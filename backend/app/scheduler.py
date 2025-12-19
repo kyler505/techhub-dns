@@ -127,7 +127,8 @@ def start_scheduler():
             trigger=IntervalTrigger(minutes=poll_interval),
             id="inflow_sync",
             name="Sync orders from Inflow (backup polling)",
-            replace_existing=True
+            replace_existing=True,
+            next_run_time=datetime.now()
         )
     else:
         logger.info("Inflow polling sync is disabled via INFLOW_POLLING_SYNC_ENABLED")
