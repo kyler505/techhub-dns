@@ -1,0 +1,866 @@
+{
+  "summary": {
+    "total_orders": 7317,
+    "orders_with_remarks": 6544,
+    "orders_with_alternative_locations": 0,
+    "patterns_discovered": 3,
+    "min_frequency_threshold": 5
+  },
+  "patterns": [
+    {
+      "phrase": "deliver to",
+      "regex": "deliver\\s+to\\s+([^\\r\\n,;]+?)(?:\\s*[-–—]|\\s*$|\\r|\\n|,|;|$)",
+      "frequency": 8,
+      "examples": [
+        {
+          "order_id": "RMA2895",
+          "remarks": "Pick up display S/N 95LBB64\r\nDeliver to Annex 3.645\r\nOrder Details Sent",
+          "location": "Annex 3.645",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH765",
+          "remarks": "Please deliver to Michelle Brown-Link, located at Annex 1st floor, 3.109G",
+          "location": "Michelle Brown",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH593",
+          "remarks": "Please deliver to Brown-Link, Michelle located at Annex 1st floor, 3.109G",
+          "location": "Brown",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH661",
+          "remarks": "Please deliver to Michelle Brown-Link, located at Annex 1st floor, 3.109Gliver to",
+          "location": "Michelle Brown",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "RMA2895",
+          "remarks": "Pick up display S/N 95LBB64\r\nDeliver to Annex 3.645\r\nOrder Details Sent",
+          "location": "Annex 3.645",
+          "delivery_location": null,
+          "shipping_address": ""
+        }
+      ],
+      "order_count": 4
+    },
+    {
+      "phrase": "need to",
+      "regex": "need\\s+to\\s+([^\\r\\n,;]+?)(?:\\s*[-–—]|\\s*$|\\r|\\n|,|;|$)",
+      "frequency": 6,
+      "examples": [
+        {
+          "order_id": "SWAP1033",
+          "remarks": "Need to get an Apple Pencil Pro in return.\r\n\r\nPO SWAP1033",
+          "location": "get an Apple Pencil Pro in return",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "RMA997",
+          "remarks": "Need to bring back the bad camera",
+          "location": "bring back the bad camera",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH720",
+          "remarks": "This item does not need to go through IT. Can be delivered directly to VIDI #355 if possible.",
+          "location": "go through IT. Can be delivered directly to VIDI #355 if possible",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "SWAP1033",
+          "remarks": "Need to get an Apple Pencil Pro in return.\r\n\r\nPO SWAP1033",
+          "location": "get an Apple Pencil Pro in return",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "RMA997",
+          "remarks": "Need to bring back the bad camera",
+          "location": "bring back the bad camera",
+          "delivery_location": null,
+          "shipping_address": ""
+        }
+      ],
+      "order_count": 3
+    },
+    {
+      "phrase": "located at",
+      "regex": "located\\s+at\\s+([^\\r\\n,;]+?)(?:\\s*[-–—]|\\s*$|\\r|\\n|,|;|$)",
+      "frequency": 6,
+      "examples": [
+        {
+          "order_id": "TH765",
+          "remarks": "Please deliver to Michelle Brown-Link, located at Annex 1st floor, 3.109G",
+          "location": "Annex 1st floor",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH593",
+          "remarks": "Please deliver to Brown-Link, Michelle located at Annex 1st floor, 3.109G",
+          "location": "Annex 1st floor",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH661",
+          "remarks": "Please deliver to Michelle Brown-Link, located at Annex 1st floor, 3.109Gliver to",
+          "location": "Annex 1st floor",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH765",
+          "remarks": "Please deliver to Michelle Brown-Link, located at Annex 1st floor, 3.109G",
+          "location": "Annex 1st floor",
+          "delivery_location": null,
+          "shipping_address": ""
+        },
+        {
+          "order_id": "TH593",
+          "remarks": "Please deliver to Brown-Link, Michelle located at Annex 1st floor, 3.109G",
+          "location": "Annex 1st floor",
+          "delivery_location": null,
+          "shipping_address": ""
+        }
+      ],
+      "order_count": 3
+    }
+  ],
+  "pattern_statistics": {
+    "computers for": 2,
+    "deliver to": 8,
+    "up at": 2,
+    "need to": 6,
+    "located at": 6,
+    "order for": 2,
+    "1 for": 2,
+    "station for": 2,
+    "approval in": 2,
+    "order at": 2,
+    "radovic in": 2,
+    "directly to": 2,
+    "go to": 4,
+    "delivery:": 2,
+    "unable to": 2,
+    "down to": 2,
+    "placed in": 2,
+    "workstation for": 2,
+    "all in": 2,
+    "imac for": 2,
+    "user to": 1,
+    "number to": 1
+  },
+  "raw_results": [
+    {
+      "order_id": "TH3951",
+      "inflow_order_id": "TH3951",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3952",
+      "inflow_order_id": "TH3952",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3949",
+      "inflow_order_id": "TH3949",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3947",
+      "inflow_order_id": "TH3947",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3934",
+      "inflow_order_id": "TH3934",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3938",
+      "inflow_order_id": "TH3938",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3933",
+      "inflow_order_id": "TH3933",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3939",
+      "inflow_order_id": "TH3939",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3937",
+      "inflow_order_id": "TH3937",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3940",
+      "inflow_order_id": "TH3940",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3942",
+      "inflow_order_id": "TH3942",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3943",
+      "inflow_order_id": "TH3943",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3931",
+      "inflow_order_id": "TH3931",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3936",
+      "inflow_order_id": "TH3936",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3935",
+      "inflow_order_id": "TH3935",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3932",
+      "inflow_order_id": "TH3932",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3926",
+      "inflow_order_id": "TH3926",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3927",
+      "inflow_order_id": "TH3927",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3928",
+      "inflow_order_id": "TH3928",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3929",
+      "inflow_order_id": "TH3929",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3930",
+      "inflow_order_id": "TH3930",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3919",
+      "inflow_order_id": "TH3919",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3917",
+      "inflow_order_id": "TH3917",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3920",
+      "inflow_order_id": "TH3920",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3921",
+      "inflow_order_id": "TH3921",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3924",
+      "inflow_order_id": "TH3924",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3925",
+      "inflow_order_id": "TH3925",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3922",
+      "inflow_order_id": "TH3922",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3923",
+      "inflow_order_id": "TH3923",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3918",
+      "inflow_order_id": "TH3918",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3909",
+      "inflow_order_id": "TH3909",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3911",
+      "inflow_order_id": "TH3911",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3915",
+      "inflow_order_id": "TH3915",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3902",
+      "inflow_order_id": "TH3902",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3904",
+      "inflow_order_id": "TH3904",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3905",
+      "inflow_order_id": "TH3905",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3906",
+      "inflow_order_id": "TH3906",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3908",
+      "inflow_order_id": "TH3908",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3910",
+      "inflow_order_id": "TH3910",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3912",
+      "inflow_order_id": "TH3912",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3913",
+      "inflow_order_id": "TH3913",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3914",
+      "inflow_order_id": "TH3914",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3916",
+      "inflow_order_id": "TH3916",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3900",
+      "inflow_order_id": "TH3900",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3907",
+      "inflow_order_id": "TH3907",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3892",
+      "inflow_order_id": "TH3892",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3893",
+      "inflow_order_id": "TH3893",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3894",
+      "inflow_order_id": "TH3894",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3895",
+      "inflow_order_id": "TH3895",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3899",
+      "inflow_order_id": "TH3899",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3898",
+      "inflow_order_id": "TH3898",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3890",
+      "inflow_order_id": "TH3890",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3896",
+      "inflow_order_id": "TH3896",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3897",
+      "inflow_order_id": "TH3897",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3889",
+      "inflow_order_id": "TH3889",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3891",
+      "inflow_order_id": "TH3891",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3874",
+      "inflow_order_id": "TH3874",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3880",
+      "inflow_order_id": "TH3880",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3888",
+      "inflow_order_id": "TH3888",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3876",
+      "inflow_order_id": "TH3876",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3881",
+      "inflow_order_id": "TH3881",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3885",
+      "inflow_order_id": "TH3885",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3886",
+      "inflow_order_id": "TH3886",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3884",
+      "inflow_order_id": "TH3884",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3883",
+      "inflow_order_id": "TH3883",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3877",
+      "inflow_order_id": "TH3877",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3882",
+      "inflow_order_id": "TH3882",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3887",
+      "inflow_order_id": "TH3887",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3878",
+      "inflow_order_id": "TH3878",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3879",
+      "inflow_order_id": "TH3879",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3875",
+      "inflow_order_id": "TH3875",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3873",
+      "inflow_order_id": "TH3873",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3868",
+      "inflow_order_id": "TH3868",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3872",
+      "inflow_order_id": "TH3872",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3870",
+      "inflow_order_id": "TH3870",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3861",
+      "inflow_order_id": "TH3861",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3871",
+      "inflow_order_id": "TH3871",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3864",
+      "inflow_order_id": "TH3864",
+      "has_remarks": false,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3865",
+      "inflow_order_id": "TH3865",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3862",
+      "inflow_order_id": "TH3862",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3869",
+      "inflow_order_id": "TH3869",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3863",
+      "inflow_order_id": "TH3863",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3867",
+      "inflow_order_id": "TH3867",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3866",
+      "inflow_order_id": "TH3866",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3849",
+      "inflow_order_id": "TH3849",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3855",
+      "inflow_order_id": "TH3855",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3860",
+      "inflow_order_id": "TH3860",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3859",
+      "inflow_order_id": "TH3859",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3858",
+      "inflow_order_id": "TH3858",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3848",
+      "inflow_order_id": "TH3848",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3850",
+      "inflow_order_id": "TH3850",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3852",
+      "inflow_order_id": "TH3852",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3853",
+      "inflow_order_id": "TH3853",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3854",
+      "inflow_order_id": "TH3854",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3856",
+      "inflow_order_id": "TH3856",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3857",
+      "inflow_order_id": "TH3857",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3851",
+      "inflow_order_id": "TH3851",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3847",
+      "inflow_order_id": "TH3847",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3845",
+      "inflow_order_id": "TH3845",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    },
+    {
+      "order_id": "TH3837",
+      "inflow_order_id": "TH3837",
+      "has_remarks": true,
+      "has_alternative_location": false,
+      "patterns_found": []
+    }
+  ]
+}

@@ -1,0 +1,270 @@
+import httpx
+from typing import Optional, List, Dict, Any
+import logging
+from app.config import settings
+from azure.identity import InteractiveBrowserCredential
+from azure.keyvault.secrets import SecretClient
+
+logger = logging.getLogger(__name__)
+
+
+class InflowService:
+    def __init__(self):
+        self.base_url = settings.inflow_api_url
+        self.company_id = settings.inflow_company_id
+        self.api_key = self._get_api_key()
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json;version=2024-03-12"
+        }
+
+    def _get_api_key(self) -> str:
+        """Get API key from Azure Key Vault or environment variable"""
+        if settings.inflow_api_key:
+            return settings.inflow_api_key
+
+        if settings.azure_key_vault_url:
+            try:
+                credential = InteractiveBrowserCredential(additionally_allowed_tenants=["*"])
+                kv_client = SecretClient(vault_url=settings.azure_key_vault_url, credential=credential)
+                secret = kv_client.get_secret("inflow-API-key-new")
+                return secret.value
+            except Exception as e:
+                raise ValueError(f"Failed to get API key from Key Vault: {e}")
+
+        raise ValueError("INFLOW_API_KEY or AZURE_KEY_VAULT_URL must be set")
+
+    async def fetch_orders(
+        self,
+        inventory_status: Optional[str] = None,
+        is_active: bool = True,
+        order_number: Optional[str] = None,
+        count: int = 100,
+        skip: int = 0,
+        sort: str = "orderDate",
+        sort_desc: bool = True
+    ) -> List[Dict[str, Any]]:
+        """Fetch orders from Inflow API"""
+        url = f"{self.base_url}/{self.company_id}/sales-orders"
+
+        params = {
+            "include": "pickLines.product,shipLines,packLines.product,lines",
+            "filter[isActive]": str(is_active).lower(),
+            "count": str(count),
+            "skip": str(skip),
+            "sort": sort,
+            "sortDesc": str(sort_desc).lower()
+        }
+
+        if inventory_status:
+            params["filter[inventoryStatus][]"] = inventory_status
+
+        if order_number:
+            params["filter[orderNumber]"] = order_number
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+
+            # Handle both dict with 'items' key and list response
+            if isinstance(data, dict) and "items" in data:
+                return data["items"]
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+
+    async def get_order_by_number(self, order_number: str) -> Optional[Dict[str, Any]]:
+        """Fetch a specific order by order number"""
+        orders = await self.fetch_orders(order_number=order_number, count=1)
+        if orders:
+            return orders[0]
+        return None
+
+    async def sync_recent_started_orders(
+        self,
+        max_pages: int = 3,
+        per_page: int = 100,
+        target_matches: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Sync recent unfulfilled orders, filtering for 'started' status"""
+        matches = []
+
+        for page in range(max_pages):
+            orders = await self.fetch_orders(
+                inventory_status="unfulfilled",
+                count=per_page,
+                skip=page * per_page
+            )
+
+            # Filter for 'started' status (matching picklist script logic)
+            for order in orders:
+                if self.is_strict_started(order):
+                    matches.append(order)
+                    if len(matches) >= target_matches:
+                        return matches
+
+            if len(orders) < per_page:
+                break  # No more pages
+
+        return matches
+
+    def is_strict_started(self, order: Dict[str, Any]) -> bool:
+        """Check if order has inventoryStatus='started' (case-insensitive)"""
+        return str(order.get("inventoryStatus", "")).strip().lower() == "started"
+
+    async def get_order_by_id(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a specific order by sales order ID (UUID)."""
+        url = f"{self.base_url}/{self.company_id}/sales-orders/{sales_order_id}"
+        params = {
+            "include": "pickLines.product,shipLines,packLines.product,lines"
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url, params=params, headers=self.headers)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    return None
+                logger.error(f"Failed to fetch order {sales_order_id}: {e.response.status_code} - {e.response.text}")
+                raise
+
+            data = response.json()
+
+            if isinstance(data, dict) and "items" in data:
+                return data["items"][0] if data["items"] else None
+            if isinstance(data, list):
+                return data[0] if data else None
+            return data
+
+    async def register_webhook(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
+        """
+        Register a webhook with Inflow API.
+
+        Args:
+            webhook_url: Public URL for webhook endpoint
+            events: List of events to subscribe to (e.g., ["orderCreated", "orderUpdated"])
+
+        Returns:
+            Webhook registration response from Inflow
+        """
+        import uuid
+
+        url = f"{self.base_url}/{self.company_id}/webhooks"
+
+        # Generate a WebHookSubscriptionId for new webhook registration
+        # Inflow API requires this field for PUT requests
+        webhook_subscription_id = str(uuid.uuid4())
+
+        # Map event names to Inflow's expected format
+        # Inflow uses salesOrder.created, salesOrder.updated for order events
+        event_mapping = {
+            "orderCreated": "salesOrder.created",
+            "orderUpdated": "salesOrder.updated",
+            "orderStatusChanged": "salesOrder.updated"
+        }
+
+        # Map events to Inflow's format, fallback to original if no mapping exists
+        mapped_events = [event_mapping.get(e, e) for e in events]
+        mapped_events = list(dict.fromkeys(mapped_events))
+
+        payload = {
+            "webHookSubscriptionId": webhook_subscription_id,
+            "url": webhook_url,
+            "events": mapped_events
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                # Inflow API uses PUT for webhook registration (idempotent create/update)
+                response = await client.put(url, json=payload, headers=self.headers)
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"Webhook registered successfully: {result.get('id', 'unknown')}")
+                return result
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to register webhook: {e.response.status_code} - {e.response.text}")
+                raise
+            except Exception as e:
+                logger.error(f"Error registering webhook: {e}", exc_info=True)
+                raise
+
+    async def list_webhooks(self) -> List[Dict[str, Any]]:
+        """
+        List all registered webhooks for this company.
+
+        Returns:
+            List of webhook registrations
+        """
+        url = f"{self.base_url}/{self.company_id}/webhooks"
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url, headers=self.headers)
+                response.raise_for_status()
+                data = response.json()
+
+                # Handle both dict with 'items' key and list response
+                if isinstance(data, dict) and "items" in data:
+                    return data["items"]
+                elif isinstance(data, list):
+                    return data
+                else:
+                    return []
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to list webhooks: {e.response.status_code} - {e.response.text}")
+                raise
+            except Exception as e:
+                logger.error(f"Error listing webhooks: {e}", exc_info=True)
+                raise
+
+    async def delete_webhook(self, webhook_id: str) -> bool:
+        """
+        Delete a webhook registration from Inflow.
+
+        Args:
+            webhook_id: Inflow's webhook ID
+
+        Returns:
+            True if successful
+        """
+        url = f"{self.base_url}/{self.company_id}/webhooks/{webhook_id}"
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.delete(url, headers=self.headers)
+                response.raise_for_status()
+                logger.info(f"Webhook {webhook_id} deleted successfully")
+                return True
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Webhook {webhook_id} not found")
+                    return False
+                logger.error(f"Failed to delete webhook: {e.response.status_code} - {e.response.text}")
+                raise
+            except Exception as e:
+                logger.error(f"Error deleting webhook: {e}", exc_info=True)
+                raise
+
+    def verify_webhook_signature(
+        self,
+        payload: bytes,
+        signature: str,
+        secret: Optional[str] = None
+    ) -> bool:
+        """
+        Verify webhook signature using configured secret.
+
+        Args:
+            payload: Raw request body bytes
+            signature: Signature from webhook header
+
+        Returns:
+            True if signature is valid
+        """
+        from app.utils.webhook_security import verify_webhook_signature as verify_signature
+        secret_to_use = secret or settings.inflow_webhook_secret
+        return verify_signature(payload, signature, secret_to_use) if secret_to_use else True
