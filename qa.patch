@@ -1,0 +1,108 @@
+﻿diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 7c71871bedb8b70f89302adefd2eac46451d9f91..e00c7a021de80ec3c26fd2519e9e2cf66d3210c9 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -1,88 +1,96 @@
+ import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+ import Dashboard from "./pages/Dashboard";
+ import OrderDetailPage from "./pages/OrderDetailPage";
+ import PreDeliveryQueue from "./pages/PreDeliveryQueue";
+ import InDelivery from "./pages/InDelivery";
+ import Admin from "./pages/Admin";
+ import PdfSignPage from "./pages/PdfSignPage";
++import OrderQAChecklist from "./pages/OrderQAChecklist";
+ import boxTAM from "../assets/boxTAM.svg";
+ 
+ function App() {
+   return (
+     <BrowserRouter>
+       <div className="min-h-screen bg-white flex flex-col">
+         {/* HEADER */}
+         <nav className="bg-[#800000] shadow mb-4">
+           <div className="max-w-7xl mx-auto px-4">
+             <div className="flex justify-between items-center py-4">
+               <div className="flex items-center gap-3">
+                 <img
+                   src={boxTAM}
+                   alt="boxTAM logo"
+                   className="h-8 w-auto"
+                 />
+                 <h1 className="text-xl font-bold text-white">
+                   TechHub Delivery Workflow
+                 </h1>
+               </div>
+ 
+               <nav className="flex gap-4">
+                 <Link
+                   to="/"
+                   className="text-white font-medium hover:text-gray-200"
+                 >
+                   Dashboard
+                 </Link>
+                 <Link
+                   to="/pre-delivery"
+                   className="text-white font-medium hover:text-gray-200"
+                 >
+                   Pre-Delivery Queue
+                 </Link>
+                 <Link
+                   to="/in-delivery"
+                   className="text-white font-medium hover:text-gray-200"
+                 >
+                   In Delivery
+                 </Link>
+                 <Link
+                   to="/admin"
+                   className="text-white font-medium hover:text-gray-200"
+                 >
+                   Admin
+                 </Link>
++                <Link
++                  to="/order-qa"
++                  className="text-white font-medium hover:text-gray-200"
++                >
++                  Order QA
++                </Link>
+                 <Link
+                   to="/pdf-sign"
+                   className="text-white font-medium hover:text-gray-200"
+                 >
+                   PDF Sign
+                 </Link>
+               </nav>
+             </div>
+           </div>
+         </nav>
+ 
+         {/* MAIN CONTENT */}
+         <main className="max-w-7xl mx-auto flex-grow">
+           <Routes>
+             <Route path="/" element={<Dashboard />} />
+             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+             <Route path="/pre-delivery" element={<PreDeliveryQueue />} />
+             <Route path="/in-delivery" element={<InDelivery />} />
+             <Route path="/admin" element={<Admin />} />
++            <Route path="/order-qa" element={<OrderQAChecklist />} />
+             <Route path="/pdf-sign" element={<PdfSignPage />} />
+           </Routes>
+         </main>
+ 
+         {/* FOOTER */}
+         <footer className="bg-[#800000] text-white mt-8">
+           <div className="max-w-7xl mx-auto px-4 py-4 text-center text-sm">
+             © {new Date().getFullYear()} TechHub • All rights reserved
+           </div>
+         </footer>
+       </div>
+     </BrowserRouter>
+   );
+ }
+ 
+ export default App;
+diff --git a/frontend/src/pages/OrderQAChecklist.tsx b/frontend/src/pages/OrderQAChecklist.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..823b3cb4513c51f7be74ba73ba9600dcdfa108d9
+--- /dev/null
++++ b/frontend/src/pages/OrderQAChecklist.tsx
+@@ -0,0 +1,263 @@
+[...PASTE THE REST OF THE FILE CONTENT HERE...]
