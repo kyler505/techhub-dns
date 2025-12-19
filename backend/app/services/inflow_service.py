@@ -1,6 +1,8 @@
 import httpx
 from typing import Optional, List, Dict, Any
 import logging
+import uuid
+from datetime import datetime
 from app.config import settings
 from azure.identity import InteractiveBrowserCredential
 from azure.keyvault.secrets import SecretClient
@@ -139,6 +141,75 @@ class InflowService:
             if isinstance(data, list):
                 return data[0] if data else None
             return data
+
+    async def fulfill_sales_order(self, sales_order_id: str) -> Dict[str, Any]:
+        """
+        Fulfill a sales order by ensuring pickLines, packLines, and shipLines are populated.
+        Based on inFlow docs: inventoryStatus becomes fulfilled when all products are in pickLines
+        and, for shippable orders, packLines/shipLines are present.
+        """
+        order = await self.get_order_by_id(sales_order_id)
+        if not order:
+            raise ValueError(f"Sales order {sales_order_id} not found in Inflow")
+
+        if not order.get("customerId"):
+            raise ValueError("Sales order missing customerId; cannot fulfill")
+
+        now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+        order_number = order.get("orderNumber") or sales_order_id
+        container_number = f"DELIVERY-{order_number}"
+
+        def positive_quantity(line: Dict[str, Any]) -> bool:
+            qty = line.get("quantity", {})
+            raw = qty.get("standardQuantity")
+            if raw is None:
+                return False
+            try:
+                return float(raw) > 0
+            except (TypeError, ValueError):
+                return False
+
+        if not order.get("pickLines"):
+            pick_lines = []
+            for line in order.get("lines", []):
+                if not positive_quantity(line):
+                    continue
+                pick_lines.append({
+                    "salesOrderPickLineId": str(uuid.uuid4()),
+                    "productId": line.get("productId"),
+                    "quantity": line.get("quantity"),
+                    "description": line.get("description"),
+                    "pickDate": now,
+                })
+            order["pickLines"] = pick_lines
+
+        if not order.get("packLines"):
+            pack_lines = []
+            for line in order.get("lines", []):
+                if not positive_quantity(line):
+                    continue
+                pack_lines.append({
+                    "salesOrderPackLineId": str(uuid.uuid4()),
+                    "productId": line.get("productId"),
+                    "quantity": line.get("quantity"),
+                    "description": line.get("description"),
+                    "containerNumber": container_number,
+                })
+            order["packLines"] = pack_lines
+
+        if not order.get("shipLines") and order.get("packLines"):
+            order["shipLines"] = [{
+                "salesOrderShipLineId": str(uuid.uuid4()),
+                "carrier": "TechHub",
+                "containers": list({line.get("containerNumber") for line in order["packLines"] if line.get("containerNumber")}),
+                "shippedDate": now,
+            }]
+
+        url = f"{self.base_url}/{self.company_id}/sales-orders"
+        async with httpx.AsyncClient() as client:
+            response = await client.put(url, json=order, headers=self.headers)
+            response.raise_for_status()
+            return response.json()
 
     async def register_webhook(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
         """

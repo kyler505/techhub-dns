@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { OrderDetail as OrderDetailType, OrderStatus, AuditLog, TeamsNotification } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
@@ -8,6 +10,9 @@ interface OrderDetailProps {
   notifications: TeamsNotification[];
   onStatusChange: (newStatus: OrderStatus, reason?: string) => void;
   onRetryNotification: () => void;
+  onTagOrder: (tagIds: string[]) => void;
+  onGeneratePicklist: () => void;
+  onSubmitQa: (responses: { items: { id: string; label: string; passed: boolean }[]; notes: string }) => void;
 }
 
 export default function OrderDetail({
@@ -15,8 +20,28 @@ export default function OrderDetail({
   auditLogs,
   notifications,
   onRetryNotification,
+  onTagOrder,
+  onGeneratePicklist,
+  onSubmitQa,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
+  const [qaNotes, setQaNotes] = useState("");
+  const [qaItems, setQaItems] = useState([
+    { id: "asset-tags", label: "Asset tags applied and recorded", passed: false },
+    { id: "serials", label: "Serial numbers verified", passed: false },
+    { id: "accessories", label: "Accessories included", passed: false },
+    { id: "clean", label: "Equipment cleaned and labeled", passed: false },
+  ]);
+
+  const handleTagging = () => {
+    const raw = window.prompt("Enter tag IDs (comma-separated)", "");
+    if (raw === null) return;
+    const tagIds = raw
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    onTagOrder(tagIds);
+  };
 
   return (
     <div className="space-y-6">
@@ -55,6 +80,134 @@ export default function OrderDetail({
               <p className="text-red-600">{order.issue_reason}</p>
             </div>
           )}
+        </div>
+        {order.status === OrderStatus.IN_DELIVERY && (
+          <div className="mt-4">
+            <Link
+              to="/document-signing"
+              className="inline-flex items-center px-4 py-2 bg-[#800000] text-white rounded hover:bg-[#660000]"
+            >
+              Open Document Signing
+            </Link>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-xl font-bold mb-4">Preparation Checklist</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium">Asset Tagging</p>
+              <p className="text-sm text-gray-600">
+                {order.tagged_at
+                  ? `Completed ${formatToCentralTime(order.tagged_at)}`
+                  : "Pending"}
+              </p>
+            </div>
+            <button
+              onClick={handleTagging}
+              disabled={Boolean(order.tagged_at)}
+              className="px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+            >
+              {order.tagged_at ? "Tagged" : "Mark Tagged"}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium">Picklist PDF</p>
+              <p className="text-sm text-gray-600">
+                {order.picklist_generated_at
+                  ? `Generated ${formatToCentralTime(order.picklist_generated_at)}`
+                  : "Pending"}
+              </p>
+              {order.picklist_path && (
+                <a
+                  className="text-sm text-blue-600 hover:underline"
+                  href={`/api/orders/${order.id}/picklist`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Download picklist
+                </a>
+              )}
+            </div>
+            <button
+              onClick={onGeneratePicklist}
+              disabled={!order.tagged_at || Boolean(order.picklist_generated_at)}
+              className="px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+            >
+              {order.picklist_generated_at ? "Generated" : "Generate Picklist"}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium">QA Checklist</p>
+                <p className="text-sm text-gray-600">
+                  {order.qa_completed_at
+                    ? `Completed ${formatToCentralTime(order.qa_completed_at)}`
+                    : "Pending"}
+                </p>
+              </div>
+            </div>
+            {!order.qa_completed_at && (
+              <div className="flex flex-col gap-2">
+                <div className="space-y-2">
+                  {qaItems.map((item) => (
+                    <label key={item.id} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={item.passed}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setQaItems((prev) =>
+                            prev.map((entry) =>
+                              entry.id === item.id ? { ...entry, passed: checked } : entry
+                            )
+                          );
+                        }}
+                      />
+                      {item.label}
+                    </label>
+                  ))}
+                </div>
+                <textarea
+                  value={qaNotes}
+                  onChange={(event) => setQaNotes(event.target.value)}
+                  className="w-full border rounded p-2 text-sm"
+                  rows={3}
+                  placeholder="QA notes (mock checklist for now)"
+                />
+                <button
+                  onClick={() => {
+                    onSubmitQa({ items: qaItems, notes: qaNotes });
+                    setQaNotes("");
+                    setQaItems((prev) => prev.map((item) => ({ ...item, passed: false })));
+                  }}
+                  disabled={!order.picklist_generated_at}
+                  className="self-start px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Submit QA
+                </button>
+              </div>
+            )}
+            {order.qa_completed_at && order.qa_data && (
+              <div className="text-sm text-gray-700 space-y-1">
+                {(order.qa_data.items || []).map((item: { id: string; label: string; passed: boolean }) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${item.passed ? "bg-green-500" : "bg-red-500"}`} />
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+                {order.qa_data.notes && (
+                  <p className="text-gray-600">Notes: {order.qa_data.notes}</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

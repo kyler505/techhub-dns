@@ -11,11 +11,13 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 - **Automated Order Sync**: Syncs picked orders (inventoryStatus `started`) from Inflow API every 5 minutes
 - **Smart Location Extraction**: Extracts building abbreviations (ACAD, ZACH, LAAH, etc.) from addresses using ArcGIS service
 - **Order Remarks Parsing**: Automatically extracts alternative delivery locations from order remarks
-- **Status Workflow Management**: Tracks orders through Pre-Delivery → In Delivery → Delivered
-  - **Teams Integration**: Sends automated notifications when orders transition to "In Delivery"
+- **Status Workflow Management**: Tracks orders through Picked -> Pre-Delivery -> In Delivery -> Delivered
+  - **Prep Gating**: Asset tagging, picklist generation, and QA are required before Pre-Delivery
+  - **Teams Integration**: Sends automated notifications when orders are ready and when delivery starts
   - **Audit Logging**: Complete audit trail of all status changes
   - **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue
   - **Document Signing**: Sign and download delivery PDFs stored in `frontend/public/pdfs`
+  - **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT` on disk
 
 ## Architecture
 
@@ -90,6 +92,7 @@ pip install -r requirements.txt
 # INFLOW_API_KEY=your_inflow_api_key
 # TEAMS_WEBHOOK_URL=your_teams_webhook_url (optional)
 # AZURE_KEY_VAULT_URL=your_azure_key_vault_url (optional)
+# STORAGE_ROOT=storage
 ```
 
    Example `.env` file for Docker PostgreSQL:
@@ -97,6 +100,7 @@ pip install -r requirements.txt
    DATABASE_URL=postgresql://techhub:techhub_password@localhost:5433/techhub_delivery
    INFLOW_API_URL=https://your-inflow-api-url.com
    INFLOW_API_KEY=your-api-key-here
+   STORAGE_ROOT=storage
    ```
 
 7. Run database migrations:
@@ -135,54 +139,60 @@ The frontend will be available at `http://localhost:5173`
 
 ### Webhook Setup (Local Development)
 
-For local webhook testing, use LocalTunnel to expose your backend to the internet:
+For local webhook testing, use Cloudflare Tunnel (cloudflared) to expose your backend to the internet:
 
-1. **Start your backend server** (if not already running):
+1. **Install Cloudflare Tunnel** (if not already installed):
+   ```bash
+   # Windows (using winget)
+   winget install --id Cloudflare.cloudflared
+
+   # macOS (using brew)
+   brew install cloudflared
+
+   # Linux
+   # Download from: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/
+   ```
+
+2. **Start your backend server** (if not already running):
    ```bash
    cd backend
    .venv\Scripts\Activate.ps1  # Windows PowerShell
    uvicorn app.main:app --reload
    ```
 
-2. **Start LocalTunnel** (in a new terminal):
+3. **Start Cloudflare Tunnel** (in a new terminal):
    ```bash
    # Windows PowerShell
    cd backend
-   .\scripts\start-localtunnel.ps1
+   .\scripts\start-cloudflared.ps1
 
-   # Or manually:
-   npx localtunnel --port 8000 --subdomain techhub-delivery-test
+   # Linux/macOS
+   cd backend
+   ./scripts/start-cloudflared.sh
    ```
 
-3. **Update your `.env` file** with the LocalTunnel URL:
-   ```env
-   INFLOW_WEBHOOK_ENABLED=true
-   INFLOW_WEBHOOK_URL=https://techhub-delivery-test.loca.lt/api/inflow/webhook
-   INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
-   # INFLOW_WEBHOOK_SECRET is optional; it is stored when the webhook is registered.
-   ```
+4. **The script will automatically**:
+   - Start the Cloudflare tunnel
+   - Extract the generated URL
+   - Register the webhook with Inflow
+   - Display the tunnel and webhook URLs
 
-4. **Restart your backend** to load the new environment variables
+5. **Test the webhook** by creating/updating an order in Inflow
 
-5. **Register the webhook** via Admin UI (`http://localhost:5173/admin`) or script:
-   - Admin UI: Click "Register Webhook" (URL/events are pre-filled)
-   - Script (one-step reset):
-     ```bash
-     python scripts/manage_inflow_webhook.py reset --url https://techhub-delivery-test.loca.lt/api/inflow/webhook --events orderCreated,orderUpdated
-     ```
-
-**Note:** LocalTunnel URLs may change if you restart it. Update your `.env` and re-register the webhook if needed.
+**Note:** Cloudflare Tunnel URLs change each time you restart it. The script handles re-registration automatically.
 
 ## Features
 
 ### Core Functionality
-- **Order Status Workflow**: Pre-Delivery → In Delivery → Delivered (with Issue tracking)
+- **Order Status Workflow**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with Issue tracking)
 - **Automated Sync**: Background scheduler syncs picked orders from Inflow every 5 minutes
+- **Prep Steps**: Asset tagging, picklist generation, and QA checklist completion required before Pre-Delivery
 - **Building Code Extraction**: Automatically extracts building abbreviations from addresses using ArcGIS service
 - **Order Remarks Parsing**: Intelligently extracts alternative delivery locations from order remarks
-- **Teams Notifications**: Automated notifications when orders transition to "In Delivery"
+- **Teams Notifications**: Automated notifications when orders are ready and when delivery starts
 - **Audit Logging**: Complete audit trail of all status changes with user tracking
 - **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue management
+- **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT`
 
 ### Pages & Views
 - **Dashboard**: Overview of all orders with filtering and search

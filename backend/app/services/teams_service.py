@@ -41,53 +41,59 @@ class TeamsService:
         deliverer: Optional[str] = None
     ) -> TeamsNotification:
         """Send Teams notification for order in delivery (idempotent)"""
+        return await self._send_notification(order, deliverer, "in_delivery")
+
+    async def send_ready_notification(self, order: Order) -> TeamsNotification:
+        """Send Teams notification when order is ready for delivery"""
+        return await self._send_notification(order, None, "ready")
+
+    async def _send_notification(
+        self,
+        order: Order,
+        deliverer: Optional[str],
+        notification_type: str
+    ) -> TeamsNotification:
         webhook_url = self.get_webhook_url()
         if not webhook_url:
             raise ValueError("Teams webhook URL not configured")
 
-        # Check for existing notification for this order/status transition
-        # Use a time window to prevent duplicates (within same second)
         existing = self.db.query(TeamsNotification).filter(
             and_(
                 TeamsNotification.order_id == order.id,
+                TeamsNotification.notification_type == notification_type,
                 TeamsNotification.status == NotificationStatus.SENT,
                 TeamsNotification.sent_at.isnot(None)
             )
         ).order_by(TeamsNotification.sent_at.desc()).first()
 
-        # If notification was sent recently (within last minute), don't send again
         if existing and existing.sent_at:
             time_diff = (datetime.utcnow() - existing.sent_at).total_seconds()
-            if time_diff < 60:  # 1 minute window
+            if time_diff < 60:
                 return existing
 
-        # Create notification record with pending status
         notification = TeamsNotification(
             order_id=order.id,
             status=NotificationStatus.PENDING,
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
+            notification_type=notification_type
         )
         self.db.add(notification)
         self.db.commit()
         self.db.refresh(notification)
 
         try:
-            # Build notification message
-            message = self._build_message(order, deliverer)
+            message = self._build_message(order, deliverer, notification_type)
 
-            # Send to Teams
             async with httpx.AsyncClient() as client:
                 response = await client.post(webhook_url, json=message, timeout=10.0)
                 response.raise_for_status()
 
-                # Update notification record
                 notification.status = NotificationStatus.SENT
                 notification.sent_at = datetime.utcnow()
-                # Try to extract message ID from response if available
                 try:
                     response_data = response.json()
                     notification.teams_message_id = response_data.get("id")
-                except:
+                except Exception:
                     pass
 
                 self.db.commit()
@@ -95,23 +101,34 @@ class TeamsService:
                 return notification
 
         except Exception as e:
-            # Update notification record with error
             notification.status = NotificationStatus.FAILED
             notification.error_message = str(e)
             self.db.commit()
             self.db.refresh(notification)
             raise
 
-    def _build_message(self, order: Order, deliverer: Optional[str] = None) -> dict:
+    def _build_message(
+        self,
+        order: Order,
+        deliverer: Optional[str],
+        notification_type: str
+    ) -> dict:
         """Build Teams webhook message"""
-        deliverer_text = f"**Deliverer:** {deliverer}\n" if deliverer else ""
+        if notification_type == "ready":
+            summary = f"Order {order.inflow_order_id} - Ready for Delivery"
+            title = "Order Ready for Delivery"
+            status_text = "Ready for delivery"
+        else:
+            summary = f"Order {order.inflow_order_id} - Out for Delivery"
+            title = "Order Out for Delivery"
+            status_text = "Out for delivery"
 
         message = {
             "@type": "MessageCard",
             "@context": "https://schema.org/extensions",
-            "summary": f"Order {order.inflow_order_id} - Out for Delivery",
+            "summary": summary,
             "themeColor": "0078D4",
-            "title": "Order Out for Delivery",
+            "title": title,
             "sections": [
                 {
                     "activityTitle": f"Order {order.inflow_order_id}",
@@ -130,7 +147,7 @@ class TeamsService:
                         },
                         {
                             "name": "Status:",
-                            "value": "Out for delivery"
+                            "value": status_text
                         }
                     ]
                 }

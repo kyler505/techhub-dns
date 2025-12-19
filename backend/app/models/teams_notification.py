@@ -25,6 +25,7 @@ class TeamsNotification(Base):
     error_message = Column(Text, nullable=True)
     retry_count = Column(Integer, default=0, nullable=False)
     webhook_url = Column(String, nullable=True)  # Track which config was used
+    notification_type = Column(String, nullable=False, default="in_delivery", index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Relationship

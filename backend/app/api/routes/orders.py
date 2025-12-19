@@ -1,17 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
+from pathlib import Path
 
 from app.database import get_db
 from app.services.order_service import OrderService
 from app.services.teams_service import TeamsService
+from app.services.inflow_service import InflowService
 from app.schemas.order import (
     OrderResponse,
     OrderDetailResponse,
     OrderStatusUpdate,
     BulkStatusUpdate,
-    OrderUpdate
+    OrderUpdate,
+    AssetTagUpdate,
+    PicklistGenerationRequest,
+    QASubmission
 )
 from app.models.order import OrderStatus
 from app.schemas.audit import AuditLogResponse
@@ -36,19 +42,12 @@ def get_orders(
 @router.get("/{order_id}", response_model=OrderDetailResponse)
 def get_order(order_id: UUID, db: Session = Depends(get_db)):
     """Get order detail with audit logs and notifications"""
-    from app.schemas.teams import TeamsNotificationResponse
-
     service = OrderService(db)
     order = service.get_order_detail(order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # Convert to dict and add notifications
-    order_dict = OrderDetailResponse.model_validate(order).model_dump()
-    order_dict["teams_notifications"] = [
-        TeamsNotificationResponse.model_validate(n).model_dump() for n in order.teams_notifications
-    ]
-    return order_dict
+    return OrderDetailResponse.model_validate(order)
 
 
 @router.patch("/{order_id}", response_model=OrderResponse)
@@ -97,6 +96,12 @@ async def update_order_status(
                 order,
                 order.assigned_deliverer
             )
+        if status_update.status == OrderStatus.PRE_DELIVERY:
+            teams_service = TeamsService(db)
+            background_tasks.add_task(
+                teams_service.send_ready_notification,
+                order
+            )
 
         return order
     except ValueError as e:
@@ -134,6 +139,93 @@ def get_order_audit(order_id: UUID, db: Session = Depends(get_db)):
     return order.audit_logs
 
 
+@router.post("/{order_id}/tag", response_model=OrderResponse)
+def tag_order(
+    order_id: UUID,
+    tag_update: AssetTagUpdate,
+    db: Session = Depends(get_db)
+):
+    """Mock asset tagging step"""
+    service = OrderService(db)
+    try:
+        order = service.mark_asset_tagged(
+            order_id=order_id,
+            tag_ids=tag_update.tag_ids,
+            technician=tag_update.technician
+        )
+        return order
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{order_id}/picklist", response_model=OrderResponse)
+def generate_picklist(
+    order_id: UUID,
+    request: PicklistGenerationRequest,
+    db: Session = Depends(get_db)
+):
+    """Generate a picklist PDF for the order"""
+    service = OrderService(db)
+    try:
+        order = service.generate_picklist(
+            order_id=order_id,
+            generated_by=request.generated_by
+        )
+        return order
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{order_id}/qa", response_model=OrderResponse)
+async def submit_qa(
+    order_id: UUID,
+    submission: QASubmission,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Submit QA checklist for an order"""
+    service = OrderService(db)
+    try:
+        order = service.submit_qa(
+            order_id=order_id,
+            qa_data=submission.responses,
+            technician=submission.technician
+        )
+
+        if order.status == OrderStatus.PICKED and service._prep_steps_complete(order):
+            order = service.transition_status(
+                order_id=order_id,
+                new_status=OrderStatus.PRE_DELIVERY,
+                changed_by=submission.technician
+            )
+            teams_service = TeamsService(db)
+            background_tasks.add_task(
+                teams_service.send_ready_notification,
+                order
+            )
+
+        return order
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{order_id}/picklist")
+def get_picklist(order_id: UUID, db: Session = Depends(get_db)):
+    """Download generated picklist PDF"""
+    service = OrderService(db)
+    order = service.get_order_detail(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not order.picklist_path:
+        raise HTTPException(status_code=404, detail="Picklist not generated")
+
+    path = Path(order.picklist_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Picklist file missing")
+
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
 @router.post("/{order_id}/retry-notification")
 async def retry_notification(
     order_id: UUID,
@@ -166,3 +258,26 @@ async def retry_notification(
         )
 
     return {"success": True, "notification_id": str(notification.id)}
+
+
+@router.post("/{order_id}/fulfill")
+async def fulfill_order(
+    order_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Mark an order as fulfilled in Inflow (best-effort)."""
+    service = OrderService(db)
+    order = service.get_order_detail(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not order.inflow_sales_order_id:
+        raise HTTPException(status_code=400, detail="Order missing inflow_sales_order_id")
+
+    inflow_service = InflowService()
+    try:
+        result = await inflow_service.fulfill_sales_order(order.inflow_sales_order_id)
+        return {"success": True, "result": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

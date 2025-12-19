@@ -5,6 +5,7 @@ interface StatusBadgeProps {
 }
 
 const statusColors: Record<OrderStatus, string> = {
+  [OrderStatus.PICKED]: "bg-slate-500",
   [OrderStatus.PRE_DELIVERY]: "bg-blue-500",
   [OrderStatus.IN_DELIVERY]: "bg-orange-500",
   [OrderStatus.DELIVERED]: "bg-green-500",

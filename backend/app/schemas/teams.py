@@ -23,6 +23,7 @@ class TeamsNotificationResponse(BaseModel):
     teams_message_id: Optional[str] = None
     sent_at: Optional[datetime] = None
     status: NotificationStatus
+    notification_type: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: int
     created_at: datetime

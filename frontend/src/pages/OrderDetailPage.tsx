@@ -75,6 +75,39 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleTagOrder = async (tagIds: string[]) => {
+    if (!order) return;
+    try {
+      await ordersApi.tagOrder(order.id, { tag_ids: tagIds });
+      loadOrder();
+    } catch (error) {
+      console.error("Failed to tag order:", error);
+      alert("Failed to tag order");
+    }
+  };
+
+  const handleGeneratePicklist = async () => {
+    if (!order) return;
+    try {
+      await ordersApi.generatePicklist(order.id);
+      loadOrder();
+    } catch (error) {
+      console.error("Failed to generate picklist:", error);
+      alert("Failed to generate picklist");
+    }
+  };
+
+  const handleSubmitQa = async (responses: { items: { id: string; label: string; passed: boolean }[]; notes: string }) => {
+    if (!order) return;
+    try {
+      await ordersApi.submitQa(order.id, { responses });
+      loadOrder();
+    } catch (error) {
+      console.error("Failed to submit QA:", error);
+      alert("Failed to submit QA");
+    }
+  };
+
   if (loading) {
     return <div className="p-4">Loading...</div>;
   }
@@ -97,6 +130,9 @@ export default function OrderDetailPage() {
         notifications={notifications}
         onStatusChange={handleStatusChange}
         onRetryNotification={handleRetryNotification}
+        onTagOrder={handleTagOrder}
+        onGeneratePicklist={handleGeneratePicklist}
+        onSubmitQa={handleSubmitQa}
       />
       {transitioningStatus && (
         <StatusTransition

@@ -27,6 +27,17 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
         return False
 
     try:
+        # Handle Stripe-style secrets (whsec_ prefix)
+        if secret.startswith("whsec_"):
+            secret = secret[6:]  # Remove "whsec_" prefix
+
+        # If secret is base64 encoded, decode it
+        try:
+            secret_bytes = base64.b64decode(secret, validate=False)
+        except Exception:
+            # If not base64, treat as raw string
+            secret_bytes = secret.encode("utf-8")
+
         # Common signature formats:
         # - "sha256=hexdigest"
         # - "sha256 hexdigest"
@@ -38,13 +49,17 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
         elif normalized.lower().startswith("sha256 "):
             normalized = normalized.split(" ", 1)[1].strip()
 
+        logger.debug(f"Verifying signature: received='{signature}', normalized='{normalized}', secret_length={len(secret_bytes)}")
+
         digest = hmac.new(
-            secret.encode("utf-8"),
+            secret_bytes,
             payload,
             hashlib.sha256
         ).digest()
         computed_hex = digest.hex()
         computed_b64 = base64.b64encode(digest).decode("ascii")
+
+        logger.debug(f"Computed signatures: hex='{computed_hex}', b64='{computed_b64}'")
 
         if hmac.compare_digest(normalized, computed_hex) or hmac.compare_digest(normalized, computed_b64):
             return True

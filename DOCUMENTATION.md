@@ -6,13 +6,14 @@
 2. [Architecture](#architecture)
 3. [System Components](#system-components)
 4. [Data Models](#data-models)
-5. [API Endpoints](#api-endpoints)
-6. [Frontend Pages](#frontend-pages)
-7. [Key Features](#key-features)
-8. [External Integrations](#external-integrations)
-9. [Database Schema](#database-schema)
-10. [Deployment](#deployment)
-11. [Development](#development)
+5. [Picklist Generation](#picklist-generation)
+6. [API Endpoints](#api-endpoints)
+7. [Frontend Pages](#frontend-pages)
+8. [Key Features](#key-features)
+9. [External Integrations](#external-integrations)
+10. [Database Schema](#database-schema)
+11. [Deployment](#deployment)
+12. [Development](#development)
 
 ## Overview
 
@@ -80,7 +81,7 @@ The application solves the challenge of managing delivery orders from the point 
 3. **Order Processing**: Extracts locations, building codes, and processes data
 4. **Database**: Stores orders with extracted information
 5. **Status Changes**: User actions trigger status transitions
-6. **Notifications**: Teams notifications sent on "In Delivery" transition
+6. **Notifications**: Teams notifications sent when orders are ready (PreDelivery) and when delivery starts (In Delivery)
 7. **Audit Logging**: All changes recorded in audit log
 
 ## System Components
@@ -163,9 +164,21 @@ class Order:
     recipient_contact: String    # Email address
     delivery_location: String   # Building code or address (e.g., "ACAD", "LAAH 424")
     po_number: String          # PO number
-    status: OrderStatus         # Current status (PreDelivery, InDelivery, Delivered, Issue)
+    status: OrderStatus         # Current status (Picked, PreDelivery, InDelivery, Delivered, Issue)
     assigned_deliverer: String   # Person assigned for delivery
     issue_reason: Text          # Reason if status is Issue
+    tagged_at: DateTime         # Asset tagging timestamp
+    tagged_by: String           # Asset tagging technician
+    tag_data: JSONB             # Asset tag details
+    picklist_generated_at: DateTime
+    picklist_generated_by: String
+    picklist_path: String
+    qa_completed_at: DateTime
+    qa_completed_by: String
+    qa_data: JSONB
+    qa_path: String
+    signature_captured_at: DateTime
+    signed_picklist_path: String
     inflow_data: JSONB          # Full Inflow payload (for reference)
     created_at: DateTime
     updated_at: DateTime
@@ -174,15 +187,15 @@ class Order:
 ### Order Status Workflow
 
 ```
-PreDelivery → InDelivery → Delivered
-     ↓            ↓
-   Issue ←───────┘
+Picked -> PreDelivery -> InDelivery -> Delivered
+   \\-> Issue -> Picked/PreDelivery
 ```
 
-- **PreDelivery**: Order is picked and ready for delivery assignment
+- **Picked**: Order pulled from Inflow, awaiting prep steps
+- **PreDelivery**: Asset tagging, picklist, and QA completed
 - **InDelivery**: Order is out for delivery (triggers Teams notification)
 - **Delivered**: Order has been successfully delivered (terminal state)
-- **Issue**: Order has a problem (can return to PreDelivery after resolution)
+- **Issue**: Order has a problem (can return to Picked or PreDelivery after resolution)
 
 ### Audit Log Model
 
@@ -199,6 +212,18 @@ class AuditLog:
     timestamp: DateTime
 ```
 
+### Picklist Generation
+
+Picklists are automatically generated from inFlow order data when requested via the API. The system creates professional PDF documents containing:
+
+- **Order Header**: PO number, customer information, shipping address, recipient details
+- **Item Details**: Product names, SKUs, quantities, and serial numbers (if applicable)
+- **Smart Filtering**: Only shows unshipped items by subtracting already shipped quantities from picked quantities
+- **Order Remarks**: Any special instructions or notes from the order
+- **Signature Line**: Space for customer signature upon delivery
+
+Picklists are generated using the ReportLab PDF library and stored in `STORAGE_ROOT/picklists/` with filenames matching the order number (e.g., `TH3950.pdf`).
+
 ### Teams Notification Model
 
 Tracks Teams notification delivery:
@@ -210,6 +235,7 @@ class TeamsNotification:
     teams_message_id: String    # Teams message ID
     sent_at: DateTime
     status: Enum                # pending, sent, failed
+    notification_type: String  # ready, in_delivery
     error_message: Text
     retry_count: Integer
 ```
@@ -223,6 +249,11 @@ class TeamsNotification:
 - `GET /api/orders/{order_id}` - Get order details with audit logs
 - `PATCH /api/orders/{order_id}` - Update order fields
 - `PATCH /api/orders/{order_id}/status` - Transition order status
+- `POST /api/orders/{order_id}/tag` - Record asset tagging (mock)
+- `POST /api/orders/{order_id}/picklist` - Generate picklist PDF from inFlow order data
+- `GET /api/orders/{order_id}/picklist` - Download generated picklist PDF
+- `POST /api/orders/{order_id}/qa` - Submit QA checklist responses
+- `POST /api/orders/{order_id}/fulfill` - Mark order fulfilled in Inflow (best-effort)
 - `POST /api/orders/bulk-transition` - Bulk status transition
 - `GET /api/orders/{order_id}/audit` - Get audit logs for order
 - `POST /api/orders/{order_id}/retry-notification` - Retry Teams notification
@@ -247,7 +278,7 @@ class TeamsNotification:
 ### Dashboard (`/`)
 
 Main overview page displaying all orders with:
-- Status filter tabs (All, Pre-Delivery, In Delivery, Delivered, Issue)
+- Status filter tabs (All, Picked, Pre-Delivery, In Delivery, Delivered, Issue)
 - Search functionality (order ID, recipient, location, PO number)
 - Order table with key information
 - Quick status transitions
@@ -292,6 +323,10 @@ Document signing tool:
 - Draw a signature directly on top of the PDF
 - Download a flattened copy after signing
 
+### Local Storage
+
+Picklists (generated from inFlow order data) and QA responses are stored on disk under `STORAGE_ROOT` (defaults to `storage`). QA submissions are written as JSON files in `storage/qa`.
+
 ## Key Features
 
 ### 1. Automated Order Synchronization
@@ -304,7 +339,7 @@ Document signing tool:
    - Extracts order remarks for alternative locations
    - Extracts building code from location or address using ArcGIS
    - Creates or updates order in database
-   - Sets status to PreDelivery (orders are already picked)
+   - Sets status to Picked (orders are already picked in Inflow)
 
 **Service**: `backend/app/services/inflow_service.py`
 **Scheduler**: `backend/app/scheduler.py`
@@ -345,16 +380,17 @@ Document signing tool:
 ### 4. Status Transition Validation
 
 **Rules**:
-- PreDelivery → InDelivery or Issue
-- InDelivery → Delivered or Issue
-- Issue → PreDelivery (after resolution)
-- Delivered → (terminal, no transitions)
+- Picked -> PreDelivery or Issue
+- PreDelivery -> InDelivery or Issue
+- InDelivery -> Delivered or Issue
+- Issue -> Picked or PreDelivery (after resolution)
+- Delivered -> (terminal, no transitions)
 
 **Validation**: Enforced in `OrderService._is_valid_transition()`
 
 ### 5. Teams Notifications
 
-**Trigger**: When order status changes to "In Delivery"
+**Trigger**: When order status changes to "PreDelivery" (ready) or "In Delivery"
 
 **Content**:
 - Order ID
@@ -396,6 +432,7 @@ Document signing tool:
 **Endpoints Used**:
 - `GET /{company_id}/sales-orders` - Fetch orders
 - Filters: `inventoryStatus="started"` (picked orders)
+- `PUT /{company_id}/sales-orders` - Update orders for fulfillment (pick/pack/ship lines)
 
 **Service**: `backend/app/services/inflow_service.py`
 
@@ -421,7 +458,7 @@ INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
 **Notes**:
 - The webhook secret is generated by Inflow and returned only at creation time.
 - The backend stores the secret in the database and uses it for signature verification.
-- If the webhook URL changes (e.g., LocalTunnel), re-register the webhook.
+- If the webhook URL changes (e.g., tunnel restart), re-register the webhook.
 
 ### ArcGIS Service (AggieMap)
 
@@ -472,9 +509,21 @@ CREATE TABLE orders (
     recipient_contact VARCHAR,
     delivery_location VARCHAR,
     po_number VARCHAR,
-    status orderstatus NOT NULL DEFAULT 'PreDelivery',
+    status orderstatus NOT NULL DEFAULT 'Picked',
     assigned_deliverer VARCHAR,
     issue_reason TEXT,
+    tagged_at TIMESTAMP,
+    tagged_by VARCHAR,
+    tag_data JSONB,
+    picklist_generated_at TIMESTAMP,
+    picklist_generated_by VARCHAR,
+    picklist_path VARCHAR,
+    qa_completed_at TIMESTAMP,
+    qa_completed_by VARCHAR,
+    qa_data JSONB,
+    qa_path VARCHAR,
+    signature_captured_at TIMESTAMP,
+    signed_picklist_path VARCHAR,
     inflow_data JSONB,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
@@ -518,6 +567,7 @@ CREATE TABLE teams_notifications (
     teams_message_id VARCHAR,
     sent_at TIMESTAMP,
     status notificationstatus NOT NULL,
+    notification_type VARCHAR NOT NULL DEFAULT 'in_delivery',
     error_message TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL
@@ -543,6 +593,7 @@ AZURE_KEY_VAULT_URL=https://your-keyvault.vault.azure.net/
 FRONTEND_URL=http://localhost:5173
 SECRET_KEY=your-secret-key-here
 TEAMS_WEBHOOK_URL=your_teams_webhook_url (optional)
+STORAGE_ROOT=storage
 ```
 
 ### Database Migrations
@@ -728,6 +779,21 @@ python scripts/manage_inflow_webhook.py register --url https://your-public-url/a
 python scripts/manage_inflow_webhook.py delete --url https://your-public-url/api/inflow/webhook
 python scripts/manage_inflow_webhook.py reset --url https://your-public-url/api/inflow/webhook --events orderCreated,orderUpdated
 ```
+
+### Legacy Picklist Generator
+
+**Location**: `legacy scripts/pick_list_generator.py`
+
+**Purpose**: Legacy GUI application for generating picklists from inFlow data. This was the original system used before the web application was developed.
+
+**Features**:
+- GUI interface for selecting orders by PO number
+- Direct integration with inFlow API
+- PDF generation with ReportLab
+- Google Drive upload functionality
+- Automatic browser opening for order verification
+
+**Note**: The modern web application (`POST /api/orders/{order_id}/picklist`) provides the same functionality through a REST API with improved integration and audit trails. The legacy script remains for reference and potential migration purposes.
 
 ## Troubleshooting
 

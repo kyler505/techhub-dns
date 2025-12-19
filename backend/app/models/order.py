@@ -9,6 +9,7 @@ from app.database import Base
 
 
 class OrderStatus(str, enum.Enum):
+    PICKED = "Picked"
     PRE_DELIVERY = "PreDelivery"
     IN_DELIVERY = "InDelivery"
     DELIVERED = "Delivered"
@@ -25,9 +26,21 @@ class Order(Base):
     recipient_contact = Column(String, nullable=True)  # email
     delivery_location = Column(String, nullable=True)  # building/room or shipping address
     po_number = Column(String, nullable=True)
-    status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.PRE_DELIVERY, index=True)
+    status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.PICKED, index=True)
     assigned_deliverer = Column(String, nullable=True)
     issue_reason = Column(Text, nullable=True)
+    tagged_at = Column(DateTime, nullable=True)
+    tagged_by = Column(String, nullable=True)
+    tag_data = Column(JSONB, nullable=True)
+    picklist_generated_at = Column(DateTime, nullable=True)
+    picklist_generated_by = Column(String, nullable=True)
+    picklist_path = Column(String, nullable=True)
+    qa_completed_at = Column(DateTime, nullable=True)
+    qa_completed_by = Column(String, nullable=True)
+    qa_data = Column(JSONB, nullable=True)
+    qa_path = Column(String, nullable=True)
+    signature_captured_at = Column(DateTime, nullable=True)
+    signed_picklist_path = Column(String, nullable=True)
     inflow_data = Column(JSONB, nullable=True)  # Full Inflow payload
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

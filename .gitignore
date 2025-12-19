@@ -5,6 +5,7 @@ backend/.env
 backend/venv/
 backend/.venv/
 backend/env/
+backend/storage/
 
 # Frontend
 frontend/node_modules/

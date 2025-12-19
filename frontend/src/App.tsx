@@ -51,12 +51,6 @@ function App() {
                 >
                   Admin
                 </Link>
-                <Link
-                  to="/document-signing"
-                  className="text-white font-medium hover:text-gray-200"
-                >
-                  Document Signing
-                </Link>
               </nav>
             </div>
           </div>

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Teams
     # Teams webhook URL is stored in database, not here
 
+    # Storage
+    storage_root: str = "storage"
+    picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
+
     # CORS
     frontend_url: str = "http://localhost:5173"
 

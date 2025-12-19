@@ -15,6 +15,7 @@ export default function Filters({
 }: FiltersProps) {
   const statusTabs = [
     { label: "All", value: null },
+    { label: "Picked", value: OrderStatus.PICKED },
     { label: "Pre-Delivery", value: OrderStatus.PRE_DELIVERY },
     { label: "In Delivery", value: OrderStatus.IN_DELIVERY },
     { label: "Delivered", value: OrderStatus.DELIVERED },

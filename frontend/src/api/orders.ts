@@ -37,4 +37,22 @@ export const ordersApi = {
     const response = await apiClient.post(`/orders/${orderId}/retry-notification`);
     return response.data;
   },
+
+  tagOrder: async (orderId: string, payload: { tag_ids: string[]; technician?: string }) => {
+    const response = await apiClient.post<Order>(`/orders/${orderId}/tag`, payload);
+    return response.data;
+  },
+
+  generatePicklist: async (orderId: string, payload?: { generated_by?: string }) => {
+    const response = await apiClient.post<Order>(`/orders/${orderId}/picklist`, payload || {});
+    return response.data;
+  },
+
+  submitQa: async (
+    orderId: string,
+    payload: { responses: Record<string, any>; technician?: string }
+  ) => {
+    const response = await apiClient.post<Order>(`/orders/${orderId}/qa`, payload);
+    return response.data;
+  },
 };
