@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.database import Base
 from app.config import settings
-from app.models import Order, AuditLog, TeamsNotification, TeamsConfig, InflowWebhook
+from app.models import Order, AuditLog, TeamsNotification, TeamsConfig, InflowWebhook, DeliveryRun
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

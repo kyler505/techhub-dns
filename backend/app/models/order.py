@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Enum as SQLEnum, JSON
+from sqlalchemy import Column, String, Text, DateTime, Enum as SQLEnum, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import enum
@@ -35,6 +35,7 @@ class Order(Base):
     picklist_generated_at = Column(DateTime, nullable=True)
     picklist_generated_by = Column(String, nullable=True)
     picklist_path = Column(String, nullable=True)
+    delivery_run_id = Column(UUID(as_uuid=True), ForeignKey('delivery_runs.id'), nullable=True, index=True)
     qa_completed_at = Column(DateTime, nullable=True)
     qa_completed_by = Column(String, nullable=True)
     qa_data = Column(JSONB, nullable=True)
@@ -48,3 +49,4 @@ class Order(Base):
     # Relationships
     audit_logs = relationship("AuditLog", back_populates="order", cascade="all, delete-orphan")
     teams_notifications = relationship("TeamsNotification", back_populates="order", cascade="all, delete-orphan")
+    delivery_run = relationship("DeliveryRun", back_populates="orders")

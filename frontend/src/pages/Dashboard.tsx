@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 import OrderTable from "../components/OrderTable";
+import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import Filters from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 
@@ -78,11 +79,18 @@ export default function Dashboard() {
         search={search}
         onSearchChange={setSearch}
       />
-      <OrderTable
-        orders={orders}
-        onStatusChange={handleStatusChange}
-        onViewDetail={handleViewDetail}
-      />
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-8">
+          <OrderTable
+            orders={orders}
+            onStatusChange={handleStatusChange}
+            onViewDetail={handleViewDetail}
+          />
+        </div>
+        <div className="col-span-4 space-y-4">
+          <LiveDeliveryDashboard />
+        </div>
+      </div>
       {transitioningOrder && (
         <StatusTransition
           currentStatus={

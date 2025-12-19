@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
-from app.api.routes import orders, inflow, teams, audit
+from app.api.routes import orders, inflow, teams, audit, delivery_runs
 from app.scheduler import start_scheduler
 import logging
 
@@ -42,6 +42,7 @@ app.include_router(orders.router, prefix="/api")
 app.include_router(inflow.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
+app.include_router(delivery_runs.router, prefix="/api")
 
 
 @app.get("/")

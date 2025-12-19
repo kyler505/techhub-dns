@@ -20,7 +20,7 @@ const PDF_FILES: PdfEntry[] = Object.entries(
   const normalizedPath = path.replace(/\\/g, "/");
   const filename = normalizedPath.split("/").pop() || "document.pdf";
   const name = filename.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ");
-  const normalizedUrl = url.replace("/public/", "/");
+  const normalizedUrl = (url as string).replace("/public/", "/");
   return {
     name: name || filename,
     filename,
