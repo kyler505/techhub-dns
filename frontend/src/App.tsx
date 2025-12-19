@@ -5,6 +5,7 @@ import PreDeliveryQueue from "./pages/PreDeliveryQueue";
 import InDelivery from "./pages/InDelivery";
 import Admin from "./pages/Admin";
 import DocumentSigningPage from "./pages/DocumentSigningPage";
+import OrderQAChecklist from "./pages/OrderQAChecklist";
 import boxTAM from "../assets/boxTAM.svg";
 
 function App() {
@@ -34,6 +35,12 @@ function App() {
                   Dashboard
                 </Link>
                 <Link
+                  to="/order-qa"
+                  className="text-white font-medium hover:text-gray-200"
+                >
+                  Order QA
+                </Link>
+                <Link
                   to="/pre-delivery"
                   className="text-white font-medium hover:text-gray-200"
                 >
@@ -51,6 +58,7 @@ function App() {
                 >
                   Admin
                 </Link>
+
                 <Link
                   to="/document-signing"
                   className="text-white font-medium hover:text-gray-200"
@@ -67,6 +75,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+            <Route path="/order-qa" element={<OrderQAChecklist />} />
             <Route path="/pre-delivery" element={<PreDeliveryQueue />} />
             <Route path="/in-delivery" element={<InDelivery />} />
             <Route path="/admin" element={<Admin />} />
