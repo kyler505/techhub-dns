@@ -62,6 +62,7 @@ class OrderResponse(OrderBase):
     qa_completed_by: Optional[str] = None
     qa_data: Optional[Dict[str, Any]] = None
     qa_path: Optional[str] = None
+    qa_method: Optional[str] = None
     signature_captured_at: Optional[datetime] = None
     signed_picklist_path: Optional[str] = None
     created_at: datetime

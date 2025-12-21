@@ -137,6 +137,18 @@ The frontend will be available at `http://localhost:5173`
 3. Test the webhook connection
 4. Manually trigger an Inflow sync from the API or wait for automatic sync (every 5 minutes)
 
+   **Manual Sync Command (PowerShell)**:
+   ```powershell
+   Invoke-WebRequest -Uri "http://localhost:8000/api/inflow/sync" -Method POST -ContentType "application/json"
+   ```
+
+   **Manual Sync Command (curl)**:
+   ```bash
+   curl -X POST http://localhost:8000/api/inflow/sync -H "Content-Type: application/json"
+   ```
+
+   **Response**: Returns JSON with sync statistics (orders_synced, orders_created, orders_updated)
+
 ### Webhook Setup (Local Development)
 
 For local webhook testing, use Cloudflare Tunnel (cloudflared) to expose your backend to the internet:
@@ -187,6 +199,8 @@ For local webhook testing, use Cloudflare Tunnel (cloudflared) to expose your ba
 - **Order Status Workflow**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with Issue tracking)
 - **Automated Sync**: Background scheduler syncs picked orders from Inflow every 5 minutes
 - **Prep Steps**: Asset tagging, picklist generation, and QA checklist completion required before Pre-Delivery
+- **QA Integration**: Comprehensive QA checklist determines workflow path (Delivery vs Shipping)
+- **QA Filtering**: QA page shows only orders needing QA by default, with option to view all
 - **Building Code Extraction**: Automatically extracts building abbreviations from addresses using ArcGIS service
 - **Order Remarks Parsing**: Intelligently extracts alternative delivery locations from order remarks
 - **Teams Notifications**: Automated notifications when orders are ready and when delivery starts

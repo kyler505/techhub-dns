@@ -134,14 +134,15 @@ def start_scheduler():
         logger.info("Inflow polling sync is disabled via INFLOW_POLLING_SYNC_ENABLED")
 
     # Webhook health check (every hour)
-    if settings.inflow_webhook_enabled:
-        scheduler.add_job(
-            webhook_health_check,
-            trigger=IntervalTrigger(hours=1),
-            id="webhook_health_check",
-            name="Webhook health check",
-            replace_existing=True
-        )
+    # Temporarily disabled
+    # if settings.inflow_webhook_enabled:
+    #     scheduler.add_job(
+    #         webhook_health_check,
+    #         trigger=IntervalTrigger(hours=1),
+    #         id="webhook_health_check",
+    #         name="Webhook health check",
+    #         replace_existing=True
+    #     )
 
     scheduler.start()
     if settings.inflow_polling_sync_enabled and poll_interval:

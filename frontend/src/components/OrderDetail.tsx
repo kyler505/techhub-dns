@@ -12,7 +12,6 @@ interface OrderDetailProps {
   onRetryNotification: () => void;
   onTagOrder: (tagIds: string[]) => void;
   onGeneratePicklist: () => void;
-  onSubmitQa: (responses: { items: { id: string; label: string; passed: boolean }[]; notes: string }) => void;
 }
 
 export default function OrderDetail({
@@ -22,16 +21,8 @@ export default function OrderDetail({
   onRetryNotification,
   onTagOrder,
   onGeneratePicklist,
-  onSubmitQa,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
-  const [qaNotes, setQaNotes] = useState("");
-  const [qaItems, setQaItems] = useState([
-    { id: "asset-tags", label: "Asset tags applied and recorded", passed: false },
-    { id: "serials", label: "Serial numbers verified", passed: false },
-    { id: "accessories", label: "Accessories included", passed: false },
-    { id: "clean", label: "Equipment cleaned and labeled", passed: false },
-  ]);
 
   const handleTagging = () => {
     const raw = window.prompt("Enter tag IDs (comma-separated)", "");
@@ -142,72 +133,29 @@ export default function OrderDetail({
             </button>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium">QA Checklist</p>
-                <p className="text-sm text-gray-600">
-                  {order.qa_completed_at
-                    ? `Completed ${formatToCentralTime(order.qa_completed_at)}`
-                    : "Pending"}
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium">QA Checklist</p>
+              <p className="text-sm text-gray-600">
+                {order.qa_completed_at
+                  ? `Completed ${formatToCentralTime(order.qa_completed_at)}${order.qa_completed_by ? ` by ${order.qa_completed_by}` : ''}`
+                  : "Pending"}
+              </p>
+              {order.qa_method && (
+                <p className="text-xs text-gray-500">Method: {order.qa_method}</p>
+              )}
             </div>
-            {!order.qa_completed_at && (
-              <div className="flex flex-col gap-2">
-                <div className="space-y-2">
-                  {qaItems.map((item) => (
-                    <label key={item.id} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={item.passed}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setQaItems((prev) =>
-                            prev.map((entry) =>
-                              entry.id === item.id ? { ...entry, passed: checked } : entry
-                            )
-                          );
-                        }}
-                      />
-                      {item.label}
-                    </label>
-                  ))}
-                </div>
-                <textarea
-                  value={qaNotes}
-                  onChange={(event) => setQaNotes(event.target.value)}
-                  className="w-full border rounded p-2 text-sm"
-                  rows={3}
-                  placeholder="QA notes (mock checklist for now)"
-                />
-                <button
-                  onClick={() => {
-                    onSubmitQa({ items: qaItems, notes: qaNotes });
-                    setQaNotes("");
-                    setQaItems((prev) => prev.map((item) => ({ ...item, passed: false })));
-                  }}
-                  disabled={!order.picklist_generated_at}
-                  className="self-start px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  Submit QA
-                </button>
-              </div>
-            )}
-            {order.qa_completed_at && order.qa_data && (
-              <div className="text-sm text-gray-700 space-y-1">
-                {(order.qa_data.items || []).map((item: { id: string; label: string; passed: boolean }) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${item.passed ? "bg-green-500" : "bg-red-500"}`} />
-                    <span>{item.label}</span>
-                  </div>
-                ))}
-                {order.qa_data.notes && (
-                  <p className="text-gray-600">Notes: {order.qa_data.notes}</p>
-                )}
-              </div>
+            {order.qa_completed_at ? (
+              <span className="px-3 py-2 text-sm bg-green-100 text-green-800 rounded">
+                QA Completed
+              </span>
+            ) : (
+              <span className="px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded">
+                QA Pending
+              </span>
             )}
           </div>
+
         </div>
       </div>
 

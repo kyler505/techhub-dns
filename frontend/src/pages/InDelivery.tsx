@@ -60,30 +60,24 @@ export default function InDelivery() {
   };
 
   if (loading) {
-    return <div className="p-4">Loading...</div>;
+    return <div className="flex items-center justify-center py-8">
+      <div className="text-sm text-muted-foreground">Loading...</div>
+    </div>;
   }
 
   return (
-    <div className="p-4">
-      <h1 className="text-3xl font-bold mb-4">In Delivery</h1>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Active Deliveries</h2>
+        <p className="text-sm text-muted-foreground">
+          {orders.length} order{orders.length !== 1 ? 's' : ''} currently in delivery
+        </p>
+      </div>
       <OrderTable
         orders={orders}
         onStatusChange={handleStatusChange}
         onViewDetail={handleViewDetail}
       />
-      {transitioningOrder && (
-        <StatusTransition
-          currentStatus={
-            orders.find((o) => o.id === transitioningOrder.orderId)?.status || OrderStatus.IN_DELIVERY
-          }
-          newStatus={transitioningOrder.newStatus}
-          requireReason={transitioningOrder.requireReason}
-          onConfirm={(reason) =>
-            performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
-          }
-          onCancel={() => setTransitioningOrder(null)}
-        />
-      )}
     </div>
   );
 }

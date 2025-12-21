@@ -1,23 +1,23 @@
 import { OrderStatus } from "../types/order";
+import { Badge } from "./ui/badge";
 
 interface StatusBadgeProps {
   status: OrderStatus;
 }
 
-const statusColors: Record<OrderStatus, string> = {
-  [OrderStatus.PICKED]: "bg-slate-500",
-  [OrderStatus.PRE_DELIVERY]: "bg-blue-500",
-  [OrderStatus.IN_DELIVERY]: "bg-orange-500",
-  [OrderStatus.DELIVERED]: "bg-green-500",
-  [OrderStatus.ISSUE]: "bg-red-500",
+const statusVariants: Record<OrderStatus, "default" | "secondary" | "destructive" | "success" | "warning" | "outline"> = {
+  [OrderStatus.PICKED]: "secondary",
+  [OrderStatus.PRE_DELIVERY]: "default",
+  [OrderStatus.IN_DELIVERY]: "warning",
+  [OrderStatus.SHIPPING]: "outline",
+  [OrderStatus.DELIVERED]: "success",
+  [OrderStatus.ISSUE]: "destructive",
 };
 
 export default function StatusBadge({ status }: StatusBadgeProps) {
   return (
-    <span
-      className={`px-2 py-1 rounded-full text-white text-sm font-medium ${statusColors[status]}`}
-    >
+    <Badge variant={statusVariants[status]}>
       {status}
-    </span>
+    </Badge>
   );
 }

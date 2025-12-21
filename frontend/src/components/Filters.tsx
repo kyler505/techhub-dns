@@ -23,29 +23,30 @@ export default function Filters({
   ];
 
   return (
-    <div className="mb-4 space-y-4">
-      <div className="flex gap-2 border-b">
+    <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
+      <div className="flex gap-1 border-b">
         {statusTabs.map((tab) => (
           <button
             key={tab.label}
             onClick={() => onStatusChange(tab.value)}
-            className={`px-4 py-2 border-b-2 -mb-px ${
+            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
               status === tab.value
-                ? "border-blue-500 text-blue-600 font-medium"
-                : "border-transparent text-gray-600 hover:text-gray-800"
+                ? "border-primary text-primary font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.label}
           </button>
         ))}
       </div>
-      <div>
+
+      <div className="w-full sm:w-auto sm:min-w-[300px]">
         <input
           type="text"
-          placeholder="Search by Order ID, recipient, location..."
+          placeholder="Search orders..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full px-4 py-2 border rounded"
+          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
         />
       </div>
     </div>

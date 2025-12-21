@@ -2,17 +2,16 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
-import StatusTransition from "../components/StatusTransition";
+import { deliveryRunsApi } from "../api/deliveryRuns";
+import { Button } from "../components/ui/button";
+import { formatDeliveryLocation } from "../utils/location";
+import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
 
 export default function PreDeliveryQueue() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [transitioningOrder, setTransitioningOrder] = useState<{
-    orderId: string;
-    newStatus: OrderStatus;
-    requireReason: boolean;
-  } | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,31 +40,38 @@ export default function PreDeliveryQueue() {
     setSelectedOrders(newSelected);
   };
 
-  const handleBulkStartDelivery = async () => {
+  const handleBulkStartDelivery = () => {
     if (selectedOrders.size === 0) {
       alert("Please select at least one order");
       return;
     }
+    setIsCreateDialogOpen(true);
+  };
+
+  const handleCreateDelivery = async (runner: string, vehicle: string) => {
     try {
-      await ordersApi.bulkUpdateStatus({
+      await deliveryRunsApi.createRun({
+        runner,
         order_ids: Array.from(selectedOrders),
-        status: OrderStatus.IN_DELIVERY,
+        vehicle: vehicle as "van" | "golf_cart",
       });
       setSelectedOrders(new Set());
       loadOrders();
+      alert("Delivery started successfully!");
     } catch (error) {
       console.error("Failed to start delivery:", error);
-      alert("Failed to start delivery");
+      throw error; // Re-throw to let the dialog handle the error
     }
   };
 
-  const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatus, reason?: string) => {
     const requireReason = newStatus === OrderStatus.ISSUE;
     if (requireReason && reason === undefined) {
-      setTransitioningOrder({ orderId, newStatus, requireReason: true });
-    } else {
-      performStatusChange(orderId, newStatus, reason);
+      const userReason = prompt("Please provide a reason for marking this order as an issue:");
+      if (!userReason) return; // User cancelled
+      reason = userReason;
     }
+    await performStatusChange(orderId, newStatus, reason);
   };
 
   const performStatusChange = async (
@@ -75,7 +81,6 @@ export default function PreDeliveryQueue() {
   ) => {
     try {
       await ordersApi.updateOrderStatus(orderId, { status: newStatus, reason });
-      setTransitioningOrder(null);
       loadOrders();
     } catch (error) {
       console.error("Failed to update status:", error);
@@ -88,26 +93,33 @@ export default function PreDeliveryQueue() {
   };
 
   if (loading) {
-    return <div className="p-4">Loading...</div>;
+    return <div className="flex items-center justify-center py-8">
+      <div className="text-sm text-muted-foreground">Loading...</div>
+    </div>;
   }
 
   return (
-    <div className="p-4">
-      <h1 className="text-3xl font-bold mb-4">Pre-Delivery Queue</h1>
-      <div className="mb-4 flex gap-2">
-        <button
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Pre-Delivery Queue</h2>
+          <p className="text-sm text-muted-foreground">
+            {orders.length} order{orders.length !== 1 ? 's' : ''} ready for delivery
+          </p>
+        </div>
+        <Button
           onClick={handleBulkStartDelivery}
           disabled={selectedOrders.size === 0}
-          className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:bg-gray-300"
+          className="bg-orange-500 hover:bg-orange-600"
         >
           Start Delivery ({selectedOrders.size} selected)
-        </button>
+        </Button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse border border-gray-300">
+      <div className="rounded-md border">
+        <table className="w-full">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="border border-gray-300 px-4 py-2">
+            <tr className="border-b">
+              <th className="h-12 px-4 text-left align-middle">
                 <input
                   type="checkbox"
                   checked={selectedOrders.size === orders.length && orders.length > 0}
@@ -120,66 +132,58 @@ export default function PreDeliveryQueue() {
                   }}
                 />
               </th>
-              <th className="border border-gray-300 px-4 py-2 text-left">Order ID</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">Recipient</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">Location</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">Deliverer</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
+              <th className="h-12 px-4 text-left align-middle font-medium">Order ID</th>
+              <th className="h-12 px-4 text-left align-middle font-medium">Recipient</th>
+              <th className="h-12 px-4 text-left align-middle font-medium">Location</th>
+              <th className="h-12 px-4 text-left align-middle font-medium">Deliverer</th>
+              <th className="h-12 px-4 text-left align-middle font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr key={order.id} className="hover:bg-gray-50">
-                <td className="border border-gray-300 px-4 py-2">
+              <tr key={order.id} className="border-b hover:bg-muted/50">
+                <td className="p-4 align-middle">
                   <input
                     type="checkbox"
                     checked={selectedOrders.has(order.id)}
                     onChange={() => handleSelectOrder(order.id)}
                   />
                 </td>
-                <td className="border border-gray-300 px-4 py-2">
-                  <button
+                <td className="p-4 align-middle">
+                  <Button
+                    variant="link"
                     onClick={() => handleViewDetail(order.id)}
-                    className="text-blue-600 hover:underline"
+                    className="p-0 h-auto font-normal"
                   >
                     {order.inflow_order_id}
-                  </button>
+                  </Button>
                 </td>
-                <td className="border border-gray-300 px-4 py-2">
-                  {order.recipient_name || "N/A"}
-                </td>
-                <td className="border border-gray-300 px-4 py-2">
-                  {order.delivery_location || "N/A"}
-                </td>
-                <td className="border border-gray-300 px-4 py-2">
-                  {order.assigned_deliverer || "Unassigned"}
-                </td>
-                <td className="border border-gray-300 px-4 py-2">
-                  <button
+                <td className="p-4 align-middle">{order.recipient_name || "N/A"}</td>
+                <td className="p-4 align-middle">{formatDeliveryLocation(order)}</td>
+                <td className="p-4 align-middle">{order.assigned_deliverer || "Unassigned"}</td>
+                <td className="p-4 align-middle">
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     onClick={() => handleStatusChange(order.id, OrderStatus.ISSUE, "")}
-                    className="px-2 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
                   >
                     Flag Issue
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {transitioningOrder && (
-        <StatusTransition
-          currentStatus={
-            orders.find((o) => o.id === transitioningOrder.orderId)?.status || OrderStatus.PRE_DELIVERY
-          }
-          newStatus={transitioningOrder.newStatus}
-          requireReason={transitioningOrder.requireReason}
-          onConfirm={(reason) =>
-            performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
-          }
-          onCancel={() => setTransitioningOrder(null)}
-        />
-      )}
+
+      {/* StatusTransition will be handled by parent DeliveryDashboard */}
+
+      <CreateDeliveryDialog
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+        onCreateDelivery={handleCreateDelivery}
+        selectedOrdersCount={selectedOrders.size}
+      />
     </div>
   );
 }

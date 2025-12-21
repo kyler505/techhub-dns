@@ -2,6 +2,7 @@ export enum OrderStatus {
   PICKED = "Picked",
   PRE_DELIVERY = "PreDelivery",
   IN_DELIVERY = "InDelivery",
+  SHIPPING = "Shipping",
   DELIVERED = "Delivered",
   ISSUE = "Issue",
 }
@@ -16,6 +17,7 @@ export interface Order {
   po_number?: string;
   status: OrderStatus;
   assigned_deliverer?: string;
+  delivery_run_id?: string;
   issue_reason?: string;
   tagged_at?: string;
   tagged_by?: string;
@@ -27,8 +29,10 @@ export interface Order {
   qa_completed_by?: string;
   qa_data?: Record<string, any>;
   qa_path?: string;
+  qa_method?: string;
   signature_captured_at?: string;
   signed_picklist_path?: string;
+  inflow_data?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }

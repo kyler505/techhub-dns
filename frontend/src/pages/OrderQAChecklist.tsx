@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Order } from "../types/order";
+import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 
 type QAMethod = "Delivery" | "Shipping";
@@ -70,6 +70,7 @@ export default function OrderQAChecklist() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [search, setSearch] = useState("");
+  const [showCompleted, setShowCompleted] = useState(false);
 
   // QA modal state
   const [qaOpen, setQaOpen] = useState(false);
@@ -80,15 +81,21 @@ export default function OrderQAChecklist() {
   useEffect(() => {
     loadOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, showCompleted]);
 
   const loadOrders = async () => {
     setLoadingOrders(true);
     try {
+      // Only load orders that are in Picked status (eligible for QA)
+      // or all orders if showCompleted is true
+      const statusFilter = showCompleted ? undefined : OrderStatus.PICKED;
       const data = await ordersApi.getOrders({
+        status: statusFilter,
         search: search.trim() ? search.trim() : undefined,
       });
-      setOrders(data);
+      // Filter to only show orders that have picklist generated (required for QA)
+      const filteredData = showCompleted ? data : data.filter(order => order.picklist_generated_at);
+      setOrders(filteredData);
     } catch (error) {
       console.error("Failed to load orders:", error);
       alert("Failed to load orders");
@@ -135,32 +142,48 @@ export default function OrderQAChecklist() {
       return;
     }
 
-    const payload: SavedQAChecklist = {
-      orderId: activeOrder.id,
-      inflowOrderId: activeOrder.inflow_order_id || activeOrder.id,
-      submittedAt: new Date().toISOString(),
-      form,
-    };
+    try {
+      // Submit QA to backend
+      await ordersApi.submitQa(activeOrder.id, {
+        responses: form,
+        technician: form.technician,
+      });
 
-    // Save QA checklist locally (TEMP until backend saves it)
-    localStorage.setItem(storageKey(activeOrder.id), JSON.stringify(payload));
-    setLastSavedAt(payload.submittedAt);
+      // Also save locally for UI state (optional)
+      const payload: SavedQAChecklist = {
+        orderId: activeOrder.id,
+        inflowOrderId: activeOrder.inflow_order_id || activeOrder.id,
+        submittedAt: new Date().toISOString(),
+        form,
+      };
+      localStorage.setItem(storageKey(activeOrder.id), JSON.stringify(payload));
+      setLastSavedAt(payload.submittedAt);
 
-    alert("QA checklist saved.");
-    closeQA();
-    loadOrders();
+      alert("QA checklist submitted successfully!");
+      closeQA();
+      loadOrders();
+    } catch (error) {
+      console.error("Failed to submit QA:", error);
+      alert("Failed to submit QA checklist. Please try again.");
+    }
   };
 
   const completedMap = useMemo(() => {
     const map = new Map<string, string>(); // orderId -> submittedAt
     for (const o of orders) {
-      const raw = localStorage.getItem(storageKey(o.id));
-      if (!raw) continue;
-      try {
-        const parsed = JSON.parse(raw) as SavedQAChecklist;
-        map.set(o.id, parsed.submittedAt);
-      } catch {
-        // ignore
+      // Check backend QA completion first
+      if (o.qa_completed_at) {
+        map.set(o.id, o.qa_completed_at);
+      } else {
+        // Fallback to localStorage for backwards compatibility
+        const raw = localStorage.getItem(storageKey(o.id));
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw) as SavedQAChecklist;
+          map.set(o.id, parsed.submittedAt);
+        } catch {
+          // ignore
+        }
       }
     }
     return map;
@@ -172,15 +195,18 @@ export default function OrderQAChecklist() {
         <p className="text-sm text-gray-500">Quality Assurance</p>
         <h1 className="text-3xl font-bold text-gray-900">Order QA Checklist</h1>
         <p className="mt-2 text-gray-600">
-          Select an order, click <span className="font-semibold">QA</span>, answer the checklist, then{" "}
-          <span className="font-semibold">Submit QA</span> to save.
+          Showing orders that need QA by default. Select an order, click{" "}
+          <span className="font-semibold">QA</span>, answer the checklist, then{" "}
+          <span className="font-semibold">Submit QA</span> to complete.
         </p>
       </header>
 
       <section className="bg-white shadow rounded-lg p-4 border border-gray-100 mb-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {showCompleted ? "All Orders" : "Orders Needing QA"}
+            </h2>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
@@ -192,6 +218,16 @@ export default function OrderQAChecklist() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Order ID / recipient / location..."
               />
+            </label>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-[#800000] focus:ring-[#800000]"
+              />
+              Show all orders
             </label>
           </div>
         </div>
@@ -210,7 +246,13 @@ export default function OrderQAChecklist() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => {
+                {orders
+                  .filter((o) => showCompleted || !completedMap.has(o.id))
+                  .filter((o) => {
+                    // Only show orders that are eligible for QA (not already delivered/shipped)
+                    return ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status);
+                  })
+                  .map((o) => {
                   const submittedAt = completedMap.get(o.id) || null;
                   const qaButtonLabel = submittedAt ? "Edit QA" : "QA";
 
@@ -239,10 +281,19 @@ export default function OrderQAChecklist() {
                   );
                 })}
 
-                {!orders.length && (
+                {orders
+                  .filter((o) => showCompleted || !completedMap.has(o.id))
+                  .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
+                  .length === 0 && (
                   <tr>
                     <td className="border border-gray-200 px-4 py-6 text-center text-gray-600" colSpan={4}>
-                      No orders found.
+                      {orders.length === 0
+                        ? showCompleted
+                          ? "No orders found."
+                          : "No orders need QA at this time."
+                        : showCompleted
+                        ? "No eligible orders found."
+                        : "All eligible orders have completed QA."}
                     </td>
                   </tr>
                 )}

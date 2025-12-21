@@ -189,13 +189,19 @@ class Order:
 ```
 Picked -> PreDelivery -> InDelivery -> Delivered
    \\-> Issue -> Picked/PreDelivery
+
+Picked -> PreDelivery -> Shipping -> Delivered
+   \\-> Issue -> Picked/PreDelivery
 ```
 
 - **Picked**: Order pulled from Inflow, awaiting prep steps
 - **PreDelivery**: Asset tagging, picklist, and QA completed
-- **InDelivery**: Order is out for delivery (triggers Teams notification)
-- **Delivered**: Order has been successfully delivered (terminal state)
+- **InDelivery**: Order is out for local delivery (triggers Teams notification)
+- **Shipping**: Order is prepared for external shipping (no Teams notification)
+- **Delivered**: Order has been successfully delivered/shipped (terminal state)
 - **Issue**: Order has a problem (can return to Picked or PreDelivery after resolution)
+
+The QA checklist determines whether an order follows the Delivery or Shipping workflow based on the selected method.
 
 ### Audit Log Model
 
@@ -262,6 +268,42 @@ class TeamsNotification:
 
 - `POST /api/inflow/sync` - Manually trigger Inflow sync
 - `GET /api/inflow/sync-status` - Get last sync status
+
+#### Manual Order Sync
+
+**Purpose**: Manually trigger the Inflow order synchronization process (same as the automatic 5-minute sync).
+
+**Command (PowerShell)**:
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/inflow/sync" -Method POST -ContentType "application/json"
+```
+
+**Command (curl)**:
+```bash
+curl -X POST http://localhost:8000/api/inflow/sync -H "Content-Type: application/json"
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "orders_synced": 25,
+  "orders_created": 5,
+  "orders_updated": 20,
+  "message": "Synced 25 orders"
+}
+```
+
+**Process**:
+1. Fetches recent "started" orders from Inflow API (up to 3 pages, 100 orders per page, targeting 100 total matches)
+2. Creates or updates orders in the local database
+3. Returns summary statistics of the sync operation
+
+**Use Cases**:
+- Testing Inflow integration
+- Forcing immediate sync outside the 5-minute schedule
+- Troubleshooting sync issues
+- Initial data population after setup
 
 ### Teams API (`/api/teams`)
 
@@ -381,14 +423,44 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 
 **Rules**:
 - Picked -> PreDelivery or Issue
-- PreDelivery -> InDelivery or Issue
+- PreDelivery -> InDelivery (local delivery) or Shipping (external shipping) or Issue
 - InDelivery -> Delivered or Issue
+- Shipping -> Delivered or Issue
 - Issue -> Picked or PreDelivery (after resolution)
 - Delivered -> (terminal, no transitions)
 
+**QA Integration**: The QA checklist determines whether PreDelivery transitions to InDelivery or Shipping based on the selected delivery method.
+
 **Validation**: Enforced in `OrderService._is_valid_transition()`
 
-### 5. Teams Notifications
+### 5. QA Checklist Integration
+
+**Purpose**: Comprehensive QA checklist that validates order preparation and determines workflow routing.
+
+**Process**:
+1. QA form checks asset tagging, packaging, documentation, and labeling
+2. Technician selects delivery method: "Delivery" (local) or "Shipping" (external)
+3. Based on method selection:
+   - **Delivery**: Order transitions to PreDelivery → InDelivery → Delivered
+   - **Shipping**: Order transitions to PreDelivery → Shipping → Delivered
+4. Teams notifications only sent for local delivery orders
+
+**Form Fields**:
+- Order verification
+- Asset tag and serial matching
+- Template notifications sent
+- Proper packaging verification
+- Packing slip accuracy
+- Electronic documentation
+- Box labeling verification
+- QA signature
+- **Delivery method selection** (determines workflow path)
+
+**Integration**: QA data is stored in the database and workflow automatically routes based on method selection.
+
+**Filtering**: QA page defaults to showing only "Picked" status orders that haven't completed QA, with toggle to view all eligible orders.
+
+### 7. Teams Notifications
 
 **Trigger**: When order status changes to "PreDelivery" (ready) or "In Delivery"
 
@@ -405,7 +477,7 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 
 **Service**: `backend/app/services/teams_service.py`
 
-### 6. Audit Logging
+### 8. Audit Logging
 
 **Automatic**: All status changes automatically logged
 

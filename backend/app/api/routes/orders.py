@@ -193,16 +193,27 @@ async def submit_qa(
         )
 
         if order.status == OrderStatus.PICKED and service._prep_steps_complete(order):
+            # Determine next status based on QA method
+            qa_method = order.qa_method
+            if qa_method == "Shipping":
+                next_status = OrderStatus.SHIPPING
+            else:
+                # Default to PRE_DELIVERY for Delivery method or when method is not specified
+                next_status = OrderStatus.PRE_DELIVERY
+
             order = service.transition_status(
                 order_id=order_id,
-                new_status=OrderStatus.PRE_DELIVERY,
+                new_status=next_status,
                 changed_by=submission.technician
             )
-            teams_service = TeamsService(db)
-            background_tasks.add_task(
-                teams_service.send_ready_notification,
-                order
-            )
+
+            # Only send ready notification for delivery orders, not shipping
+            if next_status == OrderStatus.PRE_DELIVERY:
+                teams_service = TeamsService(db)
+                background_tasks.add_task(
+                    teams_service.send_ready_notification,
+                    order
+                )
 
         return order
     except ValueError as e:

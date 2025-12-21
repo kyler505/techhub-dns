@@ -32,6 +32,20 @@ class OrderService:
     def _prep_steps_complete(self, order: Order) -> bool:
         return bool(order.tagged_at and order.picklist_generated_at and order.qa_completed_at)
 
+    def _is_shipping_order(self, order: Order) -> bool:
+        """Determine if an order is a shipping order (not local delivery)"""
+        if not order.inflow_data:
+            return False
+
+        shipping_addr_obj = order.inflow_data.get("shippingAddress", {})
+        city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+
+        if city:
+            city_upper = city.upper()
+            return city_upper not in ("BRYAN", "COLLEGE STATION")
+
+        return False  # Default to local delivery if no city specified
+
     def _storage_path(self, *parts: str) -> Path:
         return Path(settings.storage_root).joinpath(*parts)
 
@@ -118,6 +132,7 @@ class OrderService:
         order.qa_completed_by = technician
         order.qa_data = qa_data
         order.qa_path = str(qa_file)
+        order.qa_method = qa_data.get("method")  # "Delivery" or "Shipping"
         order.updated_at = datetime.utcnow()
 
         self.db.commit()
@@ -180,6 +195,16 @@ class OrderService:
         if new_status == OrderStatus.PRE_DELIVERY and not self._prep_steps_complete(order):
             raise ValueError("Asset tagging, picklist, and QA must be completed before Pre-Delivery")
 
+        if new_status == OrderStatus.IN_DELIVERY and old_status == OrderStatus.PRE_DELIVERY:
+            if not order.delivery_run_id:
+                raise ValueError("Order must be assigned to a delivery run before transitioning to In-Delivery")
+            if self._is_shipping_order(order):
+                raise ValueError("Shipping orders cannot be transitioned to In-Delivery")
+
+        if new_status == OrderStatus.SHIPPING:
+            if not self._is_shipping_order(order):
+                raise ValueError("Only shipping orders (outside Bryan/College Station) can be transitioned to Shipping")
+
         # Require reason for Issue status
         if new_status == OrderStatus.ISSUE and not reason:
             raise ValueError("Reason is required when flagging an issue")
@@ -213,9 +238,10 @@ class OrderService:
     def _is_valid_transition(self, from_status: OrderStatus, to_status: OrderStatus) -> bool:
         """Validate status transition"""
         valid_transitions = {
-            OrderStatus.PICKED: [OrderStatus.PRE_DELIVERY, OrderStatus.ISSUE],
-            OrderStatus.PRE_DELIVERY: [OrderStatus.IN_DELIVERY, OrderStatus.ISSUE],
+            OrderStatus.PICKED: [OrderStatus.PRE_DELIVERY, OrderStatus.SHIPPING, OrderStatus.ISSUE],
+            OrderStatus.PRE_DELIVERY: [OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING, OrderStatus.ISSUE],
             OrderStatus.IN_DELIVERY: [OrderStatus.DELIVERED, OrderStatus.ISSUE],
+            OrderStatus.SHIPPING: [OrderStatus.DELIVERED, OrderStatus.ISSUE],
             OrderStatus.ISSUE: [OrderStatus.PICKED, OrderStatus.PRE_DELIVERY],
             OrderStatus.DELIVERED: []  # Terminal state
         }
@@ -282,17 +308,21 @@ class OrderService:
         if not order_number:
             raise ValueError("Order number is required")
 
-        # Check if order is in Bryan/College Station - skip if not (FedEx shipments)
+        # Check if order is in Bryan/College Station for delivery routing
         shipping_addr_obj = inflow_data.get("shippingAddress", {})
         city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+        is_local_delivery = False
 
-        # Only process orders in Bryan or College Station
-        # If city is empty, still process (might be local delivery or data issue)
+        # Determine if this is a local delivery (Bryan/College Station) or shipping order
         if city:
             city_upper = city.upper()
-            if city_upper not in ("BRYAN", "COLLEGE STATION"):
-                logger.info(f"Skipping order {order_number} - not in Bryan/College Station (city: '{city}'). Order will be shipped via FedEx.")
-                raise ValueError(f"Order {order_number} is not in Bryan/College Station (city: '{city}'). These orders are shipped via FedEx and not processed for delivery.")
+            is_local_delivery = city_upper in ("BRYAN", "COLLEGE STATION")
+            if not is_local_delivery:
+                logger.info(f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order.")
+        else:
+            # If no city specified, assume it's local delivery (might be data issue)
+            is_local_delivery = True
+            logger.debug(f"No city specified for order {order_number}, assuming local delivery")
 
         # Extract order remarks and shipping addresses
         order_remarks = inflow_data.get("orderRemarks", "")
@@ -305,105 +335,111 @@ class OrderService:
 
         building_code = None
 
-        # PRIORITY 1: Check order remarks FIRST for building codes
-        if order_remarks:
-            logger.info(f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'")
-            # Try to extract building code directly from order remarks
-            building_code = extract_building_code_from_location(order_remarks)
-            if building_code:
-                logger.info(f"✓ Found building code '{building_code}' directly in order remarks for order {order_number}")
-            else:
-                logger.debug(f"✗ No building code found directly in order remarks for order {order_number}")
-
-        # PRIORITY 2: If no building code in remarks, check alternative location from remarks
-        if not building_code:
-            logger.debug(f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}")
-            alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
-            if alternative_location:
-                logger.debug(f"Found alternative location in remarks: '{alternative_location}'")
-                building_code = extract_building_code_from_location(alternative_location)
+        if is_local_delivery:
+            # For local deliveries, try to extract building codes
+            # PRIORITY 1: Check order remarks FIRST for building codes
+            if order_remarks:
+                logger.info(f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'")
+                # Try to extract building code directly from order remarks
+                building_code = extract_building_code_from_location(order_remarks)
                 if building_code:
-                    logger.info(f"✓ Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}")
+                    logger.info(f"✓ Found building code '{building_code}' directly in order remarks for order {order_number}")
                 else:
-                    logger.debug(f"✗ No building code extracted from alternative location '{alternative_location}'")
-            else:
-                logger.debug(f"No alternative location patterns found in remarks for order {order_number}")
+                    logger.debug(f"✗ No building code found directly in order remarks for order {order_number}")
 
-        # PRIORITY 3: If still no building code, check shipping addresses
-        if not building_code:
-            logger.info(f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'")
-
-            # First try extracting building code from address2 using location patterns (e.g., "Wehner Bldg")
-            if address2:
-                logger.info(f"Attempting to extract building code from address2: '{address2}'")
-                building_code = extract_building_code_from_location(address2)
-                if building_code:
-                    logger.info(f"✓ Found building code '{building_code}' from address2 using location patterns: '{address2}'")
-                else:
-                    logger.info(f"✗ No building code extracted from address2: '{address2}'")
-
-            # If no building code found, try location extraction on combined address
-            if not building_code and shipping_address:
-                logger.info(f"Attempting to extract building code from combined shipping address: '{shipping_address}'")
-                building_code = extract_building_code_from_location(shipping_address)
-                if building_code:
-                    logger.info(f"✓ Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'")
-                else:
-                    logger.info(f"✗ No building code extracted from combined shipping address: '{shipping_address}'")
-
-            # If no building code found, try ArcGIS matching on combined address
+            # PRIORITY 2: If no building code in remarks, check alternative location from remarks
             if not building_code:
-                building_code = get_building_abbreviation(None, shipping_address)
-                if building_code:
-                    logger.info(f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'")
-
-            # If still no building code, try ArcGIS matching on address2
-            if not building_code and address2:
-                building_code = get_building_abbreviation(None, address2)
-                if building_code:
-                    logger.info(f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'")
-
-        # Use building code if found, otherwise try to extract from fallback strings
-        if building_code:
-            delivery_location = building_code
-            logger.info(f"Using building code as delivery_location for order {order_number}: '{delivery_location}'")
-        else:
-            # Fallback: try to extract building code from alternative location or shipping address
-            # before using them as-is
-            logger.debug(f"No building code found yet, attempting final extraction from fallback strings for order {order_number}")
-
-            # Get alternative location if not already extracted
-            alternative_location = self._extract_delivery_location_from_remarks(order_remarks) if order_remarks else None
-
-            # Try to extract building code from alternative location first
-            if alternative_location:
-                logger.debug(f"Attempting final extraction from alternative_location: '{alternative_location}'")
-                building_code = extract_building_code_from_location(alternative_location)
-                if building_code:
-                    delivery_location = building_code
-                    logger.info(f"✓ Extracted building code '{building_code}' from alternative_location fallback for order {order_number}")
+                logger.debug(f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}")
+                alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
+                if alternative_location:
+                    logger.debug(f"Found alternative location in remarks: '{alternative_location}'")
+                    building_code = extract_building_code_from_location(alternative_location)
+                    if building_code:
+                        logger.info(f"✓ Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}")
+                    else:
+                        logger.debug(f"✗ No building code extracted from alternative location '{alternative_location}'")
                 else:
-                    # Try to extract from shipping address
-                    logger.debug(f"Attempting final extraction from shipping_address: '{shipping_address}'")
+                    logger.debug(f"No alternative location patterns found in remarks for order {order_number}")
+
+            # PRIORITY 3: If still no building code, check shipping addresses
+            if not building_code:
+                logger.info(f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'")
+
+                # First try extracting building code from address2 using location patterns (e.g., "Wehner Bldg")
+                if address2:
+                    logger.info(f"Attempting to extract building code from address2: '{address2}'")
+                    building_code = extract_building_code_from_location(address2)
+                    if building_code:
+                        logger.info(f"✓ Found building code '{building_code}' from address2 using location patterns: '{address2}'")
+                    else:
+                        logger.info(f"✗ No building code extracted from address2: '{address2}'")
+
+                # If no building code found, try location extraction on combined address
+                if not building_code and shipping_address:
+                    logger.info(f"Attempting to extract building code from combined shipping address: '{shipping_address}'")
+                    building_code = extract_building_code_from_location(shipping_address)
+                    if building_code:
+                        logger.info(f"✓ Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'")
+                    else:
+                        logger.info(f"✗ No building code extracted from combined shipping address: '{shipping_address}'")
+
+                # If no building code found, try ArcGIS matching on combined address
+                if not building_code:
+                    building_code = get_building_abbreviation(None, shipping_address)
+                    if building_code:
+                        logger.info(f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'")
+
+                # If still no building code, try ArcGIS matching on address2
+                if not building_code and address2:
+                    building_code = get_building_abbreviation(None, address2)
+                    if building_code:
+                        logger.info(f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'")
+
+            # Use building code if found, otherwise try to extract from fallback strings
+            if building_code:
+                delivery_location = building_code
+                logger.info(f"Using building code as delivery_location for order {order_number}: '{delivery_location}'")
+            else:
+                # Fallback: try to extract building code from alternative location or shipping address
+                # before using them as-is
+                logger.debug(f"No building code found yet, attempting final extraction from fallback strings for order {order_number}")
+
+                # Get alternative location if not already extracted
+                alternative_location = self._extract_delivery_location_from_remarks(order_remarks) if order_remarks else None
+
+                # Try to extract building code from alternative location first
+                if alternative_location:
+                    logger.debug(f"Attempting final extraction from alternative_location: '{alternative_location}'")
+                    building_code = extract_building_code_from_location(alternative_location)
+                    if building_code:
+                        delivery_location = building_code
+                        logger.info(f"✓ Extracted building code '{building_code}' from alternative_location fallback for order {order_number}")
+                    else:
+                        # Try to extract from shipping address
+                        logger.debug(f"Attempting final extraction from shipping_address: '{shipping_address}'")
+                        building_code = extract_building_code_from_location(shipping_address)
+                        if building_code:
+                            delivery_location = building_code
+                            logger.info(f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+                        else:
+                            # Last resort: use alternative location or shipping address as-is
+                            delivery_location = alternative_location or shipping_address
+                            logger.info(f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'")
+                else:
+                    # No alternative location, try shipping address
+                    logger.debug(f"No alternative location, attempting final extraction from shipping_address: '{shipping_address}'")
                     building_code = extract_building_code_from_location(shipping_address)
                     if building_code:
                         delivery_location = building_code
                         logger.info(f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
                     else:
-                        # Last resort: use alternative location or shipping address as-is
-                        delivery_location = alternative_location or shipping_address
-                        logger.info(f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'")
-            else:
-                # No alternative location, try shipping address
-                logger.debug(f"No alternative location, attempting final extraction from shipping_address: '{shipping_address}'")
-                building_code = extract_building_code_from_location(shipping_address)
-                if building_code:
-                    delivery_location = building_code
-                    logger.info(f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
-                else:
-                    # Last resort: use shipping address as-is
-                    delivery_location = shipping_address
-                    logger.info(f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{delivery_location}'")
+                        # Last resort: use shipping address as-is
+                        delivery_location = shipping_address
+                        logger.info(f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{delivery_location}'")
+        else:
+            # For shipping orders, use the city as delivery location
+            delivery_location = city if city else shipping_address
+            logger.info(f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'")
 
         # Check if order exists
         existing = self.db.query(Order).filter(

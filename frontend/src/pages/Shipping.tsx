@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Order } from "../types/order";
+import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
+import { formatDeliveryLocation } from "../utils/location";
 
 type DockStatus = "WORK_AREA" | "DOCK";
 
@@ -46,6 +47,7 @@ export default function Shipping() {
     setLoadingOrders(true);
     try {
       const data = await ordersApi.getOrders({
+        status: OrderStatus.SHIPPING,
         search: search.trim() ? search.trim() : undefined,
       });
       setOrders(data);
@@ -80,15 +82,15 @@ export default function Shipping() {
   };
 
   return (
-    <div className="p-4">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Shipping</h1>
-        <p className="mt-2 text-gray-600">
-          Basic shipping view
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Shipping Operations</h2>
+        <p className="text-sm text-muted-foreground">
+          Manage orders being prepared for shipping and carrier pickup
         </p>
-      </header>
+      </div>
 
-      <section className="bg-white shadow rounded-lg p-4 border border-gray-100">
+      <div className="rounded-lg border bg-card p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
@@ -133,7 +135,7 @@ export default function Shipping() {
                       </td>
 
                       <td className="border border-gray-200 px-4 py-2 text-gray-800">
-                        {o.delivery_location || "N/A"}
+                        {formatDeliveryLocation(o)}
                       </td>
 
                       <td className="border border-gray-200 px-4 py-2">
@@ -190,7 +192,7 @@ export default function Shipping() {
             </table>
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }

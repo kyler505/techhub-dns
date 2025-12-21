@@ -12,6 +12,7 @@ class OrderStatus(str, enum.Enum):
     PICKED = "Picked"
     PRE_DELIVERY = "PreDelivery"
     IN_DELIVERY = "InDelivery"
+    SHIPPING = "Shipping"
     DELIVERED = "Delivered"
     ISSUE = "Issue"
 
@@ -40,6 +41,7 @@ class Order(Base):
     qa_completed_by = Column(String, nullable=True)
     qa_data = Column(JSONB, nullable=True)
     qa_path = Column(String, nullable=True)
+    qa_method = Column(String, nullable=True)  # "Delivery" or "Shipping"
     signature_captured_at = Column(DateTime, nullable=True)
     signed_picklist_path = Column(String, nullable=True)
     inflow_data = Column(JSONB, nullable=True)  # Full Inflow payload

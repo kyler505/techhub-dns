@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 import OrderTable from "../components/OrderTable";
-import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import Filters from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
-export default function Dashboard() {
+export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | null>(null);
@@ -67,30 +67,47 @@ export default function Dashboard() {
   };
 
   if (loading) {
-    return <div className="p-4">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="p-4">
-      <h1 className="text-3xl font-bold mb-4">Orders Dashboard</h1>
-      <Filters
-        status={statusFilter}
-        onStatusChange={setStatusFilter}
-        search={search}
-        onSearchChange={setSearch}
-      />
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-8">
+    <div className="container mx-auto py-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+          <p className="text-muted-foreground">
+            Manage and track your delivery orders
+          </p>
+        </div>
+      </div>
+
+      <Card>
+        <div className="p-6 pb-0">
+          <Filters
+            status={statusFilter}
+            onStatusChange={setStatusFilter}
+            search={search}
+            onSearchChange={setSearch}
+          />
+        </div>
+
+        <CardHeader>
+          <CardDescription>
+            {orders.length} order{orders.length !== 1 ? 's' : ''} found
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           <OrderTable
             orders={orders}
             onStatusChange={handleStatusChange}
             onViewDetail={handleViewDetail}
           />
-        </div>
-        <div className="col-span-4 space-y-4">
-          <LiveDeliveryDashboard />
-        </div>
-      </div>
+        </CardContent>
+      </Card>
       {transitioningOrder && (
         <StatusTransition
           currentStatus={

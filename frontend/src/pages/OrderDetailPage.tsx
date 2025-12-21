@@ -97,16 +97,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  const handleSubmitQa = async (responses: { items: { id: string; label: string; passed: boolean }[]; notes: string }) => {
-    if (!order) return;
-    try {
-      await ordersApi.submitQa(order.id, { responses });
-      loadOrder();
-    } catch (error) {
-      console.error("Failed to submit QA:", error);
-      alert("Failed to submit QA");
-    }
-  };
 
   if (loading) {
     return <div className="p-4">Loading...</div>;
@@ -122,7 +112,7 @@ export default function OrderDetailPage() {
         onClick={() => navigate("/")}
         className="mb-4 px-4 py-2 border rounded hover:bg-gray-100"
       >
-        ← Back to Dashboard
+        ← Back to Orders
       </button>
       <OrderDetailComponent
         order={order}
@@ -132,7 +122,6 @@ export default function OrderDetailPage() {
         onRetryNotification={handleRetryNotification}
         onTagOrder={handleTagOrder}
         onGeneratePicklist={handleGeneratePicklist}
-        onSubmitQa={handleSubmitQa}
       />
       {transitioningStatus && (
         <StatusTransition

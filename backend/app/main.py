@@ -13,12 +13,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    scheduler = start_scheduler()
-    logger.info("Application started")
+    try:
+        scheduler = start_scheduler()
+        logger.info("Application started")
+    except Exception as e:
+        logger.error(f"Error during startup: {e}")
+        raise
     yield
     # Shutdown
-    scheduler.shutdown()
-    logger.info("Application shutdown")
+    try:
+        scheduler.shutdown()
+        logger.info("Application shutdown")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
 
 
 app = FastAPI(

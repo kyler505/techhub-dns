@@ -1,0 +1,209 @@
+import { useParams, Link } from "react-router-dom";
+import { useDeliveryRun } from "../hooks/useDeliveryRun";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { ArrowLeft, Truck, User, Clock, Package } from "lucide-react";
+
+export default function DeliveryRunDetailPage() {
+  const { runId } = useParams<{ runId: string }>();
+  const { run, loading, error } = useDeliveryRun(runId);
+
+  const formatVehicleName = (vehicle: string) => {
+    return vehicle
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-sm text-muted-foreground">Loading delivery run details...</div>
+      </div>
+    );
+  }
+
+  if (error || !run) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-red-600 mb-4">{error || "Delivery run not found"}</div>
+        <Link to="/delivery">
+          <Button variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Delivery Dashboard
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const formatDateTime = (dateString: string | null) => {
+    if (!dateString) return "Not started";
+    return new Date(dateString).toLocaleString();
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "active":
+        return "bg-green-100 text-green-800";
+      case "completed":
+        return "bg-blue-100 text-blue-800";
+      case "cancelled":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getOrderStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "pre_delivery":
+        return "bg-yellow-100 text-yellow-800";
+      case "in_delivery":
+        return "bg-blue-100 text-blue-800";
+      case "delivered":
+        return "bg-green-100 text-green-800";
+      case "issue":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Link to="/delivery">
+          <Button variant="outline" size="sm">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Delivery
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">{run.name}</h1>
+          <p className="text-muted-foreground">Run ID: {run.id}</p>
+        </div>
+      </div>
+
+      {/* Run Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Truck className="w-5 h-5" />
+            Run Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="flex items-center gap-3">
+              <User className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="text-sm text-muted-foreground">Runner</div>
+                <div className="font-medium">{run.runner}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Truck className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="text-sm text-muted-foreground">Vehicle</div>
+                <div className="font-medium">{formatVehicleName(run.vehicle)}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 rounded-full bg-current text-muted-foreground flex items-center justify-center text-xs">
+                ●
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Status</div>
+                <Badge className={getStatusColor(run.status)}>
+                  {run.status.toLowerCase()}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Package className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="text-sm text-muted-foreground">Orders</div>
+                <div className="font-medium">{run.orders.length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t">
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="text-sm text-muted-foreground">Started</div>
+                <div className="font-medium">{formatDateTime(run.start_time)}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="text-sm text-muted-foreground">Completed</div>
+                <div className="font-medium">{formatDateTime(run.end_time)}</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Orders in Run */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Orders in This Run</CardTitle>
+          <CardDescription>
+            {run.orders.length} order{run.orders.length !== 1 ? 's' : ''} assigned to this delivery run
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {run.orders.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No orders assigned to this run
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {run.orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <div className="font-medium">
+                        Order {order.inflow_order_id || order.id.slice(0, 8)}
+                      </div>
+                      {order.recipient_name && (
+                        <div className="text-sm text-muted-foreground">
+                          {order.recipient_name}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Badge className={getOrderStatusColor(order.status)}>
+                      {order.status.toLowerCase().replace('_', ' ')}
+                    </Badge>
+
+                    <Link to={`/orders/${order.id}`}>
+                      <Button variant="outline" size="sm">
+                        View Details
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

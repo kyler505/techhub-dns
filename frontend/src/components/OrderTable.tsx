@@ -1,6 +1,16 @@
 import { Order, OrderStatus } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
+import { formatDeliveryLocation } from "../utils/location";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { Button } from "./ui/button";
 
 interface OrderTableProps {
   orders: Order[];
@@ -16,7 +26,7 @@ export default function OrderTable({
   const getActionButtons = (order: Order) => {
     const buttons = [];
 
-    if (order.status === OrderStatus.PRE_DELIVERY) {
+    if (order.status === OrderStatus.PRE_DELIVERY && order.delivery_run_id) {
       buttons.push(
         <button
           key="start-delivery"
@@ -28,7 +38,19 @@ export default function OrderTable({
       );
     }
 
-    if (order.status === OrderStatus.IN_DELIVERY) {
+    if (order.status === OrderStatus.PRE_DELIVERY && !order.delivery_run_id) {
+      buttons.push(
+        <button
+          key="start-shipping"
+          onClick={() => onStatusChange(order.id, OrderStatus.SHIPPING)}
+          className="px-2 py-1 text-sm bg-purple-500 text-white rounded hover:bg-purple-600"
+        >
+          Start Shipping
+        </button>
+      );
+    }
+
+    if (order.status === OrderStatus.IN_DELIVERY || order.status === OrderStatus.SHIPPING) {
       buttons.push(
         <button
           key="delivered"
@@ -56,57 +78,39 @@ export default function OrderTable({
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse border border-gray-300">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border border-gray-300 px-4 py-2 text-left">Order ID</th>
-            <th className="border border-gray-300 px-4 py-2 text-left">Recipient</th>
-            <th className="border border-gray-300 px-4 py-2 text-left">Location</th>
-            <th className="border border-gray-300 px-4 py-2 text-left">Status</th>
-            <th className="border border-gray-300 px-4 py-2 text-left">Updated</th>
-            <th className="border border-gray-300 px-4 py-2 text-left">Deliverer</th>
-            <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.id} className="hover:bg-gray-50">
-              <td className="border border-gray-300 px-4 py-2">
-                <button
-                  onClick={() => onViewDetail(order.id)}
-                  className="text-blue-600 hover:underline"
-                >
-                  {order.inflow_order_id}
-                </button>
-              </td>
-              <td className="border border-gray-300 px-4 py-2">
-                {order.recipient_name || "N/A"}
-              </td>
-              <td className="border border-gray-300 px-4 py-2">
-                {order.delivery_location || "N/A"}
-              </td>
-              <td className="border border-gray-300 px-4 py-2">
-                <StatusBadge status={order.status} />
-              </td>
-              <td className="border border-gray-300 px-4 py-2">
-                {formatToCentralTime(order.updated_at)}
-              </td>
-              <td className="border border-gray-300 px-4 py-2">
-                {order.assigned_deliverer || "Unassigned"}
-              </td>
-              <td className="border border-gray-300 px-4 py-2">
-                <div className="flex gap-2 flex-wrap">
-                  {getActionButtons(order)}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {orders.length === 0 && (
-        <div className="text-center py-8 text-gray-500">No orders found</div>
-      )}
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Order ID</TableHead>
+          <TableHead>Recipient</TableHead>
+          <TableHead>Location</TableHead>
+          <TableHead>Order Date</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {orders.map((order) => (
+          <TableRow key={order.id}>
+            <TableCell>
+              <Button
+                variant="link"
+                onClick={() => onViewDetail(order.id)}
+                className="p-0 h-auto font-normal"
+              >
+                {order.inflow_order_id}
+              </Button>
+            </TableCell>
+            <TableCell>{order.recipient_name || "N/A"}</TableCell>
+            <TableCell>{formatDeliveryLocation(order)}</TableCell>
+            <TableCell>
+              {formatToCentralTime(order.created_at, "MMM d, yyyy")}
+            </TableCell>
+            <TableCell>
+              <StatusBadge status={order.status} />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

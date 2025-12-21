@@ -9,12 +9,12 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class VehicleEnum(str, enum.Enum):
+class VehicleEnum(enum.Enum):
     VAN = "van"
     GOLF_CART = "golf_cart"
 
 
-class DeliveryRunStatus(str, enum.Enum):
+class DeliveryRunStatus(enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -24,9 +24,10 @@ class DeliveryRun(Base):
     __tablename__ = "delivery_runs"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
     runner = Column(String, nullable=False)
-    vehicle = Column(SQLEnum(VehicleEnum, name="vehicle_enum"), nullable=False)
-    status = Column(SQLEnum(DeliveryRunStatus, name="delivery_run_status"), nullable=False, default=DeliveryRunStatus.ACTIVE)
+    vehicle = Column(String, nullable=False)
+    status = Column(String, nullable=False, default=DeliveryRunStatus.ACTIVE.value)
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
