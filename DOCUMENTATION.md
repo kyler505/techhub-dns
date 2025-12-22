@@ -61,7 +61,8 @@ The application solves the challenge of managing delivery orders from the point 
 ```
 ┌─────────────┐         ┌──────────────┐         ┌─────────────┐
 │   Frontend  │◄───────►│    Backend   │◄───────►│  PostgreSQL │
-│  (React)    │  HTTP   │   (FastAPI)  │   SQL   │  (Database) │
+│  (React)    │ HTTP/WS │   (FastAPI)  │   SQL   │  (Database) │
+│             │         │              │         │             │
 └─────────────┘         └──────────────┘         └─────────────┘
                                │
                                │
@@ -70,19 +71,21 @@ The application solves the challenge of managing delivery orders from the point 
         ▼                      ▼                      ▼
   ┌──────────┐         ┌──────────────┐      ┌─────────────┐
   │  Inflow  │         │    ArcGIS    │      │   Teams     │
-  │   API    │         │   Service    │      │  Webhook    │
+  │ API/Webhk│         │   Service    │      │  Webhook    │
   └──────────┘         └──────────────┘      └─────────────┘
 ```
 
 ### Request Flow
 
-1. **Order Sync**: APScheduler triggers sync every 5 minutes
-2. **Inflow API**: Fetches picked orders from Inflow
-3. **Order Processing**: Extracts locations, building codes, and processes data
-4. **Database**: Stores orders with extracted information
-5. **Status Changes**: User actions trigger status transitions
-6. **Notifications**: Teams notifications sent when orders are ready (PreDelivery) and when delivery starts (In Delivery)
-7. **Audit Logging**: All changes recorded in audit log
+1. **Order Sync**: APScheduler triggers sync every 5 minutes OR real-time webhook updates from Inflow
+2. **Inflow API/Webhooks**: Fetches picked orders from Inflow (polling) or receives instant updates (webhooks)
+3. **Order Processing**: Extracts locations, building codes, determines delivery vs shipping workflow, processes data
+4. **Database**: Stores orders with extracted information and workflow classification
+5. **Delivery Run Creation**: Users create delivery runs, assign orders and vehicles
+6. **Status Changes**: User actions trigger status transitions (local delivery vs shipping workflows)
+7. **Real-time Updates**: WebSocket broadcasts delivery run changes to connected clients
+8. **Notifications**: Teams notifications sent when orders are ready (PreDelivery) and when delivery starts (In Delivery)
+9. **Audit Logging**: All changes recorded in audit log including delivery run actions
 
 ## System Components
 
@@ -93,27 +96,32 @@ backend/
 ├── app/
 │   ├── api/
 │   │   └── routes/
-│   │       ├── orders.py      # Order CRUD and status management
-│   │       ├── inflow.py      # Inflow sync endpoints
-│   │       ├── teams.py        # Teams configuration
-│   │       └── audit.py       # Audit log endpoints
+│   │       ├── orders.py          # Order CRUD and status management
+│   │       ├── inflow.py          # Inflow sync endpoints and webhooks
+│   │       ├── teams.py           # Teams configuration
+│   │       ├── delivery_runs.py   # Delivery run management
+│   │       └── audit.py           # Audit log endpoints
 │   ├── models/
-│   │   ├── order.py           # Order model
-│   │   ├── audit_log.py       # Audit log model
-│   │   ├── teams_config.py    # Teams configuration model
-│   │   └── teams_notification.py  # Notification tracking
+│   │   ├── order.py               # Order model
+│   │   ├── delivery_run.py        # Delivery run model
+│   │   ├── audit_log.py           # Audit log model
+│   │   ├── teams_config.py        # Teams configuration model
+│   │   ├── teams_notification.py  # Notification tracking
+│   │   └── inflow_webhook.py      # Webhook management
 │   ├── services/
-│   │   ├── order_service.py   # Order business logic
-│   │   ├── inflow_service.py  # Inflow API integration
-│   │   └── teams_service.py   # Teams notification service
+│   │   ├── order_service.py       # Order business logic
+│   │   ├── delivery_run_service.py # Delivery run management
+│   │   ├── inflow_service.py      # Inflow API integration
+│   │   └── teams_service.py       # Teams notification service
 │   ├── utils/
-│   │   └── building_mapper.py # Building code extraction (ArcGIS)
+│   │   └── building_mapper.py     # Building code extraction (ArcGIS)
 │   ├── schemas/
-│   │   └── order.py           # Pydantic schemas
-│   ├── database.py            # Database connection
-│   ├── config.py              # Configuration management
-│   ├── main.py                # FastAPI application
-│   └── scheduler.py           # Background task scheduler
+│   │   ├── order.py               # Pydantic schemas
+│   │   └── delivery_run.py        # Delivery run schemas
+│   ├── database.py                # Database connection
+│   ├── config.py                  # Configuration management
+│   ├── main.py                    # FastAPI application
+│   └── scheduler.py               # Background task scheduler
 ├── scripts/
 │   └── analyze_order_patterns.py  # Pattern discovery script
 └── alembic/                   # Database migrations
@@ -128,24 +136,31 @@ frontend/
 │   │   ├── client.ts         # Axios configuration
 │   │   ├── orders.ts         # Order API calls
 │   │   ├── inflow.ts         # Inflow sync API
-│   │   └── teams.ts          # Teams API calls
+│   │   ├── teams.ts          # Teams API calls
+│   │   └── deliveryRuns.ts   # Delivery run API calls
 │   ├── components/
 │   │   ├── OrderTable.tsx    # Order listing table
 │   │   ├── OrderDetail.tsx   # Order detail view
 │   │   ├── StatusBadge.tsx   # Status display component
 │   │   ├── StatusTransition.tsx  # Status change dialog
-│   │   └── Filters.tsx       # Filter controls
+│   │   ├── Filters.tsx       # Filter controls
+│   │   └── LiveDeliveryDashboard.tsx # Real-time delivery tracking
 │   ├── pages/
-│   │   ├── Dashboard.tsx     # Main dashboard
+│   │   ├── DeliveryDashboard.tsx   # Live delivery overview
+│   │   ├── Orders.tsx        # Main orders dashboard
 │   │   ├── PreDeliveryQueue.tsx  # Pre-delivery queue
 │   │   ├── InDelivery.tsx    # In-delivery tracking
+│   │   ├── Shipping.tsx      # Shipping workflow management
 │   │   ├── OrderDetailPage.tsx   # Order detail page
+│   │   ├── DeliveryRunDetailPage.tsx # Delivery run detail
 │   │   └── Admin.tsx         # Admin configuration
 │   ├── hooks/
 │   │   ├── useOrders.ts      # Order data hook
-│   │   └── useStatusTransition.ts  # Status transition hook
+│   │   ├── useStatusTransition.ts  # Status transition hook
+│   │   └── useDeliveryRuns.ts # Delivery runs hook with WebSocket
 │   ├── types/
-│   │   └── order.ts          # TypeScript type definitions
+│   │   ├── order.ts          # TypeScript type definitions
+│   │   └── websocket.ts      # WebSocket message types
 │   └── App.tsx               # Main application component
 ```
 
@@ -246,6 +261,42 @@ class TeamsNotification:
     retry_count: Integer
 ```
 
+### Delivery Run Model
+
+Manages delivery runs with vehicle and runner assignment:
+
+```python
+class DeliveryRun:
+    id: UUID                    # Primary key
+    name: String                # Auto-generated run name (e.g., "Morning Run 1")
+    runner: String              # Person assigned to the run
+    vehicle: Enum               # van, golf_cart
+    status: Enum                # Active, Completed, Cancelled
+    start_time: DateTime        # When run was created/started
+    end_time: DateTime          # When run was completed
+    created_at: DateTime
+    updated_at: DateTime
+    orders: Relationship        # Orders assigned to this run
+```
+
+### Inflow Webhook Model
+
+Tracks webhook subscriptions for real-time updates:
+
+```python
+class InflowWebhook:
+    id: UUID                    # Primary key
+    webhook_id: String          # Inflow webhook subscription ID
+    url: String                 # Webhook endpoint URL
+    events: JSONB               # Events to subscribe to
+    status: Enum                # ACTIVE, INACTIVE, FAILED
+    last_received_at: DateTime  # Last webhook received
+    failure_count: Integer      # Consecutive failures
+    secret: String              # Webhook signature secret
+    created_at: DateTime
+    updated_at: DateTime
+```
+
 ## API Endpoints
 
 ### Orders API (`/api/orders`)
@@ -311,6 +362,15 @@ curl -X POST http://localhost:8000/api/inflow/sync -H "Content-Type: application
 - `PUT /api/teams/config` - Update Teams webhook URL
 - `POST /api/teams/test` - Test Teams webhook connection
 
+### Delivery Runs API (`/api/delivery-runs`)
+
+- `POST /api/delivery-runs` - Create a new delivery run with assigned orders and vehicle
+- `GET /api/delivery-runs/active` - Get all active delivery runs with order details
+- `GET /api/delivery-runs/{run_id}` - Get detailed information about a specific delivery run
+- `PUT /api/delivery-runs/{run_id}/finish` - Complete a delivery run (requires all orders delivered)
+- `GET /api/delivery-runs/vehicles/available` - Get availability status of all vehicles
+- `WebSocket /api/delivery-runs/ws` - Real-time updates for delivery run changes
+
 ### Audit API (`/api/audit`)
 
 - `GET /api/audit/orders/{order_id}` - Get audit logs for order
@@ -351,10 +411,34 @@ Detailed view of a single order:
 - Teams notification status and retry
 - Full Inflow data (if available)
 
+### Delivery Dashboard (`/`)
+
+Main delivery operations dashboard:
+- Live delivery run tracking with real-time WebSocket updates
+- Pre-delivery, in-delivery, and shipping queues in tabs
+- Delivery statistics (ready for delivery, active deliveries, completed today)
+- Quick access to delivery run creation and management
+
+### Delivery Run Detail Page (`/delivery/runs/:runId`)
+
+Detailed view of a specific delivery run:
+- Run information (runner, vehicle, status, timing)
+- List of assigned orders with current status
+- Order transition capabilities
+- Run completion functionality
+
+### Shipping Operations (`/shipping`)
+
+Dedicated page for managing shipping workflow:
+- Orders in shipping workflow stages (Work Area, Dock, Shipped to Carrier)
+- Stage transitions with carrier and tracking information
+- Shipping coordinator tools
+
 ### Admin Page (`/admin`)
 
 System configuration:
 - Teams webhook URL configuration
+- Inflow webhook management and registration
 - Webhook connection testing
 - System status information
 
@@ -460,6 +544,53 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 
 **Filtering**: QA page defaults to showing only "Picked" status orders that haven't completed QA, with toggle to view all eligible orders.
 
+### 6. Delivery Run Management
+
+**Purpose**: Coordinate and track local deliveries by grouping orders into delivery runs with vehicle and runner assignment.
+
+**Process**:
+1. **Run Creation**: Select multiple Pre-Delivery orders and assign to a runner with vehicle
+2. **Automatic Naming**: Runs are auto-named based on time (e.g., "Morning Run 1", "Afternoon Run 2")
+3. **Order Assignment**: Orders transition to "In Delivery" status when run is created
+4. **Live Tracking**: Real-time WebSocket updates show run status to all connected clients
+5. **Run Completion**: Mark run complete only when all orders are delivered, triggers Inflow fulfillment
+
+**Key Features**:
+- Vehicle availability checking (no double-booking)
+- Runner accountability and audit trails
+- Real-time dashboard updates
+- Bulk order transitions
+- Automatic Teams notifications when runs start
+
+**Service**: `backend/app/services/delivery_run_service.py`
+**API**: `/api/delivery-runs/`
+**Frontend**: Live delivery dashboard with WebSocket integration
+
+### 7. Shipping Workflow Management
+
+**Purpose**: Handle orders requiring external shipping with structured workflow stages and carrier tracking.
+
+**Workflow Stages**:
+1. **Work Area** (initial): Order ready for shipping preparation
+2. **At Dock**: Order physically prepared and ready for carrier pickup
+3. **Shipped to Carrier**: Order handed to carrier with tracking information
+
+**Process**:
+1. **Automatic Classification**: Orders classified as shipping based on delivery address (outside Bryan/College Station)
+2. **QA Selection**: During QA, technician selects "Shipping" method
+3. **Stage Transitions**: Manual progression through Work Area → Dock → Shipped to Carrier
+4. **Carrier Integration**: Capture carrier name and tracking number
+5. **Final Delivery**: Order marked delivered when shipping is confirmed
+
+**Key Features**:
+- Blocking stage progression (must complete each stage in order)
+- Carrier and tracking number capture
+- Audit trail for all shipping transitions
+- Separate from local delivery workflow
+- No Teams notifications (external shipping)
+
+**Database Fields**: `shipping_workflow_status`, `carrier_name`, `tracking_number`, `shipped_to_carrier_at`
+
 ### 7. Teams Notifications
 
 **Trigger**: When order status changes to "PreDelivery" (ready) or "In Delivery"
@@ -495,18 +626,43 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 
 ### Inflow API
 
-**Purpose**: Source of order data
+**Purpose**: Source of order data with polling and webhook support
 
 **Authentication**:
 - API key from environment variable or Azure Key Vault
 - Bearer token authentication
 
 **Endpoints Used**:
-- `GET /{company_id}/sales-orders` - Fetch orders
+- `GET /{company_id}/sales-orders` - Fetch orders (polling)
 - Filters: `inventoryStatus="started"` (picked orders)
 - `PUT /{company_id}/sales-orders` - Update orders for fulfillment (pick/pack/ship lines)
+- `POST /webhooks` - Register webhook subscriptions
+- `GET /webhooks` - List webhook subscriptions
+- `DELETE /webhooks/{id}` - Delete webhook subscriptions
 
 **Service**: `backend/app/services/inflow_service.py`
+
+### Inflow Webhooks
+
+**Purpose**: Real-time order updates with fallback to polling
+
+**Configuration**:
+```
+INFLOW_WEBHOOK_ENABLED=true
+INFLOW_WEBHOOK_URL=https://your-public-url/api/inflow/webhook
+INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
+```
+
+**Features**:
+- Automatic webhook registration via management script
+- Signature verification for security
+- Fallback to 5-minute polling if webhooks fail
+- Local database tracking of webhook subscriptions
+- Failure counting and automatic deactivation
+
+**Management Script**: `backend/scripts/manage_inflow_webhook.py`
+
+**Webhook Endpoint**: `POST /api/inflow/webhook` - Receives real-time order updates
 
 ### Inflow Webhooks
 
@@ -568,6 +724,28 @@ https://gis.cstx.gov/csgis/rest/services/IT_GIS/ITS_TAMU_Parking/MapServer/3/que
 
 **Fallback**: Uses `INFLOW_API_KEY` environment variable
 
+### WebSocket Integration
+
+**Purpose**: Real-time updates for delivery run tracking and live dashboard
+
+**Implementation**:
+- FastAPI WebSocket endpoint at `/api/delivery-runs/ws`
+- Broadcasts active delivery runs to all connected clients
+- Automatic reconnection with exponential backoff
+- Message format: `{"type": "active_runs", "data": [...run objects...]}`
+
+**Frontend Integration**:
+- `useDeliveryRuns` hook manages WebSocket connection
+- Automatic fallback to polling if WebSocket fails
+- Real-time updates without page refresh
+- Connection status indicators
+
+**Backend Features**:
+- In-memory WebSocket client tracking
+- Database session management per connection
+- Graceful cleanup on disconnection
+- Best-effort broadcasting (non-blocking)
+
 ## Database Schema
 
 ### Orders Table
@@ -584,6 +762,7 @@ CREATE TABLE orders (
     status orderstatus NOT NULL DEFAULT 'Picked',
     assigned_deliverer VARCHAR,
     issue_reason TEXT,
+    delivery_run_id UUID REFERENCES delivery_runs(id),
     tagged_at TIMESTAMP,
     tagged_by VARCHAR,
     tag_data JSONB,
@@ -596,6 +775,13 @@ CREATE TABLE orders (
     qa_path VARCHAR,
     signature_captured_at TIMESTAMP,
     signed_picklist_path VARCHAR,
+    shipping_workflow_status VARCHAR DEFAULT 'work_area',
+    shipping_workflow_status_updated_at TIMESTAMP,
+    shipping_workflow_status_updated_by VARCHAR,
+    shipped_to_carrier_at TIMESTAMP,
+    shipped_to_carrier_by VARCHAR,
+    carrier_name VARCHAR,
+    tracking_number VARCHAR,
     inflow_data JSONB,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
@@ -603,6 +789,48 @@ CREATE TABLE orders (
 
 CREATE INDEX ix_orders_inflow_order_id ON orders(inflow_order_id);
 CREATE INDEX ix_orders_status ON orders(status);
+CREATE INDEX ix_orders_delivery_run_id ON orders(delivery_run_id);
+```
+
+### Delivery Runs Table
+
+```sql
+CREATE TABLE delivery_runs (
+    id UUID PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    runner VARCHAR NOT NULL,
+    vehicle vehicle_enum NOT NULL,
+    status delivery_run_status NOT NULL DEFAULT 'Active',
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TYPE vehicle_enum AS ENUM ('van', 'golf_cart');
+CREATE TYPE delivery_run_status AS ENUM ('Active', 'Completed', 'Cancelled');
+```
+
+### Inflow Webhooks Table
+
+```sql
+CREATE TABLE inflow_webhooks (
+    id UUID PRIMARY KEY,
+    webhook_id VARCHAR NOT NULL,
+    url VARCHAR NOT NULL,
+    events JSONB NOT NULL,
+    status webhookstatus NOT NULL,
+    last_received_at TIMESTAMP,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    secret VARCHAR,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ix_inflow_webhooks_status ON inflow_webhooks(status);
+CREATE INDEX ix_inflow_webhooks_webhook_id ON inflow_webhooks(webhook_id);
+
+CREATE TYPE webhookstatus AS ENUM ('ACTIVE', 'INACTIVE', 'FAILED');
 ```
 
 ### Audit Logs Table
@@ -836,6 +1064,41 @@ python scripts/analyze_order_patterns.py --min-frequency 10
 ```
 
 **Output**: JSON report with discovered patterns, frequencies, and suggested regex patterns. The script generates a JSON report at `backend/scripts/pattern_analysis_report.json` (or custom path) containing all discovered patterns and statistics.
+
+### Inflow Webhook Management Script
+
+**Location**: `backend/scripts/manage_inflow_webhook.py`
+
+**Purpose**: Manage Inflow webhook subscriptions for real-time order updates.
+
+**Common Commands**:
+```bash
+# List remote webhooks registered with Inflow
+python scripts/manage_inflow_webhook.py list
+
+# List local webhook records in database
+python scripts/manage_inflow_webhook.py list --local
+
+# Register new webhook subscription
+python scripts/manage_inflow_webhook.py register --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
+
+# Delete webhook by URL
+python scripts/manage_inflow_webhook.py delete --url https://your-app.com/api/inflow/webhook
+
+# Reset webhook (delete existing by URL, register new)
+python scripts/manage_inflow_webhook.py reset --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
+```
+
+**Features**:
+- Remote webhook management (register, list, delete with Inflow API)
+- Local database synchronization
+- Automatic secret handling and storage
+- Failure tracking and status management
+- Batch operations for webhook cleanup
+
+**Webhook Events**: `orderCreated`, `orderUpdated` (configurable)
+
+**Security**: Webhook signature verification using stored secrets
 
 ### Inflow Webhook Management Script
 

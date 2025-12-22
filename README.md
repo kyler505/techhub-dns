@@ -9,22 +9,30 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 ### Key Capabilities
 
 - **Automated Order Sync**: Syncs picked orders (inventoryStatus `started`) from Inflow API every 5 minutes
+- **Real-time Webhook Integration**: Receives instant order updates via Inflow webhooks with fallback to polling
 - **Smart Location Extraction**: Extracts building abbreviations (ACAD, ZACH, LAAH, etc.) from addresses using ArcGIS service
 - **Order Remarks Parsing**: Automatically extracts alternative delivery locations from order remarks
-- **Status Workflow Management**: Tracks orders through Picked -> Pre-Delivery -> In Delivery -> Delivered
-  - **Prep Gating**: Asset tagging, picklist generation, and QA are required before Pre-Delivery
-  - **Teams Integration**: Sends automated notifications when orders are ready and when delivery starts
-  - **Audit Logging**: Complete audit trail of all status changes
-  - **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue
-  - **Document Signing**: Sign and download delivery PDFs stored in `frontend/public/pdfs`
-  - **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT` on disk
+- **Dual Workflow Management**:
+  - **Local Delivery**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with delivery runs)
+  - **Shipping**: Picked -> Pre-Delivery -> Shipping -> Delivered (with shipping workflow stages)
+- **Delivery Run Management**: Group orders into delivery runs with vehicle assignment and runner tracking
+- **Live Delivery Dashboard**: Real-time tracking of active delivery runs with WebSocket updates
+- **Prep Gating**: Asset tagging, picklist generation, and QA are required before Pre-Delivery
+- **QA Method Selection**: Choose between "Delivery" or "Shipping" workflows during QA
+- **Teams Integration**: Sends automated notifications when orders are ready and when delivery starts
+- **Audit Logging**: Complete audit trail of all status changes and delivery run actions
+- **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue management
+- **Shipping Workflow**: Three-stage process (Work Area → Dock → Shipped to Carrier) with carrier tracking
+- **Document Signing**: Sign and download delivery PDFs stored in `frontend/public/pdfs`
+- **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT` on disk
 
 ## Architecture
 
-- **Backend**: FastAPI with PostgreSQL, APScheduler for periodic sync
-- **Frontend**: React + Vite with TypeScript, TailwindCSS
+- **Backend**: FastAPI with PostgreSQL, APScheduler for periodic sync, WebSocket support for real-time updates
+- **Frontend**: React + Vite with TypeScript, TailwindCSS, WebSocket integration
 - **Notifications**: Microsoft Teams webhook integration
-- **External Services**: Inflow API, ArcGIS (AggieMap), Azure Key Vault
+- **Real-time Updates**: WebSocket connections for live delivery run tracking
+- **External Services**: Inflow API (polling + webhooks), ArcGIS (AggieMap), Azure Key Vault
 
 ## Setup
 
@@ -193,28 +201,61 @@ For local webhook testing, use Cloudflare Tunnel (cloudflared) to expose your ba
 
 **Note:** Cloudflare Tunnel URLs change each time you restart it. The script handles re-registration automatically.
 
+### Inflow Webhook Setup (Alternative to Polling)
+
+For production environments or when real-time updates are preferred, set up Inflow webhooks instead of relying solely on the 5-minute polling sync:
+
+1. **Configure Environment Variables**:
+   ```bash
+   INFLOW_WEBHOOK_ENABLED=true
+   INFLOW_WEBHOOK_URL=https://your-public-url/api/inflow/webhook
+   INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
+   ```
+
+2. **Register Webhook** (using the management script):
+   ```bash
+   cd backend
+   python scripts/manage_inflow_webhook.py reset --url https://your-public-url/api/inflow/webhook --events orderCreated,orderUpdated
+   ```
+
+3. **Webhook Management**:
+   - **List webhooks**: `python scripts/manage_inflow_webhook.py list`
+   - **Delete webhook**: `python scripts/manage_inflow_webhook.py delete --url https://your-url`
+   - **Reset webhook**: `python scripts/manage_inflow_webhook.py reset --url https://your-url --events orderCreated,orderUpdated`
+
+**Benefits**: Instant order updates, reduced API load, real-time notifications for urgent orders.
+
 ## Features
 
 ### Core Functionality
-- **Order Status Workflow**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with Issue tracking)
-- **Automated Sync**: Background scheduler syncs picked orders from Inflow every 5 minutes
+- **Dual Order Workflows**:
+  - **Local Delivery**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with delivery runs)
+  - **Shipping**: Picked -> Pre-Delivery -> Shipping (Work Area → Dock → Shipped) -> Delivered
+- **Delivery Run Management**: Create and track delivery runs with vehicle assignment and runner coordination
+- **Live Delivery Dashboard**: Real-time tracking of active delivery runs with WebSocket updates
+- **Automated Sync**: Background scheduler syncs picked orders from Inflow every 5 minutes + real-time webhooks
+- **Inflow Webhook Integration**: Receive instant order updates with fallback to polling
 - **Prep Steps**: Asset tagging, picklist generation, and QA checklist completion required before Pre-Delivery
-- **QA Integration**: Comprehensive QA checklist determines workflow path (Delivery vs Shipping)
+- **QA Integration**: Comprehensive QA checklist with delivery method selection (Delivery vs Shipping)
 - **QA Filtering**: QA page shows only orders needing QA by default, with option to view all
 - **Building Code Extraction**: Automatically extracts building abbreviations from addresses using ArcGIS service
 - **Order Remarks Parsing**: Intelligently extracts alternative delivery locations from order remarks
 - **Teams Notifications**: Automated notifications when orders are ready and when delivery starts
-- **Audit Logging**: Complete audit trail of all status changes with user tracking
+- **Audit Logging**: Complete audit trail of all status changes and delivery run actions
 - **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue management
+- **Shipping Workflow**: Three-stage shipping process with carrier tracking and documentation
 - **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT`
 
 ### Pages & Views
-- **Dashboard**: Overview of all orders with filtering and search
+- **Delivery Dashboard**: Live overview with delivery runs, statistics, and real-time tracking
+- **Orders Dashboard**: Overview of all orders with filtering and search
 - **Pre-Delivery Queue**: Manage orders ready for delivery assignment
-  - **In Delivery**: Track orders currently out for delivery
-  - **Order Detail**: Detailed view with audit logs and notification history
-  - **Admin**: Configure Teams webhook and manage system settings
-  - **Document Signing**: Sign and download delivery PDFs
+- **In Delivery**: Track orders currently out for delivery
+- **Shipping**: Manage shipping workflow (Work Area → Dock → Shipped to Carrier)
+- **Delivery Run Detail**: Detailed view of delivery runs with order tracking
+- **Order Detail**: Detailed view with audit logs and notification history
+- **Admin**: Configure Teams webhook, manage Inflow webhooks, and system settings
+- **Document Signing**: Sign and download delivery PDFs
 
 ## Scripts
 
@@ -268,3 +309,34 @@ python scripts/analyze_order_patterns.py --min-frequency 10
 4. Optionally updates `order_service.py` with new patterns (preserving existing ones)
 
 **Output**: The script generates a JSON report at `backend/scripts/pattern_analysis_report.json` (or custom path) containing all discovered patterns and statistics.
+
+### Inflow Webhook Management Script
+
+**Location**: `backend/scripts/manage_inflow_webhook.py`
+
+**Purpose**: Manage Inflow webhook subscriptions for real-time order updates.
+
+**Common Commands**:
+```bash
+# List remote webhooks
+python scripts/manage_inflow_webhook.py list
+
+# List local database webhooks
+python scripts/manage_inflow_webhook.py list --local
+
+# Register webhook
+python scripts/manage_inflow_webhook.py register --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
+
+# Delete webhook by URL
+python scripts/manage_inflow_webhook.py delete --url https://your-app.com/api/inflow/webhook
+
+# Reset webhook (delete existing, register new)
+python scripts/manage_inflow_webhook.py reset --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
+```
+
+**Features**:
+- List active webhooks (remote and local)
+- Register new webhook subscriptions
+- Delete existing webhooks
+- Reset webhooks with cleanup
+- Automatic secret storage and validation
