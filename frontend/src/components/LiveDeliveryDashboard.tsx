@@ -5,11 +5,7 @@ export default function LiveDeliveryDashboard() {
   const { runs, loading, error, refetch } = useDeliveryRuns();
 
   return (
-    <div className="p-4 bg-white rounded shadow">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Live Delivery Dashboard</h2>
-      </div>
-
+    <div className="p-4">
       {error && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
           {error}
@@ -24,7 +20,7 @@ export default function LiveDeliveryDashboard() {
         <div className="grid grid-cols-1 gap-4">
           {runs.map((r) => (
             <Link key={r.id} to={`/delivery/runs/${r.id}`}>
-              <div className="border p-3 rounded hover:bg-gray-50 cursor-pointer transition-colors">
+              <div className="border p-3 rounded hover:bg-gray-50 cursor-pointer transition-colors bg-white">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="text-sm text-gray-500">Run</div>

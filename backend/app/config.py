@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Inflow Polling Sync (fallback when webhooks are enabled)
     inflow_polling_sync_enabled: bool = True
+    inflow_polling_sync_interval_minutes: Optional[int] = None
 
     # Teams
     # Teams webhook URL is stored in database, not here

@@ -9,12 +9,37 @@ from app.database import Base
 
 
 class OrderStatus(str, enum.Enum):
-    PICKED = "Picked"
-    PRE_DELIVERY = "PreDelivery"
-    IN_DELIVERY = "InDelivery"
-    SHIPPING = "Shipping"
-    DELIVERED = "Delivered"
-    ISSUE = "Issue"
+    PICKED = "picked"
+    PRE_DELIVERY = "pre-delivery"
+    IN_DELIVERY = "in-delivery"
+    SHIPPING = "shipping"
+    DELIVERED = "delivered"
+    ISSUE = "issue"
+
+    @property
+    def display_name(self) -> str:
+        return {
+            "picked": "Picked",
+            "pre-delivery": "Pre-Delivery",
+            "in-delivery": "In Delivery",
+            "shipping": "Shipping",
+            "delivered": "Delivered",
+            "issue": "Issue"
+        }.get(self.value, self.value)
+
+
+class ShippingWorkflowStatus(str, enum.Enum):
+    WORK_AREA = "work_area"
+    DOCK = "dock"
+    SHIPPED = "shipped"
+
+    @property
+    def display_name(self) -> str:
+        return {
+            "work_area": "Work Area",
+            "dock": "At Dock",
+            "shipped": "Shipped to Carrier"
+        }.get(self.value, self.value)
 
 
 class Order(Base):
@@ -27,7 +52,7 @@ class Order(Base):
     recipient_contact = Column(String, nullable=True)  # email
     delivery_location = Column(String, nullable=True)  # building/room or shipping address
     po_number = Column(String, nullable=True)
-    status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.PICKED, index=True)
+    status = Column(String, nullable=False, default=OrderStatus.PICKED.value, index=True)
     assigned_deliverer = Column(String, nullable=True)
     issue_reason = Column(Text, nullable=True)
     tagged_at = Column(DateTime, nullable=True)
@@ -44,6 +69,14 @@ class Order(Base):
     qa_method = Column(String, nullable=True)  # "Delivery" or "Shipping"
     signature_captured_at = Column(DateTime, nullable=True)
     signed_picklist_path = Column(String, nullable=True)
+    # Shipping workflow fields
+    shipping_workflow_status = Column(String, nullable=True, default=ShippingWorkflowStatus.WORK_AREA.value)
+    shipping_workflow_status_updated_at = Column(DateTime, nullable=True)
+    shipping_workflow_status_updated_by = Column(String, nullable=True)
+    shipped_to_carrier_at = Column(DateTime, nullable=True)
+    shipped_to_carrier_by = Column(String, nullable=True)
+    carrier_name = Column(String, nullable=True)  # "FedEx", "UPS", etc.
+    tracking_number = Column(String, nullable=True)
     inflow_data = Column(JSONB, nullable=True)  # Full Inflow payload
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -1,4 +1,4 @@
-import { OrderStatus } from "../types/order";
+import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 import { Badge } from "./ui/badge";
 
 interface StatusBadgeProps {
@@ -17,7 +17,7 @@ const statusVariants: Record<OrderStatus, "default" | "secondary" | "destructive
 export default function StatusBadge({ status }: StatusBadgeProps) {
   return (
     <Badge variant={statusVariants[status]}>
-      {status}
+      {OrderStatusDisplayNames[status]}
     </Badge>
   );
 }

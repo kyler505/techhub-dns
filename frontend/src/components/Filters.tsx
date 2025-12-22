@@ -1,4 +1,4 @@
-import { OrderStatus } from "../types/order";
+import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 
 interface FiltersProps {
   status: OrderStatus | null;
@@ -15,11 +15,12 @@ export default function Filters({
 }: FiltersProps) {
   const statusTabs = [
     { label: "All", value: null },
-    { label: "Picked", value: OrderStatus.PICKED },
-    { label: "Pre-Delivery", value: OrderStatus.PRE_DELIVERY },
-    { label: "In Delivery", value: OrderStatus.IN_DELIVERY },
-    { label: "Delivered", value: OrderStatus.DELIVERED },
-    { label: "Issue", value: OrderStatus.ISSUE },
+    { label: OrderStatusDisplayNames[OrderStatus.PICKED], value: OrderStatus.PICKED },
+    { label: OrderStatusDisplayNames[OrderStatus.PRE_DELIVERY], value: OrderStatus.PRE_DELIVERY },
+    { label: OrderStatusDisplayNames[OrderStatus.IN_DELIVERY], value: OrderStatus.IN_DELIVERY },
+    { label: OrderStatusDisplayNames[OrderStatus.SHIPPING], value: OrderStatus.SHIPPING },
+    { label: OrderStatusDisplayNames[OrderStatus.DELIVERED], value: OrderStatus.DELIVERED },
+    { label: OrderStatusDisplayNames[OrderStatus.ISSUE], value: OrderStatus.ISSUE },
   ];
 
   return (

@@ -1,42 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { Order, OrderStatus } from "../types/order";
+import { useEffect, useState } from "react";
+import { Order, OrderStatus, ShippingWorkflowStatus, ShippingWorkflowStatusDisplayNames } from "../types/order";
 import { ordersApi } from "../api/orders";
 import { formatDeliveryLocation } from "../utils/location";
-
-type DockStatus = "WORK_AREA" | "DOCK";
-
-type ShippingLocalState = {
-  dockStatus: DockStatus;
-  shippedToFedexAt?: string; // ISO timestamp
-};
-
-const storageKey = (orderId: string) => `order-shipping-v1:${orderId}`;
-
-function readLocal(orderId: string): ShippingLocalState {
-  const raw = localStorage.getItem(storageKey(orderId));
-  if (!raw) return { dockStatus: "WORK_AREA" };
-  try {
-    const parsed = JSON.parse(raw) as ShippingLocalState;
-    return {
-      dockStatus: parsed.dockStatus === "DOCK" ? "DOCK" : "WORK_AREA",
-      shippedToFedexAt: parsed.shippedToFedexAt,
-    };
-  } catch {
-    return { dockStatus: "WORK_AREA" };
-  }
-}
-
-function writeLocal(orderId: string, state: ShippingLocalState) {
-  localStorage.setItem(storageKey(orderId), JSON.stringify(state));
-}
 
 export default function Shipping() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [search, setSearch] = useState("");
-
-  // This is only for forcing UI refresh when localStorage changes
-  const [localTick, setLocalTick] = useState(0);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrders();
@@ -59,26 +30,27 @@ export default function Shipping() {
     }
   };
 
-  const localMap = useMemo(() => {
-    const map = new Map<string, ShippingLocalState>();
-    for (const o of orders) map.set(o.id, readLocal(o.id));
-    return map;
-  }, [orders, localTick]);
-
-  const setDockStatus = (orderId: string, dockStatus: DockStatus) => {
-    const prev = readLocal(orderId);
-    writeLocal(orderId, { ...prev, dockStatus });
-    setLocalTick((t) => t + 1);
-  };
-
-  const markShippedToFedex = (orderId: string) => {
-    const prev = readLocal(orderId);
-    if (prev.shippedToFedexAt) {
-      const ok = confirm("This order is already marked as shipped to FedEx. Mark again (overwrite timestamp)?");
-      if (!ok) return;
+  const updateShippingWorkflow = async (
+    orderId: string,
+    status: ShippingWorkflowStatus,
+    carrierName?: string,
+    trackingNumber?: string
+  ) => {
+    setUpdatingOrderId(orderId);
+    try {
+      await ordersApi.updateShippingWorkflow(orderId, {
+        status,
+        carrier_name: carrierName,
+        tracking_number: trackingNumber,
+        updated_by: "shipping_coordinator" // This should come from auth context in a real app
+      });
+      await loadOrders(); // Refresh the orders list
+    } catch (error) {
+      console.error("Failed to update shipping workflow:", error);
+      alert("Failed to update shipping status");
+    } finally {
+      setUpdatingOrderId(null);
     }
-    writeLocal(orderId, { ...prev, shippedToFedexAt: new Date().toISOString() });
-    setLocalTick((t) => t + 1);
   };
 
   return (
@@ -124,9 +96,8 @@ export default function Shipping() {
               </thead>
               <tbody>
                 {orders.map((o) => {
-                  const local = localMap.get(o.id) ?? { dockStatus: "WORK_AREA" };
-                  const isDock = local.dockStatus === "DOCK";
-                  const shippedAt = local.shippedToFedexAt ? new Date(local.shippedToFedexAt) : null;
+                  const currentStatus = o.shipping_workflow_status || ShippingWorkflowStatus.WORK_AREA;
+                  const isUpdating = updatingOrderId === o.id;
 
                   return (
                     <tr key={o.id} className="hover:bg-gray-50">
@@ -142,38 +113,53 @@ export default function Shipping() {
                         <div className="flex items-center gap-2">
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${
-                              isDock ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
+                              currentStatus === ShippingWorkflowStatus.DOCK ? "bg-blue-100 text-blue-700" :
+                              currentStatus === ShippingWorkflowStatus.SHIPPED ? "bg-green-100 text-green-700" :
+                              "bg-gray-100 text-gray-700"
                             }`}
                           >
-                            {isDock ? "At Dock for shipping" : "Still in work area"}
+                            {ShippingWorkflowStatusDisplayNames[currentStatus]}
                           </span>
 
-                          <button
-                            type="button"
-                            onClick={() => setDockStatus(o.id, isDock ? "WORK_AREA" : "DOCK")}
-                            className="rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                          >
-                            Toggle
-                          </button>
+                          {currentStatus === ShippingWorkflowStatus.WORK_AREA && (
+                            <button
+                              type="button"
+                              onClick={() => updateShippingWorkflow(o.id, ShippingWorkflowStatus.DOCK)}
+                              disabled={isUpdating}
+                              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isUpdating ? "Moving..." : "Move to Dock"}
+                            </button>
+                          )}
                         </div>
                       </td>
 
                       <td className="border border-gray-200 px-4 py-2">
                         <div className="flex flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={() => markShippedToFedex(o.id)}
-                            className="w-fit rounded-md bg-[#800000] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#660000]"
-                          >
-                            Shipped to FedEx
-                          </button>
+                          {currentStatus === ShippingWorkflowStatus.DOCK && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const carrier = prompt("Carrier name (FedEx, UPS, etc.):");
+                                if (carrier) {
+                                  updateShippingWorkflow(o.id, ShippingWorkflowStatus.SHIPPED, carrier);
+                                }
+                              }}
+                              disabled={isUpdating}
+                              className="w-fit rounded-md bg-[#800000] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#660000] disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isUpdating ? "Shipping..." : "Mark as Shipped"}
+                            </button>
+                          )}
 
-                          {shippedAt ? (
-                            <span className="text-xs text-gray-600">
-                              Marked: {shippedAt.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">Not marked</span>
+                          {currentStatus === ShippingWorkflowStatus.SHIPPED && o.carrier_name && (
+                            <div className="text-xs text-gray-600">
+                              <div>Shipped to: {o.carrier_name}</div>
+                              {o.tracking_number && <div>Tracking: {o.tracking_number}</div>}
+                              {o.shipped_to_carrier_at && (
+                                <div>At: {new Date(o.shipped_to_carrier_at).toLocaleString()}</div>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>

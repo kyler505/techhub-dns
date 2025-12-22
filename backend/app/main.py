@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.api.routes import orders, inflow, teams, audit, delivery_runs
+from app.api.middleware import error_handler_middleware
 from app.scheduler import start_scheduler
 import logging
 
@@ -43,6 +44,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Error handler middleware (must be after CORS to catch errors from CORS middleware)
+app.middleware("http")(error_handler_middleware)
+
 
 # Include routers
 app.include_router(orders.router, prefix="/api")

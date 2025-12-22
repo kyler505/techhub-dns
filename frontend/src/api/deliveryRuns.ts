@@ -44,4 +44,9 @@ export const deliveryRunsApi = {
     const response = await apiClient.get<DeliveryRunDetailResponse>(`/delivery-runs/${runId}`);
     return response.data;
   },
+
+  finishRun: async (runId: string): Promise<DeliveryRunResponse> => {
+    const response = await apiClient.put<DeliveryRunResponse>(`/delivery-runs/${runId}/finish`);
+    return response.data;
+  },
 };

@@ -1,5 +1,6 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from uuid import UUID
@@ -8,6 +9,9 @@ from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.utils.timezone import is_morning_in_cst, get_date_in_cst
 from sqlalchemy import func
 from app.models.order import Order, OrderStatus
+from app.services.audit_service import AuditService
+from app.services.inflow_service import InflowService
+from app.utils.exceptions import NotFoundError, ValidationError
 
 
 class DeliveryRunService:
@@ -38,7 +42,7 @@ class DeliveryRunService:
             existing_runs = self.db.query(DeliveryRun).filter(
                 and_(
                     DeliveryRun.created_at >= morning_start_utc,
-                    DeliveryRun.created_at <= morning_end_utc
+                    DeliveryRun.created_at < run_time.replace(tzinfo=timezone.utc)
                 )
             ).count()
             run_number = existing_runs + 1
@@ -55,7 +59,7 @@ class DeliveryRunService:
             existing_runs = self.db.query(DeliveryRun).filter(
                 and_(
                     DeliveryRun.created_at >= afternoon_start_utc,
-                    DeliveryRun.created_at <= day_end_utc
+                    DeliveryRun.created_at < run_time.replace(tzinfo=timezone.utc)
                 )
             ).count()
             run_number = existing_runs + 1
@@ -75,16 +79,19 @@ class DeliveryRunService:
         """
         # Vehicle availability
         if not self.check_vehicle_availability(vehicle):
-            raise ValueError(f"Vehicle {vehicle} is currently in use")
+            raise ValidationError(f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle})
 
         # Validate orders
         orders = self.db.query(Order).filter(Order.id.in_(order_ids)).with_for_update().all()
         if len(orders) != len(order_ids):
-            raise ValueError("One or more orders not found")
+            raise ValidationError("One or more orders not found", details={"expected_count": len(order_ids), "found_count": len(orders)})
 
         for o in orders:
-            if o.status != OrderStatus.PRE_DELIVERY:
-                raise ValueError(f"Order {o.inflow_order_id or o.id} not in Pre-Delivery")
+            if o.status != OrderStatus.PRE_DELIVERY.value:
+                raise ValidationError(
+                    f"Order {o.inflow_order_id or o.id} not in Pre-Delivery",
+                    details={"order_id": str(o.id), "current_status": o.status}
+                )
 
         # Generate run name
         run_time = datetime.utcnow()
@@ -104,11 +111,27 @@ class DeliveryRunService:
         # Assign orders
         for o in orders:
             o.delivery_run_id = run.id
-            o.status = OrderStatus.IN_DELIVERY
+            o.status = OrderStatus.IN_DELIVERY.value
             o.updated_at = datetime.utcnow()
 
         self.db.commit()
         self.db.refresh(run)
+
+        # Audit logging for delivery run creation
+        audit_service = AuditService(self.db)
+        audit_service.log_delivery_run_action(
+            run_id=str(run.id),
+            action="created",
+            user_id=runner,  # Runner who created the run
+            description=f"Delivery run created by {runner}",
+            audit_metadata={
+                "vehicle": vehicle,
+                "order_count": len(order_ids),
+                "order_ids": order_ids,
+                "run_name": run_name
+            }
+        )
+
         return run
 
     def get_run_by_id(self, run_id: UUID) -> DeliveryRun | None:
@@ -117,21 +140,106 @@ class DeliveryRunService:
     def get_active_runs_with_details(self) -> List[DeliveryRun]:
         return self.db.query(DeliveryRun).filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value).all()
 
-    def finish_run(self, run_id: UUID) -> DeliveryRun:
+    def _fulfill_orders_in_inflow(self, orders: List[Order], user_id: Optional[str]) -> tuple[List[dict], List[dict]]:
+        if not orders:
+            return [], []
+
+        inflow_service = InflowService()
+
+        async def _fulfill() -> tuple[List[dict], List[dict]]:
+            successes: List[dict] = []
+            failures: List[dict] = []
+
+            for order in orders:
+                inflow_sales_order_id = order.inflow_sales_order_id
+                if not inflow_sales_order_id:
+                    failures.append({
+                        "order_id": str(order.id),
+                        "inflow_order_id": order.inflow_order_id,
+                        "error": "missing_inflow_sales_order_id"
+                    })
+                    continue
+
+                try:
+                    await inflow_service.fulfill_sales_order(
+                        inflow_sales_order_id,
+                        db=self.db,
+                        user_id=user_id
+                    )
+                    successes.append({
+                        "order_id": str(order.id),
+                        "inflow_order_id": order.inflow_order_id,
+                        "inflow_sales_order_id": inflow_sales_order_id
+                    })
+                except Exception as exc:
+                    failures.append({
+                        "order_id": str(order.id),
+                        "inflow_order_id": order.inflow_order_id,
+                        "inflow_sales_order_id": inflow_sales_order_id,
+                        "error": str(exc)
+                    })
+
+            return successes, failures
+
+        return asyncio.run(_fulfill())
+
+    def finish_run(self, run_id: UUID, user_id: Optional[str] = None) -> DeliveryRun:
         run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id).with_for_update().first()
         if not run:
-            raise ValueError("DeliveryRun not found")
+            raise NotFoundError("DeliveryRun", str(run_id))
 
-        # TODO: validate signatures/bundles exist for each order before marking Delivered
+        # Validate ALL orders are already delivered
+        undelivered_orders = [o for o in run.orders if o.status != OrderStatus.DELIVERED.value]
+        if undelivered_orders:
+            raise ValidationError(
+                f"Cannot finish delivery run: {len(undelivered_orders)} orders are not yet delivered",
+                details={
+                    "undelivered_count": len(undelivered_orders),
+                    "undelivered_order_ids": [str(o.id) for o in undelivered_orders]
+                }
+            )
+
+        inflow_successes, inflow_failures = self._fulfill_orders_in_inflow(run.orders, user_id)
+
+        audit_service = AuditService(self.db)
+        if inflow_failures:
+            audit_service.log_delivery_run_action(
+                run_id=str(run_id),
+                action="completion_failed",
+                user_id=user_id,
+                description="Delivery run completion failed during inFlow fulfillment",
+                audit_metadata={
+                    "order_count": len(run.orders),
+                    "fulfilled_orders": inflow_successes,
+                    "failed_orders": inflow_failures
+                }
+            )
+            self.db.commit()
+            raise ValidationError(
+                "Cannot finish delivery run: inFlow fulfillment failed for one or more orders",
+                details={
+                    "failed_orders": inflow_failures,
+                    "fulfilled_count": len(inflow_successes)
+                }
+            )
+
         run.status = DeliveryRunStatus.COMPLETED.value
         run.end_time = datetime.utcnow()
         run.updated_at = datetime.utcnow()
 
-        # Mark orders as Delivered
-        for o in run.orders:
-            o.status = OrderStatus.DELIVERED
-            o.updated_at = datetime.utcnow()
+        audit_service.log_delivery_run_action(
+            run_id=str(run_id),
+            action="completed",
+            user_id=user_id,
+            description="Delivery run completed",
+            audit_metadata={
+                "order_count": len(run.orders),
+                "completed_at": run.end_time.isoformat(),
+                "fulfilled_orders": inflow_successes
+            }
+        )
 
         self.db.commit()
         self.db.refresh(run)
+
         return run

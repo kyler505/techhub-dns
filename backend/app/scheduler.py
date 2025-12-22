@@ -102,24 +102,38 @@ def start_scheduler():
     """Start the APScheduler for periodic Inflow sync"""
     scheduler = AsyncIOScheduler()
     poll_interval = None
+    poll_interval_override = settings.inflow_polling_sync_interval_minutes
 
     # Check if polling sync is enabled
     if settings.inflow_polling_sync_enabled:
-        # Check webhook status to determine polling frequency
-        db = SessionLocal()
-        try:
-            has_webhook = _has_active_webhook(db)
-
-            if has_webhook and settings.inflow_webhook_enabled:
-                # Webhooks active: poll less frequently (backup/catch-up)
-                poll_interval = 30
-                logger.info("Webhooks enabled - using reduced polling frequency as backup")
+        if poll_interval_override is not None:
+            if poll_interval_override <= 0:
+                logger.warning(
+                    "INFLOW_POLLING_SYNC_INTERVAL_MINUTES must be > 0; "
+                    "falling back to default polling frequency"
+                )
             else:
-                # No webhooks: use normal polling frequency
-                poll_interval = 5
-                logger.info("Webhooks not enabled - using normal polling frequency")
-        finally:
-            db.close()
+                poll_interval = poll_interval_override
+                logger.info(
+                    "Using INFLOW_POLLING_SYNC_INTERVAL_MINUTES override for polling frequency"
+                )
+
+        if poll_interval is None:
+            # Check webhook status to determine polling frequency
+            db = SessionLocal()
+            try:
+                has_webhook = _has_active_webhook(db)
+
+                if has_webhook and settings.inflow_webhook_enabled:
+                    # Webhooks active: poll less frequently (backup/catch-up)
+                    poll_interval = 30
+                    logger.info("Webhooks enabled - using reduced polling frequency as backup")
+                else:
+                    # No webhooks: use normal polling frequency
+                    poll_interval = 5
+                    logger.info("Webhooks not enabled - using normal polling frequency")
+            finally:
+                db.close()
 
         # Sync job (backup polling)
         scheduler.add_job(

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { OrderStatus } from "../types/order";
+import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 
 interface StatusTransitionProps {
   currentStatus: OrderStatus;
@@ -32,7 +32,7 @@ export default function StatusTransition({
       <div className="bg-white rounded-lg p-6 max-w-md w-full">
         <h2 className="text-xl font-bold mb-4">Change Status</h2>
         <p className="mb-4">
-          Change status from <strong>{currentStatus}</strong> to <strong>{newStatus}</strong>
+          Change status from <strong>{OrderStatusDisplayNames[currentStatus]}</strong> to <strong>{OrderStatusDisplayNames[newStatus]}</strong>
         </p>
         <form onSubmit={handleSubmit}>
           {requireReason && (

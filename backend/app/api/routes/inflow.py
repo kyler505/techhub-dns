@@ -7,6 +7,7 @@ import uuid
 from app.database import get_db
 from app.services.inflow_service import InflowService
 from app.services.order_service import OrderService
+from app.api.routes.orders import _broadcast_orders
 from app.schemas.inflow import (
     InflowSyncResponse,
     InflowSyncStatusResponse,
@@ -62,6 +63,13 @@ async def sync_orders(
             except Exception as e:
                 logger.error(f"Error processing order {inflow_order.get('orderNumber')}: {e}", exc_info=True)
                 continue
+
+        # Broadcast order updates via WebSocket
+        try:
+            import asyncio
+            asyncio.create_task(_broadcast_orders(db))
+        except Exception:
+            pass  # WebSocket broadcasting is best-effort
 
         return InflowSyncResponse(
             success=True,
@@ -212,11 +220,11 @@ async def inflow_webhook(request: Request, db: Session = Depends(get_db)):
             if order_number:
                 logger.info(f"Extracted orderNumber {order_number} from fetched order")
 
-        # Only process if status is 'started' (matching our filter)
-        if not inflow_service.is_strict_started(inflow_order):
+        # Only process if status is 'started' AND pickLines exist (matching our filter)
+        if not inflow_service.is_started_and_picked(inflow_order):
             identifier = order_number or sales_order_id or "unknown"
-            logger.info(f"Order {identifier} skipped (not 'started' status)")
-            return {"status": "skipped", "message": "Order not in 'started' status"}
+            logger.info(f"Order {identifier} skipped (not 'started' status or no pickLines)")
+            return {"status": "skipped", "message": "Order not in 'started' status or has no pickLines"}
 
         # Create or update order
         try:
@@ -231,6 +239,13 @@ async def inflow_webhook(request: Request, db: Session = Depends(get_db)):
                 webhook.last_received_at = datetime.utcnow()
                 webhook.failure_count = 0
                 db.commit()
+
+            # Broadcast order update via WebSocket
+            try:
+                import asyncio
+                asyncio.create_task(_broadcast_orders(db))
+            except Exception:
+                pass  # WebSocket broadcasting is best-effort
 
             logger.info(f"Order {order_number} processed successfully via webhook")
             return {"status": "processed", "order_id": str(order.id)}

@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 import logging
 import uuid
 from datetime import datetime
+from sqlalchemy.orm import Session
 from app.config import settings
 from azure.identity import InteractiveBrowserCredential
 from azure.keyvault.secrets import SecretClient
@@ -91,7 +92,7 @@ class InflowService:
         per_page: int = 100,
         target_matches: int = 100
     ) -> List[Dict[str, Any]]:
-        """Sync recent unfulfilled orders, filtering for 'started' status"""
+        """Sync recent unfulfilled orders, filtering for 'started' status AND pickLines"""
         matches = []
 
         for page in range(max_pages):
@@ -101,9 +102,9 @@ class InflowService:
                 skip=page * per_page
             )
 
-            # Filter for 'started' status (matching picklist script logic)
+            # Filter for 'started' status AND pickLines exist
             for order in orders:
-                if self.is_strict_started(order):
+                if self.is_started_and_picked(order):
                     matches.append(order)
                     if len(matches) >= target_matches:
                         return matches
@@ -116,6 +117,13 @@ class InflowService:
     def is_strict_started(self, order: Dict[str, Any]) -> bool:
         """Check if order has inventoryStatus='started' (case-insensitive)"""
         return str(order.get("inventoryStatus", "")).strip().lower() == "started"
+
+    def is_started_and_picked(self, order: Dict[str, Any]) -> bool:
+        """Check if order has started status AND has pickLines (ready for TechHub)"""
+        return (
+            self.is_strict_started(order) and
+            bool(order.get("pickLines"))
+        )
 
     async def get_order_by_id(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
         """Fetch a specific order by sales order ID (UUID)."""
@@ -142,15 +150,22 @@ class InflowService:
                 return data[0] if data else None
             return data
 
-    async def fulfill_sales_order(self, sales_order_id: str) -> Dict[str, Any]:
+    async def fulfill_sales_order(self, sales_order_id: str, db: Session = None, user_id: str = None) -> Dict[str, Any]:
         """
         Fulfill a sales order by ensuring pickLines, packLines, and shipLines are populated.
         Based on inFlow docs: inventoryStatus becomes fulfilled when all products are in pickLines
         and, for shippable orders, packLines/shipLines are present.
         """
+        from app.services.audit_service import AuditService
+
         order = await self.get_order_by_id(sales_order_id)
         if not order:
             raise ValueError(f"Sales order {sales_order_id} not found in Inflow")
+
+        # Require actual pickLines - don't create them artificially
+        if not order.get("pickLines"):
+            order_number = order.get("orderNumber") or sales_order_id
+            raise ValueError(f"Order {order_number} has no pickLines - items were not picked from inventory")
 
         if not order.get("customerId"):
             raise ValueError("Sales order missing customerId; cannot fulfill")
@@ -169,19 +184,7 @@ class InflowService:
             except (TypeError, ValueError):
                 return False
 
-        if not order.get("pickLines"):
-            pick_lines = []
-            for line in order.get("lines", []):
-                if not positive_quantity(line):
-                    continue
-                pick_lines.append({
-                    "salesOrderPickLineId": str(uuid.uuid4()),
-                    "productId": line.get("productId"),
-                    "quantity": line.get("quantity"),
-                    "description": line.get("description"),
-                    "pickDate": now,
-                })
-            order["pickLines"] = pick_lines
+        # pickLines validation is now done above - they must exist
 
         if not order.get("packLines"):
             pack_lines = []
@@ -209,7 +212,26 @@ class InflowService:
         async with httpx.AsyncClient() as client:
             response = await client.put(url, json=order, headers=self.headers)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+
+            # Audit logging for inFlow fulfillment
+            if db:
+                audit_service = AuditService(db)
+                audit_service.log_action(
+                    entity_type="inflow_order",
+                    entity_id=sales_order_id,
+                    action="fulfilled",
+                    user_id=user_id,
+                    description=f"Order fulfilled in inFlow system",
+                    audit_metadata={
+                        "inflow_order_number": order.get("orderNumber"),
+                        "pick_lines_count": len(order.get("pickLines", [])),
+                        "pack_lines_count": len(order.get("packLines", [])),
+                        "ship_lines_count": len(order.get("shipLines", []))
+                    }
+                )
+
+            return result
 
     async def register_webhook(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
         """

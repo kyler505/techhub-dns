@@ -1,11 +1,71 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import PreDeliveryQueue from "./PreDeliveryQueue";
 import InDelivery from "./InDelivery";
 import Shipping from "./Shipping";
+import { ordersApi } from "../api/orders";
+import { OrderStatus } from "../types/order";
+
+interface DeliveryStats {
+  readyForDelivery: number;
+  activeDeliveries: number;
+  shippingQueue: number;
+  completedToday: number;
+}
 
 export default function DeliveryDashboard() {
+  const [stats, setStats] = useState<DeliveryStats>({
+    readyForDelivery: 0,
+    activeDeliveries: 0,
+    shippingQueue: 0,
+    completedToday: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setStatsLoading(true);
+
+        // Fetch orders by status to calculate stats
+        const [preDeliveryOrders, inDeliveryOrders, shippingOrders, deliveredOrders] = await Promise.all([
+          ordersApi.getOrders({ status: OrderStatus.PRE_DELIVERY }),
+          ordersApi.getOrders({ status: OrderStatus.IN_DELIVERY }),
+          ordersApi.getOrders({ status: OrderStatus.SHIPPING }),
+          ordersApi.getOrders({ status: OrderStatus.DELIVERED }),
+        ]);
+
+        // Calculate completed today (orders delivered today)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const completedToday = deliveredOrders.filter(order => {
+          if (!order.updated_at) return false;
+          const updatedDate = new Date(order.updated_at);
+          updatedDate.setHours(0, 0, 0, 0);
+          return updatedDate.getTime() === today.getTime();
+        }).length;
+
+        setStats({
+          readyForDelivery: preDeliveryOrders.length,
+          activeDeliveries: inDeliveryOrders.length,
+          shippingQueue: shippingOrders.length,
+          completedToday,
+        });
+      } catch (error) {
+        console.error("Failed to fetch delivery stats:", error);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    fetchStats();
+
+    // Refresh stats every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -67,14 +127,14 @@ export default function DeliveryDashboard() {
         </div>
       </div>
 
-      {/* Additional Delivery Metrics or Quick Actions could go here */}
+      {/* Delivery Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Ready for Delivery</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{statsLoading ? "..." : stats.readyForDelivery}</div>
             <p className="text-xs text-muted-foreground">Orders in pre-delivery</p>
           </CardContent>
         </Card>
@@ -84,7 +144,7 @@ export default function DeliveryDashboard() {
             <CardTitle className="text-sm font-medium">Active Deliveries</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{statsLoading ? "..." : stats.activeDeliveries}</div>
             <p className="text-xs text-muted-foreground">Orders in transit</p>
           </CardContent>
         </Card>
@@ -94,7 +154,7 @@ export default function DeliveryDashboard() {
             <CardTitle className="text-sm font-medium">Shipping Queue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{statsLoading ? "..." : stats.shippingQueue}</div>
             <p className="text-xs text-muted-foreground">Orders ready to ship</p>
           </CardContent>
         </Card>
@@ -104,7 +164,7 @@ export default function DeliveryDashboard() {
             <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{statsLoading ? "..." : stats.completedToday}</div>
             <p className="text-xs text-muted-foreground">Deliveries completed</p>
           </CardContent>
         </Card>

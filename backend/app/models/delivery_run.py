@@ -15,9 +15,9 @@ class VehicleEnum(enum.Enum):
 
 
 class DeliveryRunStatus(enum.Enum):
-    ACTIVE = "active"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    ACTIVE = "Active"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
 
 
 class DeliveryRun(Base):

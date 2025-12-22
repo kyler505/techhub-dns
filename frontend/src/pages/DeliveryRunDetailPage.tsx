@@ -1,13 +1,22 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, Truck, User, Clock, Package } from "lucide-react";
+import { ArrowLeft, Truck, User, Clock, Package, CheckCircle } from "lucide-react";
+import { deliveryRunsApi } from "../api/deliveryRuns";
+import { OrderStatus } from "../types/order";
 
 export default function DeliveryRunDetailPage() {
   const { runId } = useParams<{ runId: string }>();
   const { run, loading, error } = useDeliveryRun(runId);
+  const [finishing, setFinishing] = useState(false);
+
+  // Check if all orders are delivered
+  const allOrdersDelivered = run?.orders.every(order =>
+    order.status.toLowerCase() === 'delivered'
+  ) ?? false;
 
   const formatVehicleName = (vehicle: string) => {
     return vehicle
@@ -74,17 +83,45 @@ export default function DeliveryRunDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link to="/delivery">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Delivery
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">{run.name}</h1>
-          <p className="text-muted-foreground">Run ID: {run.id}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link to="/delivery">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Delivery
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">{run.name}</h1>
+            <p className="text-muted-foreground">Run ID: {run.id}</p>
+          </div>
         </div>
+
+        {/* Complete Delivery Button */}
+        {run && run.status === 'Active' && (
+          <Button
+            onClick={async () => {
+              if (!allOrdersDelivered) return;
+
+              setFinishing(true);
+              try {
+                await deliveryRunsApi.finishRun(run.id);
+                // Refresh the page to show updated status
+                window.location.reload();
+              } catch (error) {
+                console.error('Failed to finish delivery run:', error);
+                alert('Failed to complete delivery. Please ensure all orders are delivered first.');
+              } finally {
+                setFinishing(false);
+              }
+            }}
+            disabled={!allOrdersDelivered || finishing}
+            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+          >
+            <CheckCircle className="w-4 h-4 mr-2" />
+            {finishing ? 'Completing...' : 'Complete Delivery'}
+          </Button>
+        )}
       </div>
 
       {/* Run Summary */}
@@ -172,7 +209,9 @@ export default function DeliveryRunDetailPage() {
               {run.orders.map((order) => (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${
+                    order.status.toLowerCase() !== 'delivered' ? 'border-orange-200 bg-orange-50' : ''
+                  }`}
                 >
                   <div className="flex items-center gap-4">
                     <div>
@@ -192,11 +231,25 @@ export default function DeliveryRunDetailPage() {
                       {order.status.toLowerCase().replace('_', ' ')}
                     </Badge>
 
+                    {order.status.toLowerCase() !== 'delivered' && (
+                      <span className="text-xs text-orange-600 font-medium">
+                        Must be signed first
+                      </span>
+                    )}
+
                     <Link to={`/orders/${order.id}`}>
                       <Button variant="outline" size="sm">
                         View Details
                       </Button>
                     </Link>
+
+                    {order.status === OrderStatus.IN_DELIVERY && (
+                      <Link to={`/document-signing?orderId=${order.id}`}>
+                        <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
+                          Sign Document
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

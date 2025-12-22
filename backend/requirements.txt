@@ -11,3 +11,5 @@ apscheduler==3.10.4
 azure-identity==1.15.0
 azure-keyvault-secrets==4.7.0
 reportlab==4.0.7
+pypdf==3.17.4
+pillow==10.1.0

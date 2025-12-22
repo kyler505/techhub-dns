@@ -1,10 +1,13 @@
 import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { ordersApi } from "../api/orders";
+import { OrderDetail } from "../types/order";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -14,30 +17,70 @@ interface PdfEntry {
   url: string;
 }
 
-const PDF_FILES: PdfEntry[] = Object.entries(
-  import.meta.glob("../../public/pdfs/*.pdf", { eager: true, query: "?url", import: "default" })
-).map(([path, url]) => {
-  const normalizedPath = path.replace(/\\/g, "/");
-  const filename = normalizedPath.split("/").pop() || "document.pdf";
-  const name = filename.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ");
-  const normalizedUrl = (url as string).replace("/public/", "/");
-  return {
-    name: name || filename,
-    filename,
-    url: normalizedUrl,
-  };
-});
-
 const DEVICE_PIXEL_RATIO = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
 function DocumentSigningPage() {
-  const [selectedPdf, setSelectedPdf] = useState<PdfEntry | null>(PDF_FILES[0] ?? null);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [selectedPdf, setSelectedPdf] = useState<PdfEntry | null>(null);
+  const [loadingOrder, setLoadingOrder] = useState(true);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number>();
   const [pageNumber, setPageNumber] = useState(1);
   const [pageViewport, setPageViewport] = useState<{ width: number; height: number } | null>(null);
   const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // Load order when component mounts
+  useEffect(() => {
+    const orderId = searchParams.get('orderId');
+    if (!orderId) {
+      setOrderError('No order ID provided');
+      setLoadingOrder(false);
+      return;
+    }
+
+    const loadOrder = async () => {
+      try {
+        setLoadingOrder(true);
+        setOrderError(null);
+        const orderData = await ordersApi.getOrder(orderId);
+        setOrder(orderData);
+
+        // Set up PDF entry for the order's picklist
+        if (orderData.picklist_path) {
+          setSelectedPdf({
+            name: `Picklist for Order ${orderData.inflow_order_id || orderData.id.slice(0, 8)}`,
+            filename: `order-${orderData.id}-picklist.pdf`,
+            url: `/api/orders/${orderData.id}/picklist`
+          });
+        } else {
+          setOrderError('No picklist available for this order');
+        }
+      } catch (err) {
+        console.error('Failed to load order:', err);
+        setOrderError('Failed to load order details');
+      } finally {
+        setLoadingOrder(false);
+      }
+    };
+
+    loadOrder();
+  }, [searchParams]);
+
+  // Immediate fallback: Try to set containerWidth when viewerRef becomes available
+  useEffect(() => {
+    if (viewerRef.current && !containerWidth) {
+      console.log('Immediate fallback: viewerRef available, trying to get container width');
+      const rect = viewerRef.current.getBoundingClientRect();
+      if (rect.width > 0) {
+        console.log('Immediate fallback: Setting containerWidth to:', rect.width);
+        setContainerWidth(rect.width);
+      }
+    }
+  }, [containerWidth]); // Run whenever containerWidth changes (or initially)
   const [hasSignature, setHasSignature] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,22 +90,34 @@ function DocumentSigningPage() {
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pointerIdRef = useRef<number | null>(null);
 
-  const availablePdfs = useMemo(() => PDF_FILES, []);
   const selectedPdfUrl = useMemo(() => (selectedPdf ? selectedPdf.url : null), [selectedPdf]);
 
   useEffect(() => {
-    if (!viewerRef.current) return undefined;
+    if (!viewerRef.current) {
+      console.log('ResizeObserver: viewerRef.current is null');
+      return undefined;
+    }
+
+    console.log('ResizeObserver: Setting up observer on element:', viewerRef.current);
 
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
-      if (rect) setContainerWidth(rect.width);
+      console.log('ResizeObserver fired, container width:', rect?.width, 'height:', rect?.height);
+      if (rect && rect.width > 0) {
+        console.log('Setting containerWidth to:', rect.width);
+        setContainerWidth(rect.width);
+      }
     });
 
     observer.observe(viewerRef.current);
-    return () => observer.disconnect();
+    return () => {
+      console.log('ResizeObserver: Disconnecting');
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {
+    console.log('Debug - pageViewport:', pageViewport, 'containerWidth:', containerWidth, 'renderSize:', renderSize, 'selectedPdf:', !!selectedPdf);
     if (!pageViewport || containerWidth === null || containerWidth === 0) return;
     const nextScale = containerWidth / pageViewport.width;
     setRenderSize({
@@ -70,6 +125,36 @@ function DocumentSigningPage() {
       height: pageViewport.height * nextScale,
     });
   }, [containerWidth, pageViewport]);
+
+  // Fallback: If we have viewport but no containerWidth, try to get it from the DOM
+  useEffect(() => {
+    if (pageViewport && !containerWidth && viewerRef.current && !loadingOrder) {
+      console.log('Fallback: Trying to get container width from DOM');
+      const rect = viewerRef.current.getBoundingClientRect();
+      if (rect.width > 0) {
+        console.log('Fallback: Got width from getBoundingClientRect:', rect.width);
+        setContainerWidth(rect.width);
+      }
+    }
+  }, [pageViewport, containerWidth, loadingOrder]);
+
+  // Fallback: If we have a selected PDF but no renderSize after a delay, try to force it
+  useEffect(() => {
+    if (selectedPdf && !renderSize && !loadingOrder && pageViewport && containerWidth) {
+      console.log('Fallback: Attempting to force renderSize calculation');
+      const timer = setTimeout(() => {
+        if (pageViewport && containerWidth && !renderSize) {
+          console.log('Fallback: Setting renderSize');
+          const nextScale = containerWidth / pageViewport.width;
+          setRenderSize({
+            width: pageViewport.width * nextScale,
+            height: pageViewport.height * nextScale,
+          });
+        }
+      }, 1000); // Reduced to 1 second since we have fallbacks now
+      return () => clearTimeout(timer);
+    }
+  }, [selectedPdf, renderSize, pageViewport, containerWidth, loadingOrder]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -111,13 +196,16 @@ function DocumentSigningPage() {
   }, [clearSignature, pageNumber, selectedPdf]);
 
   const handleLoadSuccess = useCallback(({ numPages: loadedPages }: { numPages: number }) => {
+    console.log('PDF loaded successfully with', loadedPages, 'pages');
     setNumPages(loadedPages);
     setPageNumber(1);
     setError(null);
   }, []);
 
   const handlePageLoad = useCallback((page: PDFPageProxy) => {
+    console.log('PDF page loaded, setting viewport');
     const viewport = page.getViewport({ scale: 1 });
+    console.log('Viewport:', viewport.width, 'x', viewport.height);
     setPageViewport({ width: viewport.width, height: viewport.height });
     setIsPageRendering(false);
   }, []);
@@ -194,7 +282,7 @@ function DocumentSigningPage() {
   const isCanvasReady = Boolean(renderSize && selectedPdfUrl);
 
   const saveSignedPdf = useCallback(async () => {
-    if (!selectedPdf || !canvasRef.current || !selectedPdfUrl) return;
+    if (!order || !canvasRef.current || !selectedPdfUrl) return;
     if (!hasSignature) {
       setError("Add a signature before saving.");
       return;
@@ -204,142 +292,77 @@ function DocumentSigningPage() {
     setError(null);
 
     try {
-      const canvas = canvasRef.current;
-      const [pdfBytes, pngBytes] = await Promise.all([
-        fetch(selectedPdfUrl).then((response) => {
-          if (!response.ok) throw new Error("Failed to fetch PDF file.");
-          return response.arrayBuffer();
-        }),
-        fetch(canvas.toDataURL("image/png")).then((res) => res.arrayBuffer()),
-      ]);
+      // Convert canvas to base64 for transmission
+      const signatureImage = canvasRef.current.toDataURL('image/png');
 
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      const pngImage = await pdfDoc.embedPng(pngBytes);
-      const page = pdfDoc.getPage(pageNumber - 1);
-      const { width: pageWidth, height: pageHeight } = page.getSize();
-
-      page.drawImage(pngImage, {
-        x: 0,
-        y: 0,
-        width: pageWidth,
-        height: pageHeight,
+      // Send signature data to backend for bundling
+      await ordersApi.signOrder(order.id, {
+        signature_image: signatureImage,
+        page_number: pageNumber,
+        position: { x: 50, y: 60 } // Approximate position of signature line
       });
 
-      const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const signedText = `Signed ${new Date().toLocaleDateString()}`;
-      page.drawText(signedText, {
-        x: pageWidth - 170,
-        y: 24,
-        size: 12,
-        font: helvetica,
-        color: rgb(0.3, 0.3, 0.3),
+      // Navigate back to the delivery run or order detail
+      const returnTo = searchParams.get('returnTo') || `/orders/${order.id}`;
+      navigate(returnTo, {
+        state: { message: 'Document signed successfully! Bundled documents generated and order marked as delivered.' }
       });
 
-      const signedPdfBytes = await pdfDoc.save();
-      const signedPdfArray = Uint8Array.from(signedPdfBytes);
-      const blob = new Blob([signedPdfArray], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const downloadLink = document.createElement("a");
-      const fileName = selectedPdf.filename.replace(/\.pdf$/i, "");
-      downloadLink.href = url;
-      downloadLink.download = `${fileName}-SIGNED.pdf`;
-      downloadLink.click();
-      URL.revokeObjectURL(url);
     } catch (saveError) {
       console.error(saveError);
-      setError("Unable to save the signed PDF. Please try again.");
+      setError("Unable to complete signing. Please try again.");
     } finally {
       setIsSaving(false);
     }
-  }, [hasSignature, pageNumber, selectedPdf, selectedPdfUrl]);
+  }, [hasSignature, order, selectedPdfUrl, pageNumber, searchParams, navigate]);
+
+  if (loadingOrder) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-sm text-muted-foreground">Loading order details...</div>
+      </div>
+    );
+  }
+
+  if (orderError || !order) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-red-600 mb-4">{orderError || "Order not found"}</div>
+        <button
+          onClick={() => navigate(-1)}
+          className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pb-8">
       <div className="max-w-6xl mx-auto">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Document Signing</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Sign Delivery Document</h1>
           <p className="text-gray-600 mt-1">
-            Select a PDF placed in <code className="bg-gray-100 px-1 py-0.5 rounded">frontend/public/pdfs</code>, sign
-            with your Apple Pencil, and download a flattened copy.
+            Order {order.inflow_order_id || order.id.slice(0, 8)} - {order.recipient_name || 'Unknown Recipient'}
           </p>
         </header>
 
-        <section className="mb-6 bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Available PDFs</h2>
-              <p className="text-sm text-gray-600">
-                Drop additional files into <span className="font-semibold">frontend/public/pdfs</span> to see them listed
-                here.
-              </p>
+        {!selectedPdf && (
+          <section className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="text-yellow-800">
+              <strong>No picklist available</strong> - This order doesn't have a generated picklist to sign.
             </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                className="px-4 py-2 rounded-md bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200"
-                onClick={() => {
-                  setSelectedPdf(null);
-                  setNumPages(undefined);
-                  setPageNumber(1);
-                  setPageViewport(null);
-                  setRenderSize(null);
-                  setError(null);
-                  setIsPageRendering(false);
-                  clearSignature();
-                }}
-              >
-                Clear selection
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 rounded-md bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200"
-                onClick={clearSignature}
-                disabled={!isCanvasReady || !hasSignature}
-              >
-                Clear signature
-              </button>
-            </div>
-          </div>
+          </section>
+        )}
 
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {availablePdfs.map((pdf) => {
-              const isSelected = selectedPdf?.filename === pdf.filename;
-              return (
-                <button
-                  key={pdf.filename}
-                  type="button"
-                  onClick={() => {
-                    setSelectedPdf(pdf);
-                    setPageNumber(1);
-                    setIsPageRendering(true);
-                    setError(null);
-                    clearSignature();
-                  }}
-                  className={`w-full text-left rounded-lg border px-4 py-3 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-[#800000] ${
-                    isSelected ? "border-[#800000] bg-[#800000]/10" : "border-gray-200 hover:border-[#800000]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-gray-900">{pdf.name}</p>
-                      <p className="text-sm text-gray-600">{pdf.filename}</p>
-                    </div>
-                    {isSelected && (
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold text-[#800000] bg-white border border-[#800000]/30 rounded-full">
-                        Selected
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-            {!availablePdfs.length && (
-              <p className="col-span-full text-gray-600">
-                No PDFs found. Add files to <span className="font-semibold">frontend/public/pdfs</span> to start signing.
-              </p>
-            )}
-          </div>
-        </section>
+        {selectedPdf && (
+          <section className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="text-blue-800">
+              <strong>Ready to sign:</strong> {selectedPdf.name}
+            </div>
+          </section>
+        )}
 
         <section className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

@@ -47,6 +47,10 @@ class TeamsService:
         """Send Teams notification when order is ready for delivery"""
         return await self._send_notification(order, None, "ready")
 
+    async def send_delivery_complete_notification(self, order: Order) -> TeamsNotification:
+        """Send Teams notification when delivery is complete"""
+        return await self._send_notification(order, order.assigned_deliverer, "delivered")
+
     async def _send_notification(
         self,
         order: Order,
@@ -56,6 +60,7 @@ class TeamsService:
         webhook_url = self.get_webhook_url()
         if not webhook_url:
             raise ValueError("Teams webhook URL not configured")
+
 
         existing = self.db.query(TeamsNotification).filter(
             and_(

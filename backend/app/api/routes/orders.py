@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -17,12 +17,60 @@ from app.schemas.order import (
     OrderUpdate,
     AssetTagUpdate,
     PicklistGenerationRequest,
-    QASubmission
+    QASubmission,
+    SignatureData,
+    ShippingWorkflowUpdateRequest,
+    ShippingWorkflowResponse
 )
 from app.models.order import OrderStatus
 from app.schemas.audit import AuditLogResponse
+from app.utils.exceptions import DNSApiError, NotFoundError, ValidationError
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+# Simple in-memory broadcaster for WebSocket clients
+_order_websockets: List[WebSocket] = []
+
+
+async def _broadcast_orders(db_session: Session = None):
+    """Send current orders to all connected websockets."""
+    # Create our own session if none provided
+    if db_session is None:
+        from app.database import SessionLocal
+        db_session = SessionLocal()
+
+    try:
+        service = OrderService(db_session)
+        # Get all orders (we could optimize this later with filtering/caching)
+        orders, _ = service.get_orders(limit=1000)  # Get up to 1000 orders
+        payload = []
+        for order in orders:
+            payload.append({
+                "id": str(order.id),
+                "inflow_order_id": order.inflow_order_id,
+                "recipient_name": order.recipient_name,
+                "status": order.status,
+                "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+                "delivery_location": order.delivery_location,
+                "assigned_deliverer": order.assigned_deliverer
+            })
+
+        # Broadcast
+        to_remove = []
+        for ws in _order_websockets:
+            try:
+                await ws.send_json({"type": "orders_update", "data": payload})
+            except Exception:
+                to_remove.append(ws)
+
+        for rem in to_remove:
+            try:
+                _order_websockets.remove(rem)
+            except ValueError:
+                pass
+    finally:
+        if db_session is not None and hasattr(db_session, 'close'):
+            db_session.close()
 
 
 @router.get("", response_model=List[OrderResponse])
@@ -80,32 +128,36 @@ async def update_order_status(
 ):
     """Transition order status"""
     service = OrderService(db)
-    try:
-        order = service.transition_status(
-            order_id=order_id,
-            new_status=status_update.status,
-            changed_by=changed_by,
-            reason=status_update.reason
+    order = service.transition_status(
+        order_id=order_id,
+        new_status=status_update.status,
+        changed_by=changed_by,
+        reason=status_update.reason
+    )
+
+    # Send Teams notification in background if transitioning to In Delivery
+    if status_update.status == OrderStatus.IN_DELIVERY:
+        teams_service = TeamsService(db)
+        background_tasks.add_task(
+            teams_service.send_delivery_notification,
+            order,
+            order.assigned_deliverer
+        )
+    if status_update.status == OrderStatus.PRE_DELIVERY:
+        teams_service = TeamsService(db)
+        background_tasks.add_task(
+            teams_service.send_ready_notification,
+            order
         )
 
-        # Send Teams notification in background if transitioning to In Delivery
-        if status_update.status == OrderStatus.IN_DELIVERY:
-            teams_service = TeamsService(db)
-            background_tasks.add_task(
-                teams_service.send_delivery_notification,
-                order,
-                order.assigned_deliverer
-            )
-        if status_update.status == OrderStatus.PRE_DELIVERY:
-            teams_service = TeamsService(db)
-            background_tasks.add_task(
-                teams_service.send_ready_notification,
-                order
-            )
+    # Broadcast order update via WebSocket
+    try:
+        import asyncio
+        asyncio.create_task(_broadcast_orders(db))
+    except Exception:
+        pass  # WebSocket broadcasting is best-effort
 
-        return order
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return order
 
 
 @router.post("/bulk-transition", response_model=List[OrderResponse])
@@ -116,16 +168,21 @@ def bulk_transition_status(
 ):
     """Bulk transition multiple orders"""
     service = OrderService(db)
+    orders = service.bulk_transition(
+        order_ids=bulk_update.order_ids,
+        new_status=bulk_update.status,
+        changed_by=changed_by,
+        reason=bulk_update.reason
+    )
+
+    # Broadcast order updates via WebSocket
     try:
-        orders = service.bulk_transition(
-            order_ids=bulk_update.order_ids,
-            new_status=bulk_update.status,
-            changed_by=changed_by,
-            reason=bulk_update.reason
-        )
-        return orders
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import asyncio
+        asyncio.create_task(_broadcast_orders(db))
+    except Exception:
+        pass  # WebSocket broadcasting is best-effort
+
+    return orders
 
 
 @router.get("/{order_id}/audit", response_model=List[AuditLogResponse])
@@ -147,15 +204,12 @@ def tag_order(
 ):
     """Mock asset tagging step"""
     service = OrderService(db)
-    try:
-        order = service.mark_asset_tagged(
-            order_id=order_id,
-            tag_ids=tag_update.tag_ids,
-            technician=tag_update.technician
-        )
-        return order
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    order = service.mark_asset_tagged(
+        order_id=order_id,
+        tag_ids=tag_update.tag_ids,
+        technician=tag_update.technician
+    )
+    return order
 
 
 @router.post("/{order_id}/picklist", response_model=OrderResponse)
@@ -166,14 +220,11 @@ def generate_picklist(
 ):
     """Generate a picklist PDF for the order"""
     service = OrderService(db)
-    try:
-        order = service.generate_picklist(
-            order_id=order_id,
-            generated_by=request.generated_by
-        )
-        return order
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    order = service.generate_picklist(
+        order_id=order_id,
+        generated_by=request.generated_by
+    )
+    return order
 
 
 @router.post("/{order_id}/qa", response_model=OrderResponse)
@@ -185,39 +236,43 @@ async def submit_qa(
 ):
     """Submit QA checklist for an order"""
     service = OrderService(db)
-    try:
-        order = service.submit_qa(
+    order = service.submit_qa(
+        order_id=order_id,
+        qa_data=submission.responses,
+        technician=submission.technician
+    )
+
+    if order.status == OrderStatus.PICKED and service._prep_steps_complete(order):
+        # Determine next status based on QA method
+        qa_method = order.qa_method
+        if qa_method == "Shipping":
+            next_status = OrderStatus.SHIPPING
+        else:
+            # Default to PRE_DELIVERY for Delivery method or when method is not specified
+            next_status = OrderStatus.PRE_DELIVERY
+
+        order = service.transition_status(
             order_id=order_id,
-            qa_data=submission.responses,
-            technician=submission.technician
+            new_status=next_status,
+            changed_by=submission.technician
         )
 
-        if order.status == OrderStatus.PICKED and service._prep_steps_complete(order):
-            # Determine next status based on QA method
-            qa_method = order.qa_method
-            if qa_method == "Shipping":
-                next_status = OrderStatus.SHIPPING
-            else:
-                # Default to PRE_DELIVERY for Delivery method or when method is not specified
-                next_status = OrderStatus.PRE_DELIVERY
-
-            order = service.transition_status(
-                order_id=order_id,
-                new_status=next_status,
-                changed_by=submission.technician
+        # Only send ready notification for delivery orders, not shipping
+        if next_status == OrderStatus.PRE_DELIVERY:
+            teams_service = TeamsService(db)
+            background_tasks.add_task(
+                teams_service.send_ready_notification,
+                order
             )
 
-            # Only send ready notification for delivery orders, not shipping
-            if next_status == OrderStatus.PRE_DELIVERY:
-                teams_service = TeamsService(db)
-                background_tasks.add_task(
-                    teams_service.send_ready_notification,
-                    order
-                )
+    # Broadcast order update via WebSocket
+    try:
+        import asyncio
+        asyncio.create_task(_broadcast_orders(db))
+    except Exception:
+        pass  # WebSocket broadcasting is best-effort
 
-        return order
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return order
 
 
 @router.get("/{order_id}/picklist")
@@ -285,10 +340,141 @@ async def fulfill_order(
         raise HTTPException(status_code=400, detail="Order missing inflow_sales_order_id")
 
     inflow_service = InflowService()
+    result = await inflow_service.fulfill_sales_order(
+        order.inflow_sales_order_id,
+        db=db,
+        user_id="system"  # Automated fulfillment
+    )
+    return {"success": True, "result": result}
+
+
+@router.post("/{order_id}/sign")
+async def sign_order(
+    order_id: UUID,
+    signature_data: SignatureData,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Complete order signing, generate bundled documents, and transition to Delivered status"""
+    service = OrderService(db)
+
+    # Get the current order
+    order = service.get_order_by_id(order_id)
+    if not order:
+        raise NotFoundError("Order", str(order_id))
+
+    if order.status != OrderStatus.IN_DELIVERY.value:
+        raise ValidationError(
+            f"Order must be in In Delivery status to sign. Current status: {order.status}",
+            details={
+                "current_status": order.status,
+                "required_status": OrderStatus.IN_DELIVERY.value
+            }
+        )
+
+    # Generate bundled documents (signed picklist + QA form)
+    bundled_path = service.generate_bundled_documents(
+        order_id=order_id,
+        signature_data=signature_data.model_dump()
+    )
+
+    # Update order status to Delivered using the service method (which creates audit log)
+    from datetime import datetime
+    order = service.transition_status(
+        order_id=order_id,
+        new_status=OrderStatus.DELIVERED,
+        changed_by="system"  # Order signing is automated
+    )
+
+    # Record signature timestamp and bundled document path
+    order.signature_captured_at = datetime.utcnow()
+    order.signed_picklist_path = bundled_path
+    order.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(order)
+
+    # Send notification that delivery is complete
+    background_tasks.add_task(
+        service.teams_service.send_delivery_complete_notification,
+        order
+    )
+
+    # Broadcast order update via WebSocket
     try:
-        result = await inflow_service.fulfill_sales_order(order.inflow_sales_order_id)
-        return {"success": True, "result": result}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import asyncio
+        asyncio.create_task(_broadcast_orders(db))
+    except Exception:
+        pass  # WebSocket broadcasting is best-effort
+
+    return {
+        "success": True,
+        "message": "Order signed and bundled documents generated",
+        "bundled_document_path": bundled_path
+    }
+
+
+@router.patch("/{order_id}/shipping-workflow", response_model=OrderResponse)
+def update_shipping_workflow(
+    order_id: UUID,
+    request: ShippingWorkflowUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """Update shipping workflow status for an order"""
+    service = OrderService(db)
+    order = service.transition_shipping_workflow(
+        order_id=order_id,
+        new_status=request.status,
+        carrier_name=request.carrier_name,
+        tracking_number=request.tracking_number,
+        updated_by=request.updated_by
+    )
+
+    # Broadcast order update via WebSocket
+    try:
+        import asyncio
+        asyncio.create_task(_broadcast_orders(db))
+    except Exception:
+        pass  # WebSocket broadcasting is best-effort
+
+    return order
+
+
+@router.get("/{order_id}/shipping-workflow", response_model=ShippingWorkflowResponse)
+def get_shipping_workflow(order_id: UUID, db: Session = Depends(get_db)):
+    """Get shipping workflow status for an order"""
+    service = OrderService(db)
+    order = service.get_order_by_id(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    return ShippingWorkflowResponse(
+        shipping_workflow_status=order.shipping_workflow_status,
+        shipping_workflow_status_updated_at=order.shipping_workflow_status_updated_at,
+        shipping_workflow_status_updated_by=order.shipping_workflow_status_updated_by,
+        shipped_to_carrier_at=order.shipped_to_carrier_at,
+        shipped_to_carrier_by=order.shipped_to_carrier_by,
+        carrier_name=order.carrier_name,
+        tracking_number=order.tracking_number
+    )
+
+
+@router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
+    await websocket.accept()
+    _order_websockets.append(websocket)
+    try:
+        # Send initial snapshot
+        await _broadcast_orders(db)
+
+        while True:
+            # Keep connection alive; no client messages required
+            try:
+                await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+    finally:
+        try:
+            _order_websockets.remove(websocket)
+        except ValueError:
+            pass

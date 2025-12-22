@@ -14,11 +14,13 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
-from app.models.order import Order, OrderStatus
+from app.models.order import Order, OrderStatus, ShippingWorkflowStatus
 from app.models.audit_log import AuditLog
+from app.services.audit_service import AuditService
 from app.models.teams_notification import TeamsNotification, NotificationStatus
 from app.services.teams_service import TeamsService
 from app.utils.building_mapper import get_building_abbreviation, extract_building_code_from_location
+from app.utils.exceptions import NotFoundError, ValidationError, StatusTransitionError, FileOperationError
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,17 @@ class OrderService:
 
     def _prep_steps_complete(self, order: Order) -> bool:
         return bool(order.tagged_at and order.picklist_generated_at and order.qa_completed_at)
+
+    def _get_incomplete_steps(self, order: Order) -> List[str]:
+        """Get list of incomplete preparation steps for an order"""
+        incomplete = []
+        if not order.tagged_at:
+            incomplete.append("asset_tagging")
+        if not order.picklist_generated_at:
+            incomplete.append("picklist_generation")
+        if not order.qa_completed_at:
+            incomplete.append("qa_checklist")
+        return incomplete
 
     def _is_shipping_order(self, order: Order) -> bool:
         """Determine if an order is a shipping order (not local delivery)"""
@@ -57,7 +70,7 @@ class OrderService:
     ) -> Order:
         order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
         if not order:
-            raise ValueError("Order not found")
+            raise NotFoundError("Order", str(order_id))
 
         order.tagged_at = datetime.utcnow()
         order.tagged_by = technician
@@ -66,6 +79,20 @@ class OrderService:
 
         self.db.commit()
         self.db.refresh(order)
+
+        # Audit logging for asset tagging
+        audit_service = AuditService(self.db)
+        audit_service.log_order_action(
+            order_id=str(order_id),
+            action="asset_tagged",
+            user_id=technician or "unknown",
+            description=f"Order tagged with {len(tag_ids)} asset tags",
+            audit_metadata={
+                "tag_ids": tag_ids,
+                "tagged_by": technician
+            }
+        )
+
         return order
 
     def generate_picklist(
@@ -75,13 +102,13 @@ class OrderService:
     ) -> Order:
         order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
         if not order:
-            raise ValueError("Order not found")
+            raise NotFoundError("Order", str(order_id))
 
         if not order.tagged_at:
-            raise ValueError("Asset tagging must be completed before generating a picklist")
+            raise ValidationError("Asset tagging must be completed before generating a picklist")
 
         if not order.inflow_data:
-            raise ValueError("Order must have inFlow data to generate picklist")
+            raise ValidationError("Order must have inFlow data to generate picklist")
 
         picklist_dir = self._storage_path("picklists")
         picklist_dir.mkdir(parents=True, exist_ok=True)
@@ -98,6 +125,21 @@ class OrderService:
 
         self.db.commit()
         self.db.refresh(order)
+
+        # Audit logging for picklist generation
+        audit_service = AuditService(self.db)
+        audit_service.log_order_action(
+            order_id=str(order_id),
+            action="picklist_generated",
+            user_id=generated_by or "unknown",
+            description=f"Picklist PDF generated",
+            audit_metadata={
+                "filename": filename,
+                "generated_by": generated_by,
+                "file_path": str(destination)
+            }
+        )
+
         return order
 
     def submit_qa(
@@ -108,10 +150,47 @@ class OrderService:
     ) -> Order:
         order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
         if not order:
-            raise ValueError("Order not found")
+            raise NotFoundError("Order", str(order_id))
 
         if not order.picklist_generated_at:
-            raise ValueError("Picklist must be generated before QA can be completed")
+            raise ValidationError("Picklist must be generated before QA can be completed")
+
+        # Validate QA data format - must use detailed shipping QA format
+        required_fields = [
+            'orderNumber', 'technician', 'qaSignature', 'method',
+            'verifyAssetTagSerialMatch', 'verifyOrderDetailsTemplateSent',
+            'verifyPackagedProperly', 'verifyPackingSlipSerialsMatch',
+            'verifyElectronicPackingSlipSaved', 'verifyBoxesLabeledCorrectly'
+        ]
+
+        missing_fields = [field for field in required_fields if field not in qa_data]
+        if missing_fields:
+            raise ValidationError(
+                f"QA data missing required fields for detailed format: {', '.join(missing_fields)}",
+                details={"missing_fields": missing_fields}
+            )
+
+        # Validate method is either "Delivery" or "Shipping"
+        if qa_data.get('method') not in ['Delivery', 'Shipping']:
+            raise ValidationError(
+                "QA method must be either 'Delivery' or 'Shipping'",
+                field="method",
+                details={"provided_method": qa_data.get('method')}
+            )
+
+        # Validate boolean fields are boolean
+        boolean_fields = [
+            'verifyAssetTagSerialMatch', 'verifyOrderDetailsTemplateSent',
+            'verifyPackagedProperly', 'verifyPackingSlipSerialsMatch',
+            'verifyElectronicPackingSlipSaved', 'verifyBoxesLabeledCorrectly'
+        ]
+        for field in boolean_fields:
+            if not isinstance(qa_data.get(field), bool):
+                raise ValidationError(
+                    f"QA field '{field}' must be a boolean value",
+                    field=field,
+                    details={"field_type": type(qa_data.get(field)).__name__}
+                )
 
         qa_dir = self._storage_path("qa")
         qa_dir.mkdir(parents=True, exist_ok=True)
@@ -137,6 +216,21 @@ class OrderService:
 
         self.db.commit()
         self.db.refresh(order)
+
+        # Audit logging for QA completion
+        audit_service = AuditService(self.db)
+        audit_service.log_order_action(
+            order_id=str(order_id),
+            action="qa_completed",
+            user_id=technician or "unknown",
+            description=f"QA completed using {qa_data.get('method', 'unknown')} method",
+            audit_metadata={
+                "qa_method": qa_data.get("method"),
+                "completed_by": technician,
+                "qa_file_path": str(qa_file)
+            }
+        )
+
         return order
 
     def get_orders(
@@ -150,7 +244,7 @@ class OrderService:
         query = self.db.query(Order)
 
         if status:
-            query = query.filter(Order.status == status)
+            query = query.filter(Order.status == status.value)
 
         if search:
             search_filter = or_(
@@ -165,6 +259,10 @@ class OrderService:
         orders = query.order_by(Order.updated_at.desc()).offset(skip).limit(limit).all()
 
         return orders, total
+
+    def get_order_by_id(self, order_id: UUID) -> Optional[Order]:
+        """Get a single order by ID"""
+        return self.db.query(Order).filter(Order.id == order_id).first()
 
     def get_order_detail(self, order_id: UUID) -> Optional[Order]:
         """Get order with related data (audit logs, notifications)"""
@@ -184,33 +282,56 @@ class OrderService:
         order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
 
         if not order:
-            raise ValueError("Order not found")
+            raise NotFoundError("Order", str(order_id))
 
         old_status = order.status
+        qa_method = order.qa_method.strip().lower() if order.qa_method else None
 
         # Validate transition
-        if not self._is_valid_transition(old_status, new_status):
-            raise ValueError(f"Invalid transition from {old_status} to {new_status}")
+        if not self._is_valid_transition(old_status, new_status.value):
+            raise StatusTransitionError(old_status, new_status.value)
 
         if new_status == OrderStatus.PRE_DELIVERY and not self._prep_steps_complete(order):
-            raise ValueError("Asset tagging, picklist, and QA must be completed before Pre-Delivery")
+            raise ValidationError(
+                "Asset tagging, picklist, and QA must be completed before Pre-Delivery",
+                details={"missing_steps": self._get_incomplete_steps(order)}
+            )
+
+        if new_status in (OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING):
+            if not qa_method:
+                raise ValidationError(
+                    "QA method must be set before routing an order to Delivery or Shipping",
+                    field="qa_method"
+                )
+            if new_status == OrderStatus.IN_DELIVERY and qa_method != "delivery":
+                raise ValidationError(
+                    "Order QA method must be Delivery to transition to In Delivery",
+                    field="qa_method",
+                    details={"qa_method": order.qa_method, "requested_status": new_status.value}
+                )
+            if new_status == OrderStatus.SHIPPING and qa_method != "shipping":
+                raise ValidationError(
+                    "Order QA method must be Shipping to transition to Shipping",
+                    field="qa_method",
+                    details={"qa_method": order.qa_method, "requested_status": new_status.value}
+                )
 
         if new_status == OrderStatus.IN_DELIVERY and old_status == OrderStatus.PRE_DELIVERY:
             if not order.delivery_run_id:
-                raise ValueError("Order must be assigned to a delivery run before transitioning to In-Delivery")
+                raise ValidationError("Order must be assigned to a delivery run before transitioning to In-Delivery")
             if self._is_shipping_order(order):
-                raise ValueError("Shipping orders cannot be transitioned to In-Delivery")
+                raise ValidationError("Shipping orders cannot be transitioned to In-Delivery")
 
         if new_status == OrderStatus.SHIPPING:
             if not self._is_shipping_order(order):
-                raise ValueError("Only shipping orders (outside Bryan/College Station) can be transitioned to Shipping")
+                raise ValidationError("Only shipping orders (outside Bryan/College Station) can be transitioned to Shipping")
 
         # Require reason for Issue status
         if new_status == OrderStatus.ISSUE and not reason:
-            raise ValueError("Reason is required when flagging an issue")
+            raise ValidationError("Reason is required when flagging an issue")
 
         # Update order status
-        order.status = new_status
+        order.status = new_status.value
         order.updated_at = datetime.utcnow()
 
         if new_status == OrderStatus.ISSUE:
@@ -220,7 +341,7 @@ class OrderService:
         audit_log = AuditLog(
             order_id=order.id,
             changed_by=changed_by,
-            from_status=old_status.value if old_status else None,
+            from_status=old_status,
             to_status=new_status.value,
             reason=reason,
             timestamp=datetime.utcnow()
@@ -235,15 +356,15 @@ class OrderService:
 
         return order
 
-    def _is_valid_transition(self, from_status: OrderStatus, to_status: OrderStatus) -> bool:
+    def _is_valid_transition(self, from_status: str, to_status: str) -> bool:
         """Validate status transition"""
         valid_transitions = {
-            OrderStatus.PICKED: [OrderStatus.PRE_DELIVERY, OrderStatus.SHIPPING, OrderStatus.ISSUE],
-            OrderStatus.PRE_DELIVERY: [OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING, OrderStatus.ISSUE],
-            OrderStatus.IN_DELIVERY: [OrderStatus.DELIVERED, OrderStatus.ISSUE],
-            OrderStatus.SHIPPING: [OrderStatus.DELIVERED, OrderStatus.ISSUE],
-            OrderStatus.ISSUE: [OrderStatus.PICKED, OrderStatus.PRE_DELIVERY],
-            OrderStatus.DELIVERED: []  # Terminal state
+            OrderStatus.PICKED.value: [OrderStatus.PRE_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
+            OrderStatus.PRE_DELIVERY.value: [OrderStatus.IN_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
+            OrderStatus.IN_DELIVERY.value: [OrderStatus.DELIVERED.value, OrderStatus.ISSUE.value],
+            OrderStatus.SHIPPING.value: [OrderStatus.DELIVERED.value, OrderStatus.ISSUE.value],
+            OrderStatus.ISSUE.value: [OrderStatus.PICKED.value, OrderStatus.PRE_DELIVERY.value],
+            OrderStatus.DELIVERED.value: []  # Terminal state
         }
 
         return to_status in valid_transitions.get(from_status, [])
@@ -306,7 +427,7 @@ class OrderService:
         """Create or update order from Inflow data"""
         order_number = inflow_data.get("orderNumber")
         if not order_number:
-            raise ValueError("Order number is required")
+            raise ValidationError("Order number is required", field="orderNumber")
 
         # Check if order is in Bryan/College Station for delivery routing
         shipping_addr_obj = inflow_data.get("shippingAddress", {})
@@ -454,10 +575,8 @@ class OrderService:
                 existing.inflow_sales_order_id = inflow_data.get("salesOrderId")
                 data_changed = True
 
-            new_recipient_name = (
-                inflow_data.get("customFields", {}).get("custom4") or
-                inflow_data.get("contactName")
-            )
+            new_recipient_name = inflow_data.get("contactName")
+            # TODO: Add logic for more sophisticated recipient name ingestion from various sources
             if existing.recipient_name != new_recipient_name:
                 existing.recipient_name = new_recipient_name
                 data_changed = True
@@ -509,14 +628,11 @@ class OrderService:
             order = Order(
                 inflow_order_id=order_number,
                 inflow_sales_order_id=inflow_data.get("salesOrderId"),
-                recipient_name=(
-                    inflow_data.get("customFields", {}).get("custom4") or
-                    inflow_data.get("contactName")
-                ),
+                recipient_name=inflow_data.get("contactName"),
                 recipient_contact=inflow_data.get("email"),
                 delivery_location=delivery_location,
                 po_number=inflow_data.get("poNumber"),
-                status=OrderStatus.PICKED,
+                status=OrderStatus.PICKED.value,
                 inflow_data=inflow_data,
                 created_at=created_time,
                 updated_at=created_time  # Set to same as created_at initially
@@ -524,6 +640,22 @@ class OrderService:
             self.db.add(order)
             self.db.commit()
             self.db.refresh(order)
+
+            # Audit logging for order import
+            audit_service = AuditService(self.db)
+            audit_service.log_order_action(
+                order_id=str(order.id),
+                action="imported_from_inflow",
+                user_id="system",  # Automated import
+                description=f"Order imported from inFlow",
+            audit_metadata={
+                "inflow_order_id": order_number,
+                "inflow_sales_order_id": inflow_data.get("salesOrderId"),
+                "source": "inflow_webhook",
+                "order_type": "shipping" if self._is_shipping_order(order) else "delivery"
+            }
+            )
+
             return order
 
     def _generate_picklist_pdf(self, inflow_data: Dict[str, Any], output_path: str) -> None:
@@ -760,3 +892,305 @@ class OrderService:
         if line:
             lines.append(line)
         return lines
+
+    def transition_shipping_workflow(
+        self,
+        order_id: UUID,
+        new_status: ShippingWorkflowStatus,
+        carrier_name: Optional[str] = None,
+        tracking_number: Optional[str] = None,
+        updated_by: Optional[str] = None
+    ) -> Order:
+        """Transition shipping workflow status with validation"""
+
+        order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        if not order:
+            raise NotFoundError("Order", str(order_id))
+
+        if order.status != OrderStatus.SHIPPING.value:
+            raise ValidationError("Order must be in Shipping status to update shipping workflow")
+
+        # Validate blocking requirements
+        current_status = order.shipping_workflow_status or ShippingWorkflowStatus.WORK_AREA.value
+
+        if new_status == ShippingWorkflowStatus.DOCK and current_status != ShippingWorkflowStatus.WORK_AREA.value:
+            raise ValidationError("Order must be in Work Area before moving to Dock")
+
+        if new_status == ShippingWorkflowStatus.SHIPPED and current_status != ShippingWorkflowStatus.DOCK.value:
+            raise ValidationError("Order must be at Dock before marking as Shipped")
+
+        # Update fields
+        order.shipping_workflow_status = new_status.value
+        order.shipping_workflow_status_updated_at = datetime.utcnow()
+        order.shipping_workflow_status_updated_by = updated_by
+        order.updated_at = datetime.utcnow()
+
+        if new_status == ShippingWorkflowStatus.SHIPPED:
+            order.shipped_to_carrier_at = datetime.utcnow()
+            order.shipped_to_carrier_by = updated_by
+            if carrier_name:
+                order.carrier_name = carrier_name
+            if tracking_number:
+                order.tracking_number = tracking_number
+
+            # Auto-transition to Delivered status when shipped
+            order.status = OrderStatus.DELIVERED.value
+
+        self.db.commit()
+        self.db.refresh(order)
+
+        # Audit logging
+        audit_service = AuditService(self.db)
+        audit_service.log_order_action(
+            order_id=str(order_id),
+            action=f"shipping_workflow_{new_status.value}",
+            user_id=updated_by or "unknown",
+            description=f"Shipping workflow updated to {new_status.display_name}",
+            audit_metadata={
+                "carrier_name": carrier_name,
+                "tracking_number": tracking_number
+            }
+        )
+
+        return order
+
+    def generate_bundled_documents(self, order_id: UUID, signature_data: dict) -> str:
+        """Generate bundled documents: create folder with signed picklist and QA form"""
+        order = self.db.query(Order).filter(Order.id == order_id).first()
+        if not order:
+            raise NotFoundError("Order", str(order_id))
+
+        if not order.picklist_path or not order.qa_path:
+            raise ValidationError(
+                "Order missing picklist or QA data",
+                details={
+                    "has_picklist": bool(order.picklist_path),
+                    "has_qa": bool(order.qa_path)
+                }
+            )
+
+        # Create completed documents directory structure
+        completed_dir = self._storage_path("completed")
+        completed_dir.mkdir(parents=True, exist_ok=True)
+
+        order_dir = completed_dir / (order.inflow_order_id or str(order.id))
+        order_dir.mkdir(parents=True, exist_ok=True)
+
+
+        # Generate individual PDFs
+        signed_picklist_path = self._apply_signature_to_pdf(
+            order.picklist_path, signature_data
+        )
+
+
+        qa_pdf_path = self._generate_qa_pdf(order.qa_data, order)
+
+
+        # Copy files to completed folder
+        import shutil
+
+        signed_picklist_dest = order_dir / "signed_picklist.pdf"
+        qa_form_dest = order_dir / "qa_form.pdf"
+
+
+        shutil.copy2(signed_picklist_path, signed_picklist_dest)
+        shutil.copy2(qa_pdf_path, qa_form_dest)
+
+        # Clean up temporary files
+        Path(signed_picklist_path).unlink(missing_ok=True)
+        Path(qa_pdf_path).unlink(missing_ok=True)
+
+
+        return str(order_dir)
+
+    def _apply_signature_to_pdf(self, pdf_path: str, signature_data: dict) -> str:
+        """Apply signature overlay to existing PDF"""
+        from pypdf import PdfReader, PdfWriter
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.utils import ImageReader
+        import base64
+        import io
+        from PIL import Image
+        import tempfile
+        import os
+
+        # Extract signature data
+        signature_b64 = signature_data.get('signature_image', '')
+        page_number = signature_data.get('page_number', 1)
+        position = signature_data.get('position', {'x': 50, 'y': 60})  # Default position
+
+        if not signature_b64:
+            # No signature provided, return original PDF
+            return pdf_path
+
+        # Decode base64 signature image
+        try:
+            signature_data_bytes = base64.b64decode(signature_b64.split(',')[1])  # Remove data:image/png;base64, prefix
+            signature_image = Image.open(io.BytesIO(signature_data_bytes))
+
+            # Convert to RGB if necessary (reportlab doesn't support RGBA)
+            if signature_image.mode == 'RGBA':
+                # Create a white background image
+                background = Image.new('RGB', signature_image.size, (255, 255, 255))
+                background.paste(signature_image, mask=signature_image.split()[-1])  # Use alpha as mask
+                signature_image = background
+            elif signature_image.mode != 'RGB':
+                signature_image = signature_image.convert('RGB')
+
+        except Exception as e:
+            print(f"Error processing signature image: {e}")
+            return pdf_path
+
+        # Read the original PDF
+        reader = PdfReader(pdf_path)
+
+        # Validate page number
+        if page_number < 1 or page_number > len(reader.pages):
+            page_number = len(reader.pages)  # Default to last page
+
+        # Get page dimensions (assuming all pages have same size for simplicity)
+        page = reader.pages[page_number - 1]
+        page_width = float(page.mediabox.width)
+        page_height = float(page.mediabox.height)
+
+        # Calculate signature position and size
+        # Position is given as percentage of page (0-100), convert to points
+        sig_x = (position.get('x', 50) / 100.0) * page_width
+        sig_y = (position.get('y', 60) / 100.0) * page_height
+
+        # Scale signature to reasonable size (max 200x100 points)
+        max_sig_width = 200
+        max_sig_height = 100
+
+        sig_width = min(signature_image.width, max_sig_width)
+        sig_height = min(signature_image.height, max_sig_height)
+
+        # Maintain aspect ratio
+        aspect_ratio = signature_image.width / signature_image.height
+        if sig_width / aspect_ratio <= max_sig_height:
+            sig_height = sig_width / aspect_ratio
+        else:
+            sig_width = sig_height * aspect_ratio
+
+        # Create overlay PDF with signature
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as overlay_file:
+            overlay_path = overlay_file.name
+
+        c = canvas.Canvas(overlay_path, pagesize=(page_width, page_height))
+
+        # Draw signature at calculated position
+        # Convert coordinates: reportlab uses bottom-left origin, position uses top-left
+        reportlab_x = sig_x
+        reportlab_y = page_height - sig_y - sig_height
+
+        c.drawImage(ImageReader(signature_image), reportlab_x, reportlab_y, width=sig_width, height=sig_height)
+        c.save()
+
+        # Merge overlay with original PDF
+        writer = PdfWriter()
+
+        # Add pages from original PDF, overlaying signature on target page
+        for i, page in enumerate(reader.pages):
+            if i == page_number - 1:  # 0-indexed
+                # Read the overlay PDF
+                overlay_reader = PdfReader(overlay_path)
+                overlay_page = overlay_reader.pages[0]
+
+                # Merge overlay onto the page
+                page.merge_page(overlay_page)
+
+            writer.add_page(page)
+
+        # Save signed PDF
+        signed_path = pdf_path.replace('.pdf', '-signed.pdf')
+        with open(signed_path, 'wb') as f:
+            writer.write(f)
+
+        # Clean up temporary overlay file
+        try:
+            os.unlink(overlay_path)
+        except:
+            pass
+
+        return signed_path
+
+    def _generate_qa_pdf(self, qa_data: dict, order: Order) -> str:
+        """Generate QA checklist PDF from JSON data"""
+        qa_dir = self._storage_path("temp")
+        qa_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{order.inflow_order_id or order.id}-qa.pdf"
+        output_path = qa_dir / filename
+
+        pdf = canvas.Canvas(str(output_path), pagesize=letter)
+        width, height = letter
+
+        # Header
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(50, height - 50, "Quality Assurance Checklist")
+
+        # Order details
+        pdf.setFont("Helvetica", 12)
+        y_pos = height - 80
+        pdf.drawString(50, y_pos, f"Order: {order.inflow_order_id}")
+        pdf.drawString(50, y_pos - 20, f"Recipient: {order.recipient_name or 'Unknown'}")
+        pdf.drawString(50, y_pos - 40, f"Method: {qa_data.get('method', 'Unknown')}")
+        pdf.drawString(50, y_pos - 60, f"Technician: {qa_data.get('technician', 'Unknown')}")
+        pdf.drawString(50, y_pos - 80, f"QA Signature: {qa_data.get('qaSignature', 'Unknown')}")
+
+        # Checklist items
+        y_pos -= 120
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(50, y_pos, "Quality Assurance Checklist:")
+        y_pos -= 30
+
+        pdf.setFont("Helvetica", 11)
+
+        # Handle both old and new QA formats
+        if "items" in qa_data:
+            # Old format: items array with id, label, passed
+            checklist_items = qa_data["items"]
+            for item in checklist_items:
+                status = "PASS" if item.get("passed", False) else "FAIL"
+                label = item.get("label", item.get("id", "Unknown"))
+                pdf.drawString(70, y_pos, f"[{status}] {label}")
+                y_pos -= 20
+        else:
+            # New detailed format: individual boolean fields
+            checklist_items = [
+                ("verifyAssetTagSerialMatch", "Asset tags applied and serial numbers match on device, sticker, and pick list"),
+                ("verifyOrderDetailsTemplateSent", "Order details template sent to customer before delivery"),
+                ("verifyPackagedProperly", "System and all materials packaged properly"),
+                ("verifyPackingSlipSerialsMatch", "Packing slip and picked items serial numbers match"),
+                ("verifyElectronicPackingSlipSaved", "Electronic packing slip saved on shipping/receiving computer"),
+                ("verifyBoxesLabeledCorrectly", "Boxes labeled with correct order details and shipping labels marked out")
+            ]
+
+            for field, description in checklist_items:
+                status = "PASS" if qa_data.get(field, False) else "FAIL"
+                pdf.drawString(70, y_pos, f"[{status}] {description}")
+                y_pos -= 20
+
+        # Signature line
+        y_pos -= 40
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(50, y_pos, "QA Technician Signature:")
+        pdf.line(50, y_pos - 10, width - 50, y_pos - 10)
+        pdf.drawString(50, y_pos - 25, qa_data.get("qaSignature", ""))
+
+        pdf.save()
+        return str(output_path)
+
+    def _bundle_pdfs(self, pdf_paths: list[str], output_path: str) -> None:
+        """Combine multiple PDFs into single document"""
+
+        from pypdf import PdfMerger
+
+        merger = PdfMerger()
+        for pdf_path in pdf_paths:
+            merger.append(pdf_path)
+
+
+        merger.write(output_path)
+        merger.close()

@@ -75,7 +75,7 @@ export default function OrderDetail({
         {order.status === OrderStatus.IN_DELIVERY && (
           <div className="mt-4">
             <Link
-              to="/document-signing"
+              to={`/document-signing?orderId=${order.id}`}
               className="inline-flex items-center px-4 py-2 bg-[#800000] text-white rounded hover:bg-[#660000]"
             >
               Open Document Signing

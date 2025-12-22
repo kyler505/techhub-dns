@@ -1,11 +1,32 @@
 export enum OrderStatus {
-  PICKED = "Picked",
-  PRE_DELIVERY = "PreDelivery",
-  IN_DELIVERY = "InDelivery",
-  SHIPPING = "Shipping",
-  DELIVERED = "Delivered",
-  ISSUE = "Issue",
+  PICKED = "picked",
+  PRE_DELIVERY = "pre-delivery",
+  IN_DELIVERY = "in-delivery",
+  SHIPPING = "shipping",
+  DELIVERED = "delivered",
+  ISSUE = "issue",
 }
+
+export enum ShippingWorkflowStatus {
+  WORK_AREA = "work_area",
+  DOCK = "dock",
+  SHIPPED = "shipped",
+}
+
+export const ShippingWorkflowStatusDisplayNames: Record<ShippingWorkflowStatus, string> = {
+  [ShippingWorkflowStatus.WORK_AREA]: "Work Area",
+  [ShippingWorkflowStatus.DOCK]: "At Dock",
+  [ShippingWorkflowStatus.SHIPPED]: "Shipped to Carrier",
+};
+
+export const OrderStatusDisplayNames: Record<OrderStatus, string> = {
+  [OrderStatus.PICKED]: "Picked",
+  [OrderStatus.PRE_DELIVERY]: "Pre-Delivery",
+  [OrderStatus.IN_DELIVERY]: "In Delivery",
+  [OrderStatus.SHIPPING]: "Shipping",
+  [OrderStatus.DELIVERED]: "Delivered",
+  [OrderStatus.ISSUE]: "Issue",
+};
 
 export interface Order {
   id: string;
@@ -32,6 +53,14 @@ export interface Order {
   qa_method?: string;
   signature_captured_at?: string;
   signed_picklist_path?: string;
+  // Shipping workflow fields
+  shipping_workflow_status?: ShippingWorkflowStatus;
+  shipping_workflow_status_updated_at?: string;
+  shipping_workflow_status_updated_by?: string;
+  shipped_to_carrier_at?: string;
+  shipped_to_carrier_by?: string;
+  carrier_name?: string;
+  tracking_number?: string;
   inflow_data?: Record<string, any>;
   created_at: string;
   updated_at: string;
