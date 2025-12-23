@@ -41,10 +41,26 @@ export default function DeliveryDashboard() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const completedToday = deliveredOrders.filter(order => {
-          if (!order.updated_at) return false;
-          const updatedDate = new Date(order.updated_at);
-          updatedDate.setHours(0, 0, 0, 0);
-          return updatedDate.getTime() === today.getTime();
+          // Use the appropriate completion timestamp based on order type
+          let completionTime = null;
+
+          // For local deliveries, use signature_captured_at
+          if (order.signature_captured_at) {
+            completionTime = order.signature_captured_at;
+          }
+          // For shipping orders, use shipped_to_carrier_at
+          else if (order.shipped_to_carrier_at) {
+            completionTime = order.shipped_to_carrier_at;
+          }
+          // Fallback to updated_at if neither is available
+          else if (order.updated_at) {
+            completionTime = order.updated_at;
+          }
+
+          if (!completionTime) return false;
+          const completionDate = new Date(completionTime);
+          completionDate.setHours(0, 0, 0, 0);
+          return completionDate.getTime() === today.getTime();
         }).length;
 
         setStats({

@@ -259,56 +259,67 @@ For production environments or when real-time updates are preferred, set up Infl
 
 ## Scripts
 
-### Pattern Discovery Script
+### Database Manager
 
-The pattern discovery script (`backend/scripts/analyze_order_patterns.py`) analyzes all historical orders from the Inflow API to automatically discover common patterns in order remarks that indicate alternative delivery locations.
+**Location**: `backend/scripts/database_manager.py`
 
-**Purpose**: When orders have remarks like "deliver to LAAH 424" instead of the shipping address, this script finds these patterns and can automatically update the code to extract alternative locations.
+**Purpose**: Universal database and order management tool for development, testing, and maintenance.
 
-**Usage**:
-
+**Interactive Mode**:
 ```bash
 cd backend
-
-# Activate virtual environment first
-# Windows (PowerShell):
-.venv\Scripts\Activate.ps1
-# Windows (Command Prompt):
-.venv\Scripts\activate.bat
-# Linux/Mac:
-source .venv/bin/activate
-
-# Preview analysis without saving (dry run)
-python scripts/analyze_order_patterns.py --dry-run
-
-# Generate report and save to file
-python scripts/analyze_order_patterns.py
-
-# Generate report with custom output path
-python scripts/analyze_order_patterns.py --output reports/pattern_analysis.json
-
-# Generate report and automatically update order_service.py with discovered patterns
-python scripts/analyze_order_patterns.py --update-code
-
-# Preview code changes before updating
-python scripts/analyze_order_patterns.py --update-code --dry-run
-
-# Use custom minimum frequency threshold (default: 5)
-python scripts/analyze_order_patterns.py --min-frequency 10
+python scripts/database_manager.py
 ```
 
-**What it does**:
+**Direct Commands**:
+```bash
+# List and search orders
+python scripts/database_manager.py --list
+python scripts/database_manager.py --list --status PreDelivery
+python scripts/database_manager.py --search TH3970
 
-1. Fetches all orders from Inflow API (including fulfilled/historical orders)
-2. Analyzes order remarks to find patterns like "deliver to", "location:", etc.
-3. Generates a JSON report with:
-   - Summary statistics
-   - Discovered patterns with frequency counts
-   - Suggested regex patterns
-   - Example matches for each pattern
-4. Optionally updates `order_service.py` with new patterns (preserving existing ones)
+# Order details and management
+python scripts/database_manager.py --details TH3970
+python scripts/database_manager.py --update-status TH3970 Delivered
+python scripts/database_manager.py --delete TH3970
 
-**Output**: The script generates a JSON report at `backend/scripts/pattern_analysis_report.json` (or custom path) containing all discovered patterns and statistics.
+# Create test orders
+python scripts/database_manager.py --create --order-number TH9999 --recipient "Test User"
+
+# Testing utilities
+python scripts/database_manager.py --reset TH3970
+python scripts/database_manager.py --clear-all
+python scripts/database_manager.py --stats
+```
+
+**Features**:
+- ✅ Create, read, update, delete orders
+- ✅ Bulk operations and database maintenance
+- ✅ Order status management with validation
+- ✅ Testing utilities (reset orders, clear data)
+- ✅ Comprehensive search and filtering
+- ✅ Database statistics and health checks
+- ✅ Interactive mode for complex operations
+
+### Pattern Discovery Script
+
+**Location**: `backend/scripts/analyze_order_patterns.py`
+
+**Purpose**: Analyzes historical orders to discover patterns in order remarks for alternative delivery locations.
+
+**Usage**:
+```bash
+cd backend
+python scripts/analyze_order_patterns.py --dry-run    # Preview analysis
+python scripts/analyze_order_patterns.py              # Generate report
+python scripts/analyze_order_patterns.py --update-code # Update code with patterns
+```
+
+**Features**:
+- Fetches historical orders from Inflow API
+- Discovers location patterns in order remarks
+- Generates JSON reports with statistics
+- Optionally updates order parsing logic
 
 ### Inflow Webhook Management Script
 
@@ -318,25 +329,13 @@ python scripts/analyze_order_patterns.py --min-frequency 10
 
 **Common Commands**:
 ```bash
-# List remote webhooks
 python scripts/manage_inflow_webhook.py list
-
-# List local database webhooks
-python scripts/manage_inflow_webhook.py list --local
-
-# Register webhook
 python scripts/manage_inflow_webhook.py register --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
-
-# Delete webhook by URL
-python scripts/manage_inflow_webhook.py delete --url https://your-app.com/api/inflow/webhook
-
-# Reset webhook (delete existing, register new)
 python scripts/manage_inflow_webhook.py reset --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
 ```
 
 **Features**:
-- List active webhooks (remote and local)
-- Register new webhook subscriptions
-- Delete existing webhooks
-- Reset webhooks with cleanup
-- Automatic secret storage and validation
+- List and manage webhook subscriptions
+- Register/delete webhooks
+- Automatic secret handling
+- Failure tracking and recovery
