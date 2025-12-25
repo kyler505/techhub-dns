@@ -227,25 +227,6 @@ For production environments or when real-time updates are preferred, set up Infl
 
 ## Features
 
-### Core Functionality
-- **Dual Order Workflows**:
-  - **Local Delivery**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with delivery runs)
-  - **Shipping**: Picked -> Pre-Delivery -> Shipping (Work Area → Dock → Shipped) -> Delivered
-- **Delivery Run Management**: Create and track delivery runs with vehicle assignment and runner coordination
-- **Live Delivery Dashboard**: Real-time tracking of active delivery runs with WebSocket updates
-- **Automated Sync**: Background scheduler syncs picked orders from Inflow every 5 minutes + real-time webhooks
-- **Inflow Webhook Integration**: Receive instant order updates with fallback to polling
-- **Prep Steps**: Asset tagging, picklist generation, and QA checklist completion required before Pre-Delivery
-- **QA Integration**: Comprehensive QA checklist with delivery method selection (Delivery vs Shipping)
-- **QA Filtering**: QA page shows only orders needing QA by default, with option to view all
-- **Building Code Extraction**: Automatically extracts building abbreviations from addresses using ArcGIS service
-- **Order Remarks Parsing**: Intelligently extracts alternative delivery locations from order remarks
-- **Teams Notifications**: Automated notifications when orders are ready and when delivery starts
-- **Audit Logging**: Complete audit trail of all status changes and delivery run actions
-- **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue management
-- **Shipping Workflow**: Three-stage shipping process with carrier tracking and documentation
-- **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT`
-
 ### Pages & Views
 - **Delivery Dashboard**: Live overview with delivery runs, statistics, and real-time tracking
 - **Orders Dashboard**: Overview of all orders with filtering and search
