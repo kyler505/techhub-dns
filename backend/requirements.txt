@@ -1,5 +1,7 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+flask==3.0.0
+flask-cors==4.0.0
+flask-socketio==5.3.6
+waitress==2.1.2
 sqlalchemy==2.0.23
 alembic==1.12.1
 psycopg2-binary==2.9.9

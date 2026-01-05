@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Order } from "../types/order";
-import { WebSocketMessage, OrderSummary } from "../types/websocket";
+import { io, Socket } from "socket.io-client";
+import { OrderSummary } from "../types/websocket";
 
-export function useOrdersWebSocket(wsUrl?: string) {
+export function useOrdersWebSocket(socketUrl?: string) {
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   // Fetch orders via HTTP as fallback
   const fetchOrders = async () => {
@@ -34,51 +34,58 @@ export function useOrdersWebSocket(wsUrl?: string) {
     // Initial HTTP fetch as fallback
     fetchOrders();
 
-    const url =
-      wsUrl ||
-      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/orders/ws`;
-    let ws: WebSocket;
+    // Build Socket.IO URL from current host
+    const baseUrl = socketUrl || `${window.location.protocol}//${window.location.host}`;
+
+    let socket: Socket;
 
     try {
-      ws = new WebSocket(url);
-      wsRef.current = ws;
+      socket = io(baseUrl, {
+        path: "/socket.io",
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
+      socketRef.current = socket;
     } catch (e) {
-      console.debug("WebSocket connection failed (expected if backend not running)", e);
+      console.debug("Socket.IO connection failed (expected if backend not running)", e);
       return;
     }
 
-    ws.onopen = () => {
-      console.debug("Orders WS connected");
+    socket.on("connect", () => {
+      console.debug("Orders Socket.IO connected");
       setError(null);
-    };
+      // Join orders namespace/room
+      socket.emit("join", { room: "orders" });
+    });
 
-    ws.onmessage = (evt) => {
+    socket.on("orders_update", (payload: { type: string; data: OrderSummary[] }) => {
       try {
-        const payload: WebSocketMessage = JSON.parse(evt.data);
         if (payload.type === "orders_update") {
           setOrders(payload.data || []);
           setLoading(false);
         }
       } catch (e) {
-        console.warn("Failed to parse WS message", e);
+        console.warn("Failed to parse Socket.IO message", e);
       }
-    };
+    });
 
-    ws.onclose = () => {
-      console.debug("Orders WS closed");
-    };
+    socket.on("disconnect", () => {
+      console.debug("Orders Socket.IO disconnected");
+    });
 
-    ws.onerror = (err) => {
-      console.debug("Orders WS error (expected if backend not running)", err);
-      setError("WebSocket connection failed - using cached data");
-    };
+    socket.on("connect_error", (err) => {
+      console.debug("Orders Socket.IO error (expected if backend not running)", err);
+      setError("Socket.IO connection failed - using cached data");
+    });
 
     return () => {
       try {
-        ws.close();
+        socket.disconnect();
       } catch (e) {}
     };
-  }, [wsUrl]);
+  }, [socketUrl]);
 
   return { orders, loading, error, refetch: fetchOrders };
 }

@@ -361,3 +361,234 @@ class InflowService:
         from app.utils.webhook_security import verify_webhook_signature as verify_signature
         secret_to_use = secret or settings.inflow_webhook_secret
         return verify_signature(payload, signature, secret_to_use) if secret_to_use else True
+
+    # ========== SYNC VERSIONS FOR FLASK ==========
+
+    def fetch_orders_sync(
+        self,
+        inventory_status: Optional[str] = None,
+        is_active: bool = True,
+        order_number: Optional[str] = None,
+        count: int = 100,
+        skip: int = 0,
+        sort: str = "orderDate",
+        sort_desc: bool = True
+    ) -> List[Dict[str, Any]]:
+        """Fetch orders from Inflow API (sync version)"""
+        url = f"{self.base_url}/{self.company_id}/sales-orders"
+
+        params = {
+            "include": "pickLines.product,shipLines,packLines.product,lines",
+            "filter[isActive]": str(is_active).lower(),
+            "count": str(count),
+            "skip": str(skip),
+            "sort": sort,
+            "sortDesc": str(sort_desc).lower()
+        }
+
+        if inventory_status:
+            params["filter[inventoryStatus][]"] = inventory_status
+
+        if order_number:
+            params["filter[orderNumber]"] = order_number
+
+        with httpx.Client() as client:
+            response = client.get(url, params=params, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+
+            if isinstance(data, dict) and "items" in data:
+                return data["items"]
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+
+    def get_order_by_number_sync(self, order_number: str) -> Optional[Dict[str, Any]]:
+        """Fetch a specific order by order number (sync version)"""
+        orders = self.fetch_orders_sync(order_number=order_number, count=1)
+        if orders:
+            return orders[0]
+        return None
+
+    def sync_recent_started_orders_sync(
+        self,
+        max_pages: int = 3,
+        per_page: int = 100,
+        target_matches: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Sync recent unfulfilled orders (sync version)"""
+        matches = []
+
+        for page in range(max_pages):
+            orders = self.fetch_orders_sync(
+                inventory_status="unfulfilled",
+                count=per_page,
+                skip=page * per_page
+            )
+
+            for order in orders:
+                if self.is_started_and_picked(order):
+                    matches.append(order)
+                    if len(matches) >= target_matches:
+                        return matches
+
+            if len(orders) < per_page:
+                break
+
+        return matches
+
+    def get_order_by_id_sync(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a specific order by sales order ID (sync version)"""
+        url = f"{self.base_url}/{self.company_id}/sales-orders/{sales_order_id}"
+        params = {"include": "pickLines.product,shipLines,packLines.product,lines"}
+
+        with httpx.Client() as client:
+            try:
+                response = client.get(url, params=params, headers=self.headers)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    return None
+                raise
+
+            data = response.json()
+            if isinstance(data, dict) and "items" in data:
+                return data["items"][0] if data["items"] else None
+            if isinstance(data, list):
+                return data[0] if data else None
+            return data
+
+    def fulfill_sales_order_sync(self, sales_order_id: str, db: Session = None, user_id: str = None) -> Dict[str, Any]:
+        """Fulfill a sales order (sync version)"""
+        from app.services.audit_service import AuditService
+
+        order = self.get_order_by_id_sync(sales_order_id)
+        if not order:
+            raise ValueError(f"Sales order {sales_order_id} not found in Inflow")
+
+        if not order.get("pickLines"):
+            order_number = order.get("orderNumber") or sales_order_id
+            raise ValueError(f"Order {order_number} has no pickLines")
+
+        if not order.get("customerId"):
+            raise ValueError("Sales order missing customerId")
+
+        now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+        order_number = order.get("orderNumber") or sales_order_id
+        container_number = f"DELIVERY-{order_number}"
+
+        def positive_quantity(line: Dict[str, Any]) -> bool:
+            qty = line.get("quantity", {})
+            raw = qty.get("standardQuantity")
+            if raw is None:
+                return False
+            try:
+                return float(raw) > 0
+            except (TypeError, ValueError):
+                return False
+
+        if not order.get("packLines"):
+            pack_lines = []
+            for line in order.get("lines", []):
+                if not positive_quantity(line):
+                    continue
+                pack_lines.append({
+                    "salesOrderPackLineId": str(uuid.uuid4()),
+                    "productId": line.get("productId"),
+                    "quantity": line.get("quantity"),
+                    "description": line.get("description"),
+                    "containerNumber": container_number,
+                })
+            order["packLines"] = pack_lines
+
+        if not order.get("shipLines") and order.get("packLines"):
+            order["shipLines"] = [{
+                "salesOrderShipLineId": str(uuid.uuid4()),
+                "carrier": "TechHub",
+                "containers": list({line.get("containerNumber") for line in order["packLines"] if line.get("containerNumber")}),
+                "shippedDate": now,
+            }]
+
+        url = f"{self.base_url}/{self.company_id}/sales-orders"
+        with httpx.Client() as client:
+            response = client.put(url, json=order, headers=self.headers)
+            response.raise_for_status()
+            result = response.json()
+
+            if db:
+                audit_service = AuditService(db)
+                audit_service.log_action(
+                    entity_type="inflow_order",
+                    entity_id=sales_order_id,
+                    action="fulfilled",
+                    user_id=user_id,
+                    description="Order fulfilled in inFlow system",
+                    audit_metadata={
+                        "inflow_order_number": order.get("orderNumber"),
+                        "pick_lines_count": len(order.get("pickLines", [])),
+                        "pack_lines_count": len(order.get("packLines", [])),
+                        "ship_lines_count": len(order.get("shipLines", []))
+                    }
+                )
+
+            return result
+
+    def register_webhook_sync(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
+        """Register a webhook with Inflow API (sync version)"""
+        url = f"{self.base_url}/{self.company_id}/webhooks"
+        webhook_subscription_id = str(uuid.uuid4())
+
+        event_mapping = {
+            "orderCreated": "salesOrder.created",
+            "orderUpdated": "salesOrder.updated",
+            "orderStatusChanged": "salesOrder.updated"
+        }
+
+        mapped_events = [event_mapping.get(e, e) for e in events]
+        mapped_events = list(dict.fromkeys(mapped_events))
+
+        payload = {
+            "webHookSubscriptionId": webhook_subscription_id,
+            "url": webhook_url,
+            "events": mapped_events
+        }
+
+        with httpx.Client() as client:
+            response = client.put(url, json=payload, headers=self.headers)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Webhook registered successfully: {result.get('id', 'unknown')}")
+            return result
+
+    def list_webhooks_sync(self) -> List[Dict[str, Any]]:
+        """List all registered webhooks (sync version)"""
+        url = f"{self.base_url}/{self.company_id}/webhooks"
+
+        with httpx.Client() as client:
+            response = client.get(url, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+
+            if isinstance(data, dict) and "items" in data:
+                return data["items"]
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+
+    def delete_webhook_sync(self, webhook_id: str) -> bool:
+        """Delete a webhook registration (sync version)"""
+        url = f"{self.base_url}/{self.company_id}/webhooks/{webhook_id}"
+
+        with httpx.Client() as client:
+            try:
+                response = client.delete(url, headers=self.headers)
+                response.raise_for_status()
+                logger.info(f"Webhook {webhook_id} deleted successfully")
+                return True
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Webhook {webhook_id} not found")
+                    return False
+                raise

@@ -1,67 +1,84 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+from flask import Flask, jsonify
+from flask_cors import CORS
+from flask_socketio import SocketIO
 from app.config import settings
 from app.api.routes import orders, inflow, teams, audit, delivery_runs
-from app.api.middleware import error_handler_middleware
+from app.api.middleware import register_error_handlers
 from app.scheduler import start_scheduler
 import logging
+import atexit
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+app = Flask(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    try:
-        scheduler = start_scheduler()
-        logger.info("Application started")
-    except Exception as e:
-        logger.error(f"Error during startup: {e}")
-        raise
-    yield
-    # Shutdown
-    try:
-        scheduler.shutdown()
-        logger.info("Application shutdown")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
+# Configure CORS
+CORS(app, origins=[settings.frontend_url], supports_credentials=True)
+
+# Configure Flask-SocketIO
+socketio = SocketIO(app, cors_allowed_origins=[settings.frontend_url])
+
+# Register error handlers
+register_error_handlers(app)
+
+# Global scheduler reference
+_scheduler = None
+_initialized = False
 
 
-app = FastAPI(
-    title="TechHub Delivery Workflow API",
-    description="Internal API for managing delivery orders",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[settings.frontend_url],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Error handler middleware (must be after CORS to catch errors from CORS middleware)
-app.middleware("http")(error_handler_middleware)
+def init_scheduler():
+    """Initialize the scheduler on first request"""
+    global _scheduler, _initialized
+    if not _initialized:
+        _initialized = True
+        try:
+            _scheduler = start_scheduler()
+            logger.info("Application started")
+        except Exception as e:
+            logger.error(f"Error during startup: {e}")
+            raise
 
 
-# Include routers
-app.include_router(orders.router, prefix="/api")
-app.include_router(inflow.router, prefix="/api")
-app.include_router(teams.router, prefix="/api")
-app.include_router(audit.router, prefix="/api")
-app.include_router(delivery_runs.router, prefix="/api")
+def shutdown_scheduler():
+    """Shutdown scheduler on app exit"""
+    global _scheduler
+    if _scheduler:
+        try:
+            _scheduler.shutdown()
+            logger.info("Application shutdown")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
 
 
-@app.get("/")
+# Register shutdown handler
+atexit.register(shutdown_scheduler)
+
+
+# Register blueprints with full path prefixes
+app.register_blueprint(orders.bp, url_prefix="/api/orders")
+app.register_blueprint(inflow.bp, url_prefix="/api/inflow")
+app.register_blueprint(teams.bp, url_prefix="/api/teams")
+app.register_blueprint(audit.bp, url_prefix="/api/audit")
+app.register_blueprint(delivery_runs.bp, url_prefix="/api/delivery-runs")
+
+
+@app.route("/")
 def root():
-    return {"message": "TechHub Delivery Workflow API", "version": "1.0.0"}
+    return jsonify({"message": "TechHub Delivery Workflow API", "version": "1.0.0"})
 
 
-@app.get("/health")
+@app.route("/health")
 def health():
-    return {"status": "healthy"}
+    return jsonify({"status": "healthy"})
+
+
+@app.before_request
+def before_request():
+    """Initialize scheduler before first request"""
+    init_scheduler()
+
+
+if __name__ == "__main__":
+    # Development server - use waitress for production
+    socketio.run(app, host="0.0.0.0", port=8000, debug=True)

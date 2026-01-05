@@ -5,13 +5,11 @@ import { ordersApi } from "../api/orders";
 import { deliveryRunsApi } from "../api/deliveryRuns";
 import { Button } from "../components/ui/button";
 import { formatDeliveryLocation } from "../utils/location";
-import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
 
 export default function PreDeliveryQueue() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,27 +38,37 @@ export default function PreDeliveryQueue() {
     setSelectedOrders(newSelected);
   };
 
-  const handleBulkStartDelivery = () => {
+  const handleBulkStartDelivery = async () => {
     if (selectedOrders.size === 0) {
       alert("Please select at least one order");
       return;
     }
-    setIsCreateDialogOpen(true);
-  };
 
-  const handleCreateDelivery = async (runner: string, vehicle: string) => {
+    // Prompt for delivery details
+    const runner = prompt("Enter deliverer name:");
+    if (!runner?.trim()) return;
+
+    const vehicle = prompt("Enter vehicle (Truck/Golf Cart/On Foot):");
+    if (!vehicle?.trim()) return;
+
+    const validVehicles = ["Truck", "Golf Cart", "On Foot"];
+    if (!validVehicles.includes(vehicle)) {
+      alert("Invalid vehicle. Please choose: Truck, Golf Cart, or On Foot");
+      return;
+    }
+
     try {
       await deliveryRunsApi.createRun({
-        runner,
+        runner: runner.trim(),
         order_ids: Array.from(selectedOrders),
-        vehicle: vehicle as "van" | "golf_cart",
+        vehicle: vehicle as "Truck" | "Golf Cart" | "On Foot",
       });
       setSelectedOrders(new Set());
       loadOrders();
       alert("Delivery started successfully!");
     } catch (error) {
       console.error("Failed to start delivery:", error);
-      throw error; // Re-throw to let the dialog handle the error
+      alert("Failed to start delivery");
     }
   };
 
@@ -177,13 +185,6 @@ export default function PreDeliveryQueue() {
       </div>
 
       {/* StatusTransition will be handled by parent DeliveryDashboard */}
-
-      <CreateDeliveryDialog
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        onCreateDelivery={handleCreateDelivery}
-        selectedOrdersCount={selectedOrders.size}
-      />
     </div>
   );
 }

@@ -35,11 +35,12 @@ The application solves the challenge of managing delivery orders from the point 
 ### Technology Stack
 
 **Backend:**
-- FastAPI (Python web framework)
+- Flask (Python web framework)
 - PostgreSQL (Database)
 - SQLAlchemy (ORM)
 - Alembic (Database migrations)
 - APScheduler (Background task scheduling)
+- Flask-SocketIO (Real-time communications)
 - httpx (HTTP client for external APIs)
 
 **Frontend:**
@@ -48,6 +49,7 @@ The application solves the challenge of managing delivery orders from the point 
 - Vite (Build tool)
 - React Router (Routing)
 - TailwindCSS (Styling)
+- Socket.IO Client (Real-time updates)
 - Axios (HTTP client)
 
 **External Services:**
@@ -63,8 +65,8 @@ The application solves the challenge of managing delivery orders from the point 
 ```
 ┌─────────────┐         ┌──────────────┐         ┌─────────────┐
 │   Frontend  │◄───────►│    Backend   │◄───────►│  PostgreSQL │
-│  (React)    │ HTTP/WS │   (FastAPI)  │   SQL   │  (Database) │
-│             │         │              │         │             │
+│  (React)    │ HTTP/   │   (Flask)    │   SQL   │  (Database) │
+│             │   WS    │              │         │             │
 └─────────────┘         └──────────────┘         └─────────────┘
                                │
                                │
@@ -85,7 +87,7 @@ The application solves the challenge of managing delivery orders from the point 
 4. **Database**: Stores orders with extracted information and workflow classification
 5. **Delivery Run Creation**: Users create delivery runs, assign orders and vehicles
 6. **Status Changes**: User actions trigger status transitions (local delivery vs shipping workflows)
-7. **Real-time Updates**: WebSocket broadcasts delivery run changes to connected clients
+7. **Real-time Updates**: Socket.IO broadcasts delivery run changes to connected clients
 8. **Notifications**: Teams notifications sent when orders are ready (PreDelivery) and when delivery starts (In Delivery)
 9. **Audit Logging**: All changes recorded in audit log including delivery run actions
 
@@ -122,7 +124,7 @@ backend/
 │   │   └── delivery_run.py        # Delivery run schemas
 │   ├── database.py                # Database connection
 │   ├── config.py                  # Configuration management
-│   ├── main.py                    # FastAPI application
+│   ├── main.py                    # Flask application
 │   └── scheduler.py               # Background task scheduler
 ├── scripts/
 │   └── analyze_order_patterns.py  # Pattern discovery script
@@ -159,10 +161,10 @@ frontend/
 │   ├── hooks/
 │   │   ├── useOrders.ts      # Order data hook
 │   │   ├── useStatusTransition.ts  # Status transition hook
-│   │   └── useDeliveryRuns.ts # Delivery runs hook with WebSocket
+│   │   └── useDeliveryRuns.ts # Delivery runs hook with Socket.IO
 │   ├── types/
 │   │   ├── order.ts          # TypeScript type definitions
-│   │   └── websocket.ts      # WebSocket message types
+│   │   └── websocket.ts      # Socket.IO message types
 │   └── App.tsx               # Main application component
 ```
 
@@ -702,27 +704,27 @@ https://gis.cstx.gov/csgis/rest/services/IT_GIS/ITS_TAMU_Parking/MapServer/3/que
 
 **Fallback**: Uses `INFLOW_API_KEY` environment variable
 
-### WebSocket Integration
+### Socket.IO Integration
 
 **Purpose**: Real-time updates for delivery run tracking and live dashboard
 
 **Implementation**:
-- FastAPI WebSocket endpoint at `/api/delivery-runs/ws`
+- Flask-SocketIO server integrated with Flask app
 - Broadcasts active delivery runs to all connected clients
-- Automatic reconnection with exponential backoff
+- Socket.IO client with automatic reconnection
 - Message format: `{"type": "active_runs", "data": [...run objects...]}`
 
 **Frontend Integration**:
-- `useDeliveryRuns` hook manages WebSocket connection
-- Automatic fallback to polling if WebSocket fails
+- `useDeliveryRuns` hook manages Socket.IO connection
+- Automatic fallback to HTTP polling if Socket.IO fails
 - Real-time updates without page refresh
 - Connection status indicators
 
 **Backend Features**:
-- In-memory WebSocket client tracking
-- Database session management per connection
-- Graceful cleanup on disconnection
+- Global Socket.IO event emission
+- Database session management per event
 - Best-effort broadcasting (non-blocking)
+- threading.Thread for background broadcasts
 
 ## Database Schema
 

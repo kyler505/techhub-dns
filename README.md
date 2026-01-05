@@ -28,10 +28,10 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 
 ## Architecture
 
-- **Backend**: FastAPI with PostgreSQL, APScheduler for periodic sync, WebSocket support for real-time updates
-- **Frontend**: React + Vite with TypeScript, TailwindCSS, WebSocket integration
+- **Backend**: Flask with PostgreSQL, APScheduler for periodic sync, Socket.IO for real-time updates
+- **Frontend**: React + Vite with TypeScript, TailwindCSS, Socket.IO client
 - **Notifications**: Microsoft Teams webhook integration
-- **Real-time Updates**: WebSocket connections for live delivery run tracking
+- **Real-time Updates**: Socket.IO connections for live delivery run tracking
 - **External Services**: Inflow API (polling + webhooks), ArcGIS (AggieMap), Azure Key Vault
 
 ## Setup
@@ -118,7 +118,11 @@ alembic upgrade head
 
 8. Start the server:
 ```bash
-uvicorn app.main:app --reload
+# Development
+python -m app.main
+
+# Production (with Waitress)
+waitress-serve --listen=*:8000 app.main:app
 ```
 
 The API will be available at `http://localhost:8000`
@@ -177,7 +181,7 @@ For local webhook testing, use Cloudflare Tunnel (cloudflared) to expose your ba
    ```bash
    cd backend
    .venv\Scripts\Activate.ps1  # Windows PowerShell
-   uvicorn app.main:app --reload
+   python -m app.main
    ```
 
 3. **Start Cloudflare Tunnel** (in a new terminal):

@@ -1,8 +1,12 @@
-from fastapi import Depends
-from sqlalchemy.orm import Session
-from app.database import get_db
+from contextlib import contextmanager
+from app.database import SessionLocal
 
 
-def get_database() -> Session:
-    """Dependency for database session"""
-    return Depends(get_db)
+@contextmanager
+def get_database():
+    """Context manager for database session"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

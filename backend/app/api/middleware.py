@@ -1,5 +1,4 @@
-from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse
+from flask import jsonify
 from app.schemas.error import ErrorResponse
 from app.utils.exceptions import DNSApiError
 import logging
@@ -8,49 +7,76 @@ import uuid
 logger = logging.getLogger(__name__)
 
 
-async def error_handler_middleware(request: Request, call_next):
-    """Global error handler middleware that converts exceptions to structured error responses."""
-    try:
-        return await call_next(request)
-    except DNSApiError as e:
-        logger.warning(f"DNS API Error: {e.code} - {e.message}")
-        return JSONResponse(
-            status_code=e.status_code,
-            content=ErrorResponse(
-                error={
-                    "code": e.code,
-                    "message": e.message,
-                    "field": e.field,
-                    "details": e.details
-                },
-                request_id=str(uuid.uuid4())
-            ).dict()
+def register_error_handlers(app):
+    """Register Flask error handlers for consistent error responses."""
+
+    @app.errorhandler(DNSApiError)
+    def handle_dns_api_error(error):
+        """Handle custom DNS API errors."""
+        logger.warning(f"DNS API Error: {error.code} - {error.message}")
+        response = ErrorResponse(
+            error={
+                "code": error.code,
+                "message": error.message,
+                "field": error.field,
+                "details": error.details
+            },
+            request_id=str(uuid.uuid4())
         )
-    except HTTPException as e:
-        # Convert FastAPI HTTPException to our format
-        logger.warning(f"HTTP Exception: {e.status_code} - {e.detail}")
-        return JSONResponse(
-            status_code=e.status_code,
-            content=ErrorResponse(
-                error={
-                    "code": "HTTP_EXCEPTION",
-                    "message": e.detail,
-                    "details": {"status_code": e.status_code}
-                },
-                request_id=str(uuid.uuid4())
-            ).dict()
+        return jsonify(response.model_dump()), error.status_code
+
+    @app.errorhandler(400)
+    def handle_bad_request(error):
+        """Handle 400 Bad Request errors."""
+        logger.warning(f"Bad Request: {error.description}")
+        response = ErrorResponse(
+            error={
+                "code": "BAD_REQUEST",
+                "message": error.description or "Bad request",
+                "details": {}
+            },
+            request_id=str(uuid.uuid4())
         )
-    except Exception as e:
-        # Catch-all for unexpected errors
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content=ErrorResponse(
-                error={
-                    "code": "INTERNAL_SERVER_ERROR",
-                    "message": "An unexpected error occurred",
-                    "details": {"error_type": type(e).__name__}
-                },
-                request_id=str(uuid.uuid4())
-            ).dict()
+        return jsonify(response.model_dump()), 400
+
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        """Handle 404 Not Found errors."""
+        logger.warning(f"Not Found: {error.description}")
+        response = ErrorResponse(
+            error={
+                "code": "NOT_FOUND",
+                "message": error.description or "Resource not found",
+                "details": {}
+            },
+            request_id=str(uuid.uuid4())
         )
+        return jsonify(response.model_dump()), 404
+
+    @app.errorhandler(500)
+    def handle_internal_error(error):
+        """Handle 500 Internal Server errors."""
+        logger.error(f"Internal Server Error: {error}", exc_info=True)
+        response = ErrorResponse(
+            error={
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {"error_type": type(error).__name__}
+            },
+            request_id=str(uuid.uuid4())
+        )
+        return jsonify(response.model_dump()), 500
+
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        """Catch-all for unexpected errors."""
+        logger.error(f"Unexpected error: {str(error)}", exc_info=True)
+        response = ErrorResponse(
+            error={
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {"error_type": type(error).__name__}
+            },
+            request_id=str(uuid.uuid4())
+        )
+        return jsonify(response.model_dump()), 500

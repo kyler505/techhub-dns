@@ -200,3 +200,105 @@ class TeamsService:
                 TeamsNotification.status == NotificationStatus.SENT
             )
         ).order_by(TeamsNotification.sent_at.desc()).first()
+
+    # ========== SYNC VERSIONS FOR FLASK ==========
+
+    def send_delivery_notification_sync(
+        self,
+        order: Order,
+        deliverer: Optional[str] = None
+    ) -> TeamsNotification:
+        """Send Teams notification for order in delivery (sync version)"""
+        return self._send_notification_sync(order, deliverer, "in_delivery")
+
+    def send_ready_notification_sync(self, order: Order) -> TeamsNotification:
+        """Send Teams notification when order is ready (sync version)"""
+        return self._send_notification_sync(order, None, "ready")
+
+    def send_delivery_complete_notification_sync(self, order: Order) -> TeamsNotification:
+        """Send Teams notification when delivery is complete (sync version)"""
+        return self._send_notification_sync(order, order.assigned_deliverer, "delivered")
+
+    def _send_notification_sync(
+        self,
+        order: Order,
+        deliverer: Optional[str],
+        notification_type: str
+    ) -> TeamsNotification:
+        """Send notification synchronously"""
+        webhook_url = self.get_webhook_url()
+        if not webhook_url:
+            raise ValueError("Teams webhook URL not configured")
+
+        existing = self.db.query(TeamsNotification).filter(
+            and_(
+                TeamsNotification.order_id == order.id,
+                TeamsNotification.notification_type == notification_type,
+                TeamsNotification.status == NotificationStatus.SENT,
+                TeamsNotification.sent_at.isnot(None)
+            )
+        ).order_by(TeamsNotification.sent_at.desc()).first()
+
+        if existing and existing.sent_at:
+            time_diff = (datetime.utcnow() - existing.sent_at).total_seconds()
+            if time_diff < 60:
+                return existing
+
+        notification = TeamsNotification(
+            order_id=order.id,
+            status=NotificationStatus.PENDING,
+            webhook_url=webhook_url,
+            notification_type=notification_type
+        )
+        self.db.add(notification)
+        self.db.commit()
+        self.db.refresh(notification)
+
+        try:
+            message = self._build_message(order, deliverer, notification_type)
+
+            with httpx.Client() as client:
+                response = client.post(webhook_url, json=message, timeout=10.0)
+                response.raise_for_status()
+
+                notification.status = NotificationStatus.SENT
+                notification.sent_at = datetime.utcnow()
+                try:
+                    response_data = response.json()
+                    notification.teams_message_id = response_data.get("id")
+                except Exception:
+                    pass
+
+                self.db.commit()
+                self.db.refresh(notification)
+                return notification
+
+        except Exception as e:
+            notification.status = NotificationStatus.FAILED
+            notification.error_message = str(e)
+            self.db.commit()
+            self.db.refresh(notification)
+            raise
+
+    def retry_notification_sync(self, notification_id: UUID) -> TeamsNotification:
+        """Retry a failed notification (sync version)"""
+        notification = self.db.query(TeamsNotification).filter(
+            TeamsNotification.id == notification_id
+        ).first()
+
+        if not notification:
+            raise ValueError("Notification not found")
+
+        if notification.status == NotificationStatus.SENT:
+            raise ValueError("Notification already sent")
+
+        order = self.db.query(Order).filter(Order.id == notification.order_id).first()
+        if not order:
+            raise ValueError("Order not found")
+
+        notification.status = NotificationStatus.PENDING
+        notification.error_message = None
+        notification.retry_count += 1
+        self.db.commit()
+
+        return self.send_delivery_notification_sync(order, order.assigned_deliverer)
