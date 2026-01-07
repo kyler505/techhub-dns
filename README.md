@@ -16,7 +16,7 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
   - **Local Delivery**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with delivery runs)
   - **Shipping**: Picked -> Pre-Delivery -> Shipping -> Delivered (with shipping workflow stages)
 - **Delivery Run Management**: Group orders into delivery runs with vehicle assignment and runner tracking
-- **Live Delivery Dashboard**: Real-time tracking of active delivery runs with WebSocket updates
+- **Live Delivery Dashboard**: Real-time tracking of active delivery runs with Socket.IO updates
 - **Prep Gating**: Asset tagging, picklist generation, and QA are required before Pre-Delivery
 - **QA Method Selection**: Choose between "Delivery" or "Shipping" workflows during QA
 - **Teams Integration**: Sends automated notifications when orders are ready and when delivery starts

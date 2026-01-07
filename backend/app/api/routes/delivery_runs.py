@@ -60,6 +60,7 @@ def create_run():
 
             response = DeliveryRunResponse(
                 id=run.id,
+                name=run.name,
                 runner=run.runner,
                 vehicle=run.vehicle,
                 status=run.status,
@@ -72,6 +73,30 @@ def create_run():
             abort(400, description=str(e))
 
 
+@bp.route("", methods=["GET"])
+def get_runs():
+    """Get delivery runs (optionally filtered by status)"""
+    status_filter = request.args.getlist('status')
+
+    with get_db() as db:
+        service = DeliveryRunService(db)
+        runs = service.get_all_run_details(status=status_filter if status_filter else None)
+
+        result = []
+        for r in runs:
+            result.append(DeliveryRunResponse(
+                id=r.id,
+                name=r.name,
+                runner=r.runner,
+                vehicle=r.vehicle,
+                status=r.status,
+                start_time=r.start_time,
+                end_time=r.end_time,
+                order_ids=[o.id for o in r.orders]
+            ).model_dump())
+        return jsonify(result)
+
+
 @bp.route("/active", methods=["GET"])
 def get_active_runs():
     """Get all active delivery runs"""
@@ -82,6 +107,7 @@ def get_active_runs():
         for r in runs:
             result.append(DeliveryRunResponse(
                 id=r.id,
+                name=r.name,
                 runner=r.runner,
                 vehicle=r.vehicle,
                 status=r.status,
@@ -97,8 +123,39 @@ def get_available_vehicles():
     """Get available vehicles"""
     with get_db() as db:
         service = DeliveryRunService(db)
-        vehicles = {v.value: service.check_vehicle_availability(v) for v in VehicleEnum}
+        vehicles = {v.value: service.check_vehicle_availability(v.value) for v in VehicleEnum}
         return jsonify(vehicles)
+
+@bp.route("/<uuid:run_id>", methods=["GET"])
+def get_run(run_id):
+    """Get delivery run details"""
+    with get_db() as db:
+        service = DeliveryRunService(db)
+        run = service.get_run_by_id(run_id)
+        if not run:
+            abort(404, description="Delivery run not found")
+
+        from app.schemas.delivery_run import DeliveryRunDetailResponse, OrderSummary
+
+        response = DeliveryRunDetailResponse(
+            id=run.id,
+            name=run.name,
+            runner=run.runner,
+            vehicle=run.vehicle,
+            status=run.status,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            orders=[
+                OrderSummary(
+                    id=o.id,
+                    inflow_order_id=o.inflow_order_id,
+                    recipient_name=o.recipient_name,
+                    delivery_location=o.delivery_location,
+                    status=o.status
+                ) for o in run.orders
+            ]
+        )
+        return jsonify(response.model_dump())
 
 
 @bp.route("/<run_id>/finish", methods=["PUT"])
@@ -114,6 +171,7 @@ def finish_run(run_id):
 
             response = DeliveryRunResponse(
                 id=run.id,
+                name=run.name,
                 runner=run.runner,
                 vehicle=run.vehicle,
                 status=run.status,

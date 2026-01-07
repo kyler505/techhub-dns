@@ -140,6 +140,15 @@ class DeliveryRunService:
     def get_active_runs_with_details(self) -> List[DeliveryRun]:
         return self.db.query(DeliveryRun).filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value).all()
 
+    def get_all_run_details(self, status: Optional[List[str]] = None) -> List[DeliveryRun]:
+        """Get all delivery runs, optionally filtered by status"""
+        query = self.db.query(DeliveryRun)
+
+        if status:
+            query = query.filter(DeliveryRun.status.in_(status))
+
+        return query.order_by(DeliveryRun.created_at.desc()).all()
+
     def _fulfill_orders_in_inflow(self, orders: List[Order], user_id: Optional[str]) -> tuple[List[dict], List[dict]]:
         if not orders:
             return [], []

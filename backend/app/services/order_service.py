@@ -1029,17 +1029,10 @@ class OrderService:
             signature_data_bytes = base64.b64decode(signature_b64.split(',')[1])  # Remove data:image/png;base64, prefix
             signature_image = Image.open(io.BytesIO(signature_data_bytes))
 
-            # Convert to RGB if necessary (reportlab doesn't support RGBA)
-            if signature_image.mode == 'RGBA':
-                # Create a white background image
-                background = Image.new('RGB', signature_image.size, (255, 255, 255))
-                background.paste(signature_image, mask=signature_image.split()[-1])  # Use alpha as mask
-                signature_image = background
-            elif signature_image.mode != 'RGB':
-                signature_image = signature_image.convert('RGB')
-
+            # Ensure we keep the image in a mode reportlab can handle (RGB or RGBA)
+            # reportlab supports RGBA with mask='auto'
         except Exception as e:
-            print(f"Error processing signature image: {e}")
+            logger.error(f"Error processing signature image: {e}")
             return pdf_path
 
         # Read the original PDF
@@ -1054,37 +1047,23 @@ class OrderService:
         page_width = float(page.mediabox.width)
         page_height = float(page.mediabox.height)
 
-        # Calculate signature position and size
-        # Position is given as percentage of page (0-100), convert to points
-        sig_x = (position.get('x', 50) / 100.0) * page_width
-        sig_y = (position.get('y', 60) / 100.0) * page_height
-
-        # Scale signature to reasonable size (max 200x100 points)
-        max_sig_width = 200
-        max_sig_height = 100
-
-        sig_width = min(signature_image.width, max_sig_width)
-        sig_height = min(signature_image.height, max_sig_height)
-
-        # Maintain aspect ratio
-        aspect_ratio = signature_image.width / signature_image.height
-        if sig_width / aspect_ratio <= max_sig_height:
-            sig_height = sig_width / aspect_ratio
-        else:
-            sig_width = sig_height * aspect_ratio
-
         # Create overlay PDF with signature
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as overlay_file:
             overlay_path = overlay_file.name
 
         c = canvas.Canvas(overlay_path, pagesize=(page_width, page_height))
 
-        # Draw signature at calculated position
-        # Convert coordinates: reportlab uses bottom-left origin, position uses top-left
-        reportlab_x = sig_x
-        reportlab_y = page_height - sig_y - sig_height
-
-        c.drawImage(ImageReader(signature_image), reportlab_x, reportlab_y, width=sig_width, height=sig_height)
+        # Frontend sends a canvas capture that matches the PDF aspect ratio and covers the whole page
+        # So we draw it filling the page dimensions.
+        # mask='auto' ensures transparency from the alpha channel is respected.
+        c.drawImage(
+            ImageReader(signature_image),
+            0,
+            0,
+            width=page_width,
+            height=page_height,
+            mask='auto'
+        )
         c.save()
 
         # Merge overlay with original PDF

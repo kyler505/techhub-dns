@@ -281,7 +281,7 @@ def get_picklist(order_id):
         if not path.exists():
             abort(404, description="Picklist file missing")
 
-        return send_file(path, mimetype="application/pdf", download_name=path.name)
+        return send_file(path.resolve(), mimetype="application/pdf", download_name=path.name)
 
 
 @bp.route("/<uuid:order_id>/retry-notification", methods=["POST"])

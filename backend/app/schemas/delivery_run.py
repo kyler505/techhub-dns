@@ -37,6 +37,7 @@ class OrderSummary(BaseModel):
     id: UUID
     inflow_order_id: Optional[str] = None
     recipient_name: Optional[str] = None
+    delivery_location: Optional[str] = None
     status: str
 
     model_config = {"from_attributes": True}
