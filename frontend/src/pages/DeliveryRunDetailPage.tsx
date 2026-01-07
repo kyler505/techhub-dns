@@ -229,7 +229,7 @@ export default function DeliveryRunDetailPage() {
                                             )}
                                             {order.delivery_location && (
                                                 <div className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-                                                    <span className="font-medium">Loc:</span> {order.delivery_location}
+                                                    <span className="font-medium">Location:</span> {order.delivery_location}
                                                 </div>
                                             )}
                                         </div>
