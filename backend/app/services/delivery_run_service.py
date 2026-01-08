@@ -178,7 +178,8 @@ class DeliveryRunService:
                     await inflow_service.fulfill_sales_order(
                         inflow_sales_order_id,
                         db=self.db,
-                        user_id=user_id
+                        user_id=user_id,
+                        only_picked_items=True  # Only fulfill items that were actually picked
                     )
                     successes.append({
                         "order_id": str(order.id),
