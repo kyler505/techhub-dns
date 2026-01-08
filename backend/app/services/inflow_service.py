@@ -190,11 +190,19 @@ class InflowService:
                 return data[0] if data else None
             return data
 
-    async def fulfill_sales_order(self, sales_order_id: str, db: Session = None, user_id: str = None) -> Dict[str, Any]:
+    async def fulfill_sales_order(self, sales_order_id: str, db: Session = None, user_id: str = None, only_picked_items: bool = False) -> Dict[str, Any]:
         """
         Fulfill a sales order by ensuring pickLines, packLines, and shipLines are populated.
         Based on inFlow docs: inventoryStatus becomes fulfilled when all products are in pickLines
         and, for shippable orders, packLines/shipLines are present.
+        
+        Args:
+            sales_order_id: The Inflow sales order ID
+            db: Database session for audit logging
+            user_id: User ID for audit logging
+            only_picked_items: If True, only fulfill items in pickLines (for partial orders from delivery runs).
+                              When True, packLines are created from pickLines instead of original order lines,
+                              and the "fully picked" validation is skipped.
         """
         from app.services.audit_service import AuditService
 
@@ -228,7 +236,10 @@ class InflowService:
 
         if not order.get("packLines"):
             pack_lines = []
-            for line in order.get("lines", []):
+            # If only_picked_items is True, use pickLines instead of lines (for partial order fulfillment)
+            source_lines = order.get("pickLines", []) if only_picked_items else order.get("lines", [])
+            
+            for line in source_lines:
                 if not positive_quantity(line):
                     continue
                 pack_lines.append({
@@ -248,35 +259,37 @@ class InflowService:
                 "shippedDate": now,
             }]
 
-            # Check if order is fully picked
-            is_fully_picked = self._is_fully_picked(order)
-            if not is_fully_picked:
-                msg = f"Order {order_number} is only partially picked. Skipping InFlow fulfillment to avoid inventory issues."
-                logger.warning(msg)
+            # Check if order is fully picked (skip this check if only_picked_items=True)
+            if not only_picked_items:
+                is_fully_picked = self._is_fully_picked(order)
+                if not is_fully_picked:
+                    msg = f"Order {order_number} is only partially picked. Skipping InFlow fulfillment to avoid inventory issues."
+                    logger.warning(msg)
 
-                if db:
-                    # Log the skip
-                    audit_service = AuditService(db)
-                    audit_service.log_action(
-                        entity_type="inflow_order",
-                        entity_id=sales_order_id,
-                        action="fulfillment_skipped",
-                        user_id=user_id,
-                        description=msg,
-                        audit_metadata={
-                            "reason": "partial_pick",
-                            "inflow_order_number": order.get("orderNumber")
-                        }
-                    )
+                    if db:
+                        # Log the skip
+                        audit_service = AuditService(db)
+                        audit_service.log_action(
+                            entity_type="inflow_order",
+                            entity_id=sales_order_id,
+                            action="fulfillment_skipped",
+                            user_id=user_id,
+                            description=msg,
+                            audit_metadata={
+                                "reason": "partial_pick",
+                                "inflow_order_number": order.get("orderNumber")
+                            }
+                        )
 
-                # Return success structure but indicate skipped
-                return {
-                    "salesOrderId": sales_order_id,
-                    "orderNumber": order_number,
-                    "status": "skipped",
-                    "message": msg
-                }
+                    # Return success structure but indicate skipped
+                    return {
+                        "salesOrderId": sales_order_id,
+                        "orderNumber": order_number,
+                        "status": "skipped",
+                        "message": msg
+                    }
 
+            # Proceed with fulfillment (either fully picked, or only_picked_items=True)
             url = f"{self.base_url}/{self.company_id}/sales-orders"
             async with httpx.AsyncClient() as client:
                 response = await client.put(url, json=order, headers=self.headers)
@@ -286,17 +299,22 @@ class InflowService:
             # Audit logging for inFlow fulfillment
             if db:
                 audit_service = AuditService(db)
+                description = "Order fulfilled in inFlow system"
+                if only_picked_items:
+                    description = "Order fulfilled in inFlow system (only picked items, partial fulfillment)"
+                
                 audit_service.log_action(
                     entity_type="inflow_order",
                     entity_id=sales_order_id,
                     action="fulfilled",
                     user_id=user_id,
-                    description=f"Order fulfilled in inFlow system",
+                    description=description,
                     audit_metadata={
                         "inflow_order_number": order.get("orderNumber"),
                         "pick_lines_count": len(order.get("pickLines", [])),
                         "pack_lines_count": len(order.get("packLines", [])),
-                        "ship_lines_count": len(order.get("shipLines", []))
+                        "ship_lines_count": len(order.get("shipLines", [])),
+                        "only_picked_items": only_picked_items
                     }
                 )
 
