@@ -68,6 +68,9 @@ class Order(Base):
     qa_method = Column(String(50), nullable=True)  # "Delivery" or "Shipping"
     signature_captured_at = Column(DateTime, nullable=True)
     signed_picklist_path = Column(String(500), nullable=True)
+    # Order Details PDF fields
+    order_details_path = Column(String(500), nullable=True)
+    order_details_generated_at = Column(DateTime, nullable=True)
     # Shipping workflow fields
     shipping_workflow_status = Column(String(50), nullable=True, default=ShippingWorkflowStatus.WORK_AREA.value)
     shipping_workflow_status_updated_at = Column(DateTime, nullable=True)

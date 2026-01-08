@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     email_from_address: str = "techhub@tamu.edu"
     email_from_name: str = "TechHub Technology Services"
 
+    # Power Automate Teams Notifications
+    teams_recipient_notifications_enabled: bool = False  # Safety: disabled by default
+    power_automate_flow_url: Optional[str] = None  # HTTP trigger URL from Power Automate
+
     class Config:
         env_file = ".env"
         case_sensitive = False

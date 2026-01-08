@@ -143,6 +143,9 @@ class OrderService:
             }
         )
 
+        # Send Order Details email to recipient (after picklist, before QA)
+        self._send_order_details_email(order, generated_by)
+
         return order
 
     def submit_qa(
@@ -899,6 +902,83 @@ class OrderService:
         if line:
             lines.append(line)
         return lines
+
+    def _send_order_details_email(self, order: Order, generated_by: Optional[str] = None) -> None:
+        """
+        Send Order Details PDF email to recipient after picklist generation.
+        Also saves the PDF to storage for record-keeping.
+        This runs as a best-effort operation - errors are logged but don't fail the picklist generation.
+        """
+        from app.services.pdf_service import pdf_service
+        from app.services.email_service import email_service
+        from app.config import settings
+
+        # Get recipient email
+        recipient_email = order.recipient_contact
+        order_number = order.inflow_order_id
+
+        try:
+            # Generate Order Details PDF
+            if not order.inflow_data:
+                logger.warning(f"No inFlow data for order {order_number}, skipping Order Details generation")
+                return
+
+            pdf_bytes = pdf_service.generate_order_details_pdf(order.inflow_data)
+
+            # Save PDF to storage
+            order_details_dir = self._storage_path("order_details")
+            order_details_dir.mkdir(parents=True, exist_ok=True)
+            pdf_filename = f"{order_number}.pdf"
+            pdf_path = order_details_dir / pdf_filename
+            pdf_path.write_bytes(pdf_bytes)
+            logger.info(f"Order Details PDF saved to {pdf_path}")
+
+            # Update order with Order Details path
+            order.order_details_path = str(pdf_path)
+            order.order_details_generated_at = datetime.utcnow()
+            self.db.commit()
+
+            # Check if email sending is configured
+            if not settings.smtp_host:
+                logger.debug(f"SMTP not configured, skipping Order Details email for order {order_number}")
+                return
+
+            if not recipient_email:
+                logger.warning(f"No recipient email for order {order_number}, skipping Order Details email")
+                return
+
+            # Send email
+            customer_name = order.recipient_name or "Customer"
+
+            success = email_service.send_order_details_email(
+                to_address=recipient_email,
+                order_number=order_number,
+                customer_name=customer_name,
+                pdf_content=pdf_bytes
+            )
+
+            if success:
+                logger.info(f"Order Details email sent to {recipient_email} for order {order_number}")
+
+                # Audit log the email
+                audit_service = AuditService(self.db)
+                audit_service.log_order_action(
+                    order_id=str(order.id),
+                    action="order_details_email_sent",
+                    user_id=generated_by or "system",
+                    description=f"Order Details PDF emailed to {recipient_email}",
+                    audit_metadata={
+                        "recipient_email": recipient_email,
+                        "order_number": order_number,
+                        "pdf_path": str(pdf_path)
+                    }
+                )
+            else:
+                logger.error(f"Failed to send Order Details email to {recipient_email} for order {order_number}")
+
+        except Exception as e:
+            # Log error but don't fail the picklist generation
+            logger.error(f"Error generating/sending Order Details for order {order.inflow_order_id}: {e}")
 
     def transition_shipping_workflow(
         self,

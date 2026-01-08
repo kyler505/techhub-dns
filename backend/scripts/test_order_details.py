@@ -92,9 +92,10 @@ def main():
         except Exception as e:
             print(f"  ERROR: Failed to save PDF: {e}")
     else:
-        # Save to default location
-        default_path = f"storage/OrderDetails_{args.order_number}.pdf"
-        os.makedirs("storage", exist_ok=True)
+        # Save to default location (same as production workflow)
+        default_dir = "storage/order_details"
+        os.makedirs(default_dir, exist_ok=True)
+        default_path = f"{default_dir}/{args.order_number}.pdf"
         with open(default_path, 'wb') as f:
             f.write(pdf_bytes)
         print(f"\n  → PDF saved to: {default_path}")

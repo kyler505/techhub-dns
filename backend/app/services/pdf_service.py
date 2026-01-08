@@ -215,16 +215,12 @@ class PDFService:
                 logger.warning(f"Could not load logo: {e}")
 
         # TechHub address (next to logo)
-        pdf.setFont("Helvetica", 7)
+        pdf.setFont("Helvetica", 8)
         addr_x = x_margin + 150
-        pdf.drawString(addr_x, y_pos, "TechHub")
-        pdf.drawString(addr_x, y_pos - 9, "WCDC -")
-        pdf.drawString(addr_x, y_pos - 18, "TechHub")
-        pdf.drawString(addr_x, y_pos - 27, "474")
-        pdf.drawString(addr_x, y_pos - 36, "Agronomy Rd")
-        pdf.drawString(addr_x, y_pos - 45, "College")
-        pdf.drawString(addr_x, y_pos - 54, "Station, TX")
-        pdf.drawString(addr_x, y_pos - 63, "77843 USA")
+        pdf.drawString(addr_x, y_pos, "WCDC - TechHub")
+        pdf.drawString(addr_x, y_pos - 11, "474 Agronomy Rd")
+        pdf.drawString(addr_x, y_pos - 22, "College Station, TX 77843")
+        pdf.drawString(addr_x, y_pos - 33, "USA")
 
         # Order Details title (right side)
         pdf.setFont("Helvetica-Bold", 14)
