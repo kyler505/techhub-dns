@@ -1,19 +1,20 @@
 services:
-  postgres:
-    image: postgres:15-alpine
+  mysql:
+    image: mysql:8.0
     environment:
-      POSTGRES_USER: techhub
-      POSTGRES_PASSWORD: techhub_password
-      POSTGRES_DB: techhub_delivery
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: techhub_delivery
+      MYSQL_USER: techhub
+      MYSQL_PASSWORD: techhub_password
     ports:
-      - "5433:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U techhub -d techhub_delivery"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
-  postgres_data:
+  mysql_data:

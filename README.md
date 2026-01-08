@@ -28,7 +28,7 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 
 ## Architecture
 
-- **Backend**: Flask with PostgreSQL, APScheduler for periodic sync, Socket.IO for real-time updates
+- **Backend**: Flask with MySQL, APScheduler for periodic sync, Socket.IO for real-time updates
 - **Frontend**: React + Vite with TypeScript, TailwindCSS, Socket.IO client
 - **Notifications**: Microsoft Teams webhook integration
 - **Real-time Updates**: Socket.IO connections for live delivery run tracking
@@ -42,9 +42,9 @@ Before setting up the project, ensure you have the following installed:
 
 - **Python 3.9+** - Download from [python.org](https://www.python.org/downloads/)
 - **Node.js 18+** - Download from [nodejs.org](https://nodejs.org/)
-- **PostgreSQL 15+** - Download from [postgresql.org](https://www.postgresql.org/download/) or use Docker
-- **Docker** (optional, for local PostgreSQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
-- **Visual Studio Build Tools** (Windows only) - Required for building Python packages with C extensions (like `psycopg2-binary`)
+- **MySQL 8.0+** - Download from [mysql.com](https://dev.mysql.com/downloads/mysql/) or use Docker
+- **Docker** (optional, for local MySQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
+- Note: No additional Visual Studio Build Tools required for MySQL driver (pymysql is pure Python)
   - Download from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/)
   - Install "Desktop development with C++" workload
   - Or install the standalone [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
@@ -80,14 +80,14 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-5. Set up PostgreSQL:
+5. Set up MySQL:
    - **Option A: Use Docker Compose** (recommended for local development):
    ```bash
    # From the project root directory
-   docker compose up -d postgres
+   docker compose up -d mysql
    ```
-   - **Option B: Use existing PostgreSQL instance**
-     - Ensure PostgreSQL is running
+   - **Option B: Use existing MySQL instance**
+     - Ensure MySQL is running
      - Create a database for the application
      - Note the connection details (host, port, database name, username, password)
 
@@ -95,7 +95,7 @@ pip install -r requirements.txt
 ```bash
 # Create .env file (you may need to create this manually)
 # Add the following variables:
-# DATABASE_URL=postgresql://username:password@localhost:5432/database_name
+# DATABASE_URL=mysql+pymysql://username:password@localhost:3306/database_name
 # INFLOW_API_URL=your_inflow_api_url
 # INFLOW_API_KEY=your_inflow_api_key
 # TEAMS_WEBHOOK_URL=your_teams_webhook_url (optional)
@@ -103,9 +103,9 @@ pip install -r requirements.txt
 # STORAGE_ROOT=storage
 ```
 
-   Example `.env` file for Docker PostgreSQL:
+   Example `.env` file for Docker MySQL:
    ```
-   DATABASE_URL=postgresql://techhub:techhub_password@localhost:5433/techhub_delivery
+   DATABASE_URL=mysql+pymysql://techhub:techhub_password@localhost:3306/techhub_delivery
    INFLOW_API_URL=https://your-inflow-api-url.com
    INFLOW_API_KEY=your-api-key-here
    STORAGE_ROOT=storage

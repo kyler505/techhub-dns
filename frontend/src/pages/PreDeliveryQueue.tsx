@@ -8,11 +8,16 @@ import { formatDeliveryLocation } from "../utils/location";
 import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
+import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
+
 export default function PreDeliveryQueue() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
     const [iscreateDeliveryOpen, setIsCreateDeliveryOpen] = useState(false);
+
+    // Listen for real-time updates
+    const { orders: websocketOrders } = useOrdersWebSocket();
 
     // Dialog States
     const [infoDialogOpen, setInfoDialogOpen] = useState(false);
@@ -27,7 +32,7 @@ export default function PreDeliveryQueue() {
 
     useEffect(() => {
         loadOrders();
-    }, []);
+    }, [websocketOrders]); // Refetch when websocket notifies of update
 
     const loadOrders = async () => {
         setLoading(true);

@@ -22,6 +22,46 @@ class InflowService:
             "Accept": "application/json;version=2024-03-12"
         }
 
+    def _is_fully_picked(self, order: Dict[str, Any]) -> bool:
+        """
+        Check if an order is fully picked by comparing ordered lines vs pick lines.
+        """
+        lines = order.get("lines", [])
+        pick_lines = order.get("pickLines", [])
+
+        # Build map of required quantities by product ID
+        required = {}
+        for line in lines:
+            pid = line.get("productId")
+            qty = 0
+            try:
+                qty = float(line.get("quantity", {}).get("standardQuantity", 0) or 0)
+            except (ValueError, TypeError):
+                pass
+            if pid and qty > 0:
+                required[pid] = required.get(pid, 0) + qty
+
+        # Build map of picked quantities
+        picked = {}
+        for line in pick_lines:
+            pid = line.get("productId")
+            qty = 0
+            try:
+                qty = float(line.get("quantity", {}).get("standardQuantity", 0) or 0)
+            except (ValueError, TypeError):
+                pass
+            if pid and qty > 0:
+                picked[pid] = picked.get(pid, 0) + qty
+
+        # Compare
+        for pid, req_qty in required.items():
+            picked_qty = picked.get(pid, 0)
+            # floating point comparison tolerance
+            if picked_qty < (req_qty - 0.0001):
+                return False
+
+        return True
+
     def _get_api_key(self) -> str:
         """Get API key from Azure Key Vault or environment variable"""
         if settings.inflow_api_key:
@@ -208,11 +248,40 @@ class InflowService:
                 "shippedDate": now,
             }]
 
-        url = f"{self.base_url}/{self.company_id}/sales-orders"
-        async with httpx.AsyncClient() as client:
-            response = await client.put(url, json=order, headers=self.headers)
-            response.raise_for_status()
-            result = response.json()
+            # Check if order is fully picked
+            is_fully_picked = self._is_fully_picked(order)
+            if not is_fully_picked:
+                msg = f"Order {order_number} is only partially picked. Skipping InFlow fulfillment to avoid inventory issues."
+                logger.warning(msg)
+
+                if db:
+                    # Log the skip
+                    audit_service = AuditService(db)
+                    audit_service.log_action(
+                        entity_type="inflow_order",
+                        entity_id=sales_order_id,
+                        action="fulfillment_skipped",
+                        user_id=user_id,
+                        description=msg,
+                        audit_metadata={
+                            "reason": "partial_pick",
+                            "inflow_order_number": order.get("orderNumber")
+                        }
+                    )
+
+                # Return success structure but indicate skipped
+                return {
+                    "salesOrderId": sales_order_id,
+                    "orderNumber": order_number,
+                    "status": "skipped",
+                    "message": msg
+                }
+
+            url = f"{self.base_url}/{self.company_id}/sales-orders"
+            async with httpx.AsyncClient() as client:
+                response = await client.put(url, json=order, headers=self.headers)
+                response.raise_for_status()
+                result = response.json()
 
             # Audit logging for inFlow fulfillment
             if db:
@@ -509,6 +578,35 @@ class InflowService:
                 "containers": list({line.get("containerNumber") for line in order["packLines"] if line.get("containerNumber")}),
                 "shippedDate": now,
             }]
+
+        # Check if order is fully picked
+        is_fully_picked = self._is_fully_picked(order)
+        if not is_fully_picked:
+            msg = f"Order {order_number} is only partially picked. Skipping InFlow fulfillment to avoid inventory issues."
+            logger.warning(msg)
+
+            if db:
+                # Log the skip
+                audit_service = AuditService(db)
+                audit_service.log_action(
+                    entity_type="inflow_order",
+                    entity_id=sales_order_id,
+                    action="fulfillment_skipped",
+                    user_id=user_id,
+                    description=msg,
+                    audit_metadata={
+                        "reason": "partial_pick",
+                        "inflow_order_number": order.get("orderNumber")
+                    }
+                )
+
+            # Return success structure but indicate skipped
+            return {
+                "salesOrderId": sales_order_id,
+                "orderNumber": order_number,
+                "status": "skipped",
+                "message": msg
+            }
 
         url = f"{self.base_url}/{self.company_id}/sales-orders"
         with httpx.Client() as client:

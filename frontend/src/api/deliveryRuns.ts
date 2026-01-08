@@ -8,10 +8,12 @@ export interface CreateDeliveryRunRequest {
 
 export interface DeliveryRunResponse {
   id: string;
+  name: string;
   runner: string;
   vehicle: string;
   status: string;
   start_time: string | null;
+  end_time?: string | null;
 }
 
 export interface OrderSummary {
@@ -23,8 +25,6 @@ export interface OrderSummary {
 }
 
 export interface DeliveryRunDetailResponse extends DeliveryRunResponse {
-  name: string;
-  end_time: string | null;
   orders: OrderSummary[];
 }
 

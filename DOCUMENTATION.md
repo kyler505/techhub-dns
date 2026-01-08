@@ -36,7 +36,7 @@ The application solves the challenge of managing delivery orders from the point 
 
 **Backend:**
 - Flask (Python web framework)
-- PostgreSQL (Database)
+- MySQL (Database)
 - SQLAlchemy (ORM)
 - Alembic (Database migrations)
 - APScheduler (Background task scheduling)
@@ -64,7 +64,7 @@ The application solves the challenge of managing delivery orders from the point 
 
 ```
 ┌─────────────┐         ┌──────────────┐         ┌─────────────┐
-│   Frontend  │◄───────►│    Backend   │◄───────►│  PostgreSQL │
+│   Frontend  │◄───────►│    Backend   │◄───────►│    MySQL    │
 │  (React)    │ HTTP/   │   (Flask)    │   SQL   │  (Database) │
 │             │   WS    │              │         │             │
 └─────────────┘         └──────────────┘         └─────────────┘
@@ -860,9 +860,9 @@ CREATE TABLE teams_notifications (
 
 **Backend** (`.env` file in `backend` directory):
 ```
-DATABASE_URL=postgresql://user:password@localhost:5432/techhub_delivery
-# For Docker PostgreSQL (default):
-# DATABASE_URL=postgresql://techhub:techhub_password@localhost:5433/techhub_delivery
+DATABASE_URL=mysql+pymysql://user:password@localhost:3306/techhub_delivery
+# For Docker MySQL (default):
+# DATABASE_URL=mysql+pymysql://techhub:techhub_password@localhost:3306/techhub_delivery
 INFLOW_API_URL=https://your-inflow-api-url.com
 INFLOW_API_KEY=your_api_key_here
 INFLOW_WEBHOOK_ENABLED=true
@@ -896,7 +896,7 @@ alembic upgrade head
 
 ### Production Considerations
 
-1. **Database**: Use managed PostgreSQL service
+1. **Database**: Use managed MySQL service
 2. **API Keys**: Store in Azure Key Vault or secure secret management
 3. **CORS**: Update `FRONTEND_URL` to production domain
 4. **HTTPS**: Use reverse proxy (nginx) with SSL certificates
@@ -912,12 +912,9 @@ Before setting up the development environment, ensure you have the following ins
 
 - **Python 3.9+** - Download from [python.org](https://www.python.org/downloads/)
 - **Node.js 18+** - Download from [nodejs.org](https://nodejs.org/)
-- **PostgreSQL 15+** - Download from [postgresql.org](https://www.postgresql.org/download/) or use Docker
-- **Docker** (optional, for local PostgreSQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
-- **Visual Studio Build Tools** (Windows only) - Required for building Python packages with C extensions (like `psycopg2-binary`)
-  - Download from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/)
-  - Install "Desktop development with C++" workload
-  - Or install the standalone [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+- **MySQL 8.0+** - Download from [mysql.com](https://dev.mysql.com/downloads/mysql/) or use Docker
+- **Docker** (optional, for local MySQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
+- Note: No additional Visual Studio Build Tools required for MySQL driver (pymysql is pure Python)
 
 ### Running Locally
 
@@ -952,10 +949,10 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-5. Set up PostgreSQL (using Docker Compose from project root):
+5. Set up MySQL (using Docker Compose from project root):
 ```bash
 # From the project root directory
-docker compose up -d postgres
+docker compose up -d mysql
 ```
 
 6. Create a `.env` file in the `backend` directory with your configuration (see Deployment section for details)
