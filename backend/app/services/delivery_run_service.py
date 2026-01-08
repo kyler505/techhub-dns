@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from uuid import UUID
+from typing import Union
 
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.utils.timezone import is_morning_in_cst, get_date_in_cst
@@ -72,7 +73,7 @@ class DeliveryRunService:
         ).first()
         return active is None
 
-    def create_run(self, runner: str, order_ids: List[UUID], vehicle: str) -> DeliveryRun:
+    def create_run(self, runner: str, order_ids: List[Union[UUID, str]], vehicle: str) -> DeliveryRun:
         """Create a delivery run and assign orders to it.
 
         Validates that orders are in Pre-Delivery and that the vehicle is available.
@@ -81,9 +82,12 @@ class DeliveryRunService:
         if not self.check_vehicle_availability(vehicle):
             raise ValidationError(f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle})
 
+        # Convert order IDs to strings for MySQL compatibility
+        order_ids_str = [str(oid) for oid in order_ids]
+
         # Validate orders
-        orders = self.db.query(Order).filter(Order.id.in_(order_ids)).with_for_update().all()
-        if len(orders) != len(order_ids):
+        orders = self.db.query(Order).filter(Order.id.in_(order_ids_str)).with_for_update().all()
+        if len(orders) != len(order_ids_str):
             raise ValidationError("One or more orders not found", details={"expected_count": len(order_ids), "found_count": len(orders)})
 
         for o in orders:
@@ -127,15 +131,16 @@ class DeliveryRunService:
             audit_metadata={
                 "vehicle": vehicle,
                 "order_count": len(order_ids),
-                "order_ids": order_ids,
+                "order_ids": order_ids_str,
                 "run_name": run_name
             }
         )
 
         return run
 
-    def get_run_by_id(self, run_id: UUID) -> DeliveryRun | None:
-        return self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id).first()
+    def get_run_by_id(self, run_id: Union[UUID, str]) -> DeliveryRun | None:
+        run_id_str = str(run_id)
+        return self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).first()
 
     def get_active_runs_with_details(self) -> List[DeliveryRun]:
         return self.db.query(DeliveryRun).filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value).all()
@@ -192,8 +197,9 @@ class DeliveryRunService:
 
         return asyncio.run(_fulfill())
 
-    def finish_run(self, run_id: UUID, user_id: Optional[str] = None) -> DeliveryRun:
-        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id).with_for_update().first()
+    def finish_run(self, run_id: Union[UUID, str], user_id: Optional[str] = None) -> DeliveryRun:
+        run_id_str = str(run_id)
+        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
         if not run:
             raise NotFoundError("DeliveryRun", str(run_id))
 

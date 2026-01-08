@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
+from typing import Union
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -64,11 +65,12 @@ class OrderService:
 
     def mark_asset_tagged(
         self,
-        order_id: UUID,
+        order_id: Union[UUID, str],
         tag_ids: List[str],
         technician: Optional[str] = None
     ) -> Order:
-        order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        order_id_str = str(order_id)
+        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -97,10 +99,11 @@ class OrderService:
 
     def generate_picklist(
         self,
-        order_id: UUID,
+        order_id: Union[UUID, str],
         generated_by: Optional[str] = None
     ) -> Order:
-        order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        order_id_str = str(order_id)
+        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -144,11 +147,12 @@ class OrderService:
 
     def submit_qa(
         self,
-        order_id: UUID,
+        order_id: Union[UUID, str],
         qa_data: Dict[str, Any],
         technician: Optional[str] = None
     ) -> Order:
-        order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        order_id_str = str(order_id)
+        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -260,26 +264,29 @@ class OrderService:
 
         return orders, total
 
-    def get_order_by_id(self, order_id: UUID) -> Optional[Order]:
+    def get_order_by_id(self, order_id: Union[UUID, str]) -> Optional[Order]:
         """Get a single order by ID"""
-        return self.db.query(Order).filter(Order.id == order_id).first()
+        order_id_str = str(order_id)
+        return self.db.query(Order).filter(Order.id == order_id_str).first()
 
-    def get_order_detail(self, order_id: UUID) -> Optional[Order]:
+    def get_order_detail(self, order_id: Union[UUID, str]) -> Optional[Order]:
         """Get order with related data (audit logs, notifications)"""
+        order_id_str = str(order_id)
         return self.db.query(Order).options(
             selectinload(Order.audit_logs),
             selectinload(Order.teams_notifications)
-        ).filter(Order.id == order_id).first()
+        ).filter(Order.id == order_id_str).first()
 
     def transition_status(
         self,
-        order_id: UUID,
+        order_id: Union[UUID, str],
         new_status: OrderStatus,
         changed_by: Optional[str] = None,
         reason: Optional[str] = None
     ) -> Order:
         """Transition order status with validation and audit logging"""
-        order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        order_id_str = str(order_id)
+        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
 
         if not order:
             raise NotFoundError("Order", str(order_id))
@@ -371,7 +378,7 @@ class OrderService:
 
     def bulk_transition(
         self,
-        order_ids: List[UUID],
+        order_ids: List[Union[UUID, str]],
         new_status: OrderStatus,
         changed_by: Optional[str] = None,
         reason: Optional[str] = None
@@ -895,15 +902,15 @@ class OrderService:
 
     def transition_shipping_workflow(
         self,
-        order_id: UUID,
+        order_id: Union[UUID, str],
         new_status: ShippingWorkflowStatus,
         carrier_name: Optional[str] = None,
         tracking_number: Optional[str] = None,
         updated_by: Optional[str] = None
     ) -> Order:
         """Transition shipping workflow status with validation"""
-
-        order = self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        order_id_str = str(order_id)
+        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -954,9 +961,10 @@ class OrderService:
 
         return order
 
-    def generate_bundled_documents(self, order_id: UUID, signature_data: dict) -> str:
+    def generate_bundled_documents(self, order_id: Union[UUID, str], signature_data: dict) -> str:
         """Generate bundled documents: create folder with signed picklist and QA form"""
-        order = self.db.query(Order).filter(Order.id == order_id).first()
+        order_id_str = str(order_id)
+        order = self.db.query(Order).filter(Order.id == order_id_str).first()
         if not order:
             raise NotFoundError("Order", str(order_id))
 
