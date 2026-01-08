@@ -432,4 +432,95 @@ def get_shipping_workflow(order_id):
         return jsonify(response.model_dump())
 
 
+@bp.route("/<uuid:order_id>/order-details.pdf", methods=["GET"])
+def get_order_details_pdf(order_id):
+    """Generate and download Order Details PDF"""
+    from app.services.pdf_service import pdf_service
+    from io import BytesIO
+
+    with get_db() as db:
+        service = OrderService(db)
+        order = service.get_order_by_id(order_id)
+        if not order:
+            abort(404, description="Order not found")
+
+        # Get fresh inFlow data
+        inflow_service = InflowService()
+        inflow_data = inflow_service.get_order_by_id_sync(order.inflow_sales_order_id)
+
+        if not inflow_data:
+            abort(404, description="Order not found in inFlow")
+
+        # Generate PDF
+        try:
+            pdf_bytes = pdf_service.generate_order_details_pdf(inflow_data)
+            pdf_stream = BytesIO(pdf_bytes)
+            pdf_stream.seek(0)
+
+            filename = f"OrderDetails_{order.inflow_order_id}.pdf"
+            return send_file(
+                pdf_stream,
+                mimetype="application/pdf",
+                as_attachment=False,
+                download_name=filename
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to generate Order Details PDF: {e}")
+            abort(500, description="Failed to generate PDF")
+
+
+@bp.route("/<uuid:order_id>/send-order-details", methods=["POST"])
+def send_order_details_email(order_id):
+    """Generate Order Details PDF and email to recipient"""
+    from app.services.pdf_service import pdf_service
+    from app.services.email_service import email_service
+
+    with get_db() as db:
+        service = OrderService(db)
+        order = service.get_order_by_id(order_id)
+        if not order:
+            abort(404, description="Order not found")
+
+        # Get fresh inFlow data
+        inflow_service = InflowService()
+        inflow_data = inflow_service.get_order_by_id_sync(order.inflow_sales_order_id)
+
+        if not inflow_data:
+            abort(404, description="Order not found in inFlow")
+
+        # Get recipient email
+        recipient_email = inflow_data.get("email") or order.recipient_contact
+        if not recipient_email:
+            abort(400, description="No recipient email address available")
+
+        # Generate PDF
+        try:
+            pdf_bytes = pdf_service.generate_order_details_pdf(inflow_data)
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to generate Order Details PDF: {e}")
+            abort(500, description="Failed to generate PDF")
+
+        # Send email
+        customer_name = inflow_data.get("contactName") or order.recipient_name
+        order_number = order.inflow_order_id
+
+        success = email_service.send_order_details_email(
+            to_address=recipient_email,
+            order_number=order_number,
+            customer_name=customer_name,
+            pdf_content=pdf_bytes
+        )
+
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Order Details PDF sent to {recipient_email}",
+                "recipient": recipient_email
+            })
+        else:
+            abort(500, description="Failed to send email. Check SMTP configuration.")
+
+
 # SocketIO event handlers will be registered in main.py

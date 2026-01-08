@@ -40,7 +40,7 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 
 Before setting up the project, ensure you have the following installed:
 
-- **Python 3.9+** - Download from [python.org](https://www.python.org/downloads/)
+- **Python 3.12.10** - Download from [python.org](https://www.python.org/downloads/)
 - **Node.js 18+** - Download from [nodejs.org](https://nodejs.org/)
 - **MySQL 8.0+** - Download from [mysql.com](https://dev.mysql.com/downloads/mysql/) or use Docker
 - **Docker** (optional, for local MySQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
@@ -109,6 +109,14 @@ pip install -r requirements.txt
    INFLOW_API_URL=https://your-inflow-api-url.com
    INFLOW_API_KEY=your-api-key-here
    STORAGE_ROOT=storage
+
+   # SMTP Email Configuration (for Order Details emails)
+   SMTP_HOST=smtp.office365.com
+   SMTP_PORT=587
+   SMTP_USER=techhub@tamu.edu
+   SMTP_PASSWORD=your-smtp-password
+   EMAIL_FROM_ADDRESS=techhub@tamu.edu
+   EMAIL_FROM_NAME=TechHub Technology Services
    ```
 
 7. Run database migrations:

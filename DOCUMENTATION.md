@@ -249,6 +249,24 @@ Picklists are automatically generated from inFlow order data when requested via 
 
 Picklists are generated using the ReportLab PDF library and stored in `STORAGE_ROOT/picklists/` with filenames matching the order number (e.g., `TH3950.pdf`).
 
+### Order Details PDF
+
+Order Details PDFs can be generated and emailed to recipients. These documents match inFlow's Document Designer format and include:
+
+- **Header**: Texas A&M Technology Services logo, TechHub address, barcode
+- **Order Metadata**: Order number, PO #, date
+- **Addresses**: Billing and shipping addresses
+- **Line Items**: Product names, SKUs (italicized), serial numbers, quantities, unit prices, subtotals
+- **Totals**: Subtotal and total amounts
+- **Remarks**: Order notes
+
+**Features**:
+- Generated on-demand via API endpoint
+- Can be viewed in-browser or downloaded
+- Email integration for sending to recipients
+
+**Services**: `backend/app/services/pdf_service.py`, `backend/app/services/email_service.py`
+
 ### Teams Notification Model
 
 Tracks Teams notification delivery:
@@ -313,6 +331,8 @@ class InflowWebhook:
 - `POST /api/orders/{order_id}/tag` - Record asset tagging (mock)
 - `POST /api/orders/{order_id}/picklist` - Generate picklist PDF from inFlow order data
 - `GET /api/orders/{order_id}/picklist` - Download generated picklist PDF
+- `GET /api/orders/{order_id}/order-details.pdf` - Generate and download Order Details PDF
+- `POST /api/orders/{order_id}/send-order-details` - Generate Order Details PDF and email to recipient
 - `POST /api/orders/{order_id}/qa` - Submit QA checklist responses
 - `POST /api/orders/{order_id}/fulfill` - Mark order fulfilled in Inflow (best-effort)
 - `POST /api/orders/bulk-transition` - Bulk status transition

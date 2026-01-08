@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Details - {{ order_number }}</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 0.5in;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11pt;
+            color: #333;
+            line-height: 1.4;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .logo {
+            width: 200px;
+            height: auto;
+        }
+
+        .address-block {
+            font-size: 9pt;
+            line-height: 1.3;
+        }
+
+        .header-right {
+            text-align: right;
+        }
+
+        .document-title {
+            font-size: 18pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .barcode {
+            margin: 8px 0;
+        }
+
+        .barcode img {
+            height: 40px;
+        }
+
+        .order-meta {
+            font-size: 10pt;
+        }
+
+        .order-meta-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .order-meta-label {
+            font-weight: bold;
+        }
+
+        .disclaimer {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px 15px;
+            margin: 20px 0;
+            font-size: 9pt;
+            font-style: italic;
+        }
+
+        .disclaimer strong {
+            color: #c00;
+        }
+
+        .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .info-block {
+            flex: 1;
+        }
+
+        .info-block h3 {
+            font-size: 10pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .info-block p {
+            font-size: 10pt;
+            margin-bottom: 3px;
+        }
+
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .items-table th {
+            border-bottom: 2px solid #333;
+            padding: 8px 5px;
+            text-align: left;
+            font-size: 10pt;
+            font-weight: bold;
+        }
+
+        .items-table th:nth-child(2),
+        .items-table th:nth-child(3) {
+            text-align: right;
+        }
+
+        .items-table td {
+            border-bottom: 1px solid #ddd;
+            padding: 8px 5px;
+            font-size: 10pt;
+            vertical-align: top;
+        }
+
+        .items-table td:nth-child(2),
+        .items-table td:nth-child(3) {
+            text-align: right;
+        }
+
+        .items-table .product-name {
+            max-width: 350px;
+        }
+
+        .totals-section {
+            margin-top: 20px;
+            text-align: right;
+        }
+
+        .totals-table {
+            margin-left: auto;
+            border-collapse: collapse;
+        }
+
+        .totals-table td {
+            padding: 5px 10px;
+            font-size: 10pt;
+        }
+
+        .totals-table .label {
+            text-align: right;
+            font-weight: normal;
+        }
+
+        .totals-table .value {
+            text-align: right;
+            min-width: 80px;
+        }
+
+        .totals-table .total-row {
+            font-weight: bold;
+            border-top: 1px solid #333;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <img src="{{ logo_path }}" alt="Texas A&M Technology Services" class="logo">
+            <div class="address-block">
+                <strong>TechHub</strong><br>
+                WCDC -<br>
+                TechHub<br>
+                474<br>
+                Agronomy Rd<br>
+                College<br>
+                Station, TX<br>
+                77843 USA
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="document-title">Order Details</div>
+            <div class="barcode">
+                <img src="{{ barcode_path }}" alt="Barcode">
+            </div>
+            <div class="order-meta">
+                <div class="order-meta-row">
+                    <span class="order-meta-label">Order number</span>
+                    <span>{{ order_number }}</span>
+                </div>
+                <div class="order-meta-row">
+                    <span class="order-meta-label">Date</span>
+                    <span>{{ order_date }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="disclaimer">
+        Thank you for purchasing through TechHub! Your order details and PO number are shown below.
+        <strong>NOTE: Do not edit preliminary asset information.</strong>
+        <em>Editing preliminary asset information may result in items on your order arriving without asset tags.</em>
+    </div>
+
+    <div class="info-section">
+        <div class="info-block">
+            <h3>Billing Address</h3>
+            <p>{{ customer_name }}</p>
+            {% if billing_address %}
+            <p>{{ billing_address }}</p>
+            {% endif %}
+
+            <h3 style="margin-top: 15px;">Email</h3>
+            <p>{{ customer_email or 'N/A' }}</p>
+        </div>
+        <div class="info-block">
+            <h3>Order number</h3>
+            <p>{{ order_number }}</p>
+        </div>
+    </div>
+
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th class="product-name">Product</th>
+                <th>Unit Price</th>
+                <th>Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in line_items %}
+            <tr>
+                <td class="product-name">{{ item.product_name }}</td>
+                <td>{{ item.unit_price }}</td>
+                <td>{{ item.subtotal }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" style="text-align: center; font-style: italic;">No items</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals-section">
+        <table class="totals-table">
+            <tr>
+                <td class="label">Subtotal</td>
+                <td class="value">{{ subtotal }}</td>
+            </tr>
+            <tr class="total-row">
+                <td class="label">Total</td>
+                <td class="value">{{ total }}</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

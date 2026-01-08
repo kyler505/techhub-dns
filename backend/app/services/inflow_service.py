@@ -447,7 +447,7 @@ class InflowService:
         url = f"{self.base_url}/{self.company_id}/sales-orders"
 
         params = {
-            "include": "pickLines.product,shipLines,packLines.product,lines",
+            "include": "pickLines.product,shipLines,packLines.product,lines.product,lines",
             "filter[isActive]": str(is_active).lower(),
             "count": str(count),
             "skip": str(skip),

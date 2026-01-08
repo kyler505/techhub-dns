@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     # Auth (structure only)
     secret_key: str = "change-me-in-production"
 
+    # SMTP Email Configuration
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    email_from_address: str = "techhub@tamu.edu"
+    email_from_name: str = "TechHub Technology Services"
+
     class Config:
         env_file = ".env"
         case_sensitive = False
