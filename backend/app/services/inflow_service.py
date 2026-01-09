@@ -62,6 +62,74 @@ class InflowService:
 
         return True
 
+    def get_pick_status(self, order: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get detailed pick status for an order.
+
+        Returns:
+            {
+                "is_fully_picked": bool,
+                "total_ordered": int,
+                "total_picked": int,
+                "missing_items": [{"product_id": str, "product_name": str, "ordered": int, "picked": int}]
+            }
+        """
+        lines = order.get("lines", [])
+        pick_lines = order.get("pickLines", [])
+
+        # Build map of required quantities and product names by product ID
+        required = {}
+        product_names = {}
+        for line in lines:
+            pid = line.get("productId")
+            qty = 0
+            try:
+                qty = float(line.get("quantity", {}).get("standardQuantity", 0) or 0)
+            except (ValueError, TypeError):
+                pass
+            if pid and qty > 0:
+                required[pid] = required.get(pid, 0) + qty
+                # Try to get product name from line description or product data
+                if pid not in product_names:
+                    product_names[pid] = line.get("description") or line.get("product", {}).get("name") or pid
+
+        # Build map of picked quantities
+        picked = {}
+        for line in pick_lines:
+            pid = line.get("productId")
+            qty = 0
+            try:
+                qty = float(line.get("quantity", {}).get("standardQuantity", 0) or 0)
+            except (ValueError, TypeError):
+                pass
+            if pid and qty > 0:
+                picked[pid] = picked.get(pid, 0) + qty
+                # Also capture product name from pick lines if available
+                if pid not in product_names:
+                    product_names[pid] = line.get("description") or line.get("product", {}).get("name") or pid
+
+        # Calculate totals and missing items
+        total_ordered = sum(required.values())
+        total_picked = sum(min(picked.get(pid, 0), req_qty) for pid, req_qty in required.items())
+
+        missing_items = []
+        for pid, req_qty in required.items():
+            picked_qty = picked.get(pid, 0)
+            if picked_qty < (req_qty - 0.0001):
+                missing_items.append({
+                    "product_id": pid,
+                    "product_name": product_names.get(pid, pid),
+                    "ordered": int(req_qty),
+                    "picked": int(picked_qty)
+                })
+
+        return {
+            "is_fully_picked": len(missing_items) == 0,
+            "total_ordered": int(total_ordered),
+            "total_picked": int(total_picked),
+            "missing_items": missing_items
+        }
+
     def _get_api_key(self) -> str:
         """Get API key from Azure Key Vault or environment variable"""
         if settings.inflow_api_key:
@@ -195,7 +263,7 @@ class InflowService:
         Fulfill a sales order by ensuring pickLines, packLines, and shipLines are populated.
         Based on inFlow docs: inventoryStatus becomes fulfilled when all products are in pickLines
         and, for shippable orders, packLines/shipLines are present.
-        
+
         Args:
             sales_order_id: The Inflow sales order ID
             db: Database session for audit logging
@@ -238,7 +306,7 @@ class InflowService:
             pack_lines = []
             # If only_picked_items is True, use pickLines instead of lines (for partial order fulfillment)
             source_lines = order.get("pickLines", []) if only_picked_items else order.get("lines", [])
-            
+
             for line in source_lines:
                 if not positive_quantity(line):
                     continue
@@ -302,7 +370,7 @@ class InflowService:
                 description = "Order fulfilled in inFlow system"
                 if only_picked_items:
                     description = "Order fulfilled in inFlow system (only picked items, partial fulfillment)"
-                
+
                 audit_service.log_action(
                     entity_type="inflow_order",
                     entity_id=sales_order_id,

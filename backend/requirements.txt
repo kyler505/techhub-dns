@@ -17,3 +17,4 @@ reportlab==4.0.7
 pypdf==3.17.4
 pillow==10.1.0
 python-barcode==0.15.1
+msgraph-sdk==1.2.0

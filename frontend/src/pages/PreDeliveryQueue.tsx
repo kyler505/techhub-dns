@@ -7,6 +7,7 @@ import { Button } from "../components/ui/button";
 import { formatDeliveryLocation } from "../utils/location";
 import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { AlertTriangle } from "lucide-react";
 
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 
@@ -27,6 +28,10 @@ export default function PreDeliveryQueue() {
     const [issueDialogOpen, setIssueDialogOpen] = useState(false);
     const [issueReason, setIssueReason] = useState("");
     const [selectedOrderIdForIssue, setSelectedOrderIdForIssue] = useState<string | null>(null);
+
+    // Partial pick confirmation dialog
+    const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
+    const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
 
     const navigate = useNavigate();
 
@@ -63,6 +68,24 @@ export default function PreDeliveryQueue() {
             setInfoDialogOpen(true);
             return;
         }
+
+        // Check for partial pick orders
+        const selectedOrdersList = orders.filter(o => selectedOrders.has(o.id));
+        const partialPicks = selectedOrdersList.filter(
+            o => o.pick_status && !o.pick_status.is_fully_picked
+        );
+
+        if (partialPicks.length > 0) {
+            setPartialPickOrders(partialPicks);
+            setPartialPickDialogOpen(true);
+            return;
+        }
+
+        setIsCreateDeliveryOpen(true);
+    };
+
+    const handlePartialPickConfirm = () => {
+        setPartialPickDialogOpen(false);
         setIsCreateDeliveryOpen(true);
     };
 
@@ -133,12 +156,7 @@ export default function PreDeliveryQueue() {
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-semibold">Pre-Delivery Queue</h2>
-                    <p className="text-sm text-muted-foreground">
-                        {orders.length} order{orders.length !== 1 ? 's' : ''} ready for delivery
-                    </p>
-                </div>
+                <h2 className="text-lg font-semibold">Pre-Delivery Queue</h2>
                 <Button
                     onClick={handleBulkStartDelivery}
                     disabled={selectedOrders.size === 0}
@@ -147,67 +165,84 @@ export default function PreDeliveryQueue() {
                     Start Delivery ({selectedOrders.size} selected)
                 </Button>
             </div>
-            <div className="rounded-md border">
-                <table className="w-full">
-                    <thead>
-                        <tr className="border-b">
-                            <th className="h-12 px-4 text-left align-middle">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedOrders.size === orders.length && orders.length > 0}
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            setSelectedOrders(new Set(orders.map((o) => o.id)));
-                                        } else {
-                                            setSelectedOrders(new Set());
-                                        }
-                                    }}
-                                />
-
-                            </th>
-                            <th className="h-12 px-4 text-left align-middle font-medium">Order ID</th>
-                            <th className="h-12 px-4 text-left align-middle font-medium">Recipient</th>
-                            <th className="h-12 px-4 text-left align-middle font-medium">Location</th>
-                            <th className="h-12 px-4 text-left align-middle font-medium">Deliverer</th>
-                            <th className="h-12 px-4 text-left align-middle font-medium">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {orders.map((order) => (
-                            <tr key={order.id} className="border-b hover:bg-muted/50">
-                                <td className="p-4 align-middle">
+            {orders.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                    No orders in pre-delivery queue
+                </div>
+            ) : (
+                <div className="rounded-md border">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b">
+                                <th className="h-12 px-4 text-left align-middle">
                                     <input
                                         type="checkbox"
-                                        checked={selectedOrders.has(order.id)}
-                                        onChange={() => handleSelectOrder(order.id)}
+                                        checked={selectedOrders.size === orders.length && orders.length > 0}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setSelectedOrders(new Set(orders.map((o) => o.id)));
+                                            } else {
+                                                setSelectedOrders(new Set());
+                                            }
+                                        }}
                                     />
-                                </td>
-                                <td className="p-4 align-middle">
-                                    <Button
-                                        variant="link"
-                                        onClick={() => handleViewDetail(order.id)}
-                                        className="p-0 h-auto font-normal"
-                                    >
-                                        {order.inflow_order_id}
-                                    </Button>
-                                </td>
-                                <td className="p-4 align-middle">{order.recipient_name || "N/A"}</td>
-                                <td className="p-4 align-middle">{formatDeliveryLocation(order)}</td>
-                                <td className="p-4 align-middle">{order.assigned_deliverer || "Unassigned"}</td>
-                                <td className="p-4 align-middle">
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={() => openIssueDialog(order.id)}
-                                    >
-                                        Flag Issue
-                                    </Button>
-                                </td>
+
+                                </th>
+                                <th className="h-12 px-4 text-left align-middle font-medium">Order ID</th>
+                                <th className="h-12 px-4 text-left align-middle font-medium">Recipient</th>
+                                <th className="h-12 px-4 text-left align-middle font-medium">Location</th>
+                                <th className="h-12 px-4 text-left align-middle font-medium">Deliverer</th>
+                                <th className="h-12 px-4 text-left align-middle font-medium">Actions</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {orders.map((order) => (
+                                <tr key={order.id} className="border-b hover:bg-muted/50">
+                                    <td className="p-4 align-middle">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedOrders.has(order.id)}
+                                            onChange={() => handleSelectOrder(order.id)}
+                                        />
+                                    </td>
+                                    <td className="p-4 align-middle">
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="link"
+                                                onClick={() => handleViewDetail(order.id)}
+                                                className="p-0 h-auto font-normal"
+                                            >
+                                                {order.inflow_order_id}
+                                            </Button>
+                                            {order.pick_status && !order.pick_status.is_fully_picked && (
+                                                <span
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
+                                                    title={`Partial pick: ${order.pick_status.total_picked}/${order.pick_status.total_ordered} items picked`}
+                                                >
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    Partial
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="p-4 align-middle">{order.recipient_name || "N/A"}</td>
+                                    <td className="p-4 align-middle">{formatDeliveryLocation(order)}</td>
+                                    <td className="p-4 align-middle">{order.assigned_deliverer || "Unassigned"}</td>
+                                    <td className="p-4 align-middle">
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => openIssueDialog(order.id)}
+                                        >
+                                            Flag Issue
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {/* StatusTransition will be handled by parent DeliveryDashboard */}
 
@@ -255,6 +290,40 @@ export default function PreDeliveryQueue() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIssueDialogOpen(false)}>Cancel</Button>
                         <Button onClick={handleConfirmIssue}>Submit</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Partial Pick Confirmation Dialog */}
+            <Dialog open={partialPickDialogOpen} onOpenChange={setPartialPickDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            Partial Pick Warning
+                        </DialogTitle>
+                        <DialogDescription>
+                            {partialPickOrders.length} order{partialPickOrders.length > 1 ? 's are' : ' is'} only partially picked.
+                            Only the picked items will be delivered. Remainder orders will be created for unpicked items.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-48 overflow-y-auto py-2">
+                        <ul className="space-y-1 text-sm">
+                            {partialPickOrders.map(order => (
+                                <li key={order.id} className="flex justify-between items-center px-2 py-1 bg-muted rounded">
+                                    <span className="font-medium">{order.inflow_order_id}</span>
+                                    <span className="text-muted-foreground">
+                                        {order.pick_status?.total_picked}/{order.pick_status?.total_ordered} items
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPartialPickDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handlePartialPickConfirm} className="bg-amber-500 hover:bg-amber-600">
+                            Continue Anyway
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

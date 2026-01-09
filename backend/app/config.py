@@ -32,24 +32,26 @@ class Settings(BaseSettings):
     storage_root: str = "storage"
     picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
 
+    # SharePoint Storage
+    sharepoint_enabled: bool = False  # Safety: disabled by default
+    sharepoint_site_url: Optional[str] = None  # e.g., https://tamucs.sharepoint.com/teams/Team-TechHub
+    sharepoint_folder_path: str = "General/delivery-storage"  # Folder within Documents library
+
+
     # CORS
     frontend_url: str = "http://localhost:5173"
 
     # Auth (structure only)
     secret_key: str = "change-me-in-production"
 
-    # SMTP Email Configuration
-    smtp_host: Optional[str] = None
-    smtp_port: int = 587
-    smtp_user: Optional[str] = None
-    smtp_password: Optional[str] = None
-    smtp_use_tls: bool = True
-    email_from_address: str = "techhub@tamu.edu"
+    # Power Automate Email Configuration
+    power_automate_email_enabled: bool = False  # Safety: disabled by default
+    power_automate_email_flow_url: Optional[str] = None  # HTTP trigger URL for email flow
     email_from_name: str = "TechHub Technology Services"
 
-    # Power Automate Teams Notifications
+    # Power Automate Teams Notifications (direct messaging - separate from email)
     teams_recipient_notifications_enabled: bool = False  # Safety: disabled by default
-    power_automate_flow_url: Optional[str] = None  # HTTP trigger URL from Power Automate
+    power_automate_teams_flow_url: Optional[str] = None  # HTTP trigger URL for Teams flow
 
     class Config:
         env_file = ".env"

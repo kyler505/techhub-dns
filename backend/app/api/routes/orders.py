@@ -21,7 +21,8 @@ from app.schemas.order import (
     QASubmission,
     SignatureData,
     ShippingWorkflowUpdateRequest,
-    ShippingWorkflowResponse
+    ShippingWorkflowResponse,
+    PickStatus
 )
 from app.models.order import OrderStatus
 from app.schemas.audit import AuditLogResponse
@@ -88,8 +89,22 @@ def get_orders():
 
     with get_db() as db:
         service = OrderService(db)
+        inflow_service = InflowService()
         orders, total = service.get_orders(status=status_enum, search=search, skip=skip, limit=limit)
-        return jsonify([OrderResponse.model_validate(o).model_dump() for o in orders])
+
+        # Enrich orders with pick_status for Pre-Delivery queue visibility
+        result = []
+        for o in orders:
+            order_dict = OrderResponse.model_validate(o).model_dump()
+
+            # Compute pick_status from inflow_data if available
+            if o.inflow_data:
+                pick_status_data = inflow_service.get_pick_status(o.inflow_data)
+                order_dict['pick_status'] = pick_status_data
+
+            result.append(order_dict)
+
+        return jsonify(result)
 
 
 @bp.route("/<uuid:order_id>", methods=["GET"])
@@ -520,7 +535,7 @@ def send_order_details_email(order_id):
                 "recipient": recipient_email
             })
         else:
-            abort(500, description="Failed to send email. Check SMTP configuration.")
+            abort(500, description="Failed to send email. Check Power Automate configuration.")
 
 
 # SocketIO event handlers will be registered in main.py
