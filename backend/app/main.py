@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from app.config import settings
-from app.api.routes import orders, inflow, teams, audit, delivery_runs
+from app.api.routes import orders, inflow, teams, audit, delivery_runs, sharepoint
 from app.api.middleware import register_error_handlers
 from app.scheduler import start_scheduler
 import logging
@@ -61,6 +61,7 @@ app.register_blueprint(inflow.bp, url_prefix="/api/inflow")
 app.register_blueprint(teams.bp, url_prefix="/api/teams")
 app.register_blueprint(audit.bp, url_prefix="/api/audit")
 app.register_blueprint(delivery_runs.bp, url_prefix="/api/delivery-runs")
+app.register_blueprint(sharepoint.sharepoint_bp)
 
 
 @app.route("/")

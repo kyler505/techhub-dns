@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { teamsApi } from "../api/teams";
 import { inflowApi, WebhookResponse } from "../api/inflow";
+import { sharepointApi, SharePointStatus } from "../api/sharepoint";
 
 export default function Admin() {
     const [webhookUrl, setWebhookUrl] = useState("");
@@ -16,10 +17,16 @@ export default function Admin() {
     const [inflowWebhookEvents, setInflowWebhookEvents] = useState<string[]>([]);
     const [registeringWebhook, setRegisteringWebhook] = useState(false);
 
+    // SharePoint state
+    const [sharepointStatus, setSharepointStatus] = useState<SharePointStatus | null>(null);
+    const [authenticatingSharepoint, setAuthenticatingSharepoint] = useState(false);
+    const [testingSharepoint, setTestingSharepoint] = useState(false);
+
     useEffect(() => {
         loadConfig();
         loadInflowWebhooks();
         loadInflowDefaults();
+        loadSharepointStatus();
     }, []);
 
     const loadConfig = async () => {
@@ -60,6 +67,52 @@ export default function Admin() {
             }
         } catch (error) {
             console.error("Failed to load Inflow webhook defaults:", error);
+        }
+    };
+
+    const loadSharepointStatus = async () => {
+        try {
+            const status = await sharepointApi.getStatus();
+            setSharepointStatus(status);
+        } catch (error) {
+            console.error("Failed to load SharePoint status:", error);
+        }
+    };
+
+    const handleSharepointAuth = async () => {
+        setAuthenticatingSharepoint(true);
+        setMessage(null);
+        try {
+            const result = await sharepointApi.authenticate();
+            if (result.success) {
+                setMessage({ type: "success", text: result.message || "SharePoint authenticated successfully" });
+                await loadSharepointStatus();
+            } else {
+                setMessage({ type: "error", text: result.error || "Authentication failed" });
+            }
+        } catch (error: any) {
+            console.error("Failed to authenticate SharePoint:", error);
+            setMessage({ type: "error", text: error.response?.data?.error || "Authentication failed" });
+        } finally {
+            setAuthenticatingSharepoint(false);
+        }
+    };
+
+    const handleSharepointTest = async () => {
+        setTestingSharepoint(true);
+        setMessage(null);
+        try {
+            const result = await sharepointApi.testUpload();
+            if (result.success) {
+                setMessage({ type: "success", text: `Test file uploaded: ${result.filename}` });
+            } else {
+                setMessage({ type: "error", text: result.error || "Test upload failed" });
+            }
+        } catch (error: any) {
+            console.error("Failed to test SharePoint:", error);
+            setMessage({ type: "error", text: error.response?.data?.error || "Test upload failed" });
+        } finally {
+            setTestingSharepoint(false);
         }
     };
 
@@ -155,6 +208,78 @@ export default function Admin() {
     return (
         <div className="p-4 max-w-4xl space-y-6">
             <h1 className="text-2xl font-bold mb-4">Admin</h1>
+
+            {/* SharePoint Configuration */}
+            <div className="bg-white rounded-lg shadow p-6 space-y-4">
+                <h2 className="text-xl font-semibold mb-4">SharePoint Storage</h2>
+
+                {sharepointStatus && (
+                    <div className={`border rounded p-4 ${sharepointStatus.enabled
+                            ? sharepointStatus.authenticated
+                                ? "bg-green-50 border-green-200"
+                                : "bg-yellow-50 border-yellow-200"
+                            : "bg-gray-50 border-gray-200"
+                        }`}>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className={`font-medium ${sharepointStatus.enabled
+                                        ? sharepointStatus.authenticated
+                                            ? "text-green-800"
+                                            : "text-yellow-800"
+                                        : "text-gray-800"
+                                    }`}>
+                                    {sharepointStatus.enabled
+                                        ? sharepointStatus.authenticated
+                                            ? "✓ Connected"
+                                            : "⚠ Not Authenticated"
+                                        : "Disabled"}
+                                </p>
+                                {sharepointStatus.site_url && (
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        Site: {sharepointStatus.site_url}
+                                    </p>
+                                )}
+                                {sharepointStatus.folder_path && (
+                                    <p className="text-sm text-gray-600">
+                                        Folder: Documents/{sharepointStatus.folder_path}
+                                    </p>
+                                )}
+                                {sharepointStatus.error && (
+                                    <p className="text-sm text-red-600 mt-1">
+                                        Error: {sharepointStatus.error}
+                                    </p>
+                                )}
+                            </div>
+                            {sharepointStatus.enabled && (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleSharepointAuth}
+                                        disabled={authenticatingSharepoint}
+                                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                                    >
+                                        {authenticatingSharepoint ? "Authenticating..." : "Authenticate"}
+                                    </button>
+                                    {sharepointStatus.authenticated && (
+                                        <button
+                                            onClick={handleSharepointTest}
+                                            disabled={testingSharepoint}
+                                            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-sm"
+                                        >
+                                            {testingSharepoint ? "Testing..." : "Test Upload"}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {!sharepointStatus?.enabled && (
+                    <p className="text-sm text-gray-500">
+                        Set SHAREPOINT_ENABLED=true in .env to enable SharePoint storage.
+                    </p>
+                )}
+            </div>
 
             {/* Teams Configuration */}
             <div className="bg-white rounded-lg shadow p-6 space-y-4">

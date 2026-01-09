@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     sharepoint_enabled: bool = False  # Safety: disabled by default
     sharepoint_site_url: Optional[str] = None  # e.g., https://tamucs.sharepoint.com/teams/Team-TechHub
     sharepoint_folder_path: str = "General/delivery-storage"  # Folder within Documents library
+    sharepoint_tenant_id: Optional[str] = None  # Azure AD tenant ID (e.g., from TAMU)
+    sharepoint_client_id: Optional[str] = None  # Azure AD app client ID (register in Azure portal)
 
 
     # CORS
