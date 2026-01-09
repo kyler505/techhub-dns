@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import PreDeliveryQueue from "./PreDeliveryQueue";
@@ -85,24 +85,14 @@ export default function DeliveryDashboard() {
     }, []);
     return (
         <div className="container mx-auto py-6 space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Delivery Dashboard</h1>
-                    <p className="text-muted-foreground">
-                        Manage and track all delivery operations
-                    </p>
-                </div>
-            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Delivery Dashboard</h1>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Live Delivery Overview */}
                 <div className="lg:col-span-1">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Live Delivery Status</CardTitle>
-                            <CardDescription>
-                                Active delivery runs and real-time tracking
-                            </CardDescription>
+                        <CardHeader className="pb-2">
+                            <CardTitle>Live Status</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <LiveDeliveryDashboard />
@@ -113,11 +103,8 @@ export default function DeliveryDashboard() {
                 {/* Main Delivery Operations */}
                 <div className="lg:col-span-2">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Delivery Operations</CardTitle>
-                            <CardDescription>
-                                Manage orders through the delivery pipeline
-                            </CardDescription>
+                        <CardHeader className="pb-2">
+                            <CardTitle>Operations</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <Tabs defaultValue="pre-delivery" className="w-full">
@@ -157,7 +144,7 @@ export default function DeliveryDashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{statsLoading ? "..." : stats.readyForDelivery}</div>
-                        <p className="text-xs text-muted-foreground">Orders in pre-delivery</p>
+
                     </CardContent>
                 </Card>
 
@@ -167,7 +154,7 @@ export default function DeliveryDashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{statsLoading ? "..." : stats.activeDeliveries}</div>
-                        <p className="text-xs text-muted-foreground">Orders in transit</p>
+
                     </CardContent>
                 </Card>
 
@@ -177,7 +164,7 @@ export default function DeliveryDashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{statsLoading ? "..." : stats.shippingQueue}</div>
-                        <p className="text-xs text-muted-foreground">Orders ready to ship</p>
+
                     </CardContent>
                 </Card>
 
@@ -187,7 +174,7 @@ export default function DeliveryDashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{statsLoading ? "..." : stats.completedToday}</div>
-                        <p className="text-xs text-muted-foreground">Deliveries completed</p>
+
                     </CardContent>
                 </Card>
             </div>

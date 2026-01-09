@@ -121,9 +121,21 @@ class OrderService:
         # Generate the actual picklist PDF from inFlow data
         self._generate_picklist_pdf(order.inflow_data, str(destination))
 
+        # Upload to SharePoint if enabled
+        picklist_path = str(destination)
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+            if sp_service.is_enabled:
+                sp_url = sp_service.upload_pdf(str(destination), "picklists", filename)
+                picklist_path = sp_url
+                logger.info(f"Picklist uploaded to SharePoint: {sp_url}")
+        except Exception as e:
+            logger.warning(f"SharePoint upload failed for picklist, using local path: {e}")
+
         order.picklist_generated_at = datetime.utcnow()
         order.picklist_generated_by = generated_by
-        order.picklist_path = str(destination)
+        order.picklist_path = picklist_path
         order.updated_at = datetime.utcnow()
 
         self.db.commit()
@@ -201,7 +213,8 @@ class OrderService:
 
         qa_dir = self._storage_path("qa")
         qa_dir.mkdir(parents=True, exist_ok=True)
-        qa_file = qa_dir / f"{order.inflow_order_id or order.id}.json"
+        qa_filename = f"{order.inflow_order_id or order.id}.json"
+        qa_file = qa_dir / qa_filename
         qa_payload = {
             "order_id": str(order.id),
             "inflow_order_id": order.inflow_order_id,
@@ -214,10 +227,22 @@ class OrderService:
             encoding="utf-8"
         )
 
+        # Upload to SharePoint if enabled
+        qa_path = str(qa_file)
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+            if sp_service.is_enabled:
+                sp_url = sp_service.upload_json(qa_payload, "qa", qa_filename)
+                qa_path = sp_url
+                logger.info(f"QA data uploaded to SharePoint: {sp_url}")
+        except Exception as e:
+            logger.warning(f"SharePoint upload failed for QA data, using local path: {e}")
+
         order.qa_completed_at = datetime.utcnow()
         order.qa_completed_by = technician
         order.qa_data = qa_data
-        order.qa_path = str(qa_file)
+        order.qa_path = qa_path
         order.qa_method = qa_data.get("method")  # "Delivery" or "Shipping"
         order.updated_at = datetime.utcnow()
 
@@ -933,14 +958,26 @@ class OrderService:
             pdf_path.write_bytes(pdf_bytes)
             logger.info(f"Order Details PDF saved to {pdf_path}")
 
+            # Upload to SharePoint if enabled
+            order_details_path = str(pdf_path)
+            try:
+                from app.services.sharepoint_service import get_sharepoint_service
+                sp_service = get_sharepoint_service()
+                if sp_service.is_enabled:
+                    sp_url = sp_service.upload_file(pdf_bytes, "order-details", pdf_filename)
+                    order_details_path = sp_url
+                    logger.info(f"Order Details PDF uploaded to SharePoint: {sp_url}")
+            except Exception as e:
+                logger.warning(f"SharePoint upload failed for Order Details, using local path: {e}")
+
             # Update order with Order Details path
-            order.order_details_path = str(pdf_path)
+            order.order_details_path = order_details_path
             order.order_details_generated_at = datetime.utcnow()
             self.db.commit()
 
             # Check if email sending is configured
-            if not settings.smtp_host:
-                logger.debug(f"SMTP not configured, skipping Order Details email for order {order_number}")
+            if not email_service.is_configured():
+                logger.debug(f"Power Automate email not configured, skipping Order Details email for order {order_number}")
                 return
 
             if not recipient_email:
