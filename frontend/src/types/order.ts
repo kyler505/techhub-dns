@@ -28,6 +28,20 @@ export const OrderStatusDisplayNames: Record<OrderStatus, string> = {
   [OrderStatus.ISSUE]: "Issue",
 };
 
+export interface PickStatusItem {
+  product_id: string;
+  product_name: string;
+  ordered: number;
+  picked: number;
+}
+
+export interface PickStatus {
+  is_fully_picked: boolean;
+  total_ordered: number;
+  total_picked: number;
+  missing_items: PickStatusItem[];
+}
+
 export interface Order {
   id: string;
   inflow_order_id: string;
@@ -62,6 +76,7 @@ export interface Order {
   carrier_name?: string;
   tracking_number?: string;
   inflow_data?: Record<string, any>;
+  pick_status?: PickStatus;
   created_at: string;
   updated_at: string;
 }

@@ -99,7 +99,7 @@ def deactivate_local_by_id(webhook_id: str) -> int:
     try:
         updated = db.query(InflowWebhook).filter(
             InflowWebhook.webhook_id == webhook_id
-        ).update({"status": WebhookStatus.INACTIVE})
+        ).update({"status": WebhookStatus.inactive})
         db.commit()
         return updated
     except Exception:
@@ -117,7 +117,7 @@ def deactivate_local_by_url(url: str) -> int:
         updated = 0
         for webhook in webhooks:
             if normalize_url(webhook.url) == normalized:
-                webhook.status = WebhookStatus.INACTIVE
+                webhook.status = WebhookStatus.inactive
                 updated += 1
         db.commit()
         return updated
@@ -139,8 +139,8 @@ def upsert_local_webhook(
     try:
         if not keep_existing:
             db.query(InflowWebhook).filter(
-                InflowWebhook.status == WebhookStatus.ACTIVE
-            ).update({"status": WebhookStatus.INACTIVE})
+                InflowWebhook.status == WebhookStatus.active
+            ).update({"status": WebhookStatus.inactive})
 
         webhook = db.query(InflowWebhook).filter(
             InflowWebhook.webhook_id == webhook_id
@@ -149,7 +149,7 @@ def upsert_local_webhook(
         if webhook:
             webhook.url = url
             webhook.events = events
-            webhook.status = WebhookStatus.ACTIVE
+            webhook.status = WebhookStatus.active
             if secret:
                 webhook.secret = secret
         else:
@@ -157,7 +157,7 @@ def upsert_local_webhook(
                 webhook_id=webhook_id,
                 url=url,
                 events=events,
-                status=WebhookStatus.ACTIVE,
+                status=WebhookStatus.active,
                 secret=secret
             )
             db.add(webhook)

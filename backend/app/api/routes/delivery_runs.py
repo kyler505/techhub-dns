@@ -160,11 +160,17 @@ def get_run(run_id):
 
 @bp.route("/<run_id>/finish", methods=["PUT"])
 def finish_run(run_id):
-    """Finish a delivery run"""
+    """Finish a delivery run, optionally creating remainder orders for partial picks"""
+    data = request.get_json() or {}
+    create_remainders = data.get("create_remainders", True)  # Default to True if not specified
+
     with get_db() as db:
         service = DeliveryRunService(db)
         try:
-            run = service.finish_run(UUID(run_id))
+            run = service.finish_run(
+                UUID(run_id),
+                create_remainders=create_remainders
+            )
 
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()

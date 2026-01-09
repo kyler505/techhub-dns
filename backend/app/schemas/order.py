@@ -20,6 +20,22 @@ class OrderCreate(OrderBase):
     inflow_data: Optional[Dict[str, Any]] = None
 
 
+class PickStatusItem(BaseModel):
+    """Individual item that was not fully picked"""
+    product_id: str
+    product_name: str
+    ordered: int
+    picked: int
+
+
+class PickStatus(BaseModel):
+    """Pick status for an order - indicates if order is fully picked"""
+    is_fully_picked: bool
+    total_ordered: int
+    total_picked: int
+    missing_items: List[PickStatusItem] = []
+
+
 class OrderUpdate(BaseModel):
     recipient_name: Optional[str] = None
     recipient_contact: Optional[str] = None
@@ -78,6 +94,8 @@ class OrderResponse(OrderBase):
     shipped_to_carrier_by: Optional[str] = None
     carrier_name: Optional[str] = None
     tracking_number: Optional[str] = None
+    pick_status: Optional[PickStatus] = None
+    delivery_run_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 

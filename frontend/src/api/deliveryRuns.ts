@@ -39,8 +39,11 @@ export const deliveryRunsApi = {
     return response.data;
   },
 
-  finishRun: async (runId: string): Promise<DeliveryRunResponse> => {
-    const response = await apiClient.put<DeliveryRunResponse>(`/delivery-runs/${runId}/finish`);
+  finishRun: async (runId: string, createRemainders: boolean = true): Promise<DeliveryRunResponse> => {
+    const response = await apiClient.put<DeliveryRunResponse>(
+      `/delivery-runs/${runId}/finish`,
+      { create_remainders: createRemainders }
+    );
     return response.data;
   },
 

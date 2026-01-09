@@ -1,14 +1,15 @@
 """
-Email Service for sending Order Details PDFs via SMTP.
+Email Service using Power Automate HTTP trigger.
+
+This service sends emails via a Power Automate flow that handles
+the actual email sending through Outlook/Exchange.
 """
 
-import smtplib
+import base64
 import logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-from typing import Optional, List, Tuple
-from pathlib import Path
+from typing import Optional
+
+import httpx
 
 from app.config import settings
 
@@ -16,97 +17,87 @@ logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Service for sending emails via SMTP."""
+    """Service for sending emails via Power Automate flow."""
 
     def __init__(self):
-        self.host = settings.smtp_host
-        self.port = settings.smtp_port
-        self.user = settings.smtp_user
-        self.password = settings.smtp_password
-        self.from_address = settings.email_from_address
+        self.enabled = settings.power_automate_email_enabled
+        self.flow_url = settings.power_automate_email_flow_url
         self.from_name = settings.email_from_name
-        self.use_tls = settings.smtp_use_tls
 
-    def _is_configured(self) -> bool:
-        """Check if SMTP is properly configured."""
-        return bool(self.host and self.port)
+    def is_configured(self) -> bool:
+        """Check if email sending is properly configured."""
+        return bool(self.enabled and self.flow_url)
 
     def send_email(
         self,
         to_address: str,
         subject: str,
-        body_text: str,
-        body_html: Optional[str] = None,
-        attachments: Optional[List[Tuple[str, bytes, str]]] = None
+        body_html: str,
+        body_text: Optional[str] = None,
+        attachment_name: Optional[str] = None,
+        attachment_content: Optional[bytes] = None,
+        attachment_type: str = "application/pdf"
     ) -> bool:
         """
-        Send an email with optional attachments.
+        Send an email via Power Automate flow.
 
         Args:
             to_address: Recipient email address
             subject: Email subject
-            body_text: Plain text body
-            body_html: Optional HTML body
-            attachments: Optional list of (filename, content, mime_type) tuples
+            body_html: HTML body content
+            body_text: Optional plain text body (fallback)
+            attachment_name: Optional attachment filename
+            attachment_content: Optional attachment content as bytes
+            attachment_type: MIME type of attachment
 
         Returns:
             True if email sent successfully, False otherwise
         """
-        if not self._is_configured():
-            logger.warning("SMTP not configured, skipping email send")
+        if not self.enabled:
+            logger.info("Power Automate email is disabled")
             return False
 
-        if not to_address:
-            logger.warning("No recipient email address provided")
+        if not self.flow_url:
+            logger.warning("Power Automate email flow URL not configured")
             return False
+
+        # Build payload for Power Automate
+        payload = {
+            "to": to_address,
+            "subject": subject,
+            "bodyHtml": body_html,
+            "bodyText": body_text or "",
+            "fromName": self.from_name,
+        }
+
+        # Add attachment if provided
+        if attachment_name and attachment_content:
+            payload["attachmentName"] = attachment_name
+            payload["attachmentContentBase64"] = base64.b64encode(attachment_content).decode("utf-8")
+            payload["attachmentType"] = attachment_type
 
         try:
-            # Create message
-            msg = MIMEMultipart('mixed')
-            msg['From'] = f"{self.from_name} <{self.from_address}>" if self.from_name else self.from_address
-            msg['To'] = to_address
-            msg['Subject'] = subject
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    self.flow_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"}
+                )
 
-            # Create alternative part for text/html
-            msg_alt = MIMEMultipart('alternative')
+                if response.status_code in (200, 202):
+                    logger.info(f"Email sent successfully to {to_address}")
+                    return True
+                else:
+                    logger.error(
+                        f"Power Automate email flow returned {response.status_code}: {response.text}"
+                    )
+                    return False
 
-            # Add plain text
-            msg_alt.attach(MIMEText(body_text, 'plain'))
-
-            # Add HTML if provided
-            if body_html:
-                msg_alt.attach(MIMEText(body_html, 'html'))
-
-            msg.attach(msg_alt)
-
-            # Add attachments
-            if attachments:
-                for filename, content, mime_type in attachments:
-                    part = MIMEApplication(content, Name=filename)
-                    part['Content-Disposition'] = f'attachment; filename="{filename}"'
-                    msg.attach(part)
-
-            # Connect and send
-            if self.use_tls:
-                server = smtplib.SMTP(self.host, self.port)
-                server.starttls()
-            else:
-                server = smtplib.SMTP(self.host, self.port)
-
-            if self.user and self.password:
-                server.login(self.user, self.password)
-
-            server.sendmail(self.from_address, [to_address], msg.as_string())
-            server.quit()
-
-            logger.info(f"Email sent successfully to {to_address}")
-            return True
-
-        except smtplib.SMTPException as e:
-            logger.error(f"SMTP error sending email to {to_address}: {e}")
+        except httpx.TimeoutException:
+            logger.error(f"Timeout sending email to {to_address}")
             return False
-        except Exception as e:
-            logger.error(f"Failed to send email to {to_address}: {e}")
+        except httpx.RequestError as e:
+            logger.error(f"Error sending email: {e}")
             return False
 
     def send_order_details_email(
@@ -117,86 +108,60 @@ class EmailService:
         pdf_content: bytes
     ) -> bool:
         """
-        Send Order Details PDF email to a recipient.
+        Send Order Details PDF email to recipient.
 
         Args:
             to_address: Recipient email address
-            order_number: Order number for subject line
-            customer_name: Customer name for greeting
-            pdf_content: PDF file content as bytes
+            order_number: The order number (e.g., TH4013)
+            customer_name: Customer's display name
+            pdf_content: Order Details PDF as bytes
 
         Returns:
-            True if email sent successfully
+            True if email sent successfully, False otherwise
         """
-        subject = f"Your Order Details - {order_number}"
-
-        body_text = f"""Dear {customer_name or 'Valued Customer'},
-
-Thank you for your order through TechHub!
-
-Please find attached the Order Details document for your order {order_number}.
-
-This document contains:
-- Your order information and PO number
-- Line item details with pricing
-- Order totals
-
-If you have any questions about your order, please contact TechHub at techhub@tamu.edu.
-
-Best regards,
-TechHub Technology Services
-Texas A&M University
-"""
+        subject = f"TechHub Order Details - {order_number}"
 
         body_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .header {{ color: #500000; }}
-        .footer {{ margin-top: 20px; font-size: 12px; color: #666; }}
-    </style>
-</head>
-<body>
-    <p>Dear {customer_name or 'Valued Customer'},</p>
+        <html>
+        <body style="font-family: Arial, sans-serif; color: #333;">
+            <h2 style="color: #500000;">Your TechHub Order Details</h2>
+            <p>Dear {customer_name},</p>
+            <p>Thank you for your order with TechHub Technology Services.</p>
+            <p>Please find attached your <strong>Order Details</strong> document for order <strong>{order_number}</strong>.</p>
+            <p><em>Important:</em> Do not edit preliminary asset information. Editing preliminary asset information may result in items on your order arriving without asset tags.</p>
+            <hr style="border: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 12px; color: #666;">
+                This is an automated message from TechHub Technology Services.<br>
+                WCDC - TechHub | 474 Agronomy Rd | College Station, TX 77843
+            </p>
+        </body>
+        </html>
+        """
 
-    <p>Thank you for your order through TechHub!</p>
+        body_text = f"""
+Your TechHub Order Details
 
-    <p>Please find attached the <strong>Order Details</strong> document for your order <strong>{order_number}</strong>.</p>
+Dear {customer_name},
 
-    <p>This document contains:</p>
-    <ul>
-        <li>Your order information and PO number</li>
-        <li>Line item details with pricing</li>
-        <li>Order totals</li>
-    </ul>
+Thank you for your order with TechHub Technology Services.
 
-    <p>If you have any questions about your order, please contact TechHub at
-    <a href="mailto:techhub@tamu.edu">techhub@tamu.edu</a>.</p>
+Please find attached your Order Details document for order {order_number}.
 
-    <p>Best regards,<br>
-    <strong>TechHub Technology Services</strong><br>
-    Texas A&M University</p>
+Important: Do not edit preliminary asset information. Editing preliminary asset information may result in items on your order arriving without asset tags.
 
-    <div class="footer">
-        <hr>
-        <p>This is an automated message from TechHub. Please do not reply directly to this email.</p>
-    </div>
-</body>
-</html>
-"""
-
-        attachments = [
-            (f"OrderDetails_{order_number}.pdf", pdf_content, "application/pdf")
-        ]
+---
+TechHub Technology Services
+WCDC - TechHub | 474 Agronomy Rd | College Station, TX 77843
+        """
 
         return self.send_email(
             to_address=to_address,
             subject=subject,
-            body_text=body_text,
             body_html=body_html,
-            attachments=attachments
+            body_text=body_text,
+            attachment_name=f"OrderDetails_{order_number}.pdf",
+            attachment_content=pdf_content,
+            attachment_type="application/pdf"
         )
 
 

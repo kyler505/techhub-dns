@@ -21,7 +21,7 @@ class TeamsRecipientService:
 
     def __init__(self):
         self.enabled = settings.teams_recipient_notifications_enabled
-        self.flow_url = settings.power_automate_flow_url
+        self.flow_url = settings.power_automate_teams_flow_url
 
     def is_configured(self) -> bool:
         """Check if the service is properly configured."""

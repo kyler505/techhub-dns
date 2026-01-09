@@ -198,7 +198,17 @@ class DeliveryRunService:
 
         return asyncio.run(_fulfill())
 
-    def finish_run(self, run_id: Union[UUID, str], user_id: Optional[str] = None) -> DeliveryRun:
+    def finish_run(self, run_id: Union[UUID, str], user_id: Optional[str] = None, create_remainders: bool = True) -> DeliveryRun:
+        """
+        Finish a delivery run: fulfill orders in InFlow and optionally create remainder orders.
+
+        Args:
+            run_id: ID of the delivery run
+            user_id: User completing the run
+            create_remainders: If True, create remainder orders for partial picks (user confirmed)
+        """
+        from app.services.order_splitting import OrderSplittingService
+
         run_id_str = str(run_id)
         run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
         if not run:
@@ -239,6 +249,16 @@ class DeliveryRunService:
                 }
             )
 
+        # Create remainder orders for partial picks (if user confirmed)
+        remainder_results = {"remainder_count": 0, "remainders_created": []}
+        if create_remainders:
+            splitting_service = OrderSplittingService(self.db)
+            remainder_results = splitting_service.process_partial_fulfillments(
+                orders=run.orders,
+                user_id=user_id,
+                create_remainders=True
+            )
+
         run.status = DeliveryRunStatus.COMPLETED.value
         run.end_time = datetime.utcnow()
         run.updated_at = datetime.utcnow()
@@ -251,7 +271,8 @@ class DeliveryRunService:
             audit_metadata={
                 "order_count": len(run.orders),
                 "completed_at": run.end_time.isoformat(),
-                "fulfilled_orders": inflow_successes
+                "fulfilled_orders": inflow_successes,
+                "remainders_created": remainder_results.get("remainder_count", 0)
             }
         )
 

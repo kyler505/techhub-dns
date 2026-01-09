@@ -106,11 +106,11 @@ def main():
     else:
         print(f"\nStep 4: Sending email to {args.email}...")
 
-        # Check SMTP configuration
-        from app.config import settings
-        if not settings.smtp_host:
-            print("  WARNING: SMTP_HOST not configured in .env")
-            print("  Email will not be sent. Configure SMTP settings to enable.")
+        # Check Power Automate configuration
+        if not email_service.is_configured():
+            print("  WARNING: Power Automate email not configured")
+            print("  Set POWER_AUTOMATE_EMAIL_ENABLED=true and")
+            print("  POWER_AUTOMATE_EMAIL_FLOW_URL in .env to enable.")
         else:
             customer_name = inflow_data.get("contactName", "Test User")
             order_number = args.order_number
@@ -125,7 +125,7 @@ def main():
             if success:
                 print(f"  ✓ Email sent successfully to {args.email}")
             else:
-                print(f"  ✗ Failed to send email. Check SMTP configuration.")
+                print(f"  ✗ Failed to send email. Check Power Automate configuration.")
 
     print(f"\n{'='*60}")
     print("Test complete!")

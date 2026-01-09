@@ -80,6 +80,10 @@ class Order(Base):
     carrier_name = Column(String(100), nullable=True)  # "FedEx", "UPS", etc.
     tracking_number = Column(String(255), nullable=True)
     inflow_data = Column(JSON, nullable=True)  # Full Inflow payload
+    # Remainder order tracking
+    parent_order_id = Column(String(36), nullable=True, index=True)  # If this is a remainder, points to parent
+    has_remainder = Column(String(1), nullable=True, default=None)  # 'Y' if this order has a remainder
+    remainder_order_id = Column(String(36), nullable=True)  # Points to the remainder order
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
