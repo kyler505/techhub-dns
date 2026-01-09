@@ -1,6 +1,6 @@
 """
 SharePoint Storage Service for file and QA data storage.
-Uses Microsoft Graph API with Interactive Browser authentication.
+Uses Microsoft Graph API with Interactive Browser authentication (same as Key Vault).
 """
 
 import io
@@ -36,10 +36,11 @@ class SharePointService:
         return settings.sharepoint_enabled and bool(settings.sharepoint_site_url)
 
     def _get_credential(self) -> InteractiveBrowserCredential:
-        """Get or create the interactive browser credential."""
+        """Get or create the interactive browser credential (same pattern as Key Vault)."""
         if self._credential is None:
             logger.info("Initializing SharePoint authentication (browser window will open)...")
-            self._credential = InteractiveBrowserCredential()
+            # Use the same pattern as inflow_service.py and legacy scripts
+            self._credential = InteractiveBrowserCredential(additionally_allowed_tenants=["*"])
         return self._credential
 
     def _get_access_token(self) -> str:
