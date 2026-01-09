@@ -50,7 +50,7 @@ export default function DeliveryRunDetailPage() {
         );
     }
 
-    const formatDateTime = (dateString: string | null) => {
+    const formatDateTime = (dateString: string | null | undefined) => {
         if (!dateString) return "Not started";
         return new Date(dateString).toLocaleString();
     };
@@ -253,7 +253,7 @@ export default function DeliveryRunDetailPage() {
                                         </Link>
 
                                         {order.status === OrderStatus.IN_DELIVERY && (
-                                            <Link to={`/document-signing?orderId=${order.id}`}>
+                                            <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
                                                 <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
                                                     Sign Document
                                                 </Button>
