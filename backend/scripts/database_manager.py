@@ -104,7 +104,8 @@ def get_order_by_id(order_id: UUID) -> Optional[Order]:
     """Get a single order by ID."""
     db = SessionLocal()
     try:
-        return db.query(Order).filter(Order.id == order_id).first()
+        order_id_str = str(order_id)
+        return db.query(Order).filter(Order.id == order_id_str).first()
     finally:
         db.close()
 
@@ -122,7 +123,8 @@ def delete_order(order_id: UUID, confirm: bool = True, cascade: bool = True) -> 
     """Delete an order and optionally its related data."""
     db = SessionLocal()
     try:
-        order = db.query(Order).filter(Order.id == order_id).first()
+        order_id_str = str(order_id)
+        order = db.query(Order).filter(Order.id == order_id_str).first()
 
         if not order:
             print(f"Order with ID {order_id} not found.")
@@ -142,8 +144,8 @@ def delete_order(order_id: UUID, confirm: bool = True, cascade: bool = True) -> 
 
         # Delete related data if cascade is enabled
         if cascade:
-            db.query(TeamsNotification).filter(TeamsNotification.order_id == order_id).delete()
-            db.query(AuditLog).filter(AuditLog.order_id == order_id).delete()
+            db.query(TeamsNotification).filter(TeamsNotification.order_id == order_id_str).delete()
+            db.query(AuditLog).filter(AuditLog.order_id == order_id_str).delete()
 
         # Delete the order
         db.delete(order)
@@ -303,7 +305,8 @@ def update_order_status(order_id: UUID, new_status: str, user_id: Optional[str] 
     """Update an order's status with validation."""
     db = SessionLocal()
     try:
-        order = db.query(Order).filter(Order.id == order_id).first()
+        order_id_str = str(order_id)
+        order = db.query(Order).filter(Order.id == order_id_str).first()
 
         if not order:
             print(f"Order with ID {order_id} not found.")

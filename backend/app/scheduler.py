@@ -62,7 +62,7 @@ def sync_inflow_orders():
 def _has_active_webhook(db: Session) -> bool:
     """Check if there's an active webhook registered"""
     webhook = db.query(InflowWebhook).filter(
-        InflowWebhook.status == WebhookStatus.ACTIVE
+        InflowWebhook.status == WebhookStatus.active
     ).first()
     return webhook is not None
 
@@ -70,7 +70,7 @@ def _has_active_webhook(db: Session) -> bool:
 def _check_webhook_health(db: Session):
     """Check webhook health and alert if no events received recently"""
     webhook = db.query(InflowWebhook).filter(
-        InflowWebhook.status == WebhookStatus.ACTIVE
+        InflowWebhook.status == WebhookStatus.active
     ).first()
 
     if webhook:

@@ -113,7 +113,7 @@ def inflow_webhook():
         with get_db() as db:
             secrets = [
                 w.secret for w in db.query(InflowWebhook).filter(
-                    InflowWebhook.status == WebhookStatus.ACTIVE
+                    InflowWebhook.status == WebhookStatus.active
                 ).all()
                 if w.secret
             ]
@@ -211,7 +211,7 @@ def inflow_webhook():
                 order = order_service.create_order_from_inflow(inflow_order)
 
                 webhook = db.query(InflowWebhook).filter(
-                    InflowWebhook.status == WebhookStatus.ACTIVE
+                    InflowWebhook.status == WebhookStatus.active
                 ).first()
 
                 if webhook:
@@ -232,13 +232,13 @@ def inflow_webhook():
                 logger.error(f"Error processing order {order_number}: {e}", exc_info=True)
 
                 webhook = db.query(InflowWebhook).filter(
-                    InflowWebhook.status == WebhookStatus.ACTIVE
+                    InflowWebhook.status == WebhookStatus.active
                 ).first()
 
                 if webhook:
                     webhook.failure_count += 1
                     if webhook.failure_count >= 10:
-                        webhook.status = WebhookStatus.FAILED
+                        webhook.status = WebhookStatus.failed
                     db.commit()
 
                 return jsonify({"status": "error", "message": str(e)})
@@ -278,8 +278,8 @@ def register_webhook():
 
         with get_db() as db:
             db.query(InflowWebhook).filter(
-                InflowWebhook.status == WebhookStatus.ACTIVE
-            ).update({"status": WebhookStatus.INACTIVE})
+                InflowWebhook.status == WebhookStatus.active
+            ).update({"status": WebhookStatus.inactive})
 
             webhook_id = (
                 result.get("webHookSubscriptionId")
@@ -290,7 +290,7 @@ def register_webhook():
                 webhook_id=webhook_id,
                 url=req.url,
                 events=req.events,
-                status=WebhookStatus.ACTIVE,
+                status=WebhookStatus.active,
                 secret=result.get("secret") or settings.inflow_webhook_secret
             )
 
@@ -381,7 +381,7 @@ def test_webhook():
     try:
         with get_db() as db:
             webhook = db.query(InflowWebhook).filter(
-                InflowWebhook.status == WebhookStatus.ACTIVE
+                InflowWebhook.status == WebhookStatus.active
             ).first()
 
             if not webhook:

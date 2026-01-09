@@ -23,7 +23,7 @@ function App() {
               <Link to="/" className="flex items-center gap-3">
                 <img src={boxTAM} alt="boxTAM logo" className="h-8 w-auto" />
                 <h1 className="text-xl font-bold text-white">
-                  TechHub Delivery Workflow
+                  TechHub
                 </h1>
               </Link>
 

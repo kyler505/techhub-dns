@@ -169,8 +169,9 @@ class TeamsService:
 
     async def retry_notification(self, notification_id: UUID) -> TeamsNotification:
         """Retry a failed notification"""
+        notification_id_str = str(notification_id)
         notification = self.db.query(TeamsNotification).filter(
-            TeamsNotification.id == notification_id
+            TeamsNotification.id == notification_id_str
         ).first()
 
         if not notification:
@@ -194,9 +195,10 @@ class TeamsService:
 
     def check_notification_sent(self, order_id: UUID) -> Optional[TeamsNotification]:
         """Check if notification was already sent for this order"""
+        order_id_str = str(order_id)
         return self.db.query(TeamsNotification).filter(
             and_(
-                TeamsNotification.order_id == order_id,
+                TeamsNotification.order_id == order_id_str,
                 TeamsNotification.status == NotificationStatus.SENT
             )
         ).order_by(TeamsNotification.sent_at.desc()).first()
@@ -282,8 +284,9 @@ class TeamsService:
 
     def retry_notification_sync(self, notification_id: UUID) -> TeamsNotification:
         """Retry a failed notification (sync version)"""
+        notification_id_str = str(notification_id)
         notification = self.db.query(TeamsNotification).filter(
-            TeamsNotification.id == notification_id
+            TeamsNotification.id == notification_id_str
         ).first()
 
         if not notification:
