@@ -16,9 +16,10 @@ def check_recent_notification(
     Prevents duplicate notifications within the time window.
     """
     cutoff_time = datetime.utcnow() - timedelta(seconds=time_window_seconds)
+    order_id_str = str(order_id)
 
     recent = db.query(TeamsNotification).filter(
-        TeamsNotification.order_id == order_id,
+        TeamsNotification.order_id == order_id_str,
         TeamsNotification.status == NotificationStatus.SENT,
         TeamsNotification.sent_at >= cutoff_time
     ).order_by(TeamsNotification.sent_at.desc()).first()

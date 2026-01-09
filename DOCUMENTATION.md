@@ -176,7 +176,7 @@ The core order model stores order information synced from Inflow:
 
 ```python
 class Order:
-    id: UUID                    # Primary key
+    id: String(36)              # Primary key (UUID stored as string)
     inflow_order_id: String     # Order number from Inflow (e.g., "TH3270")
     inflow_sales_order_id: String  # Inflow sales order UUID
     recipient_name: String      # Recipient name
@@ -188,17 +188,18 @@ class Order:
     issue_reason: Text          # Reason if status is Issue
     tagged_at: DateTime         # Asset tagging timestamp
     tagged_by: String           # Asset tagging technician
-    tag_data: JSONB             # Asset tag details
+    tag_data: JSON              # Asset tag details
     picklist_generated_at: DateTime
     picklist_generated_by: String
     picklist_path: String
     qa_completed_at: DateTime
     qa_completed_by: String
-    qa_data: JSONB
+    qa_data: JSON
     qa_path: String
+    qa_method: String           # "Delivery" or "Shipping"
     signature_captured_at: DateTime
     signed_picklist_path: String
-    inflow_data: JSONB          # Full Inflow payload (for reference)
+    inflow_data: JSON           # Full Inflow payload (for reference)
     created_at: DateTime
     updated_at: DateTime
 ```
@@ -228,8 +229,8 @@ Tracks all status changes:
 
 ```python
 class AuditLog:
-    id: UUID
-    order_id: UUID              # Foreign key to Order
+    id: String(36)              # Primary key (UUID stored as string)
+    order_id: String(36)        # Foreign key to Order
     changed_by: String          # User who made the change
     from_status: String         # Previous status
     to_status: String           # New status
@@ -273,8 +274,8 @@ Tracks Teams notification delivery:
 
 ```python
 class TeamsNotification:
-    id: UUID
-    order_id: UUID              # Foreign key to Order
+    id: String(36)              # Primary key (UUID stored as string)
+    order_id: String(36)        # Foreign key to Order
     teams_message_id: String    # Teams message ID
     sent_at: DateTime
     status: Enum                # pending, sent, failed
@@ -289,11 +290,11 @@ Manages delivery runs with vehicle and runner assignment:
 
 ```python
 class DeliveryRun:
-    id: UUID                    # Primary key
+    id: String(36)              # Primary key (UUID stored as string)
     name: String                # Auto-generated run name (e.g., "Morning Run 1")
     runner: String              # Person assigned to the run
-    vehicle: Enum               # van, golf_cart
-    status: Enum                # Active, Completed, Cancelled
+    vehicle: String             # van, golf_cart
+    status: String              # Active, Completed, Cancelled
     start_time: DateTime        # When run was created/started
     end_time: DateTime          # When run was completed
     created_at: DateTime
@@ -307,11 +308,11 @@ Tracks webhook subscriptions for real-time updates:
 
 ```python
 class InflowWebhook:
-    id: UUID                    # Primary key
+    id: String(36)              # Primary key (UUID stored as string)
     webhook_id: String          # Inflow webhook subscription ID
     url: String                 # Webhook endpoint URL
-    events: JSONB               # Events to subscribe to
-    status: Enum                # ACTIVE, INACTIVE, FAILED
+    events: JSON                # Events to subscribe to
+    status: Enum                # active, inactive, failed
     last_received_at: DateTime  # Last webhook received
     failure_count: Integer      # Consecutive failures
     secret: String              # Webhook signature secret
@@ -748,43 +749,49 @@ https://gis.cstx.gov/csgis/rest/services/IT_GIS/ITS_TAMU_Parking/MapServer/3/que
 
 ## Database Schema
 
+> **Note:** The database uses MySQL 8.0+. UUIDs are stored as VARCHAR(36) strings.
+
 ### Orders Table
 
 ```sql
 CREATE TABLE orders (
-    id UUID PRIMARY KEY,
-    inflow_order_id VARCHAR UNIQUE NOT NULL,
-    inflow_sales_order_id VARCHAR,
-    recipient_name VARCHAR,
-    recipient_contact VARCHAR,
-    delivery_location VARCHAR,
-    po_number VARCHAR,
-    status orderstatus NOT NULL DEFAULT 'Picked',
-    assigned_deliverer VARCHAR,
+    id VARCHAR(36) PRIMARY KEY,
+    inflow_order_id VARCHAR(255) UNIQUE NOT NULL,
+    inflow_sales_order_id VARCHAR(255),
+    recipient_name VARCHAR(255),
+    recipient_contact VARCHAR(255),
+    delivery_location VARCHAR(500),
+    po_number VARCHAR(255),
+    status VARCHAR(50) NOT NULL DEFAULT 'picked',
+    assigned_deliverer VARCHAR(255),
     issue_reason TEXT,
-    delivery_run_id UUID REFERENCES delivery_runs(id),
-    tagged_at TIMESTAMP,
-    tagged_by VARCHAR,
-    tag_data JSONB,
-    picklist_generated_at TIMESTAMP,
-    picklist_generated_by VARCHAR,
-    picklist_path VARCHAR,
-    qa_completed_at TIMESTAMP,
-    qa_completed_by VARCHAR,
-    qa_data JSONB,
-    qa_path VARCHAR,
-    signature_captured_at TIMESTAMP,
-    signed_picklist_path VARCHAR,
-    shipping_workflow_status VARCHAR DEFAULT 'work_area',
-    shipping_workflow_status_updated_at TIMESTAMP,
-    shipping_workflow_status_updated_by VARCHAR,
-    shipped_to_carrier_at TIMESTAMP,
-    shipped_to_carrier_by VARCHAR,
-    carrier_name VARCHAR,
-    tracking_number VARCHAR,
-    inflow_data JSONB,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    delivery_run_id VARCHAR(36),
+    tagged_at DATETIME,
+    tagged_by VARCHAR(255),
+    tag_data JSON,
+    picklist_generated_at DATETIME,
+    picklist_generated_by VARCHAR(255),
+    picklist_path VARCHAR(500),
+    qa_completed_at DATETIME,
+    qa_completed_by VARCHAR(255),
+    qa_data JSON,
+    qa_path VARCHAR(500),
+    qa_method VARCHAR(50),
+    signature_captured_at DATETIME,
+    signed_picklist_path VARCHAR(500),
+    order_details_path VARCHAR(500),
+    order_details_generated_at DATETIME,
+    shipping_workflow_status VARCHAR(50) DEFAULT 'work_area',
+    shipping_workflow_status_updated_at DATETIME,
+    shipping_workflow_status_updated_by VARCHAR(255),
+    shipped_to_carrier_at DATETIME,
+    shipped_to_carrier_by VARCHAR(255),
+    carrier_name VARCHAR(100),
+    tracking_number VARCHAR(255),
+    inflow_data JSON,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    FOREIGN KEY (delivery_run_id) REFERENCES delivery_runs(id)
 );
 
 CREATE INDEX ix_orders_inflow_order_id ON orders(inflow_order_id);
@@ -796,65 +803,93 @@ CREATE INDEX ix_orders_delivery_run_id ON orders(delivery_run_id);
 
 ```sql
 CREATE TABLE delivery_runs (
-    id UUID PRIMARY KEY,
-    name VARCHAR NOT NULL,
-    runner VARCHAR NOT NULL,
-    vehicle vehicle_enum NOT NULL,
-    status delivery_run_status NOT NULL DEFAULT 'Active',
-    start_time TIMESTAMP,
-    end_time TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    runner VARCHAR(255) NOT NULL,
+    vehicle VARCHAR(50) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'Active',
+    start_time DATETIME,
+    end_time DATETIME,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
 );
 
-CREATE TYPE vehicle_enum AS ENUM ('van', 'golf_cart');
-CREATE TYPE delivery_run_status AS ENUM ('Active', 'Completed', 'Cancelled');
+-- Vehicle values: 'van', 'golf_cart'
+-- Status values: 'Active', 'Completed', 'Cancelled'
 ```
 
 ### Inflow Webhooks Table
 
 ```sql
 CREATE TABLE inflow_webhooks (
-    id UUID PRIMARY KEY,
-    webhook_id VARCHAR NOT NULL,
-    url VARCHAR NOT NULL,
-    events JSONB NOT NULL,
-    status webhookstatus NOT NULL,
-    last_received_at TIMESTAMP,
+    id VARCHAR(36) PRIMARY KEY,
+    webhook_id VARCHAR(255) NOT NULL UNIQUE,
+    url VARCHAR(500) NOT NULL,
+    events JSON NOT NULL,
+    status ENUM('active', 'inactive', 'failed') NOT NULL DEFAULT 'active',
+    last_received_at DATETIME,
     failure_count INTEGER NOT NULL DEFAULT 0,
-    secret VARCHAR,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    secret VARCHAR(255),
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
 );
 
 CREATE INDEX ix_inflow_webhooks_status ON inflow_webhooks(status);
 CREATE INDEX ix_inflow_webhooks_webhook_id ON inflow_webhooks(webhook_id);
-
-CREATE TYPE webhookstatus AS ENUM ('ACTIVE', 'INACTIVE', 'FAILED');
 ```
 
 ### Audit Logs Table
 
 ```sql
 CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY,
-    order_id UUID REFERENCES orders(id),
-    changed_by VARCHAR,
-    from_status VARCHAR,
-    to_status VARCHAR NOT NULL,
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    changed_by VARCHAR(255),
+    from_status VARCHAR(50),
+    to_status VARCHAR(50) NOT NULL,
     reason TEXT,
-    timestamp TIMESTAMP NOT NULL
+    timestamp DATETIME NOT NULL,
+    metadata JSON,
+    FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+CREATE INDEX ix_audit_logs_order_id ON audit_logs(order_id);
+CREATE INDEX ix_audit_logs_timestamp ON audit_logs(timestamp);
+```
+
+### System Audit Logs Table
+
+```sql
+CREATE TABLE system_audit_logs (
+    id VARCHAR(36) PRIMARY KEY,
+    entity_type VARCHAR(100) NOT NULL,
+    entity_id VARCHAR(36) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    description TEXT,
+    user_id VARCHAR(255),
+    user_role VARCHAR(100),
+    old_value JSON,
+    new_value JSON,
+    metadata JSON,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    timestamp DATETIME NOT NULL,
+    created_at DATETIME NOT NULL
+);
+
+CREATE INDEX ix_system_audit_logs_entity_type ON system_audit_logs(entity_type);
+CREATE INDEX ix_system_audit_logs_entity_id ON system_audit_logs(entity_id);
+CREATE INDEX ix_system_audit_logs_timestamp ON system_audit_logs(timestamp);
 ```
 
 ### Teams Config Table
 
 ```sql
 CREATE TABLE teams_config (
-    id UUID PRIMARY KEY,
-    webhook_url VARCHAR,
-    updated_at TIMESTAMP NOT NULL,
-    updated_by VARCHAR
+    id VARCHAR(36) PRIMARY KEY,
+    webhook_url VARCHAR(500),
+    updated_at DATETIME NOT NULL,
+    updated_by VARCHAR(255)
 );
 ```
 
@@ -862,17 +897,25 @@ CREATE TABLE teams_config (
 
 ```sql
 CREATE TABLE teams_notifications (
-    id UUID PRIMARY KEY,
-    order_id UUID REFERENCES orders(id),
-    teams_message_id VARCHAR,
-    sent_at TIMESTAMP,
-    status notificationstatus NOT NULL,
-    notification_type VARCHAR NOT NULL DEFAULT 'in_delivery',
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    teams_message_id VARCHAR(255),
+    sent_at DATETIME,
+    status ENUM('pending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
+    notification_type VARCHAR(50) NOT NULL DEFAULT 'in_delivery',
     error_message TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL
+    webhook_url VARCHAR(500),
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+CREATE INDEX ix_teams_notifications_order_id ON teams_notifications(order_id);
+CREATE INDEX ix_teams_notifications_teams_message_id ON teams_notifications(teams_message_id);
+CREATE INDEX ix_teams_notifications_status ON teams_notifications(status);
+CREATE INDEX ix_teams_notifications_notification_type ON teams_notifications(notification_type);
 ```
+
 
 ## Deployment
 
