@@ -1,15 +1,20 @@
 """
-Teams Recipient Notification Service using Power Automate.
+Teams Recipient Notification Service using SharePoint Queue.
 
-This service sends Teams chat messages directly to order recipients
-when their delivery is on its way.
+Flow:
+1. App writes notification request JSON to SharePoint (teams-queue folder)
+2. Power Automate triggers on new file in SharePoint
+3. Flow sends Teams chat message to recipient
+4. Flow deletes the processed file
+
+This bypasses SAS authentication issues with HTTP triggers.
 """
 
+import json
 import logging
-from typing import Dict, Any, Optional, List
 from datetime import datetime
-
-import httpx
+from typing import Dict, Any, Optional, List
+from uuid import uuid4
 
 from app.config import settings
 
@@ -17,17 +22,21 @@ logger = logging.getLogger(__name__)
 
 
 class TeamsRecipientService:
-    """Service for sending Teams notifications to recipients via Power Automate."""
+    """Service for sending Teams notifications via SharePoint queue."""
 
     def __init__(self):
         self.enabled = settings.teams_recipient_notifications_enabled
-        self.flow_url = settings.power_automate_teams_flow_url
 
     def is_configured(self) -> bool:
-        """Check if the service is properly configured."""
-        return bool(self.enabled and self.flow_url)
+        """Check if the service is properly configured (SharePoint must be enabled)."""
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+            return self.enabled and sp_service.is_enabled
+        except Exception:
+            return False
 
-    def send_delivery_notification(
+    def _queue_notification_to_sharepoint(
         self,
         recipient_email: str,
         recipient_name: str,
@@ -37,7 +46,58 @@ class TeamsRecipientService:
         order_items: Optional[List[str]] = None
     ) -> bool:
         """
-        Send a Teams notification to the recipient about their delivery.
+        Queue a Teams notification request to SharePoint.
+
+        Writes a JSON file to the teams-queue folder.
+        Power Automate flow monitors this folder and sends Teams messages.
+        """
+        from app.services.sharepoint_service import get_sharepoint_service
+
+        try:
+            sp_service = get_sharepoint_service()
+            if not sp_service.is_enabled:
+                logger.warning("SharePoint not enabled, cannot queue Teams notification")
+                return False
+
+            # Create notification request JSON
+            request_id = str(uuid4())[:8]
+            timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            filename = f"teams-{timestamp}-{request_id}.json"
+
+            notification_request = {
+                "id": request_id,
+                "type": "delivery_notification",
+                "recipientEmail": recipient_email,
+                "recipientName": recipient_name,
+                "orderNumber": order_number,
+                "deliveryRunner": delivery_runner,
+                "estimatedTime": estimated_time,
+                "orderItems": order_items,
+                "createdAt": datetime.utcnow().isoformat() + "Z",
+                "status": "pending"
+            }
+
+            # Upload to teams-queue folder
+            url = sp_service.upload_json(notification_request, "teams-queue", filename)
+            logger.info(f"Teams notification queued to SharePoint: {url}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to queue Teams notification to SharePoint: {e}")
+            return False
+
+    def send_delivery_notification(
+        self,
+        recipient_email: str,
+        recipient_name: str,
+        order_number: str,
+        delivery_runner: str,
+        estimated_time: Optional[str] = None,
+        order_items: Optional[List[str]] = None,
+        force: bool = False
+    ) -> bool:
+        """
+        Queue a Teams notification to the recipient about their delivery.
 
         Args:
             recipient_email: Recipient's TAMU email (must have Teams)
@@ -46,58 +106,23 @@ class TeamsRecipientService:
             delivery_runner: Name of the person delivering
             estimated_time: Optional estimated delivery time
             order_items: Optional list of item names in the order
+            force: If True, bypass the enabled check (for testing)
 
         Returns:
-            True if notification sent successfully, False otherwise
+            True if notification queued successfully, False otherwise
         """
-        if not self.enabled:
+        if not force and not self.enabled:
             logger.info("Teams recipient notifications are disabled")
             return False
 
-        if not self.flow_url:
-            logger.warning("Power Automate flow URL not configured")
-            return False
-
-        # Build the payload for Power Automate
-        payload = {
-            "recipientEmail": recipient_email,
-            "recipientName": recipient_name,
-            "orderNumber": order_number,
-            "deliveryRunner": delivery_runner,
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        if estimated_time:
-            payload["estimatedTime"] = estimated_time
-
-        if order_items:
-            payload["orderItems"] = order_items
-
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    self.flow_url,
-                    json=payload,
-                    headers={"Content-Type": "application/json"}
-                )
-
-                if response.status_code in (200, 202):
-                    logger.info(
-                        f"Teams notification sent to {recipient_email} for order {order_number}"
-                    )
-                    return True
-                else:
-                    logger.error(
-                        f"Power Automate returned {response.status_code}: {response.text}"
-                    )
-                    return False
-
-        except httpx.TimeoutException:
-            logger.error(f"Timeout sending Teams notification to {recipient_email}")
-            return False
-        except httpx.RequestError as e:
-            logger.error(f"Error sending Teams notification: {e}")
-            return False
+        return self._queue_notification_to_sharepoint(
+            recipient_email=recipient_email,
+            recipient_name=recipient_name,
+            order_number=order_number,
+            delivery_runner=delivery_runner,
+            estimated_time=estimated_time,
+            order_items=order_items
+        )
 
     def send_bulk_delivery_notifications(
         self,
@@ -105,7 +130,7 @@ class TeamsRecipientService:
         delivery_runner: str
     ) -> Dict[str, bool]:
         """
-        Send notifications for multiple orders (e.g., when starting a delivery run).
+        Queue notifications for multiple orders (e.g., when starting a delivery run).
 
         Args:
             orders: List of order dicts with recipient_email, recipient_name, order_number

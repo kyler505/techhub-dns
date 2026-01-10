@@ -283,7 +283,9 @@ def submit_qa(order_id):
 
 @bp.route("/<uuid:order_id>/picklist", methods=["GET"])
 def get_picklist(order_id):
-    """Download generated picklist PDF"""
+    """Download generated picklist PDF (from local storage or SharePoint)"""
+    from io import BytesIO
+
     with get_db() as db:
         service = OrderService(db)
         order = service.get_order_detail(order_id)
@@ -292,11 +294,44 @@ def get_picklist(order_id):
         if not order.picklist_path:
             abort(404, description="Picklist not generated")
 
-        path = Path(order.picklist_path)
-        if not path.exists():
-            abort(404, description="Picklist file missing")
+        picklist_path = order.picklist_path
 
-        return send_file(path.resolve(), mimetype="application/pdf", download_name=path.name)
+        # Check if this is a SharePoint URL
+        if picklist_path.startswith("http"):
+            # Download from SharePoint
+            try:
+                from app.services.sharepoint_service import get_sharepoint_service
+                sp_service = get_sharepoint_service()
+
+                # Extract filename from the path stored in order
+                # The path format is the SharePoint web URL
+                filename = f"{order.inflow_order_id}.pdf"
+
+                # Download the file from SharePoint
+                pdf_bytes = sp_service.download_file("picklists", filename)
+                if not pdf_bytes:
+                    abort(404, description="Picklist file not found in SharePoint")
+
+                pdf_stream = BytesIO(pdf_bytes)
+                pdf_stream.seek(0)
+
+                return send_file(
+                    pdf_stream,
+                    mimetype="application/pdf",
+                    as_attachment=False,
+                    download_name=filename
+                )
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to download picklist from SharePoint: {e}")
+                abort(500, description=f"Failed to download from SharePoint: {str(e)}")
+        else:
+            # Local file path
+            path = Path(picklist_path)
+            if not path.exists():
+                abort(404, description="Picklist file missing")
+
+            return send_file(path.resolve(), mimetype="application/pdf", download_name=path.name)
 
 
 @bp.route("/<uuid:order_id>/retry-notification", methods=["POST"])
