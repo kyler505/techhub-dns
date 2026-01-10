@@ -2,6 +2,11 @@
 """
 Test script for Order Details PDF generation and email sending.
 
+Flow:
+1. Check SharePoint for existing PDF
+2. If not found, generate and upload to SharePoint
+3. Send email with PDF
+
 Usage:
     python scripts/test_order_details.py <order_number> <email_address>
 
@@ -23,6 +28,7 @@ load_dotenv()
 from app.services.inflow_service import InflowService
 from app.services.pdf_service import pdf_service
 from app.services.email_service import email_service
+from app.config import settings
 
 
 def main():
@@ -43,9 +49,9 @@ def main():
         help="Generate PDF only, don't send email"
     )
     parser.add_argument(
-        "--save",
-        type=str,
-        help="Save PDF to specified path"
+        "--force-generate",
+        action="store_true",
+        help="Force regenerate PDF even if it exists in SharePoint"
     )
 
     args = parser.parse_args()
@@ -73,32 +79,65 @@ def main():
     print(f"    - Email: {inflow_data.get('email', 'N/A')}")
     print(f"    - Lines: {len(inflow_data.get('lines', []))} item(s)")
 
-    # Step 2: Generate PDF
-    print("\nStep 2: Generating Order Details PDF...")
-    try:
-        pdf_bytes = pdf_service.generate_order_details_pdf(inflow_data)
-        print(f"  ✓ Generated PDF: {len(pdf_bytes):,} bytes")
-    except Exception as e:
-        print(f"  ERROR: Failed to generate PDF: {e}")
-        sys.exit(1)
+    pdf_bytes = None
+    pdf_filename = f"{args.order_number}.pdf"
+    pdf_source = "generated"
 
-    # Step 3: Save PDF if requested
-    if args.save:
-        print(f"\nStep 3: Saving PDF to {args.save}...")
+    # Step 2: Check SharePoint for existing PDF (unless --force-generate)
+    if not args.force_generate:
+        print("\nStep 2: Checking SharePoint for existing PDF...")
         try:
-            with open(args.save, 'wb') as f:
-                f.write(pdf_bytes)
-            print(f"  ✓ Saved PDF to: {args.save}")
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+
+            if sp_service.is_enabled:
+                print(f"  → SharePoint enabled, checking for: order-details/{pdf_filename}")
+                existing_pdf = sp_service.download_file("order-details", pdf_filename)
+
+                if existing_pdf:
+                    print(f"  ✓ Found existing PDF in SharePoint: {len(existing_pdf):,} bytes")
+                    pdf_bytes = existing_pdf
+                    pdf_source = "sharepoint"
+                else:
+                    print(f"  → PDF not found in SharePoint")
+            else:
+                print("  → SharePoint not enabled, skipping check")
         except Exception as e:
-            print(f"  ERROR: Failed to save PDF: {e}")
+            print(f"  WARNING: Error checking SharePoint: {e}")
     else:
-        # Save to default location (same as production workflow)
+        print("\nStep 2: Skipping SharePoint check (--force-generate)")
+
+    # Step 3: Generate PDF if not found
+    if pdf_bytes is None:
+        print("\nStep 3: Generating Order Details PDF...")
+        try:
+            pdf_bytes = pdf_service.generate_order_details_pdf(inflow_data)
+            print(f"  ✓ Generated PDF: {len(pdf_bytes):,} bytes")
+        except Exception as e:
+            print(f"  ERROR: Failed to generate PDF: {e}")
+            sys.exit(1)
+
+        # Upload to SharePoint
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+
+            if sp_service.is_enabled:
+                print("  → Uploading to SharePoint...")
+                sp_url = sp_service.upload_file(pdf_bytes, "order-details", pdf_filename)
+                print(f"  ✓ Uploaded to SharePoint: {sp_url}")
+        except Exception as e:
+            print(f"  WARNING: Failed to upload to SharePoint: {e}")
+
+        # Save locally
         default_dir = "storage/order_details"
         os.makedirs(default_dir, exist_ok=True)
-        default_path = f"{default_dir}/{args.order_number}.pdf"
+        default_path = f"{default_dir}/{pdf_filename}"
         with open(default_path, 'wb') as f:
             f.write(pdf_bytes)
-        print(f"\n  → PDF saved to: {default_path}")
+        print(f"  → PDF saved to: {default_path}")
+    else:
+        print(f"\nStep 3: Using existing PDF from {pdf_source}")
 
     # Step 4: Send email (unless --no-email)
     if args.no_email:
@@ -106,29 +145,31 @@ def main():
     else:
         print(f"\nStep 4: Sending email to {args.email}...")
 
-        # Check Power Automate configuration
-        if not email_service.is_configured():
-            print("  WARNING: Power Automate email not configured")
-            print("  Set POWER_AUTOMATE_EMAIL_ENABLED=true and")
-            print("  POWER_AUTOMATE_EMAIL_FLOW_URL in .env to enable.")
+        # For testing, we send email directly using the flow URL
+        # This bypasses the POWER_AUTOMATE_EMAIL_ENABLED check since this is a test script
+        if not settings.power_automate_email_flow_url:
+            print("  ERROR: POWER_AUTOMATE_EMAIL_FLOW_URL not configured in .env")
+            print("  Cannot send email without a Power Automate flow URL.")
         else:
             customer_name = inflow_data.get("contactName", "Test User")
             order_number = args.order_number
 
+            # Call the email service directly with force=True to bypass enabled check
             success = email_service.send_order_details_email(
                 to_address=args.email,
                 order_number=order_number,
                 customer_name=customer_name,
-                pdf_content=pdf_bytes
+                pdf_content=pdf_bytes,
+                force=True
             )
 
             if success:
                 print(f"  ✓ Email sent successfully to {args.email}")
             else:
-                print(f"  ✗ Failed to send email. Check Power Automate configuration.")
+                print(f"  ✗ Failed to send email. Check Power Automate flow URL.")
 
     print(f"\n{'='*60}")
-    print("Test complete!")
+    print(f"Test complete! (PDF source: {pdf_source})")
     print(f"{'='*60}\n")
 
 

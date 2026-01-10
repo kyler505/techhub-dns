@@ -911,27 +911,47 @@ class OrderService:
         return y_offset
 
     def _wrap_text(self, text: str, max_width: int, font_name: str, font_size: int) -> List[str]:
-        """Wrap text to fit within max_width"""
-        words = text.split()
-        lines = []
-        line = ""
+        """Wrap text to fit within max_width, respecting explicit newlines"""
+        if not text:
+            return []
 
-        for word in words:
-            test_line = f"{line} {word}".strip()
-            test_width = stringWidth(test_line, font_name, font_size)
-            if test_width <= max_width:
-                line = test_line
-            else:
+        # First split on explicit newlines to respect intentional line breaks
+        paragraphs = str(text).split('\n')
+        lines = []
+
+        for paragraph in paragraphs:
+            if not paragraph.strip():
+                # Preserve blank lines
+                lines.append("")
+                continue
+
+            words = paragraph.split()
+            line = ""
+
+            for word in words:
+                test_line = f"{line} {word}".strip()
+                test_width = stringWidth(test_line, font_name, font_size)
+                if test_width <= max_width:
+                    line = test_line
+                else:
+                    if line:
+                        lines.append(line)
+                    line = word
+
+            if line:
                 lines.append(line)
-                line = word
-        if line:
-            lines.append(line)
+
         return lines
 
     def _send_order_details_email(self, order: Order, generated_by: Optional[str] = None) -> None:
         """
         Send Order Details PDF email to recipient after picklist generation.
-        Also saves the PDF to storage for record-keeping.
+
+        Flow:
+        1. Check SharePoint for existing PDF
+        2. If not found, generate PDF and upload to SharePoint
+        3. Send email with PDF
+
         This runs as a best-effort operation - errors are logged but don't fail the picklist generation.
         """
         from app.services.pdf_service import pdf_service
@@ -941,34 +961,55 @@ class OrderService:
         # Get recipient email
         recipient_email = order.recipient_contact
         order_number = order.inflow_order_id
+        pdf_filename = f"{order_number}.pdf"
 
         try:
-            # Generate Order Details PDF
             if not order.inflow_data:
                 logger.warning(f"No inFlow data for order {order_number}, skipping Order Details generation")
                 return
 
-            pdf_bytes = pdf_service.generate_order_details_pdf(order.inflow_data)
+            pdf_bytes = None
+            order_details_path = None
 
-            # Save PDF to storage
-            order_details_dir = self._storage_path("order_details")
-            order_details_dir.mkdir(parents=True, exist_ok=True)
-            pdf_filename = f"{order_number}.pdf"
-            pdf_path = order_details_dir / pdf_filename
-            pdf_path.write_bytes(pdf_bytes)
-            logger.info(f"Order Details PDF saved to {pdf_path}")
-
-            # Upload to SharePoint if enabled
-            order_details_path = str(pdf_path)
+            # Step 1: Check SharePoint first for existing PDF
             try:
                 from app.services.sharepoint_service import get_sharepoint_service
                 sp_service = get_sharepoint_service()
+
                 if sp_service.is_enabled:
-                    sp_url = sp_service.upload_file(pdf_bytes, "order-details", pdf_filename)
-                    order_details_path = sp_url
-                    logger.info(f"Order Details PDF uploaded to SharePoint: {sp_url}")
+                    logger.info(f"Checking SharePoint for existing Order Details PDF: {pdf_filename}")
+                    existing_pdf = sp_service.download_file("order-details", pdf_filename)
+
+                    if existing_pdf:
+                        logger.info(f"Found existing Order Details PDF in SharePoint: {pdf_filename}")
+                        pdf_bytes = existing_pdf
+                        order_details_path = sp_service.get_file_url("order-details", pdf_filename)
             except Exception as e:
-                logger.warning(f"SharePoint upload failed for Order Details, using local path: {e}")
+                logger.warning(f"Error checking SharePoint for existing PDF: {e}")
+
+            # Step 2: If not found in SharePoint, generate and upload
+            if pdf_bytes is None:
+                logger.info(f"Generating Order Details PDF for order {order_number}")
+                pdf_bytes = pdf_service.generate_order_details_pdf(order.inflow_data)
+
+                # Save locally first
+                order_details_dir = self._storage_path("order_details")
+                order_details_dir.mkdir(parents=True, exist_ok=True)
+                pdf_path = order_details_dir / pdf_filename
+                pdf_path.write_bytes(pdf_bytes)
+                logger.info(f"Order Details PDF saved to {pdf_path}")
+                order_details_path = str(pdf_path)
+
+                # Upload to SharePoint if enabled
+                try:
+                    from app.services.sharepoint_service import get_sharepoint_service
+                    sp_service = get_sharepoint_service()
+                    if sp_service.is_enabled:
+                        sp_url = sp_service.upload_file(pdf_bytes, "order-details", pdf_filename)
+                        order_details_path = sp_url
+                        logger.info(f"Order Details PDF uploaded to SharePoint: {sp_url}")
+                except Exception as e:
+                    logger.warning(f"SharePoint upload failed for Order Details, using local path: {e}")
 
             # Update order with Order Details path
             order.order_details_path = order_details_path
@@ -984,7 +1025,7 @@ class OrderService:
                 logger.warning(f"No recipient email for order {order_number}, skipping Order Details email")
                 return
 
-            # Send email
+            # Step 3: Send email with PDF
             customer_name = order.recipient_name or "Customer"
 
             success = email_service.send_order_details_email(
@@ -1007,7 +1048,7 @@ class OrderService:
                     audit_metadata={
                         "recipient_email": recipient_email,
                         "order_number": order_number,
-                        "pdf_path": str(pdf_path)
+                        "pdf_path": order_details_path
                     }
                 )
             else:
