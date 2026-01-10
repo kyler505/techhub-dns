@@ -46,9 +46,13 @@ class Settings(BaseSettings):
     # Auth (structure only)
     secret_key: str = "change-me-in-production"
 
-    # Power Automate Email Configuration
-    power_automate_email_enabled: bool = False  # Safety: disabled by default
-    power_automate_email_flow_url: Optional[str] = None  # HTTP trigger URL for email flow
+    # TAMU SMTP Email Configuration
+    smtp_enabled: bool = False  # Safety: disabled by default
+    smtp_host: str = "relay.tamu.edu"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None  # shared_netid@tamu.edu
+    smtp_password: Optional[str] = None
+    smtp_from_address: Optional[str] = None  # e.g., techhub@tamu.edu
     email_from_name: str = "TechHub Technology Services"
 
     # Power Automate Teams Notifications (direct messaging - separate from email)

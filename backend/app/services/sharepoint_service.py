@@ -1,6 +1,7 @@
 """
 SharePoint Storage Service for file and QA data storage.
 Uses Microsoft Graph API with Interactive Browser authentication (same as Key Vault).
+Tokens are cached to disk so you don't need to re-authenticate after restart.
 """
 
 import io
@@ -10,7 +11,7 @@ from typing import Optional, Dict, Any
 from functools import lru_cache
 
 import httpx
-from azure.identity import InteractiveBrowserCredential
+from azure.identity import InteractiveBrowserCredential, TokenCachePersistenceOptions
 
 from app.config import settings
 
@@ -36,11 +37,18 @@ class SharePointService:
         return settings.sharepoint_enabled and bool(settings.sharepoint_site_url)
 
     def _get_credential(self) -> InteractiveBrowserCredential:
-        """Get or create the interactive browser credential (same pattern as Key Vault)."""
+        """Get or create the interactive browser credential with persistent token cache."""
         if self._credential is None:
-            logger.info("Initializing SharePoint authentication (browser window will open)...")
-            # Use the same pattern as inflow_service.py and legacy scripts
-            self._credential = InteractiveBrowserCredential(additionally_allowed_tenants=["*"])
+            logger.info("Initializing SharePoint authentication...")
+            # Enable persistent token caching - tokens survive server restarts
+            cache_options = TokenCachePersistenceOptions(
+                name="techhub_sharepoint_cache",
+                allow_unencrypted_storage=True  # For Windows compatibility
+            )
+            self._credential = InteractiveBrowserCredential(
+                additionally_allowed_tenants=["*"],
+                cache_persistence_options=cache_options
+            )
         return self._credential
 
     def _get_access_token(self) -> str:
@@ -227,6 +235,54 @@ class SharePointService:
         except Exception as e:
             logger.error(f"Error getting file URL: {e}")
             return None
+
+    def download_file(self, subfolder: str, filename: str) -> Optional[bytes]:
+        """
+        Download file content from SharePoint.
+
+        Returns None if the file doesn't exist.
+        """
+        if not self.is_enabled:
+            return None
+
+        try:
+            drive_id = self._get_drive_id()
+            folder_path = self._get_folder_path(subfolder)
+            # Use :/content to download the file content
+            url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root:/{folder_path}/{filename}:/content"
+
+            with httpx.Client(timeout=60.0) as client:
+                response = client.get(url, headers=self._get_headers(), follow_redirects=True)
+                if response.status_code == 404:
+                    logger.debug(f"File not found in SharePoint: {folder_path}/{filename}")
+                    return None
+                response.raise_for_status()
+                logger.info(f"Downloaded file from SharePoint: {folder_path}/{filename}")
+                return response.content
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"Error downloading file from SharePoint: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error downloading file from SharePoint: {e}")
+            return None
+
+    def file_exists(self, subfolder: str, filename: str) -> bool:
+        """Check if a file exists in SharePoint."""
+        if not self.is_enabled:
+            return False
+
+        try:
+            drive_id = self._get_drive_id()
+            folder_path = self._get_folder_path(subfolder)
+            url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root:/{folder_path}/{filename}"
+
+            with httpx.Client() as client:
+                response = client.get(url, headers=self._get_headers())
+                return response.status_code == 200
+        except Exception:
+            return False
 
 
 # Singleton instance (lazy initialization)

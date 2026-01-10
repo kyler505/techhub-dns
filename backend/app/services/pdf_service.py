@@ -68,24 +68,34 @@ class PDFService:
         return buffer
 
     def _wrap_text(self, pdf: canvas.Canvas, text: str, max_width: float, font_name: str, font_size: int) -> list:
-        """Wrap text to fit within max_width."""
+        """Wrap text to fit within max_width, respecting explicit newlines."""
         if not text:
             return []
-        words = str(text).split(' ')
+
+        # First split on explicit newlines to respect intentional line breaks
+        paragraphs = str(text).split('\n')
         lines = []
-        current_line = ""
 
-        for word in words:
-            test_line = f"{current_line} {word}".strip()
-            if pdf.stringWidth(test_line, font_name, font_size) <= max_width:
-                current_line = test_line
-            else:
-                if current_line:
-                    lines.append(current_line)
-                current_line = word
+        for paragraph in paragraphs:
+            if not paragraph.strip():
+                # Preserve blank lines
+                lines.append("")
+                continue
 
-        if current_line:
-            lines.append(current_line)
+            words = paragraph.split(' ')
+            current_line = ""
+
+            for word in words:
+                test_line = f"{current_line} {word}".strip()
+                if pdf.stringWidth(test_line, font_name, font_size) <= max_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+
+            if current_line:
+                lines.append(current_line)
 
         return lines
 
