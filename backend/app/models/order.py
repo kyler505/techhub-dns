@@ -9,6 +9,7 @@ from app.database import Base
 
 class OrderStatus(str, enum.Enum):
     PICKED = "picked"
+    QA = "qa"
     PRE_DELIVERY = "pre-delivery"
     IN_DELIVERY = "in-delivery"
     SHIPPING = "shipping"
@@ -19,6 +20,7 @@ class OrderStatus(str, enum.Enum):
     def display_name(self) -> str:
         return {
             "picked": "Picked",
+            "qa": "QA",
             "pre-delivery": "Pre-Delivery",
             "in-delivery": "In Delivery",
             "shipping": "Shipping",

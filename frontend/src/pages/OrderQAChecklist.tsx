@@ -86,16 +86,23 @@ export default function OrderQAChecklist() {
     const loadOrders = async () => {
         setLoadingOrders(true);
         try {
-            // Only load orders that are in Picked status (eligible for QA)
+            // Only load orders that are in QA status (awaiting QA checklist)
             // or all orders if showCompleted is true
-            const statusFilter = showCompleted ? undefined : OrderStatus.PICKED;
-            const data = await ordersApi.getOrders({
-                status: statusFilter,
-                search: search.trim() ? search.trim() : undefined,
-            });
-            // Filter to only show orders that have picklist generated (required for QA)
-            const filteredData = showCompleted ? data : data.filter(order => order.picklist_generated_at);
-            setOrders(filteredData);
+            if (showCompleted) {
+                // Fetch all orders when showing completed
+                const data = await ordersApi.getOrders({
+                    search: search.trim() ? search.trim() : undefined,
+                });
+                setOrders(data);
+            } else {
+                // Fetch orders in QA status (awaiting QA checklist)
+                const data = await ordersApi.getOrders({
+                    status: OrderStatus.QA,
+                    search: search.trim() ? search.trim() : undefined,
+                });
+                // Orders in QA status already have picklist generated, so no need to filter
+                setOrders(data);
+            }
         } catch (error) {
             console.error("Failed to load orders:", error);
             alert("Failed to load orders");

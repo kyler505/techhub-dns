@@ -1,55 +1,66 @@
 import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 
+// Special filter type that can be a single status, array of statuses, or null (all)
+export type StatusFilter = OrderStatus | OrderStatus[] | null;
+
 interface FiltersProps {
-  status: OrderStatus | null;
-  onStatusChange: (status: OrderStatus | null) => void;
-  search: string;
-  onSearchChange: (search: string) => void;
+    status: StatusFilter;
+    onStatusChange: (status: StatusFilter) => void;
+    search: string;
+    onSearchChange: (search: string) => void;
 }
 
 export default function Filters({
-  status,
-  onStatusChange,
-  search,
-  onSearchChange,
+    status,
+    onStatusChange,
+    search,
+    onSearchChange,
 }: FiltersProps) {
-  const statusTabs = [
-    { label: "All", value: null },
-    { label: OrderStatusDisplayNames[OrderStatus.PICKED], value: OrderStatus.PICKED },
-    { label: OrderStatusDisplayNames[OrderStatus.PRE_DELIVERY], value: OrderStatus.PRE_DELIVERY },
-    { label: OrderStatusDisplayNames[OrderStatus.IN_DELIVERY], value: OrderStatus.IN_DELIVERY },
-    { label: OrderStatusDisplayNames[OrderStatus.SHIPPING], value: OrderStatus.SHIPPING },
-    { label: OrderStatusDisplayNames[OrderStatus.DELIVERED], value: OrderStatus.DELIVERED },
-    { label: OrderStatusDisplayNames[OrderStatus.ISSUE], value: OrderStatus.ISSUE },
-  ];
+    // Helper to check if current filter matches a tab
+    const isActiveTab = (tabValue: StatusFilter) => {
+        if (tabValue === null && status === null) return true;
+        if (Array.isArray(tabValue) && Array.isArray(status)) {
+            return tabValue.length === status.length && tabValue.every(v => status.includes(v));
+        }
+        return tabValue === status;
+    };
 
-  return (
-    <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
-      <div className="flex gap-1 border-b">
-        {statusTabs.map((tab) => (
-          <button
-            key={tab.label}
-            onClick={() => onStatusChange(tab.value)}
-            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
-              status === tab.value
-                ? "border-primary text-primary font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+    const statusTabs: { label: string; value: StatusFilter }[] = [
+        { label: "All", value: null },
+        { label: "Picked + QA", value: [OrderStatus.PICKED, OrderStatus.QA] },
+        { label: OrderStatusDisplayNames[OrderStatus.PRE_DELIVERY], value: OrderStatus.PRE_DELIVERY },
+        { label: OrderStatusDisplayNames[OrderStatus.IN_DELIVERY], value: OrderStatus.IN_DELIVERY },
+        { label: OrderStatusDisplayNames[OrderStatus.SHIPPING], value: OrderStatus.SHIPPING },
+        { label: OrderStatusDisplayNames[OrderStatus.DELIVERED], value: OrderStatus.DELIVERED },
+        { label: OrderStatusDisplayNames[OrderStatus.ISSUE], value: OrderStatus.ISSUE },
+    ];
 
-      <div className="w-full sm:w-auto sm:min-w-[300px]">
-        <input
-          type="text"
-          placeholder="Search orders..."
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-        />
-      </div>
-    </div>
-  );
+    return (
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
+            <div className="flex gap-1 border-b">
+                {statusTabs.map((tab) => (
+                    <button
+                        key={tab.label}
+                        onClick={() => onStatusChange(tab.value)}
+                        className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${isActiveTab(tab.value)
+                            ? "border-primary text-primary font-medium"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                            }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            <div className="w-full sm:w-auto sm:min-w-[300px]">
+                <input
+                    type="text"
+                    placeholder="Search orders..."
+                    value={search}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+            </div>
+        </div>
+    );
 }
