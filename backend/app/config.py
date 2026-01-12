@@ -59,9 +59,13 @@ class Settings(BaseSettings):
     teams_recipient_notifications_enabled: bool = False  # Safety: disabled by default
     power_automate_teams_flow_url: Optional[str] = None  # HTTP trigger URL for Teams flow
 
+    # Flask environment
+    flask_env: str = "development"
+
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Allow unknown env vars (e.g., from system)
 
     @field_validator("inflow_webhook_events", mode="before")
     @classmethod
