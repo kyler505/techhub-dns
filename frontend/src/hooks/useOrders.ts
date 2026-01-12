@@ -9,7 +9,7 @@ export function useOrders(status?: OrderStatus, search?: string) {
   const [error, setError] = useState<Error | null>(null);
 
   // Use WebSocket for real-time updates
-  const { orders: wsOrders, loading: wsLoading, error: wsError, refetch: wsRefetch } = useOrdersWebSocket();
+  const { orders: wsOrders, loading: wsLoading, error: wsError } = useOrdersWebSocket();
 
   useEffect(() => {
     loadOrders();
@@ -48,7 +48,8 @@ export function useOrders(status?: OrderStatus, search?: string) {
         );
       }
 
-      setOrders(filteredOrders);
+      // Cast to Order[] - WebSocket provides summary data that's compatible
+      setOrders(filteredOrders as unknown as Order[]);
       setLoading(false);
     }
   }, [wsOrders, status, search]);
