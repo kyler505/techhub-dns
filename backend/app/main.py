@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -8,6 +8,7 @@ from app.api.middleware import register_error_handlers
 from app.scheduler import start_scheduler
 import logging
 import atexit
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,6 +31,10 @@ register_error_handlers(app)
 # Global scheduler reference
 _scheduler = None
 _initialized = False
+
+# Frontend static files path (for production deployment)
+# In development, frontend is served separately by Vite
+FRONTEND_DIST_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist')
 
 
 def init_scheduler():
@@ -69,14 +74,35 @@ app.register_blueprint(delivery_runs.bp, url_prefix="/api/delivery-runs")
 app.register_blueprint(sharepoint.sharepoint_bp)
 
 
-@app.route("/")
-def root():
-    return jsonify({"message": "TechHub Delivery Workflow API", "version": "1.0.0"})
-
-
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy"})
+
+
+@app.route("/api")
+def api_root():
+    return jsonify({"message": "TechHub Delivery Workflow API", "version": "1.0.0"})
+
+
+# Serve React frontend static files (production only)
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve React frontend. Falls back to index.html for client-side routing."""
+    # Check if frontend dist exists (production mode)
+    if os.path.exists(FRONTEND_DIST_PATH):
+        # Serve static assets (js, css, images, etc.)
+        if path and os.path.exists(os.path.join(FRONTEND_DIST_PATH, path)):
+            return send_from_directory(FRONTEND_DIST_PATH, path)
+        # Fallback to index.html for SPA routing
+        return send_from_directory(FRONTEND_DIST_PATH, 'index.html')
+    else:
+        # Development mode - frontend served by Vite
+        return jsonify({
+            "message": "TechHub Delivery Workflow API",
+            "version": "1.0.0",
+            "note": "Frontend not built. Run 'npm run build' in frontend directory."
+        })
 
 
 @app.before_request
