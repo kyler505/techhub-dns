@@ -34,7 +34,7 @@ function App() {
                 </Link>
 
                 <Link to="/order-qa" className="text-white font-medium hover:text-gray-200">
-                  Order QA
+                  QA
                 </Link>
 
                 <Link to="/delivery" className="text-white font-medium hover:text-gray-200">

@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
+from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import settings
 from app.api.routes import orders, inflow, teams, audit, delivery_runs, sharepoint
 from app.api.middleware import register_error_handlers
@@ -12,12 +13,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False  # Prevent 308 redirects that break CORS
 
-# Configure CORS
-CORS(app, origins=[settings.frontend_url], supports_credentials=True)
+# Fix for running behind proxy (PythonAnywhere) - ensures correct URL generation
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# Configure CORS - allow all origins (configure specific origins for production)
+CORS(app, origins="*", supports_credentials=True)
 
 # Configure Flask-SocketIO
-socketio = SocketIO(app, cors_allowed_origins=[settings.frontend_url])
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Register error handlers
 register_error_handlers(app)

@@ -13,6 +13,7 @@ from app.utils.exceptions import (
 # Mock OrderStatus for testing without full imports
 class MockOrderStatus:
     PICKED = type('obj', (object,), {'value': 'picked', 'display_name': 'Picked'})()
+    QA = type('obj', (object,), {'value': 'qa', 'display_name': 'QA'})()
     PRE_DELIVERY = type('obj', (object,), {'value': 'pre-delivery', 'display_name': 'Pre-Delivery'})()
     IN_DELIVERY = type('obj', (object,), {'value': 'in-delivery', 'display_name': 'In Delivery'})()
     SHIPPING = type('obj', (object,), {'value': 'shipping', 'display_name': 'Shipping'})()
@@ -101,6 +102,7 @@ def test_file_operation_error():
 def test_order_status_values():
     """Test that OrderStatus enum uses kebab-case values"""
     assert MockOrderStatus.PICKED.value == "picked"
+    assert MockOrderStatus.QA.value == "qa"
     assert MockOrderStatus.PRE_DELIVERY.value == "pre-delivery"
     assert MockOrderStatus.IN_DELIVERY.value == "in-delivery"
     assert MockOrderStatus.SHIPPING.value == "shipping"
@@ -112,6 +114,7 @@ def test_order_status_values():
 def test_order_status_display_names():
     """Test that display_name property returns proper display names"""
     assert MockOrderStatus.PICKED.display_name == "Picked"
+    assert MockOrderStatus.QA.display_name == "QA"
     assert MockOrderStatus.PRE_DELIVERY.display_name == "Pre-Delivery"
     assert MockOrderStatus.IN_DELIVERY.display_name == "In Delivery"
     assert MockOrderStatus.SHIPPING.display_name == "Shipping"

@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 import OrderTable from "../components/OrderTable";
-import Filters from "../components/Filters";
+import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 import { Card, CardContent } from "../components/ui/card";
 
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState<OrderStatus | null>(OrderStatus.PICKED);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
     const [transitioningOrder, setTransitioningOrder] = useState<{
         orderId: string;
@@ -26,11 +26,27 @@ export default function Orders() {
     const loadOrders = async () => {
         setLoading(true);
         try {
-            const data = await ordersApi.getOrders({
-                status: statusFilter || undefined,
-                search: search || undefined,
-            });
-            setOrders(data);
+            // Handle array of statuses by fetching each and combining
+            if (Array.isArray(statusFilter)) {
+                const orderPromises = statusFilter.map(status =>
+                    ordersApi.getOrders({
+                        status,
+                        search: search || undefined,
+                    })
+                );
+                const results = await Promise.all(orderPromises);
+                // Combine and sort by updated_at descending
+                const combined = results.flat().sort((a, b) =>
+                    new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+                );
+                setOrders(combined);
+            } else {
+                const data = await ordersApi.getOrders({
+                    status: statusFilter || undefined,
+                    search: search || undefined,
+                });
+                setOrders(data);
+            }
         } catch (error) {
             console.error("Failed to load orders:", error);
         } finally {

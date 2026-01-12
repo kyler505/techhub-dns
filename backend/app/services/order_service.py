@@ -158,6 +158,25 @@ class OrderService:
         # Send Order Details email to recipient (after picklist, before QA)
         self._send_order_details_email(order, generated_by)
 
+        # Transition order to QA status (awaiting QA checklist)
+        if order.status == OrderStatus.PICKED.value:
+            order.status = OrderStatus.QA.value
+            order.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(order)
+
+            # Audit log for status transition to QA
+            audit_service.log_order_action(
+                order_id=str(order_id),
+                action="status_changed",
+                user_id=generated_by or "system",
+                description="Order moved to QA queue after picklist generation",
+                audit_metadata={
+                    "from_status": OrderStatus.PICKED.value,
+                    "to_status": OrderStatus.QA.value
+                }
+            )
+
         return order
 
     def submit_qa(
@@ -394,11 +413,12 @@ class OrderService:
     def _is_valid_transition(self, from_status: str, to_status: str) -> bool:
         """Validate status transition"""
         valid_transitions = {
-            OrderStatus.PICKED.value: [OrderStatus.PRE_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
+            OrderStatus.PICKED.value: [OrderStatus.QA.value, OrderStatus.PRE_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
+            OrderStatus.QA.value: [OrderStatus.PRE_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
             OrderStatus.PRE_DELIVERY.value: [OrderStatus.IN_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
             OrderStatus.IN_DELIVERY.value: [OrderStatus.DELIVERED.value, OrderStatus.ISSUE.value],
             OrderStatus.SHIPPING.value: [OrderStatus.DELIVERED.value, OrderStatus.ISSUE.value],
-            OrderStatus.ISSUE.value: [OrderStatus.PICKED.value, OrderStatus.PRE_DELIVERY.value],
+            OrderStatus.ISSUE.value: [OrderStatus.PICKED.value, OrderStatus.QA.value, OrderStatus.PRE_DELIVERY.value],
             OrderStatus.DELIVERED.value: []  # Terminal state
         }
 

@@ -1,5 +1,6 @@
 export enum OrderStatus {
   PICKED = "picked",
+  QA = "qa",
   PRE_DELIVERY = "pre-delivery",
   IN_DELIVERY = "in-delivery",
   SHIPPING = "shipping",
@@ -21,6 +22,7 @@ export const ShippingWorkflowStatusDisplayNames: Record<ShippingWorkflowStatus, 
 
 export const OrderStatusDisplayNames: Record<OrderStatus, string> = {
   [OrderStatus.PICKED]: "Picked",
+  [OrderStatus.QA]: "QA",
   [OrderStatus.PRE_DELIVERY]: "Pre-Delivery",
   [OrderStatus.IN_DELIVERY]: "In Delivery",
   [OrderStatus.SHIPPING]: "Shipping",
