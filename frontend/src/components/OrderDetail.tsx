@@ -55,6 +55,17 @@ export default function OrderDetail({
                     <div>
                         <label className="font-medium">Location:</label>
                         <p>{order.delivery_location || "N/A"}</p>
+                        {order.inflow_data?.shippingAddress && (
+                            <p className="text-sm text-gray-500 mt-1">
+                                {[
+                                    order.inflow_data.shippingAddress.address1,
+                                    order.inflow_data.shippingAddress.address2,
+                                    order.inflow_data.shippingAddress.city,
+                                    order.inflow_data.shippingAddress.state,
+                                    order.inflow_data.shippingAddress.postalCode
+                                ].filter(Boolean).join(", ")}
+                            </p>
+                        )}
                     </div>
                     <div>
                         <label className="font-medium">PO Number:</label>
