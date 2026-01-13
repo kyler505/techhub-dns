@@ -58,10 +58,114 @@ def init_scheduler():
         _initialized = True
         try:
             _scheduler = start_scheduler()
+            # Auto-register Inflow webhook if enabled
+            if settings.inflow_webhook_auto_register:
+                _auto_register_inflow_webhook()
             logger.info("Application started")
         except Exception as e:
             logger.error(f"Error during startup: {e}")
             raise
+
+
+def _auto_register_inflow_webhook():
+    """
+    Automatically register Inflow webhook on startup if:
+    1. Auto-registration is enabled (INFLOW_WEBHOOK_AUTO_REGISTER=true)
+    2. Webhook URL is configured (INFLOW_WEBHOOK_URL)
+    3. No active webhook exists for this URL
+    """
+    import asyncio
+    from app.services.inflow_service import InflowService
+    from app.database import SessionLocal
+    from app.models.inflow_webhook import InflowWebhook, WebhookStatus
+
+    if not settings.inflow_webhook_url:
+        logger.warning("Webhook auto-registration skipped: INFLOW_WEBHOOK_URL not configured")
+        return
+
+    if not settings.inflow_webhook_events:
+        logger.warning("Webhook auto-registration skipped: no events configured")
+        return
+
+    # Normalize URL for comparison
+    target_url = settings.inflow_webhook_url.strip().rstrip("/")
+
+    # Check if we already have an active webhook for this URL in local DB
+    db = SessionLocal()
+    try:
+        existing = db.query(InflowWebhook).filter(
+            InflowWebhook.status == WebhookStatus.active
+        ).all()
+
+        for webhook in existing:
+            if webhook.url.strip().rstrip("/") == target_url:
+                logger.info(f"Webhook already registered for {target_url} (ID: {webhook.webhook_id})")
+                return
+    finally:
+        db.close()
+
+    # No active webhook found, register a new one
+    logger.info(f"Auto-registering Inflow webhook: {target_url}")
+
+    async def register():
+        service = InflowService()
+        # First, clean up any remote webhooks with the same URL
+        try:
+            remote_webhooks = await service.list_webhooks()
+            for item in remote_webhooks:
+                remote_url = (item.get("url") or "").strip().rstrip("/")
+                if remote_url == target_url:
+                    webhook_id = item.get("webHookSubscriptionId") or item.get("id")
+                    if webhook_id:
+                        logger.info(f"Cleaning up existing remote webhook: {webhook_id}")
+                        await service.delete_webhook(webhook_id)
+        except Exception as e:
+            logger.warning(f"Could not clean up remote webhooks: {e}")
+
+        # Register new webhook
+        result = await service.register_webhook(
+            target_url,
+            settings.inflow_webhook_events
+        )
+        return result
+
+    try:
+        # Run async registration
+        result = asyncio.run(register())
+
+        webhook_id = result.get("webHookSubscriptionId") or result.get("id")
+        if not webhook_id:
+            logger.error(f"Webhook registration did not return an ID: {result}")
+            return
+
+        # Store in local database
+        db = SessionLocal()
+        try:
+            # Deactivate any existing active webhooks
+            db.query(InflowWebhook).filter(
+                InflowWebhook.status == WebhookStatus.active
+            ).update({"status": WebhookStatus.inactive})
+
+            # Create new webhook record
+            new_webhook = InflowWebhook(
+                webhook_id=webhook_id,
+                url=target_url,
+                events=settings.inflow_webhook_events,
+                status=WebhookStatus.active,
+                secret=result.get("secret")
+            )
+            db.add(new_webhook)
+            db.commit()
+
+            logger.info(f"Webhook auto-registered successfully: {webhook_id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to save webhook to database: {e}")
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"Webhook auto-registration failed: {e}")
 
 
 def shutdown_scheduler():

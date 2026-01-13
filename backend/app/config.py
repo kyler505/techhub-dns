@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     inflow_webhook_secret: Optional[str] = None
     inflow_webhook_url: Optional[str] = None
     inflow_webhook_events: List[str] = ["orderCreated", "orderUpdated"]
+    inflow_webhook_auto_register: bool = False  # Auto-register webhook on app startup
 
     # Inflow Polling Sync (fallback when webhooks are enabled)
     inflow_polling_sync_enabled: bool = True
