@@ -25,9 +25,34 @@ CACHE_DURATION = timedelta(days=1)
 # Common Texas A&M building codes for validation
 # This is used to validate extracted codes, not for mapping
 COMMON_BUILDING_CODES = {
+    # Main Campus Buildings
     "ACAD", "ZACH", "LAAH", "HELD", "BLOC", "AGGY", "ANEX", "RICH", "RUDD",
     "WCLB", "EVAN", "HALB", "HRBB", "KOLD", "MELC", "MSEN", "NEDU", "PETR",
-    "RDER", "SCOT", "TAMU", "VIDI", "CHEM", "ETB", "ADMN", "THOM", "THOMPSON"
+    "RDER", "SCOT", "TAMU", "VIDI", "CHEM", "ETB", "ADMN", "THOM", "THOMPSON",
+    # Additional Campus Buildings
+    "GSC",   # General Services Complex
+    "WCSS",  # West Campus Social Sciences
+    "SPHA",  # School of Public Health Admin
+    "HPLB",  # Health Professions Learning Building
+    "HSC",   # Health Science Center (8447 John Sharp Pkwy)
+    "HPER",  # Health & Physical Education Reading Room
+    "VPAT",  # Veterinary Pathobiology
+    "VMBS",  # Veterinary Medicine & Biomedical Sciences
+    "ILCB",  # Interdisciplinary Life Sciences Building
+    "DLEB",  # Doherty Lab & Engineering Building
+    "RELS",  # RELLIS Campus
+    "BSBE",  # Biological Sciences Building East
+    "BSBW",  # Biological Sciences Building West
+    "HECC",  # Higher Education Center at Crows
+    "REYN",  # Reynolds Medical Building / Research
+    "REYM",  # Reynolds Medical
+    "TEAG",  # Teague Building
+    "WTHR",  # Weathers Building
+    "ARCC",  # Architecture Center
+    "YMCA",  # A&M YMCA
+    "REED",  # Reed Arena (McDonald's Building)
+    "SBIS",  # Student Business & Information Services
+    "VPIS",  # Visualization Sciences Building
 }
 
 
@@ -171,6 +196,17 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
     # Track which patterns we're checking for debugging
     patterns_checked = []
 
+    # Pattern 0: Specific known addresses (highest priority)
+    # These are addresses that should always map to specific building codes
+    patterns_checked.append("Pattern 0: Specific known addresses")
+    specific_address_patterns = [
+        (r'8447\s+JOHN\s+SHARP', "HSC"),  # Health Science Center
+    ]
+    for pattern, code in specific_address_patterns:
+        if re.search(pattern, location_upper):
+            logger.info(f"Extracted building code from location '{location}': {code} (Pattern 0: {pattern})")
+            return code
+
     # Pattern 1: Building code at start followed by space and room number
     # Examples: "LAAH 424", "ACAD 205C", "ZACH 101"
     patterns_checked.append("Pattern 1: Building code at start")
@@ -218,6 +254,19 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
         logger.info(f"Extracted building code from location '{location}': {location_upper} (Pattern 5)")
         return location_upper
 
+    # Pattern 5.5: Building code anywhere in string followed by room number
+    # Examples: "8447 John Sharp Pkwy HPLB 2006", "Some Address WCSS 119"
+    patterns_checked.append("Pattern 5.5: Building code anywhere followed by room number")
+    match = re.search(r'\b([A-Z]{2,6})\s+\d+', location_upper)
+    if match:
+        potential_code = match.group(1)
+        logger.debug(f"Pattern 5.5 matched: '{potential_code}'")
+        if potential_code in COMMON_BUILDING_CODES:
+            logger.info(f"Extracted building code from location '{location}': {potential_code} (Pattern 5.5)")
+            return potential_code
+        else:
+            logger.debug(f"Pattern 5.5 matched '{potential_code}' but not in COMMON_BUILDING_CODES")
+
     # Pattern 6: Building name patterns (e.g., "Wehner Bldg", "Wehner Building", "339 Wehner Bldg")
     # Map common building names to codes
     # Order matters: more specific patterns first
@@ -239,6 +288,18 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
         (r'\bPETROLEUM\s+(?:BLDG|BLDG\.|BUILDING|HALL|ENGINEERING)\b', "PETR"),
         (r'\bSCOTES\s+(?:BLDG|BLDG\.|BUILDING|HALL)\b', "SCOT"),
 
+        # Additional building names (with building suffix patterns)
+        (r'\bREYNOLDS\s+(?:MEDICAL|BLDG|BLDG\.|BUILDING)\b', "REYN"),  # Reynolds Medical Building
+        (r'\bGENERAL\s+SERVICES\s+(?:COMPLEX|BLDG|BLDG\.|BUILDING)\b', "GSC"),
+        (r'\bPUBLIC\s+POLICY\s+(?:RESEARCH\s+)?INSTITUTE\b', "WCSS"),  # WCSS houses Public Policy
+        (r'\bTECHNOLOGY\s+SERVICES\b', "GSC"),  # Tech Services often at GSC
+        (r'\bSTUDENT\s+COMPUTING\b', "GSC"),  # Student Computing Center
+        (r'\bSCHOOL\s+OF\s+PUBLIC\s+HEALTH\b', "SPHA"),
+        (r'\bHEALTH\s+PROFESSIONS\b', "HPLB"),
+        (r'\bVISUALIZATION\s+(?:BLDG|BLDG\.|BUILDING|SCIENCES)\b', "VPIS"),
+        (r'\bVETERINARY\s+(?:MEDICINE|PATHOBIOLOGY)\b', "VMBS"),
+        (r'\bINTERDISCIPLINARY\s+LIFE\s+SCIENCES\b', "ILCB"),
+
         # Building names alone (word boundaries)
         (r'\bWEHNER\b', "WCLB"),
         (r'\bZACHRY\b', "ZACH"),
@@ -256,6 +317,11 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
         (r'\bMSC\b', "MELC"),
         (r'\bPETROLEUM\b', "PETR"),
         (r'\bSCOTES\b', "SCOT"),
+        (r'\bREYNOLDS\b', "REYN"),  # Reynolds alone
+        (r'\bRELLIS\b', "RELS"),    # RELLIS campus
+
+        # Specific address patterns
+        (r'8447\s+JOHN\s+SHARP', "HSC"),  # Health Science Center address
 
         # Building number patterns (e.g., "Building 418" → BLOC for Blocker)
         # Note: These are context-dependent and may need refinement
