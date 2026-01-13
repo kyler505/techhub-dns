@@ -33,8 +33,22 @@ _scheduler = None
 _initialized = False
 
 # Frontend static files path (for production deployment)
-# In development, frontend is served separately by Vite
-FRONTEND_DIST_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist')
+# Check multiple possible locations for the dist folder
+def get_frontend_dist_path():
+    possible_paths = [
+        # PythonAnywhere path
+        '/home/techhub/techhub-dns/frontend/dist',
+        # Relative from backend (local dev)
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist'),
+        # Resolved absolute path
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'dist')),
+    ]
+    for path in possible_paths:
+        if os.path.exists(path) and os.path.isdir(path):
+            return path
+    return possible_paths[0]  # Fallback to PythonAnywhere path
+
+FRONTEND_DIST_PATH = get_frontend_dist_path()
 
 
 def init_scheduler():
