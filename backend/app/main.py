@@ -37,7 +37,7 @@ _initialized = False
 def get_frontend_dist_path():
     possible_paths = [
         # PythonAnywhere path
-        '/home/kyler505/techhub-dns/frontend/dist',
+        '/home/techhub/techhub-dns/frontend/dist',
         # Relative from backend (local dev)
         os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist'),
         # Resolved absolute path
