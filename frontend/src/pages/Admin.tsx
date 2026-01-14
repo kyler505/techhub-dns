@@ -130,7 +130,7 @@ export default function Admin() {
     const activeWebhook = inflowWebhooks.find((w) => w.status === "active");
 
     return (
-        <div className="p-4 max-w-4xl space-y-6">
+        <div className="p-4 w-full max-w-4xl mx-auto space-y-6 flex-1 flex flex-col justify-center">
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold">System Status</h1>
                 {user && (
