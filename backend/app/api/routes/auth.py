@@ -235,7 +235,10 @@ def _prepare_flask_request():
     # PythonAnywhere (and other proxies) send X-Forwarded-Proto
     # We must explicitly check this because python3-saml validates the destination URL
     forwarded_proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    is_https = forwarded_proto == "https" or request.scheme == "https"
+    # Log the detected protocol for debugging
+    logger.info(f"Preparing SAML request. Proto: {forwarded_proto}, Scheme: {request.scheme}, Headers: {dict(request.headers)}")
+
+    is_https = forwarded_proto.lower() == "https" or request.scheme == "https"
 
     return {
         "https": "on" if is_https else "off",
