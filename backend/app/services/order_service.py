@@ -113,6 +113,14 @@ class OrderService:
         if not order.inflow_data:
             raise ValidationError("Order must have inFlow data to generate picklist")
 
+        # Enforce that the user generating the picklist is the same user who tagged the assets,
+        # unless one of them is missing (legacy data)
+        if order.tagged_by and generated_by and order.tagged_by != generated_by:
+            raise ValidationError(
+                f"Asset tagging and picklist generation must be performed by the same user. "
+                f"Tagged by: {order.tagged_by}, current user: {generated_by}"
+            )
+
         picklist_dir = self._storage_path("picklists")
         picklist_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{order.inflow_order_id or order.id}.pdf"

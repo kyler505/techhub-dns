@@ -31,7 +31,7 @@ export default function Login() {
     }
 
     return (
-        <div className="w-full h-full flex items-center justify-center bg-gray-50">
+        <div className="w-full h-full flex-1 flex items-center justify-center bg-gray-50">
             <div className="text-center">
                 {/* A&M Logo */}
                 <img
