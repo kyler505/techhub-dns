@@ -231,10 +231,16 @@ def _prepare_flask_request():
     Prepare request dict for python3-saml from Flask request.
     """
     url_data = request.url.split("?")
+
+    # PythonAnywhere (and other proxies) send X-Forwarded-Proto
+    # We must explicitly check this because python3-saml validates the destination URL
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+    is_https = forwarded_proto == "https" or request.scheme == "https"
+
     return {
-        "https": "on" if request.scheme == "https" else "off",
+        "https": "on" if is_https else "off",
         "http_host": request.host,
-        "server_port": request.environ.get("SERVER_PORT", "443" if request.scheme == "https" else "80"),
+        "server_port": request.environ.get("SERVER_PORT", "443" if is_https else "80"),
         "script_name": request.path,
         "get_data": request.args.copy(),
         "post_data": request.form.copy(),
