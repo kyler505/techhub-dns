@@ -204,6 +204,42 @@ export default function Admin() {
                 )}
             </div>
 
+            {/* Manual Actions */}
+            <div className="bg-white rounded-lg shadow p-6 space-y-4">
+                <h2 className="text-xl font-semibold">Manual Actions</h2>
+                <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                    <div>
+                        <p className="font-medium text-gray-900">Sync Orders</p>
+                        <p className="text-sm text-gray-600">
+                            Manually fetch recent "Started" orders from Inflow and update the local database.
+                        </p>
+                    </div>
+                    <button
+                        onClick={async () => {
+                            if (confirm("This will fetch recent orders from Inflow. Continue?")) {
+                                try {
+                                    setMessage({ type: "success", text: "Syncing started..." });
+                                    const res = await apiClient.post("/system/sync");
+                                    setMessage({
+                                        type: "success",
+                                        text: res.data.message || "Sync completed successfully"
+                                    });
+                                } catch (error: any) {
+                                    console.error("Sync failed:", error);
+                                    setMessage({
+                                        type: "error",
+                                        text: error.response?.data?.message || "Sync failed"
+                                    });
+                                }
+                            }
+                        }}
+                        className="px-4 py-2 bg-[#800000] text-white rounded hover:bg-[#660000]"
+                    >
+                        Sync Orders
+                    </button>
+                </div>
+            </div>
+
             {/* Message Display */}
             {message && (
                 <div
