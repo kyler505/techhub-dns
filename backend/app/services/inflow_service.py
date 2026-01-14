@@ -13,12 +13,26 @@ class InflowService:
     def __init__(self):
         self.base_url = settings.inflow_api_url
         self.company_id = settings.inflow_company_id
-        self.api_key = self._get_api_key()
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json;version=2024-03-12"
-        }
+        self._api_key: Optional[str] = None
+        self._headers: Optional[Dict[str, str]] = None
+
+    @property
+    def api_key(self) -> str:
+        """Lazy API key retrieval - prevents crash on startup if Service Principal not ready."""
+        if self._api_key is None:
+            self._api_key = self._get_api_key()
+        return self._api_key
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        """Lazy headers - depends on api_key property."""
+        if self._headers is None:
+            self._headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json;version=2024-03-12"
+            }
+        return self._headers
 
     def _is_fully_picked(self, order: Dict[str, Any]) -> bool:
         """
