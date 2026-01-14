@@ -230,6 +230,10 @@ class SamlAuthService:
         session.last_seen_at = datetime.utcnow()
         db.commit()
 
+        # Refresh objects to ensure they are not expired by the commit
+        db.refresh(user)
+        db.refresh(session)
+
         return (user, session)
 
     def revoke_session(self, db: DbSession, session_id: str) -> bool:
