@@ -9,7 +9,7 @@ from functools import wraps
 from flask import request, g, jsonify
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, get_db_session
 from app.services.saml_auth_service import saml_auth_service
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,13 @@ def init_auth_middleware(app):
     This runs before every request to validate session and attach user.
     """
 
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        """Close the auth session at the end of the request."""
+        db = getattr(g, '_auth_session', None)
+        if db is not None:
+            db.close()
+
     @app.before_request
     def authenticate_request():
         """Validate session and attach user to request context."""
@@ -43,25 +50,21 @@ def init_auth_middleware(app):
         # 1. Attempt to validate session from cookie (even for public routes)
         session_id = request.cookies.get(settings.session_cookie_name)
         if session_id:
-            with get_db() as db:
-                result = saml_auth_service.validate_session(db, session_id)
-                if result:
-                    user, session = result
-                    # Force access to attributes to ensure they are loaded in __dict__
-                    _ = user.id
-                    _ = user.email
-                    _ = session.id
+            # Create a dedicated session for auth that lives for the request
+            db = get_db_session()
+            g._auth_session = db
 
-                    # Expunge objects so they can be used after db session closes
-                    db.expunge(user)
-                    db.expunge(session)
-                    g.user = user
-                    g.session = session
-                else:
-                    # Invalid/expired session - we don't clear cookie here,
-                    # but we won't set g.user.
-                    # Logic below decides if this is fatal.
-                    logger.debug(f"Invalid session: {session_id[:8]}...")
+            result = saml_auth_service.validate_session(db, session_id)
+            if result:
+                user, session = result
+                # User remains attached to g._auth_session for the duration of request
+                g.user = user
+                g.session = session
+            else:
+                # Invalid/expired session - we don't clear cookie here,
+                # but we won't set g.user.
+                # Logic below decides if this is fatal.
+                logger.debug(f"Invalid session: {session_id[:8]}...")
 
         # 2. Check strict auth requirements
         path = request.path
