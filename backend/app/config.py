@@ -2,7 +2,7 @@ import json
 from typing import Optional, List, Any
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -84,10 +84,11 @@ class Settings(BaseSettings):
     # Flask environment
     flask_env: str = "development"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        extra = "ignore"  # Allow unknown env vars (e.g., from system)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
     @field_validator("inflow_webhook_events", mode="before")
     @classmethod
