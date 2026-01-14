@@ -17,10 +17,11 @@ export default function Sessions() {
     const fetchSessions = async () => {
         try {
             const response = await apiClient.get('/auth/sessions');
-            setSessions(response.data.sessions);
+            setSessions(response.data.sessions || []);
             setError(null);
         } catch (err) {
             setError('Failed to load sessions');
+            setSessions([]); // Reset to empty array on error
             console.error('Failed to load sessions:', err);
         } finally {
             setIsLoading(false);
@@ -90,7 +91,7 @@ export default function Sessions() {
             )}
 
             <div className="bg-white shadow rounded-lg divide-y">
-                {sessions.map((session) => (
+                {sessions?.map((session) => (
                     <div key={session.id} className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center">
