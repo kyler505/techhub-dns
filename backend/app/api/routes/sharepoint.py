@@ -43,8 +43,8 @@ def get_sharepoint_status():
 @sharepoint_bp.route("/authenticate", methods=["POST"])
 def authenticate_sharepoint():
     """
-    Trigger SharePoint authentication.
-    This will open a browser window for the user to sign in.
+    Test SharePoint authentication using Service Principal.
+    This validates the MSAL client credentials flow and retrieves site/drive IDs.
     """
     from app.services.sharepoint_service import get_sharepoint_service
 
@@ -60,17 +60,24 @@ def authenticate_sharepoint():
             "error": "SharePoint site URL not configured. Set SHAREPOINT_SITE_URL in .env"
         }), 400
 
+    # Check Service Principal credentials
+    if not all([settings.azure_tenant_id, settings.azure_client_id, settings.azure_client_secret]):
+        return jsonify({
+            "success": False,
+            "error": "Azure Service Principal not configured. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET in .env"
+        }), 400
+
     try:
         sp_service = get_sharepoint_service()
 
-        # This will trigger the browser authentication flow
-        logger.info("Triggering SharePoint authentication...")
+        # This will authenticate using MSAL client credentials (no browser needed)
+        logger.info("Testing SharePoint authentication via Service Principal...")
         site_id = sp_service._get_site_id()
         drive_id = sp_service._get_drive_id()
 
         return jsonify({
             "success": True,
-            "message": "Successfully authenticated to SharePoint",
+            "message": "Successfully authenticated to SharePoint via Service Principal",
             "site_id": site_id,
             "drive_id": drive_id
         })
