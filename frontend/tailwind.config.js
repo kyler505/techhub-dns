@@ -48,6 +48,20 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // TAMU Maroon color palette
+        maroon: {
+          50: '#fdf2f4',
+          100: '#fce7eb',
+          200: '#f9d0d9',
+          300: '#f4a9ba',
+          400: '#ed7594',
+          500: '#e04a73',
+          600: '#cc2a5a',
+          700: '#500000',  // Official TAMU Maroon
+          800: '#400000',
+          900: '#300000',
+          950: '#1a0000',
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
