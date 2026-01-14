@@ -5,6 +5,8 @@ Provides endpoints for SAML login/logout and session management.
 """
 
 import logging
+import json
+import os
 from flask import Blueprint, request, redirect, make_response, jsonify, g
 
 from app.config import settings
@@ -12,6 +14,14 @@ from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
 
 logger = logging.getLogger(__name__)
+
+# #region agent log
+# Cross-platform log path: use workspace root if available, otherwise use home directory
+_workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+DEBUG_LOG_PATH = os.path.join(_workspace_root, '.cursor', 'debug.log')
+# Ensure directory exists
+os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
+# #endregion
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -138,14 +148,94 @@ def get_current_user():
 
     Returns user info if authenticated, 401 otherwise.
     """
-    if not hasattr(g, "user") or not g.user:
-        # Return OK with null user to avoid 401 console errors on startup
-        return jsonify({"user": None, "session": None})
+    # #region agent log
+    try:
+        with open(DEBUG_LOG_PATH, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth.py:135","message":"get_current_user entry","data":{"has_g_user":hasattr(g,"user")},"timestamp":int(__import__('time').time()*1000)})+'\n')
+    except: pass
+    # #endregion
+    try:
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:141","message":"before g.user check","data":{"hasattr_g_user":hasattr(g,"user"),"g_user_exists":hasattr(g,"user") and g.user is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
+        if not hasattr(g, "user") or not g.user:
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth.py:143","message":"no user found, returning null","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            except: pass
+            # #endregion
+            # Return OK with null user to avoid 401 console errors on startup
+            return jsonify({"user": None, "session": None})
 
-    return jsonify({
-        "user": g.user.to_dict(),
-        "session": g.session.to_dict() if hasattr(g, "session") and g.session else None,
-    })
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:149","message":"before to_dict calls","data":{"user_id":str(g.user.id) if hasattr(g.user,"id") else None,"has_session":hasattr(g,"session"),"session_exists":hasattr(g,"session") and g.session is not None,"user_type":type(g.user).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
+        # Eagerly access all attributes while session is still open to prevent detached instance errors
+        # #region agent log
+        try:
+            # Access all user attributes to ensure they're loaded
+            _ = g.user.id, g.user.email, g.user.display_name, g.user.department, g.user.created_at, g.user.last_login_at
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:154","message":"user attributes accessed","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except Exception as e:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:154","message":"user attributes access failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            raise
+        # #endregion
+        # #region agent log
+        try:
+            user_dict = g.user.to_dict()
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:162","message":"user.to_dict() success","data":{"user_dict_keys":list(user_dict.keys()) if user_dict else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except Exception as e:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:162","message":"user.to_dict() failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            raise
+        # #endregion
+        # #region agent log
+        try:
+            if hasattr(g, "session") and g.session:
+                # Access all session attributes to ensure they're loaded
+                _ = g.session.id, g.session.created_at, g.session.expires_at, g.session.last_seen_at, g.session.user_agent, g.session.ip_address
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:172","message":"session attributes accessed","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except Exception as e:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:172","message":"session attributes access failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            raise
+        # #endregion
+        # #region agent log
+        try:
+            session_dict = g.session.to_dict() if hasattr(g, "session") and g.session else None
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:180","message":"session.to_dict() success","data":{"session_dict_keys":list(session_dict.keys()) if session_dict else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except Exception as e:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:180","message":"session.to_dict() failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            raise
+        # #endregion
+        return jsonify({
+            "user": user_dict,
+            "session": session_dict,
+        })
+    except Exception as e:
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth.py:225","message":"get_current_user exception","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
+        # Log the full exception for debugging
+        logger.exception(f"Error in get_current_user: {e}")
+        # Re-raise to let Flask error handler deal with it
+        raise
 
 
 @bp.route("/logout", methods=["POST"])
