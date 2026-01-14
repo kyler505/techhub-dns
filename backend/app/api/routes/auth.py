@@ -229,14 +229,14 @@ def revoke_all_sessions():
 def _prepare_flask_request():
     """
     Prepare request dict for python3-saml from Flask request.
-    """
-    url_data = request.url.split("?")
 
+    IMPORTANT: python3-saml uses these values to compute the "received at" URL
+    when validating the SAML response's Destination attribute. The library
+    constructs the URL as: {https}://{http_host}{script_name}
+    """
     # PythonAnywhere (and other proxies) send X-Forwarded-Proto
     # We must explicitly check this because python3-saml validates the destination URL
     forwarded_proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    # Log the detected protocol for debugging
-    logger.info(f"Preparing SAML request. Proto: {forwarded_proto}, Scheme: {request.scheme}, Headers: {dict(request.headers)}")
 
     # CRITICAL: PythonAnywhere internal proxy sends X-Forwarded-Proto: http even for HTTPS
     # We force HTTPS for pythonanywhere.com hosts since they are always served over HTTPS externally
@@ -244,10 +244,18 @@ def _prepare_flask_request():
     is_pythonanywhere = "pythonanywhere.com" in host
     is_https = is_pythonanywhere or forwarded_proto.lower() == "https" or request.scheme == "https"
 
+    # Log the detected protocol for debugging
+    logger.info(f"Preparing SAML request. is_https={is_https}, is_pythonanywhere={is_pythonanywhere}, "
+                f"forwarded_proto={forwarded_proto}, host={host}")
+
+    # For HTTPS, we force port 443 (standard) - do not include in URL computation
+    # python3-saml only appends non-standard ports to the URL
+    server_port = "443" if is_https else "80"
+
     return {
         "https": "on" if is_https else "off",
         "http_host": request.host,
-        "server_port": request.environ.get("SERVER_PORT", "443" if is_https else "80"),
+        "server_port": server_port,
         "script_name": request.path,
         "get_data": request.args.copy(),
         "post_data": request.form.copy(),
