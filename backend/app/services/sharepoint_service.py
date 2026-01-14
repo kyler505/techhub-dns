@@ -118,6 +118,88 @@ class SharePointService:
         subfolder = subfolder.strip("/")
         return f"{base_path}/{subfolder}" if subfolder else base_path
 
+    def test_connection(self) -> Dict[str, Any]:
+        """
+        Test the SharePoint connection and return status details.
+
+        Returns:
+            dict with 'success', 'site_id', 'drive_id', and optionally 'error'
+        """
+        if not self.is_enabled:
+            return {
+                "success": False,
+                "error": "SharePoint not configured (missing AZURE_* or SHAREPOINT_* env vars)"
+            }
+
+        try:
+            # Test authentication
+            self._get_access_token()
+
+            # Try to get site ID (tests Graph API access)
+            site_id = self._get_site_id()
+            drive_id = self._get_drive_id()
+
+            return {
+                "success": True,
+                "site_id": site_id,
+                "drive_id": drive_id,
+            }
+        except Exception as e:
+            error_str = str(e)
+            logger.error(f"SharePoint connection test failed: {error_str}")
+
+            # Parse common Azure AD errors
+            if "AADSTS65001" in error_str:
+                return {
+                    "success": False,
+                    "error": "Admin consent required for Graph API permissions"
+                }
+            elif "AADSTS7000215" in error_str:
+                return {
+                    "success": False,
+                    "error": "Invalid or expired client secret"
+                }
+            elif "AADSTS700016" in error_str:
+                return {
+                    "success": False,
+                    "error": "Application not found in tenant"
+                }
+            elif "403" in error_str or "Forbidden" in error_str:
+                return {
+                    "success": False,
+                    "error": "Access denied - check Sites.ReadWrite.All permission"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": error_str[:200]
+                }
+
+    def upload_file_safe(
+        self,
+        content: bytes,
+        subfolder: str,
+        filename: str
+    ) -> Optional[str]:
+        """
+        Upload a file to SharePoint with graceful error handling.
+
+        Unlike upload_file(), this method returns None on failure instead of raising.
+        Use this when SharePoint storage is optional.
+
+        Returns:
+            Web URL to the uploaded file, or None if upload failed
+        """
+        if not self.is_enabled:
+            logger.warning(f"SharePoint disabled, skipping upload: {filename}")
+            return None
+
+        try:
+            return self.upload_file(content, subfolder, filename)
+        except Exception as e:
+            logger.error(f"SharePoint upload failed for {filename}: {e}")
+            return None
+
     def upload_file(
         self,
         content: bytes,
