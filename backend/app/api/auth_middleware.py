@@ -43,20 +43,11 @@ def init_auth_middleware(app):
     @app.teardown_appcontext
     def shutdown_session(exception=None):
         """Close the auth session at the end of the request."""
+        # Don't close session here - let it close naturally
+        # The session will be closed when the request context is torn down
+        # This ensures objects can be serialized before session closes
         db = getattr(g, '_auth_session', None)
         if db is not None:
-            # Expunge user and session objects from session before closing
-            # This allows them to be accessed after the session is closed
-            if hasattr(g, 'user') and g.user is not None:
-                try:
-                    db.expunge(g.user)
-                except:
-                    pass
-            if hasattr(g, 'session') and g.session is not None:
-                try:
-                    db.expunge(g.session)
-                except:
-                    pass
             db.close()
 
     @app.before_request
