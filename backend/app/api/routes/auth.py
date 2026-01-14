@@ -103,12 +103,21 @@ def saml_callback():
 
         # Create response with session cookie
         response = make_response(redirect(relay_state))
+
+        # Determine if secure cookie (HTTPS)
+        is_secure = settings.flask_env != "development"
+
+        # Debug logging for cookie setting
+        logger.info(f"Setting session cookie: name={settings.session_cookie_name}, "
+                    f"session_id={session.id[:8]}..., secure={is_secure}, "
+                    f"flask_env={settings.flask_env}, relay_state={relay_state}")
+
         response.set_cookie(
             settings.session_cookie_name,
             session.id,
             max_age=settings.session_max_age_hours * 3600,
             httponly=True,
-            secure=settings.flask_env != "development",
+            secure=is_secure,
             samesite="Lax",
         )
 
