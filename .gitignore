@@ -32,3 +32,6 @@ docs/
 
 # Logs
 .logs/
+
+# Automation scripts (may contain credentials)
+automation_scripts/
