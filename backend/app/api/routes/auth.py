@@ -148,169 +148,68 @@ def get_current_user():
     Get current authenticated user.
 
     Returns user info if authenticated, 401 otherwise.
+    
+    REFACTORED: Query fresh from database using properly scoped session.
+    Middleware now stores only IDs, avoiding DetachedInstanceError.
     """
     # #region agent log
     try:
         with open(DEBUG_LOG_PATH, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth.py:135","message":"get_current_user entry","data":{"has_g_user":hasattr(g,"user")},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:145","message":"get_current_user entry (refactored)","data":{"has_user_id":hasattr(g,"user_id") and g.user_id is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
     except: pass
     # #endregion
+    
+    # Check if user is authenticated (middleware sets g.user_id)
+    user_id = getattr(g, 'user_id', None)
+    session_id = getattr(g, 'session_id', None)
+    
+    if not user_id:
+        # Not authenticated - return null (not 401, let frontend handle redirect)
+        return jsonify({"user": None, "session": None})
+    
+    # Query fresh from database using properly scoped session
+    from app.models.user import User
+    from app.models.session import Session
+    
+    # #region agent log
     try:
-        # #region agent log
-        try:
-            with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:141","message":"before g.user check","data":{"hasattr_g_user":hasattr(g,"user"),"g_user_exists":hasattr(g,"user") and g.user is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        if not hasattr(g, "user") or not g.user:
+        with open(DEBUG_LOG_PATH, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:165","message":"querying user fresh from db","data":{"user_id":user_id,"session_id":session_id[:8] if session_id else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+    except: pass
+    # #endregion
+    
+    with get_db() as db:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
             # #region agent log
             try:
                 with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth.py:143","message":"no user found, returning null","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:173","message":"user not found in db","data":{"user_id":user_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
             except: pass
             # #endregion
-            # Return OK with null user to avoid 401 console errors on startup
-            return jsonify({"user": None, "session": None})
-
-        # #region agent log
-        try:
-            with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:149","message":"before serialization","data":{"has_session":hasattr(g,"session"),"session_exists":hasattr(g,"session") and g.session is not None,"user_type":type(g.user).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        # Manually construct dictionaries to avoid DetachedInstanceError
-        # Access ALL attributes immediately while session is definitely open
-        # Store in local variables so we don't need SQLAlchemy attribute access later
-        db = getattr(g, '_auth_session', None)
-        if db is None:
-            # No session - this shouldn't happen but handle gracefully
-            logger.error("No auth session found when trying to serialize user")
             return jsonify({"user": None, "session": None})
         
-        # #region agent log
-        try:
-            with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:163","message":"accessing all attributes while session open","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
+        # Build user dict while session is open - no detached instance issues
+        user_dict = user.to_dict()
         
-        # Access all user attributes immediately while session is open
-        # Store in local variables to avoid any SQLAlchemy attribute access later
-        try:
-            user_id = g.user.id
-            user_email = g.user.email
-            user_display_name = g.user.display_name
-            user_department = g.user.department
-            user_created_at = g.user.created_at
-            user_last_login_at = g.user.last_login_at
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:175","message":"user attributes accessed successfully","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-        except Exception as e:
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:180","message":"user attribute access failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            raise
-        
-        # Build user dict from local variables (no SQLAlchemy access needed)
-        try:
-            user_dict = {
-                "id": user_id,
-                "email": user_email,
-                "display_name": user_display_name,
-                "department": user_department,
-                "created_at": user_created_at.isoformat() if user_created_at else None,
-                "last_login_at": user_last_login_at.isoformat() if user_last_login_at else None,
-            }
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:175","message":"user dict built successfully","data":{"user_dict_keys":list(user_dict.keys())},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-        except Exception as e:
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:179","message":"user dict build failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            raise
-
-        # Access all session attributes immediately while session is open
-        # Store in local variables to avoid any SQLAlchemy attribute access later
+        # Get session if available
         session_dict = None
-        if hasattr(g, "session") and g.session:
-            try:
-                session_id = g.session.id
-                session_created_at = g.session.created_at
-                session_expires_at = g.session.expires_at
-                session_last_seen_at = g.session.last_seen_at
-                session_user_agent = g.session.user_agent
-                session_ip_address = g.session.ip_address
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:205","message":"session attributes accessed successfully","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-            except Exception as e:
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:210","message":"session attribute access failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-                # Session dict is optional, so log but don't fail
-                logger.warning(f"Failed to access session attributes: {e}")
-            else:
-                # Build session dict from local variables (no SQLAlchemy access needed)
-                session_dict = {
-                    "id": session_id,
-                    "created_at": session_created_at.isoformat() if session_created_at else None,
-                    "expires_at": session_expires_at.isoformat() if session_expires_at else None,
-                    "last_seen_at": session_last_seen_at.isoformat() if session_last_seen_at else None,
-                    "user_agent": session_user_agent,
-                    "ip_address": session_ip_address,
-                    "is_current": False,
-                }
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:194","message":"session dict built successfully","data":{"session_dict_keys":list(session_dict.keys())},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-            except Exception as e:
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:198","message":"session dict build failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-                # Session dict is optional, so log but don't fail
-                logger.warning(f"Failed to build session dict: {e}")
-
-        return jsonify({
-            "user": user_dict,
-            "session": session_dict,
-        })
-    except Exception as e:
+        if session_id:
+            session_obj = db.query(Session).filter(Session.id == session_id).first()
+            if session_obj:
+                session_dict = session_obj.to_dict()
+        
         # #region agent log
         try:
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth.py:225","message":"get_current_user exception","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:190","message":"returning user/session data","data":{"user_email":user_dict.get("email"),"has_session":session_dict is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
-        # Log the full exception for debugging
-        logger.exception(f"Error in get_current_user: {e}")
-        # Re-raise to let Flask error handler deal with it
-        raise
+    
+    return jsonify({
+        "user": user_dict,
+        "session": session_dict,
+    })
 
 
 @bp.route("/logout", methods=["POST"])
@@ -337,13 +236,14 @@ def list_sessions():
     """
     List all active sessions for the current user.
     """
-    if not hasattr(g, "user") or not g.user:
+    user_id = getattr(g, 'user_id', None)
+    if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
     current_session_id = request.cookies.get(settings.session_cookie_name)
 
     with get_db() as db:
-        sessions = saml_auth_service.get_user_sessions(db, g.user.id)
+        sessions = saml_auth_service.get_user_sessions(db, user_id)
         result = []
         for s in sessions:
             session_dict = s.to_dict()
@@ -358,7 +258,8 @@ def revoke_session():
     """
     Revoke a specific session.
     """
-    if not hasattr(g, "user") or not g.user:
+    user_id = getattr(g, 'user_id', None)
+    if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
     data = request.get_json()
@@ -372,7 +273,7 @@ def revoke_session():
         from app.models.session import Session
         session = db.query(Session).filter(
             Session.id == session_id,
-            Session.user_id == g.user.id
+            Session.user_id == user_id
         ).first()
 
         if not session:
@@ -388,7 +289,8 @@ def revoke_all_sessions():
     """
     Revoke all sessions except current one (sign out everywhere else).
     """
-    if not hasattr(g, "user") or not g.user:
+    user_id = getattr(g, 'user_id', None)
+    if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
     current_session_id = request.cookies.get(settings.session_cookie_name)
@@ -396,7 +298,7 @@ def revoke_all_sessions():
     with get_db() as db:
         count = saml_auth_service.revoke_all_sessions(
             db,
-            g.user.id,
+            user_id,
             except_session_id=current_session_id
         )
 

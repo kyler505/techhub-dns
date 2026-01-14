@@ -11,7 +11,7 @@ from functools import wraps
 from flask import request, g, jsonify
 
 from app.config import settings
-from app.database import get_db, get_db_session
+from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
 
 logger = logging.getLogger(__name__)
@@ -37,144 +37,73 @@ def init_auth_middleware(app):
     """
     Initialize authentication middleware for the Flask app.
 
-    This runs before every request to validate session and attach user.
+    This runs before every request to validate session and attach user ID.
+    REFACTORED: No longer stores ORM objects, only IDs - no teardown needed.
     """
-
-    @app.teardown_appcontext
-    def shutdown_session(exception=None):
-        """Close the auth session at the end of the request."""
-        # Don't close session here - let it close naturally
-        # The session will be closed when the request context is torn down
-        # This ensures objects can be serialized before session closes
-        db = getattr(g, '_auth_session', None)
-        if db is not None:
-            db.close()
 
     @app.before_request
     def authenticate_request():
-        """Validate session and attach user to request context."""
+        """
+        Validate session and attach user ID to request context.
+        
+        REFACTORED: Store only IDs (strings) in g, not ORM objects.
+        This avoids DetachedInstanceError - routes query fresh from DB when needed.
+        """
         # #region agent log
         try:
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"auth_middleware.py:40","message":"authenticate_request entry","data":{"path":request.path},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth_middleware.py:54","message":"authenticate_request entry (refactored)","data":{"path":request.path},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
-        try:
-            # Initialize g.user and g.session
-            g.user = None
-            g.session = None
-
-            # Check if SAML is configured (skip if strictly dev mode without auth)
-            # #region agent log
-            try:
-                is_configured = saml_auth_service.is_configured()
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth_middleware.py:48","message":"SAML configured check","data":{"is_configured":is_configured},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except Exception as e:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth_middleware.py:48","message":"SAML configured check failed","data":{"error":str(e)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                raise
-            # #endregion
-            if not is_configured:
-                return None
-
-            # 1. Attempt to validate session from cookie (even for public routes)
-            session_id = request.cookies.get(settings.session_cookie_name)
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"auth_middleware.py:55","message":"session_id from cookie","data":{"has_session_id":session_id is not None,"session_id_prefix":session_id[:8] if session_id else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            if session_id:
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth_middleware.py:58","message":"before get_db_session","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-                # Create a dedicated session for auth that lives for the request
-                try:
-                    db = get_db_session()
+        
+        # Initialize with None - routes check these IDs
+        g.user_id = None
+        g.session_id = None
+        # Legacy compatibility - some routes may still check g.user
+        g.user = None
+        g.session = None
+        
+        # Check if SAML is configured
+        if not saml_auth_service.is_configured():
+            return None
+        
+        # Get session ID from cookie
+        session_id_cookie = request.cookies.get(settings.session_cookie_name)
+        if not session_id_cookie:
+            # No session cookie - check auth requirements below
+            pass
+        else:
+            # Validate session using a short-lived DB session
+            with get_db() as db:
+                result = saml_auth_service.validate_session(db, session_id_cookie)
+                if result:
+                    user, session = result
+                    # Store only IDs - routes will query fresh when needed
+                    g.user_id = str(user.id)
+                    g.session_id = str(session.id)
                     # #region agent log
                     try:
                         with open(DEBUG_LOG_PATH, 'a') as f:
-                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth_middleware.py:62","message":"get_db_session success","data":{"db_type":type(db).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth_middleware.py:80","message":"session validated, storing IDs only","data":{"user_id":g.user_id,"session_id":g.session_id[:8] if g.session_id else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
                     except: pass
                     # #endregion
-                    g._auth_session = db
-                except Exception as e:
-                    # #region agent log
-                    try:
-                        with open(DEBUG_LOG_PATH, 'a') as f:
-                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"auth_middleware.py:64","message":"get_db_session failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                    except: pass
-                    # #endregion
-                    raise
-
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"auth_middleware.py:68","message":"before validate_session","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-                try:
-                    result = saml_auth_service.validate_session(db, session_id)
-                    # #region agent log
-                    try:
-                        with open(DEBUG_LOG_PATH, 'a') as f:
-                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"auth_middleware.py:71","message":"validate_session result","data":{"has_result":result is not None,"result_type":type(result).__name__ if result else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                    except: pass
-                    # #endregion
-                    if result:
-                        user, session = result
-                        # #region agent log
-                        try:
-                            with open(DEBUG_LOG_PATH, 'a') as f:
-                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth_middleware.py:75","message":"setting g.user and g.session","data":{"user_id":str(user.id) if hasattr(user,"id") else None,"session_id":str(session.id) if hasattr(session,"id") else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                        except: pass
-                        # #endregion
-                        # User remains attached to g._auth_session for the duration of request
-                        g.user = user
-                        g.session = session
-                    else:
-                        # Invalid/expired session - we don't clear cookie here,
-                        # but we won't set g.user.
-                        # Logic below decides if this is fatal.
-                        logger.debug(f"Invalid session: {session_id[:8]}...")
-                except Exception as e:
-                    # #region agent log
-                    try:
-                        with open(DEBUG_LOG_PATH, 'a') as f:
-                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"auth_middleware.py:85","message":"validate_session exception","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                    except: pass
-                    # #endregion
-                    raise
-
-            # 2. Check strict auth requirements
-            path = request.path
-            is_public = any(path.startswith(r) for r in PUBLIC_ROUTES)
-
-            # If route is public, we're done (g.user might be set or None)
-            if is_public:
-                return None
-
-            # If route is protected and we have no user, return 401
-            if not g.user:
-                if path.startswith("/api/"):
-                    return jsonify({"error": "Authentication required"}), 401
-                # For non-API routes (if any), could redirect, but frontend handles that
-                return None
-
-            return None  # Authenticated and protected, or public
-        except Exception as e:
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"auth_middleware.py:100","message":"authenticate_request exception","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            raise
+                else:
+                    logger.debug(f"Invalid session: {session_id_cookie[:8]}...")
+        
+        # Check strict auth requirements
+        path = request.path
+        is_public = any(path.startswith(r) for r in PUBLIC_ROUTES)
+        
+        if is_public:
+            return None
+        
+        # Protected route without valid session
+        if not g.user_id:
+            if path.startswith("/api/"):
+                return jsonify({"error": "Authentication required"}), 401
+            return None
+        
+        return None
 
 
 def require_auth(f):
@@ -188,12 +117,12 @@ def require_auth(f):
         @bp.route("/protected")
         @require_auth
         def protected_route():
-            user = g.user  # Guaranteed to exist
+            user_id = g.user_id  # Guaranteed to exist
             ...
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not hasattr(g, "user") or not g.user:
+        if not getattr(g, "user_id", None):
             return jsonify({"error": "Authentication required"}), 401
         return f(*args, **kwargs)
     return decorated_function
@@ -204,7 +133,16 @@ def get_current_user_email() -> str:
     Get current user's email for audit logging.
 
     Returns "system" if no user is authenticated (e.g., background jobs).
+    
+    NOTE: This queries the database to get the email since we only store ID in g.
     """
-    if hasattr(g, "user") and g.user:
-        return g.user.email
+    from app.database import get_db
+    from app.models.user import User
+    
+    user_id = getattr(g, "user_id", None)
+    if user_id:
+        with get_db() as db:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                return user.email
     return "system"
