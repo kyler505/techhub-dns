@@ -47,6 +47,9 @@ def init_auth_middleware(app):
                 result = saml_auth_service.validate_session(db, session_id)
                 if result:
                     user, session = result
+                    # Expunge objects so they can be used after db session closes
+                    db.expunge(user)
+                    db.expunge(session)
                     g.user = user
                     g.session = session
                 else:
