@@ -20,7 +20,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (isLoading) {
         // Show loading spinner while checking auth
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="flex items-center justify-center w-full h-full flex-1">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-maroon-700"></div>
             </div>
         );
