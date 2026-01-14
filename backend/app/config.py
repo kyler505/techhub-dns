@@ -60,6 +60,27 @@ class Settings(BaseSettings):
     teams_recipient_notifications_enabled: bool = False  # Safety: disabled by default
     power_automate_teams_flow_url: Optional[str] = None  # HTTP trigger URL for Teams flow
 
+    # ===========================================
+    # TAMU Entra ID Authentication (SAML + Service Principal)
+    # ===========================================
+
+    # SAML Configuration (User Authentication)
+    saml_enabled: bool = False
+    saml_idp_entity_id: Optional[str] = None  # From Azure: Microsoft Entra Identifier
+    saml_idp_sso_url: Optional[str] = None  # From Azure: Login URL
+    saml_idp_cert_path: Optional[str] = None  # Path to downloaded certificate file
+    saml_sp_entity_id: str = "https://techhub.pythonanywhere.com"
+    saml_acs_url: str = "https://techhub.pythonanywhere.com/auth/saml/callback"
+
+    # Service Principal Configuration (Backend Graph API)
+    azure_tenant_id: Optional[str] = None
+    azure_client_id: Optional[str] = None  # Service Principal client ID
+    azure_client_secret: Optional[str] = None  # Service Principal secret
+
+    # Session Configuration
+    session_cookie_name: str = "techhub_session"
+    session_max_age_hours: int = 168  # 7 days
+
     # Flask environment
     flask_env: str = "development"
 

@@ -8,46 +8,36 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 
 ### Key Capabilities
 
+- **Unified Authentication**: Secure TAMU SSO (SAML) for users and Service Principal for backend operations
 - **Automated Order Sync**: Syncs picked orders (inventoryStatus `started`) from Inflow API every 5 minutes
 - **Real-time Webhook Integration**: Receives instant order updates via Inflow webhooks with fallback to polling
 - **Smart Location Extraction**: Extracts building abbreviations (ACAD, ZACH, LAAH, etc.) from addresses using ArcGIS service
-- **Order Remarks Parsing**: Automatically extracts alternative delivery locations from order remarks
 - **Dual Workflow Management**:
   - **Local Delivery**: Picked -> Pre-Delivery -> In Delivery -> Delivered (with delivery runs)
   - **Shipping**: Picked -> Pre-Delivery -> Shipping -> Delivered (with shipping workflow stages)
 - **Delivery Run Management**: Group orders into delivery runs with vehicle assignment and runner tracking
 - **Live Delivery Dashboard**: Real-time tracking of active delivery runs with Socket.IO updates
 - **Prep Gating**: Asset tagging, picklist generation, and QA are required before Pre-Delivery
-- **QA Method Selection**: Choose between "Delivery" or "Shipping" workflows during QA
-- **Teams Integration**: Sends automated notifications when orders are ready and when delivery starts
+- **Teams Integration**: System-automated notifications via Microsoft Graph API
 - **Audit Logging**: Complete audit trail of all status changes and delivery run actions
-- **Bulk Operations**: Efficient bulk status transitions for Pre-Delivery queue management
-- **Shipping Workflow**: Three-stage process (Work Area → Dock → Shipped to Carrier) with carrier tracking
-- **Document Signing**: Sign and download delivery PDFs stored in `frontend/public/pdfs`
-- **Local Storage**: Picklists (generated from inFlow data) and QA responses stored under `STORAGE_ROOT` on disk
+- **Admin Status Dashboard**: Real-time view of system health and feature configuration
 
 ## Architecture
 
-- **Backend**: Flask with MySQL, APScheduler for periodic sync, Socket.IO for real-time updates
+- **Backend**: Flask with MySQL, MSAL (Graph API), python3-saml (SSO), APScheduler
 - **Frontend**: React + Vite with TypeScript, TailwindCSS, Socket.IO client
-- **Notifications**: Microsoft Teams webhook integration
-- **Real-time Updates**: Socket.IO connections for live delivery run tracking
-- **External Services**: Inflow API (polling + webhooks), ArcGIS (AggieMap), Azure Key Vault
+- **Authentication**: TAMU Entra ID (SAML for users, Client Credentials for backend)
+- **Services**: Microsoft Graph (Email, SharePoint, Teams), Inflow API, ArcGIS
+- **Real-time**: Socket.IO for delivery tracking, Webhooks for order sync
 
 ## Setup
 
 ### Prerequisites
 
-Before setting up the project, ensure you have the following installed:
-
-- **Python 3.12.10** - Download from [python.org](https://www.python.org/downloads/)
-- **Node.js 18+** - Download from [nodejs.org](https://nodejs.org/)
-- **MySQL 8.0+** - Download from [mysql.com](https://dev.mysql.com/downloads/mysql/) or use Docker
-- **Docker** (optional, for local MySQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
-- Note: No additional Visual Studio Build Tools required for MySQL driver (pymysql is pure Python)
-  - Download from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/)
-  - Install "Desktop development with C++" workload
-  - Or install the standalone [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+- **Python 3.12+**
+- **Node.js 18+**
+- **MySQL 8.0+**
+- **Azure App Registrations** (See [docs/AUTHENTICATION_SETUP.md](docs/AUTHENTICATION_SETUP.md))
 
 ### Backend
 
@@ -62,62 +52,33 @@ python -m venv .venv
 ```
 
 3. Activate the virtual environment:
-   - **Windows (PowerShell)**:
-   ```powershell
-   .venv\Scripts\Activate.ps1
-   ```
-   - **Windows (Command Prompt)**:
-   ```cmd
-   .venv\Scripts\activate.bat
-   ```
-   - **Linux/Mac**:
-   ```bash
-   source .venv/bin/activate
-   ```
+   - **Windows (PowerShell)**: `.venv\Scripts\Activate.ps1`
+   - **Linux/Mac**: `source .venv/bin/activate`
 
-4. Install dependencies:
+4. Install dependencies (including MSAL and SAML):
 ```bash
 pip install -r requirements.txt
 ```
 
-5. Set up MySQL:
-   - **Option A: Use Docker Compose** (recommended for local development):
+5. Set up MySQL (Docker or Local):
    ```bash
-   # From the project root directory
    docker compose up -d mysql
    ```
-   - **Option B: Use existing MySQL instance**
-     - Ensure MySQL is running
-     - Create a database for the application
-     - Note the connection details (host, port, database name, username, password)
 
-6. Create a `.env` file in the `backend` directory and configure it:
+6. Configure Environment:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Database, Inflow, and Azure credentials
+   ```
+   > See `docs/AUTHENTICATION_SETUP.md` for obtaining Azure IDs and Certificates.
+
+7. **SAML Certificate**:
+   Place your downloaded `saml_idp_cert.crt` file in `backend/certs/`.
+
+8. Run database migrations:
 ```bash
-# Create .env file (you may need to create this manually)
-# Add the following variables:
-# DATABASE_URL=mysql+pymysql://username:password@localhost:3306/database_name
-# INFLOW_API_URL=your_inflow_api_url
-# INFLOW_API_KEY=your_inflow_api_key
-# TEAMS_WEBHOOK_URL=your_teams_webhook_url (optional)
-# AZURE_KEY_VAULT_URL=your_azure_key_vault_url (optional)
-# STORAGE_ROOT=storage
+alembic upgrade head
 ```
-
-   Example `.env` file for Docker MySQL:
-   ```
-   DATABASE_URL=mysql+pymysql://techhub:techhub_password@localhost:3306/techhub_delivery
-   INFLOW_API_URL=https://your-inflow-api-url.com
-   INFLOW_API_KEY=your-api-key-here
-   STORAGE_ROOT=storage
-
-   # SMTP Email Configuration (for Order Details emails)
-   SMTP_HOST=smtp.office365.com
-   SMTP_PORT=587
-   SMTP_USER=techhub@tamu.edu
-   SMTP_PASSWORD=your-smtp-password
-   EMAIL_FROM_ADDRESS=techhub@tamu.edu
-   EMAIL_FROM_NAME=TechHub Technology Services
-   ```
 
 7. Run database migrations:
 ```bash

@@ -3,8 +3,9 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import settings
-from app.api.routes import orders, inflow, teams, audit, delivery_runs, sharepoint
+from app.api.routes import orders, inflow, audit, delivery_runs, sharepoint, auth, system
 from app.api.middleware import register_error_handlers
+from app.api.auth_middleware import init_auth_middleware
 from app.scheduler import start_scheduler
 import logging
 import atexit
@@ -27,6 +28,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Register error handlers
 register_error_handlers(app)
+
+# Initialize authentication middleware
+init_auth_middleware(app)
 
 # Global scheduler reference
 _scheduler = None
@@ -186,10 +190,11 @@ atexit.register(shutdown_scheduler)
 # Register blueprints with full path prefixes
 app.register_blueprint(orders.bp, url_prefix="/api/orders")
 app.register_blueprint(inflow.bp, url_prefix="/api/inflow")
-app.register_blueprint(teams.bp, url_prefix="/api/teams")
 app.register_blueprint(audit.bp, url_prefix="/api/audit")
 app.register_blueprint(delivery_runs.bp, url_prefix="/api/delivery-runs")
 app.register_blueprint(sharepoint.sharepoint_bp)
+app.register_blueprint(auth.bp)
+app.register_blueprint(system.bp)
 
 
 @app.route("/health")

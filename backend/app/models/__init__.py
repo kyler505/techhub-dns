@@ -4,6 +4,8 @@ from app.models.teams_notification import TeamsNotification, NotificationStatus
 from app.models.teams_config import TeamsConfig
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.models.delivery_run import DeliveryRun, VehicleEnum, DeliveryRunStatus
+from app.models.user import User
+from app.models.session import Session
 
 __all__ = [
     "Order",
@@ -17,4 +19,6 @@ __all__ = [
     "DeliveryRun",
     "VehicleEnum",
     "DeliveryRunStatus",
+    "User",
+    "Session",
 ]

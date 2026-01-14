@@ -41,6 +41,8 @@ The application solves the challenge of managing delivery orders from the point 
 - Alembic (Database migrations)
 - APScheduler (Background task scheduling)
 - Flask-SocketIO (Real-time communications)
+- **MSAL** (Microsoft Authentication Library for Graph API)
+- **python3-saml** (SAML 2.0 User Authentication)
 - httpx (HTTP client for external APIs)
 
 **Frontend:**
@@ -55,8 +57,8 @@ The application solves the challenge of managing delivery orders from the point 
 **External Services:**
 - Inflow API (Order source)
 - ArcGIS Service (Building data)
-- Microsoft Teams (Notifications)
-- Azure Key Vault (Optional: API key storage)
+- **Microsoft Entra ID** (Authentication & Authorization)
+- **Microsoft Graph API** (Email, SharePoint, Teams)
 
 ## Architecture
 
@@ -68,28 +70,27 @@ The application solves the challenge of managing delivery orders from the point 
 │  (React)    │ HTTP/   │   (Flask)    │   SQL   │  (Database) │
 │             │   WS    │              │         │             │
 └─────────────┘         └──────────────┘         └─────────────┘
-                               │
-                               │
-        ┌──────────────────────┼──────────────────────┐
-        │                      │                      │
-        ▼                      ▼                      ▼
-  ┌──────────┐         ┌──────────────┐      ┌─────────────┐
-  │  Inflow  │         │    ArcGIS    │      │   Teams     │
-  │ API/Webhk│         │   Service    │      │  Webhook    │
-  └──────────┘         └──────────────┘      └─────────────┘
+       │                       │
+       │ (SAML Redirect)       │ (Graph API)
+       ▼                       ▼
+┌──────────────┐        ┌──────────────┐      ┌─────────────┐
+│  Microsoft   │        │   Microsoft  │◄────►│   Inflow    │
+│   Entra ID   │        │     Graph    │      │  API/Webhk  │
+└──────────────┘        └──────────────┘      └─────────────┘
 ```
 
 ### Request Flow
 
-1. **Order Sync**: APScheduler triggers sync every 5 minutes OR real-time webhook updates from Inflow
-2. **Inflow API/Webhooks**: Fetches picked orders from Inflow (polling) or receives instant updates (webhooks)
-3. **Order Processing**: Extracts locations, building codes, determines delivery vs shipping workflow, processes data
-4. **Database**: Stores orders with extracted information and workflow classification
-5. **Delivery Run Creation**: Users create delivery runs, assign orders and vehicles
-6. **Status Changes**: User actions trigger status transitions (local delivery vs shipping workflows)
-7. **Real-time Updates**: Socket.IO broadcasts delivery run changes to connected clients
-8. **Notifications**: Teams notifications sent when orders are ready (PreDelivery) and when delivery starts (In Delivery)
-9. **Audit Logging**: All changes recorded in audit log including delivery run actions
+1. **Authentication**: User logs in via TAMU SSO (SAML). Backend verifies identity and establishes session.
+2. **Order Sync**: APScheduler triggers sync every 5 minutes OR real-time webhook updates from Inflow.
+3. **Inflow API/Webhooks**: Fetches picked orders from Inflow (polling) or receives instant updates (webhooks).
+4. **Order Processing**: Extracts locations, building codes, determines delivery vs shipping workflow.
+5. **Database**: Stores orders with extracted information and workflow classification.
+6. **Delivery Run Creation**: Users create delivery runs, assign orders and vehicles.
+7. **Status Changes**: User actions trigger status transitions (locked > pre-delivery > in-delivery).
+8. **Real-time Updates**: Socket.IO broadcasts delivery run changes to connected clients.
+9. **Notifications**: Backend (as Service Principal) sends Teams channel notifications via Graph API.
+10. **Audit Logging**: All changes recorded in audit log.
 
 ## System Components
 
@@ -99,6 +100,16 @@ The application solves the challenge of managing delivery orders from the point 
 backend/
 ├── app/
 │   ├── api/
+│   │   ├── routes/         # Blueprints (orders, auth, system, etc.)
+│   │   └── middleware/     # Auth middleware, error handlers
+│   ├── models/             # SQLAlchemy models (User, Session, Order)
+│   ├── services/           # Business logic
+│   │   ├── saml_auth_service.py # SAML handling
+│   │   ├── graph_service.py     # Microsoft Graph (Email/SharePoint)
+│   │   ├── inflow_service.py    # Inventory sync
+│   ├── utils/              # Helpers
+└── ...
+```│   ├── api/
 │   │   └── routes/
 │   │       ├── orders.py          # Order CRUD and status management
 │   │       ├── inflow.py          # Inflow sync endpoints and webhooks
