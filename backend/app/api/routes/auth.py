@@ -179,32 +179,54 @@ def get_current_user():
         except: pass
         # #endregion
         # Manually construct dictionaries to avoid DetachedInstanceError
-        # Access all attributes while session is still open, then build dict
+        # Access ALL attributes immediately while session is definitely open
+        # Store in local variables so we don't need SQLAlchemy attribute access later
         db = getattr(g, '_auth_session', None)
-        if db is not None:
-            # Ensure objects are refreshed and not expired
-            try:
-                db.refresh(g.user)
-                if hasattr(g, "session") and g.session:
-                    db.refresh(g.session)
-            except Exception as e:
-                logger.warning(f"Failed to refresh objects: {e}")
+        if db is None:
+            # No session - this shouldn't happen but handle gracefully
+            logger.error("No auth session found when trying to serialize user")
+            return jsonify({"user": None, "session": None})
         
         # #region agent log
         try:
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:163","message":"building user dict manually","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:163","message":"accessing all attributes while session open","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
-        # Build user dict manually while session is open
+        
+        # Access all user attributes immediately while session is open
+        # Store in local variables to avoid any SQLAlchemy attribute access later
+        try:
+            user_id = g.user.id
+            user_email = g.user.email
+            user_display_name = g.user.display_name
+            user_department = g.user.department
+            user_created_at = g.user.created_at
+            user_last_login_at = g.user.last_login_at
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:175","message":"user attributes accessed successfully","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            except: pass
+            # #endregion
+        except Exception as e:
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:180","message":"user attribute access failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            except: pass
+            # #endregion
+            raise
+        
+        # Build user dict from local variables (no SQLAlchemy access needed)
         try:
             user_dict = {
-                "id": g.user.id,
-                "email": g.user.email,
-                "display_name": g.user.display_name,
-                "department": g.user.department,
-                "created_at": g.user.created_at.isoformat() if g.user.created_at else None,
-                "last_login_at": g.user.last_login_at.isoformat() if g.user.last_login_at else None,
+                "id": user_id,
+                "email": user_email,
+                "display_name": user_display_name,
+                "department": user_department,
+                "created_at": user_created_at.isoformat() if user_created_at else None,
+                "last_login_at": user_last_login_at.isoformat() if user_last_login_at else None,
             }
             # #region agent log
             try:
@@ -220,18 +242,42 @@ def get_current_user():
             except: pass
             # #endregion
             raise
-        
-        # Build session dict manually while session is open
+
+        # Access all session attributes immediately while session is open
+        # Store in local variables to avoid any SQLAlchemy attribute access later
         session_dict = None
         if hasattr(g, "session") and g.session:
             try:
+                session_id = g.session.id
+                session_created_at = g.session.created_at
+                session_expires_at = g.session.expires_at
+                session_last_seen_at = g.session.last_seen_at
+                session_user_agent = g.session.user_agent
+                session_ip_address = g.session.ip_address
+                # #region agent log
+                try:
+                    with open(DEBUG_LOG_PATH, 'a') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:205","message":"session attributes accessed successfully","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                except: pass
+                # #endregion
+            except Exception as e:
+                # #region agent log
+                try:
+                    with open(DEBUG_LOG_PATH, 'a') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:210","message":"session attribute access failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                except: pass
+                # #endregion
+                # Session dict is optional, so log but don't fail
+                logger.warning(f"Failed to access session attributes: {e}")
+            else:
+                # Build session dict from local variables (no SQLAlchemy access needed)
                 session_dict = {
-                    "id": g.session.id,
-                    "created_at": g.session.created_at.isoformat() if g.session.created_at else None,
-                    "expires_at": g.session.expires_at.isoformat() if g.session.expires_at else None,
-                    "last_seen_at": g.session.last_seen_at.isoformat() if g.session.last_seen_at else None,
-                    "user_agent": g.session.user_agent,
-                    "ip_address": g.session.ip_address,
+                    "id": session_id,
+                    "created_at": session_created_at.isoformat() if session_created_at else None,
+                    "expires_at": session_expires_at.isoformat() if session_expires_at else None,
+                    "last_seen_at": session_last_seen_at.isoformat() if session_last_seen_at else None,
+                    "user_agent": session_user_agent,
+                    "ip_address": session_ip_address,
                     "is_current": False,
                 }
                 # #region agent log
@@ -249,7 +295,7 @@ def get_current_user():
                 # #endregion
                 # Session dict is optional, so log but don't fail
                 logger.warning(f"Failed to build session dict: {e}")
-        
+
         return jsonify({
             "user": user_dict,
             "session": session_dict,
