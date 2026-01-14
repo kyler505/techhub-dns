@@ -83,7 +83,7 @@ function AppContent() {
             </nav>
 
             {/* MAIN */}
-            <main className="flex-1 max-w-7xl mx-auto w-full px-4">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-4 flex flex-col">
                 <Routes>
                     {/* Public routes */}
                     <Route path="/login" element={<Login />} />
