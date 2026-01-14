@@ -178,69 +178,32 @@ def get_current_user():
                 f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:149","message":"before to_dict calls","data":{"has_session":hasattr(g,"session"),"session_exists":hasattr(g,"session") and g.session is not None,"user_type":type(g.user).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
-        # Eagerly load all attributes while session is still open, then expunge
-        # This prevents DetachedInstanceError when accessing attributes after session closes
-        db = getattr(g, '_auth_session', None)
-        if db is not None:
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:156","message":"eagerly loading attributes before expunge","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            # Access all user attributes to ensure they're loaded
-            try:
-                _ = g.user.id, g.user.email, g.user.display_name, g.user.department, g.user.created_at, g.user.last_login_at
-                # Access all session attributes if present
-                if hasattr(g, "session") and g.session:
-                    _ = g.session.id, g.session.created_at, g.session.expires_at, g.session.last_seen_at, g.session.user_agent, g.session.ip_address
-            except Exception as e:
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:164","message":"attribute access failed","data":{"error":str(e)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-                logger.warning(f"Failed to access attributes: {e}")
-            
-            # Now expunge objects from session so they can be accessed after session closes
-            try:
-                db.expunge(g.user)
-                if hasattr(g, "session") and g.session:
-                    db.expunge(g.session)
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:175","message":"objects expunged successfully","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-            except Exception as e:
-                # #region agent log
-                try:
-                    with open(DEBUG_LOG_PATH, 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:179","message":"expunge failed","data":{"error":str(e)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                except: pass
-                # #endregion
-                logger.warning(f"Failed to expunge objects: {e}")
-        
+        # Call to_dict() while session is still open to prevent DetachedInstanceError
+        # The session will be closed in teardown AFTER the response is returned
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"auth.py:155","message":"calling to_dict() while session is open","data":{"has_auth_session":getattr(g,"_auth_session",None) is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
         # #region agent log
         try:
             user_dict = g.user.to_dict()
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:187","message":"user.to_dict() success","data":{"user_dict_keys":list(user_dict.keys()) if user_dict else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:162","message":"user.to_dict() success","data":{"user_dict_keys":list(user_dict.keys()) if user_dict else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except Exception as e:
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:187","message":"user.to_dict() failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:162","message":"user.to_dict() failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
             raise
         # #endregion
         # #region agent log
         try:
             session_dict = g.session.to_dict() if hasattr(g, "session") and g.session else None
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:194","message":"session.to_dict() success","data":{"session_dict_keys":list(session_dict.keys()) if session_dict else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:170","message":"session.to_dict() success","data":{"session_dict_keys":list(session_dict.keys()) if session_dict else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except Exception as e:
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:194","message":"session.to_dict() failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"auth.py:170","message":"session.to_dict() failed","data":{"error":str(e),"error_type":type(e).__name__},"timestamp":int(__import__('time').time()*1000)})+'\n')
             raise
         # #endregion
         return jsonify({
