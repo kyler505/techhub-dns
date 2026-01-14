@@ -17,7 +17,7 @@ interface SystemStatus {
     graph_api: FeatureStatus;
     sharepoint: FeatureStatus;
     inflow_sync: FeatureStatus;
-    inflow_webhook: FeatureStatus;
+
 }
 
 export default function Admin() {
@@ -49,7 +49,7 @@ export default function Admin() {
                 graph_api: { name: "Microsoft Graph", enabled: false, configured: false, status: "disabled" },
                 sharepoint: { name: "SharePoint Storage", enabled: false, configured: false, status: "disabled" },
                 inflow_sync: { name: "Inflow Sync", enabled: true, configured: true, status: "active" },
-                inflow_webhook: { name: "Inflow Webhooks", enabled: false, configured: false, status: "disabled" },
+
             });
         } finally {
             setLoading(false);

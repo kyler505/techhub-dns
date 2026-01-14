@@ -25,7 +25,7 @@ def get_system_status():
         "graph_api": _get_graph_status(),
         "sharepoint": _get_sharepoint_status(),
         "inflow_sync": _get_inflow_sync_status(),
-        "inflow_webhook": _get_inflow_webhook_status(),
+
     }
 
     return jsonify(status)
@@ -308,36 +308,4 @@ def _get_inflow_sync_status():
         "configured": True,
         "status": "active",
         "details": f"Polling every {interval} minutes",
-    }
-
-
-def _get_inflow_webhook_status():
-    """Get Inflow webhook status."""
-    enabled = settings.inflow_webhook_enabled
-    url = settings.inflow_webhook_url
-
-    if not enabled:
-        return {
-            "name": "Inflow Webhooks",
-            "enabled": False,
-            "configured": False,
-            "status": "disabled",
-            "details": "Webhook integration disabled",
-        }
-
-    if not url:
-        return {
-            "name": "Inflow Webhooks",
-            "enabled": True,
-            "configured": False,
-            "status": "warning",
-            "details": "Enabled but webhook URL not configured",
-        }
-
-    return {
-        "name": "Inflow Webhooks",
-        "enabled": True,
-        "configured": True,
-        "status": "active",
-        "details": url,
     }

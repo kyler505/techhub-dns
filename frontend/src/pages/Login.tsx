@@ -34,12 +34,12 @@ export default function Login() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
             <div className="text-center">
                 {/* A&M Logo */}
-                <img 
-                    src={boxTAM} 
-                    alt="Texas A&M University" 
+                <img
+                    src={boxTAM}
+                    alt="Texas A&M University"
                     className="mx-auto h-24 w-auto mb-8"
                 />
-                
+
                 <button
                     onClick={login}
                     className="px-8 py-3 text-lg font-medium rounded-lg text-white bg-maroon-700 hover:bg-maroon-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-maroon-500 transition-colors"
