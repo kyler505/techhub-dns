@@ -45,7 +45,7 @@ function AppContent() {
     return (
         <div className="min-h-screen bg-white flex flex-col">
             {/* HEADER */}
-            <nav className="bg-[#800000] shadow mb-4">
+            <nav className="bg-maroon-700 shadow mb-4">
                 <div className="max-w-7xl mx-auto px-4">
                     <div className="flex justify-between items-center py-4">
                         {/* Logo + Title (links to Orders) */}
@@ -104,7 +104,7 @@ function AppContent() {
             </main>
 
             {/* FOOTER */}
-            <footer className="bg-[#800000] text-white mt-8">
+            <footer className="bg-maroon-700 text-white mt-8">
                 <div className="max-w-7xl mx-auto px-4 py-4 text-center text-sm">
                     © {new Date().getFullYear()} TechHub • All rights reserved
                 </div>
