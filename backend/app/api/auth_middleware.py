@@ -17,7 +17,8 @@ from app.services.saml_auth_service import saml_auth_service
 logger = logging.getLogger(__name__)
 
 # #region agent log
-# Cross-platform log path: use workspace root if available, otherwise use home directory
+# Cross-platform log path: go up from backend/app/api/auth_middleware.py to project root
+# backend/app/api/auth_middleware.py -> backend/app/api -> backend/app -> backend -> project_root
 _workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 DEBUG_LOG_PATH = os.path.join(_workspace_root, '.cursor', 'debug.log')
 # Ensure directory exists
