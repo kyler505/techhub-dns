@@ -39,7 +39,7 @@ def saml_login():
 
         return redirect(redirect_url)
     except Exception as e:
-        logger.error(f"SAML login error: {e}")
+        logger.exception(f"SAML login error: {e}")
         return jsonify({"error": "Failed to initiate login"}), 500
 
 

@@ -5,6 +5,7 @@ Handles SAML response parsing, user creation/update, and session management.
 Uses python3-saml library for SAML protocol handling.
 """
 
+import os
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
@@ -47,11 +48,22 @@ class SamlAuthService:
         # Read IdP certificate
         idp_cert = ""
         if settings.saml_idp_cert_path:
+            cert_path = settings.saml_idp_cert_path
+
+            # If default path doesn't exist, try resolving relative to project root
+            if not os.path.exists(cert_path):
+                # backend/app/services/saml_auth_service.py -> backend/
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                abs_path = os.path.join(project_root, cert_path)
+                if os.path.exists(abs_path):
+                    cert_path = abs_path
+                    logger.info(f"Resolved SAML cert path to: {cert_path}")
+
             try:
-                with open(settings.saml_idp_cert_path, 'r') as f:
+                with open(cert_path, 'r') as f:
                     idp_cert = f.read()
             except FileNotFoundError:
-                logger.error(f"SAML certificate not found: {settings.saml_idp_cert_path}")
+                logger.error(f"SAML certificate not found: {cert_path} (cwd: {os.getcwd()})")
 
         # Parse ACS URL for SP settings
         acs_parsed = urlparse(settings.saml_acs_url)
