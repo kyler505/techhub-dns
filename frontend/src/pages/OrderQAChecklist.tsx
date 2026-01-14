@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 
@@ -66,6 +67,7 @@ function isFormComplete(form: QAFormState) {
 
 export default function OrderQAChecklist() {
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [loadingOrders, setLoadingOrders] = useState(true);
@@ -123,11 +125,29 @@ export default function OrderQAChecklist() {
                 setForm(parsed.form);
                 setLastSavedAt(parsed.submittedAt);
             } catch {
-                setForm(defaultForm(orderNumber));
+                const defaults = defaultForm(orderNumber);
+                // Auto-fill technician from tagging if available
+                if (order.tagged_by) {
+                    defaults.technician = order.tagged_by;
+                }
+                // Auto-fill QA signature with current user
+                if (user?.display_name) {
+                    defaults.qaSignature = user.display_name;
+                }
+                setForm(defaults);
                 setLastSavedAt(null);
             }
         } else {
-            setForm(defaultForm(orderNumber));
+            const defaults = defaultForm(orderNumber);
+            // Auto-fill technician from tagging if available
+            if (order.tagged_by) {
+                defaults.technician = order.tagged_by;
+            }
+            // Auto-fill QA signature with current user
+            if (user?.display_name) {
+                defaults.qaSignature = user.display_name;
+            }
+            setForm(defaults);
             setLastSavedAt(null);
         }
 
