@@ -120,7 +120,8 @@ def get_current_user():
     Returns user info if authenticated, 401 otherwise.
     """
     if not hasattr(g, "user") or not g.user:
-        return jsonify({"error": "Not authenticated"}), 401
+        # Return OK with null user to avoid 401 console errors on startup
+        return jsonify({"user": None, "session": None})
 
     return jsonify({
         "user": g.user.to_dict(),

@@ -36,39 +36,41 @@ def init_auth_middleware(app):
         g.user = None
         g.session = None
 
-        # Skip auth for public routes
-        path = request.path
-        for public_route in PUBLIC_ROUTES:
-            if path.startswith(public_route):
-                return None  # Continue to route handler
-
-        # Skip auth if SAML is not configured (dev mode without auth)
+        # Check if SAML is configured (skip if strictly dev mode without auth)
         if not saml_auth_service.is_configured():
             return None
 
-        # Get session from cookie
+        # 1. Attempt to validate session from cookie (even for public routes)
         session_id = request.cookies.get(settings.session_cookie_name)
-        if not session_id:
-            # No session - for API routes, return 401
-            # For page routes, they'll redirect via frontend
-            if path.startswith("/api/"):
-                return jsonify({"error": "Authentication required"}), 401
+        if session_id:
+            with get_db() as db:
+                result = saml_auth_service.validate_session(db, session_id)
+                if result:
+                    user, session = result
+                    g.user = user
+                    g.session = session
+                else:
+                    # Invalid/expired session - we don't clear cookie here,
+                    # but we won't set g.user.
+                    # Logic below decides if this is fatal.
+                    logger.debug(f"Invalid session: {session_id[:8]}...")
+
+        # 2. Check strict auth requirements
+        path = request.path
+        is_public = any(path.startswith(r) for r in PUBLIC_ROUTES)
+
+        # If route is public, we're done (g.user might be set or None)
+        if is_public:
             return None
 
-        # Validate session
-        with get_db() as db:
-            result = saml_auth_service.validate_session(db, session_id)
-            if result:
-                user, session = result
-                g.user = user
-                g.session = session
-            else:
-                # Invalid/expired session - clear cookie
-                logger.debug(f"Invalid session: {session_id[:8]}...")
-                if path.startswith("/api/"):
-                    return jsonify({"error": "Session expired"}), 401
+        # If route is protected and we have no user, return 401
+        if not g.user:
+            if path.startswith("/api/"):
+                return jsonify({"error": "Authentication required"}), 401
+            # For non-API routes (if any), could redirect, but frontend handles that
+            return None
 
-        return None  # Continue to route handler
+        return None  # Authenticated and protected, or public
 
 
 def require_auth(f):
