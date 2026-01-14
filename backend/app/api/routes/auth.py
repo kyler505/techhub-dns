@@ -100,6 +100,9 @@ def saml_callback():
         relay_state = request.form.get("RelayState", "/")
         if not relay_state or relay_state == "None":
             relay_state = "/"
+        # Prevent redirect loop - don't redirect back to login page after successful auth
+        if relay_state == "/login" or relay_state.startswith("/login?"):
+            relay_state = "/"
 
         # Create response with session cookie
         response = make_response(redirect(relay_state))
