@@ -233,6 +233,10 @@ def _prepare_flask_request():
     IMPORTANT: python3-saml uses these values to compute the "received at" URL
     when validating the SAML response's Destination attribute. The library
     constructs the URL as: {https}://{http_host}{script_name}
+
+    NOTE: Do NOT pass server_port explicitly when behind a reverse proxy.
+    This causes issues with URL computation. Let the library determine port from http_host.
+    See: https://github.com/onelogin/python3-saml/issues/
     """
     # PythonAnywhere (and other proxies) send X-Forwarded-Proto
     # We must explicitly check this because python3-saml validates the destination URL
@@ -248,14 +252,10 @@ def _prepare_flask_request():
     logger.info(f"Preparing SAML request. is_https={is_https}, is_pythonanywhere={is_pythonanywhere}, "
                 f"forwarded_proto={forwarded_proto}, host={host}")
 
-    # For HTTPS, we force port 443 (standard) - do not include in URL computation
-    # python3-saml only appends non-standard ports to the URL
-    server_port = "443" if is_https else "80"
-
+    # Return SAML request dict - do NOT include server_port to avoid proxy issues
     return {
         "https": "on" if is_https else "off",
         "http_host": request.host,
-        "server_port": server_port,
         "script_name": request.path,
         "get_data": request.args.copy(),
         "post_data": request.form.copy(),
