@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify
 from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
 from app.services.graph_service import graph_service
+from app.services.inflow_service import InflowService
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
 
@@ -29,6 +30,45 @@ def get_system_status():
     }
 
     return jsonify(status)
+
+
+@bp.route("/sync", methods=["POST"])
+def sync_orders():
+    """
+    Manually trigger order sync from Inflow.
+    """
+    service = InflowService()
+
+    # Sync recent started orders
+    # We use sync version because this is a blocking HTTP request
+    from app.database import get_db_session
+    db = get_db_session()
+
+    try:
+        # First fetch orders from Inflow
+        orders = service.sync_recent_started_orders_sync(max_pages=3, target_matches=50)
+
+        # Then create/update them in local DB
+        from app.services.order_service import OrderService
+        order_service = OrderService(db)
+
+        synced_count = 0
+        for order_data in orders:
+            try:
+                order_service.create_order_from_inflow(order_data)
+                synced_count += 1
+            except Exception as e:
+                # Log but continue
+                import logging
+                logging.getLogger(__name__).error(f"Failed to sync order {order_data.get('orderNumber')}: {e}")
+
+        return jsonify({
+            "success": True,
+            "message": f"Synced {synced_count} orders from Inflow",
+            "count": synced_count
+        })
+    finally:
+        db.close()
 
 
 def _get_saml_status():
