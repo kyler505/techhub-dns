@@ -1,24 +1,21 @@
 """
 SharePoint Storage Service for file and QA data storage.
-Uses Microsoft Graph API with Interactive Browser authentication (same as Key Vault).
-Tokens are cached to disk so you don't need to re-authenticate after restart.
+Uses Microsoft Graph API with Service Principal authentication (MSAL client credentials).
+No user interaction required - works on headless servers.
 """
 
-import io
 import json
 import logging
 from typing import Optional, Dict, Any
-from functools import lru_cache
+from urllib.parse import urlparse
 
 import httpx
-from azure.identity import InteractiveBrowserCredential, TokenCachePersistenceOptions
+import msal
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Microsoft Graph API scopes for SharePoint access
-GRAPH_SCOPES = ["https://graph.microsoft.com/.default"]
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
 
@@ -26,37 +23,49 @@ class SharePointService:
     """Service for uploading and managing files in SharePoint via Microsoft Graph API."""
 
     def __init__(self):
-        self._credential: Optional[InteractiveBrowserCredential] = None
-        self._access_token: Optional[str] = None
+        self._msal_app = None
         self._site_id: Optional[str] = None
         self._drive_id: Optional[str] = None
 
     @property
     def is_enabled(self) -> bool:
         """Check if SharePoint storage is enabled and configured."""
-        return settings.sharepoint_enabled and bool(settings.sharepoint_site_url)
+        return (
+            settings.sharepoint_enabled
+            and bool(settings.sharepoint_site_url)
+            and bool(settings.azure_tenant_id)
+            and bool(settings.azure_client_id)
+            and bool(settings.azure_client_secret)
+        )
 
-    def _get_credential(self) -> InteractiveBrowserCredential:
-        """Get or create the interactive browser credential with persistent token cache."""
-        if self._credential is None:
-            logger.info("Initializing SharePoint authentication...")
-            # Enable persistent token caching - tokens survive server restarts
-            cache_options = TokenCachePersistenceOptions(
-                name="techhub_sharepoint_cache",
-                allow_unencrypted_storage=True  # For Windows compatibility
+    def _get_msal_app(self) -> msal.ConfidentialClientApplication:
+        """Get or create MSAL confidential client application."""
+        if self._msal_app is None:
+            authority = f"https://login.microsoftonline.com/{settings.azure_tenant_id}"
+            self._msal_app = msal.ConfidentialClientApplication(
+                settings.azure_client_id,
+                authority=authority,
+                client_credential=settings.azure_client_secret,
             )
-            self._credential = InteractiveBrowserCredential(
-                additionally_allowed_tenants=["*"],
-                cache_persistence_options=cache_options
-            )
-        return self._credential
+        return self._msal_app
 
     def _get_access_token(self) -> str:
-        """Get access token for Microsoft Graph API."""
-        credential = self._get_credential()
-        # Request token with Graph API scope
-        token = credential.get_token("https://graph.microsoft.com/.default")
-        return token.token
+        """Get access token for Microsoft Graph API using client credentials."""
+        if not self.is_enabled:
+            raise RuntimeError(
+                "SharePoint not configured. Set AZURE_* and SHAREPOINT_* environment variables."
+            )
+
+        app = self._get_msal_app()
+        scopes = ["https://graph.microsoft.com/.default"]
+        result = app.acquire_token_for_client(scopes=scopes)
+
+        if "access_token" in result:
+            return result["access_token"]
+        else:
+            error = result.get("error_description", result.get("error", "Unknown error"))
+            logger.error(f"Failed to acquire Graph token for SharePoint: {error}")
+            raise RuntimeError(f"Failed to acquire Graph token: {error}")
 
     def _get_headers(self) -> Dict[str, str]:
         """Get authorization headers for Graph API requests."""
@@ -73,22 +82,11 @@ class SharePointService:
 
         # Parse site URL: https://tamucs.sharepoint.com/teams/Team-TechHub
         site_url = settings.sharepoint_site_url.rstrip("/")
-
-        # Extract host and site path
-        # URL format: https://{host}/sites/{sitename} or https://{host}/teams/{teamname}
-        if "/teams/" in site_url:
-            parts = site_url.split("/teams/")
-            host = parts[0].replace("https://", "").replace("http://", "")
-            site_path = f"teams/{parts[1]}"
-        elif "/sites/" in site_url:
-            parts = site_url.split("/sites/")
-            host = parts[0].replace("https://", "").replace("http://", "")
-            site_path = f"sites/{parts[1]}"
-        else:
-            raise ValueError(f"Invalid SharePoint URL format: {site_url}")
+        parsed = urlparse(site_url)
+        site_path = parsed.path  # e.g., /teams/Team-TechHub
 
         # Get site ID via Graph API
-        url = f"{GRAPH_BASE_URL}/sites/{host}:/{site_path}"
+        url = f"{GRAPH_BASE_URL}/sites/{parsed.netloc}:{site_path}"
 
         with httpx.Client() as client:
             response = client.get(url, headers=self._get_headers())
@@ -138,14 +136,13 @@ class SharePointService:
             Web URL to the uploaded file
         """
         if not self.is_enabled:
-            raise RuntimeError("SharePoint storage is not enabled")
+            raise RuntimeError("SharePoint storage is not enabled or not fully configured")
 
         drive_id = self._get_drive_id()
         folder_path = self._get_folder_path(subfolder)
 
         # Build upload URL
         # For files < 4MB, use simple PUT
-        # For larger files, would need resumable upload (not implemented)
         upload_url = f"{GRAPH_BASE_URL}/drives/{drive_id}/root:/{folder_path}/{filename}:/content"
 
         headers = self._get_headers()

@@ -5,8 +5,6 @@ import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.config import settings
-from azure.identity import InteractiveBrowserCredential
-from azure.keyvault.secrets import SecretClient
 
 logger = logging.getLogger(__name__)
 
@@ -131,15 +129,31 @@ class InflowService:
         }
 
     def _get_api_key(self) -> str:
-        """Get API key from Azure Key Vault or environment variable"""
+        """Get API key from environment variable or Azure Key Vault using Service Principal."""
+        # Priority 1: Direct environment variable
         if settings.inflow_api_key:
             return settings.inflow_api_key
 
+        # Priority 2: Azure Key Vault with Service Principal
         if settings.azure_key_vault_url:
+            if not all([settings.azure_tenant_id, settings.azure_client_id, settings.azure_client_secret]):
+                raise ValueError(
+                    "Azure Key Vault configured but Service Principal credentials missing. "
+                    "Set AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET."
+                )
+
             try:
-                credential = InteractiveBrowserCredential(additionally_allowed_tenants=["*"])
+                from azure.identity import ClientSecretCredential
+                from azure.keyvault.secrets import SecretClient
+
+                credential = ClientSecretCredential(
+                    tenant_id=settings.azure_tenant_id,
+                    client_id=settings.azure_client_id,
+                    client_secret=settings.azure_client_secret,
+                )
                 kv_client = SecretClient(vault_url=settings.azure_key_vault_url, credential=credential)
                 secret = kv_client.get_secret("inflow-API-key-new")
+                logger.info("Retrieved Inflow API key from Azure Key Vault")
                 return secret.value
             except Exception as e:
                 raise ValueError(f"Failed to get API key from Key Vault: {e}")
