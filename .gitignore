@@ -28,7 +28,7 @@ Thumbs.db
 docs/
 
 # Certificates
-certs/
+# certs/ (Uncommented to allow IdP cert deployment)
 
 # Logs
 .logs/
