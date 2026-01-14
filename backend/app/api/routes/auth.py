@@ -5,8 +5,6 @@ Provides endpoints for SAML login/logout and session management.
 """
 
 import logging
-import json
-import os
 from flask import Blueprint, request, redirect, make_response, jsonify, g
 
 from app.config import settings
@@ -14,15 +12,6 @@ from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
 
 logger = logging.getLogger(__name__)
-
-# #region agent log
-# Cross-platform log path: go up from backend/app/api/routes/auth.py to project root
-# backend/app/api/routes/auth.py -> backend/app/api/routes -> backend/app/api -> backend/app -> backend -> project_root
-_workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-DEBUG_LOG_PATH = os.path.join(_workspace_root, '.cursor', 'debug.log')
-# Ensure directory exists
-os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
-# #endregion
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -148,64 +137,37 @@ def get_current_user():
     Get current authenticated user.
 
     Returns user info if authenticated, 401 otherwise.
-    
+
     REFACTORED: Query fresh from database using properly scoped session.
     Middleware now stores only IDs, avoiding DetachedInstanceError.
     """
-    # #region agent log
-    try:
-        with open(DEBUG_LOG_PATH, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:145","message":"get_current_user entry (refactored)","data":{"has_user_id":hasattr(g,"user_id") and g.user_id is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    except: pass
-    # #endregion
-    
     # Check if user is authenticated (middleware sets g.user_id)
     user_id = getattr(g, 'user_id', None)
     session_id = getattr(g, 'session_id', None)
-    
+
     if not user_id:
         # Not authenticated - return null (not 401, let frontend handle redirect)
         return jsonify({"user": None, "session": None})
-    
+
     # Query fresh from database using properly scoped session
     from app.models.user import User
     from app.models.session import Session
-    
-    # #region agent log
-    try:
-        with open(DEBUG_LOG_PATH, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:165","message":"querying user fresh from db","data":{"user_id":user_id,"session_id":session_id[:8] if session_id else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    except: pass
-    # #endregion
-    
+
     with get_db() as db:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            # #region agent log
-            try:
-                with open(DEBUG_LOG_PATH, 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:173","message":"user not found in db","data":{"user_id":user_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
             return jsonify({"user": None, "session": None})
-        
+
         # Build user dict while session is open - no detached instance issues
         user_dict = user.to_dict()
-        
+
         # Get session if available
         session_dict = None
         if session_id:
             session_obj = db.query(Session).filter(Session.id == session_id).first()
             if session_obj:
                 session_dict = session_obj.to_dict()
-        
-        # #region agent log
-        try:
-            with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"auth.py:190","message":"returning user/session data","data":{"user_email":user_dict.get("email"),"has_session":session_dict is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-    
+
     return jsonify({
         "user": user_dict,
         "session": session_dict,
