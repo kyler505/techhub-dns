@@ -238,7 +238,11 @@ def _prepare_flask_request():
     # Log the detected protocol for debugging
     logger.info(f"Preparing SAML request. Proto: {forwarded_proto}, Scheme: {request.scheme}, Headers: {dict(request.headers)}")
 
-    is_https = forwarded_proto.lower() == "https" or request.scheme == "https"
+    # CRITICAL: PythonAnywhere internal proxy sends X-Forwarded-Proto: http even for HTTPS
+    # We force HTTPS for pythonanywhere.com hosts since they are always served over HTTPS externally
+    host = request.host.lower()
+    is_pythonanywhere = "pythonanywhere.com" in host
+    is_https = is_pythonanywhere or forwarded_proto.lower() == "https" or request.scheme == "https"
 
     return {
         "https": "on" if is_https else "off",
