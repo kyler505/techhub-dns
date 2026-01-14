@@ -2,11 +2,12 @@ flask==3.0.0
 flask-cors==4.0.0
 flask-socketio==5.3.6
 waitress==2.1.2
+eventlet==0.33.3
 sqlalchemy==2.0.23
 alembic==1.12.1
 pymysql==1.1.0
-cryptography==46.0.3
-pydantic==2.5.0
+cryptography==42.0.5
+pydantic==2.5.2
 pydantic-settings==2.1.0
 httpx==0.25.2
 python-dotenv==1.0.0
@@ -18,4 +19,3 @@ reportlab==4.0.7
 pypdf==3.17.4
 pillow==10.1.0
 python-barcode==0.15.1
-msgraph-sdk==1.2.0
