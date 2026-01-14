@@ -29,3 +29,6 @@ docs/
 
 # Certificates
 certs/
+
+# Logs
+.logs/
