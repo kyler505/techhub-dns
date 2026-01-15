@@ -54,6 +54,7 @@ COMMON_BUILDING_CODES = {
     "REED",  # Reed Arena (McDonald's Building)
     "SBIS",  # Student Business & Information Services
     "VPIS",  # Visualization Sciences Building
+    "JCAIN", # J. Mike Walker '66 Mechanical Engineering
 }
 
 
@@ -243,7 +244,7 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
     # Pattern 4: Building code after comma or dash
     # Example: "Room 101, ACAD" or "101 - ACAD"
     patterns_checked.append("Pattern 4: Building code after comma/dash")
-    match = re.search(r'[,;]\s*([A-Z]{2,6})(?:\s|$)', location_upper)
+    match = re.search(r'[,;-]\s*([A-Z]{2,6})(?:\s|$)', location_upper)
     if match:
         potential_code = match.group(1)
         logger.debug(f"Pattern 4 matched: '{potential_code}'")
@@ -520,4 +521,3 @@ def get_building_abbreviation(location: Optional[str], address: Optional[str]) -
 
     logger.debug(f"No building code found for location='{location}', address='{address}'")
     return None
-
