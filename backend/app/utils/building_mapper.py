@@ -520,3 +520,4 @@ def get_building_abbreviation(location: Optional[str], address: Optional[str]) -
 
     logger.debug(f"No building code found for location='{location}', address='{address}'")
     return None
+
