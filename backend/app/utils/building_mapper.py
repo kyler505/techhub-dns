@@ -31,6 +31,7 @@ COMMON_BUILDING_CODES = {
     "RDER", "SCOT", "TAMU", "VIDI", "CHEM", "ETB", "ADMN", "THOM", "THOMPSON",
     # Additional Campus Buildings
     "GSC",   # General Services Complex
+    "SCC",   # Student Computing Center (603 Lamar Street)
     "WCSS",  # West Campus Social Sciences
     "SPHA",  # School of Public Health Admin
     "HPLB",  # Health Professions Learning Building
@@ -201,6 +202,8 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
     patterns_checked.append("Pattern 0: Specific known addresses")
     specific_address_patterns = [
         (r'8447\s+JOHN\s+SHARP', "HSC"),  # Health Science Center
+        (r'603\s+LAMAR', "SCC"),  # Student Computing Center
+        (r'STUDENT\s+COMPUTING\s+(?:CTR|CENTER|CENTRE)', "SCC"),  # Student Computing Center
     ]
     for pattern, code in specific_address_patterns:
         if re.search(pattern, location_upper):
@@ -292,8 +295,8 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
         (r'\bREYNOLDS\s+(?:MEDICAL|BLDG|BLDG\.|BUILDING)\b', "REYN"),  # Reynolds Medical Building
         (r'\bGENERAL\s+SERVICES\s+(?:COMPLEX|BLDG|BLDG\.|BUILDING)\b', "GSC"),
         (r'\bPUBLIC\s+POLICY\s+(?:RESEARCH\s+)?INSTITUTE\b', "WCSS"),  # WCSS houses Public Policy
-        (r'\bTECHNOLOGY\s+SERVICES\b', "GSC"),  # Tech Services often at GSC
-        (r'\bSTUDENT\s+COMPUTING\b', "GSC"),  # Student Computing Center
+        (r'\bTECHNOLOGY\s+SERVICES\b', "SCC"),  # Tech Services at Student Computing Center
+        (r'\bSTUDENT\s+COMPUTING\b', "SCC"),  # Student Computing Center
         (r'\bSCHOOL\s+OF\s+PUBLIC\s+HEALTH\b', "SPHA"),
         (r'\bHEALTH\s+PROFESSIONS\b', "HPLB"),
         (r'\bVISUALIZATION\s+(?:BLDG|BLDG\.|BUILDING|SCIENCES)\b', "VPIS"),

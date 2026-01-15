@@ -10,6 +10,7 @@ from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.utils.timezone import is_morning_in_cst, get_date_in_cst
 from sqlalchemy import func
 from app.models.order import Order, OrderStatus
+from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
 from app.utils.exceptions import NotFoundError, ValidationError
@@ -112,16 +113,28 @@ class DeliveryRunService:
         self.db.add(run)
         self.db.flush()  # ensure run.id available
 
-        # Assign orders
+        # Assign orders and create audit logs for status changes
         for o in orders:
+            old_status = o.status
             o.delivery_run_id = run.id
             o.status = OrderStatus.IN_DELIVERY.value
             o.updated_at = datetime.utcnow()
 
+            # Create AuditLog entry for timeline display
+            audit_log = AuditLog(
+                order_id=o.id,
+                changed_by=runner,
+                from_status=old_status,
+                to_status=OrderStatus.IN_DELIVERY.value,
+                reason=f"Added to delivery run: {run_name}",
+                timestamp=datetime.utcnow()
+            )
+            self.db.add(audit_log)
+
         self.db.commit()
         self.db.refresh(run)
 
-        # Audit logging for delivery run creation
+        # Also log to system audit log for full traceability
         audit_service = AuditService(self.db)
         audit_service.log_delivery_run_action(
             run_id=str(run.id),

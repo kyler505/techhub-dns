@@ -168,12 +168,24 @@ class OrderService:
 
         # Transition order to QA status (awaiting QA checklist)
         if order.status == OrderStatus.PICKED.value:
+            old_status = order.status
             order.status = OrderStatus.QA.value
             order.updated_at = datetime.utcnow()
+
+            # Create AuditLog entry for timeline display
+            audit_log = AuditLog(
+                order_id=order.id,
+                changed_by=generated_by or "system",
+                from_status=old_status,
+                to_status=OrderStatus.QA.value,
+                reason="Picklist generated - moved to QA queue",
+                timestamp=datetime.utcnow()
+            )
+            self.db.add(audit_log)
             self.db.commit()
             self.db.refresh(order)
 
-            # Audit log for status transition to QA
+            # Also log to system audit log for full traceability
             audit_service.log_order_action(
                 order_id=str(order_id),
                 action="status_changed",
@@ -704,19 +716,31 @@ class OrderService:
             self.db.commit()
             self.db.refresh(order)
 
-            # Audit logging for order import
+            # Create AuditLog entry for initial 'picked' status in timeline
+            audit_log = AuditLog(
+                order_id=order.id,
+                changed_by="system",
+                from_status=None,  # No previous status - order was just created
+                to_status=OrderStatus.PICKED.value,
+                reason="Order ingested from inFlow",
+                timestamp=created_time  # Match order creation time
+            )
+            self.db.add(audit_log)
+            self.db.commit()
+
+            # Also log to system audit log for full traceability
             audit_service = AuditService(self.db)
             audit_service.log_order_action(
                 order_id=str(order.id),
                 action="imported_from_inflow",
                 user_id="system",  # Automated import
                 description=f"Order imported from inFlow",
-            audit_metadata={
-                "inflow_order_id": order_number,
-                "inflow_sales_order_id": inflow_data.get("salesOrderId"),
-                "source": "inflow_webhook",
-                "order_type": "shipping" if self._is_shipping_order(order) else "delivery"
-            }
+                audit_metadata={
+                    "inflow_order_id": order_number,
+                    "inflow_sales_order_id": inflow_data.get("salesOrderId"),
+                    "source": "inflow_webhook",
+                    "order_type": "shipping" if self._is_shipping_order(order) else "delivery"
+                }
             )
 
             return order
@@ -1127,12 +1151,24 @@ class OrderService:
                 order.tracking_number = tracking_number
 
             # Auto-transition to Delivered status when shipped
+            old_status = order.status
             order.status = OrderStatus.DELIVERED.value
+
+            # Create AuditLog entry for timeline display
+            audit_log = AuditLog(
+                order_id=order.id,
+                changed_by=updated_by or "system",
+                from_status=old_status,
+                to_status=OrderStatus.DELIVERED.value,
+                reason=f"Shipped via {carrier_name or 'carrier'}" + (f" (Tracking: {tracking_number})" if tracking_number else ""),
+                timestamp=datetime.utcnow()
+            )
+            self.db.add(audit_log)
 
         self.db.commit()
         self.db.refresh(order)
 
-        # Audit logging
+        # Also log to system audit log for full traceability
         audit_service = AuditService(self.db)
         audit_service.log_order_action(
             order_id=str(order_id),

@@ -211,7 +211,7 @@ export default function Admin() {
                     <div>
                         <p className="font-medium text-gray-900">Sync Orders</p>
                         <p className="text-sm text-gray-600">
-                            Manually fetch recent "Started" orders from Inflow and update the local database.
+                            Manually fetch recent "Started" orders from Inflow and update the database.
                         </p>
                     </div>
                     <button
