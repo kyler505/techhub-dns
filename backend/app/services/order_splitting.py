@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from copy import deepcopy
 
 from app.models.order import Order, OrderStatus
+from app.models.audit_log import AuditLog
 from app.services.inflow_service import InflowService
 from app.services.audit_service import AuditService
 
@@ -150,12 +151,23 @@ class OrderSplittingService:
 
         self.db.add(remainder_order)
 
+        # Create AuditLog entry for initial 'picked' status in timeline
+        audit_log = AuditLog(
+            order_id=remainder_order.id,
+            changed_by=user_id or "system",
+            from_status=None,  # No previous status - order was just created
+            to_status=OrderStatus.PICKED.value,
+            reason=f"Remainder order created from {original_order.inflow_order_id}",
+            timestamp=datetime.utcnow()
+        )
+        self.db.add(audit_log)
+
         # Update original order to mark that it has a remainder
         original_order.has_remainder = 'Y'
         original_order.remainder_order_id = remainder_order.id
         original_order.updated_at = datetime.utcnow()
 
-        # Audit log
+        # Also log to system audit log for full traceability
         audit_service = AuditService(self.db)
 
         # Log on original order
