@@ -42,6 +42,7 @@ from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
 from app.models.teams_notification import TeamsNotification
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
+from app.utils.building_mapper import extract_building_code_from_location, get_building_code_from_address
 
 
 def format_order(order: Order, detailed: bool = False) -> str:
@@ -550,6 +551,73 @@ def get_database_stats() -> Dict[str, Any]:
         db.close()
 
 
+def fix_order_locations(order_number: Optional[str] = None, confirm: bool = True) -> bool:
+    """Re-process and update order locations using updated building mapping logic."""
+    db = SessionLocal()
+    try:
+        query = db.query(Order)
+        if order_number:
+            query = query.filter(Order.inflow_order_id == order_number)
+            target_desc = f"order {order_number}"
+        else:
+            target_desc = "all eligible orders"
+
+        orders = query.all()
+
+        if not orders:
+            print(f"No orders found matching {target_desc}.")
+            return False
+
+        orders_to_update = []
+        for order in orders:
+            current_location = order.delivery_location
+            if not current_location:
+                continue
+
+            # Skip if already a simple code (optional optimization)
+            if len(current_location) <= 6 and current_location.isalpha() and current_location.isupper():
+                continue
+
+            new_code = extract_building_code_from_location(current_location)
+            if not new_code:
+                 new_code = get_building_code_from_address(current_location)
+
+            if new_code and new_code != current_location:
+                orders_to_update.append((order, new_code))
+
+        if not orders_to_update:
+            print("No orders need location updates.")
+            return True
+
+        print(f"\nFound {len(orders_to_update)} orders to update:")
+        for order, new_code in orders_to_update[:10]:
+            print(f"  {order.inflow_order_id}: '{order.delivery_location}' -> '{new_code}'")
+        if len(orders_to_update) > 10:
+            print(f"  ... and {len(orders_to_update) - 10} more.")
+
+        if confirm:
+            response = input("\nProceed with updates? (yes/no): ").strip().lower()
+            if response not in ['yes', 'y']:
+                print("Operation cancelled.")
+                return False
+
+        count = 0
+        for order, new_code in orders_to_update:
+            order.delivery_location = new_code
+            count += 1
+
+        db.commit()
+        print(f"\n✓ Successfully updated {count} orders.")
+        return True
+
+    except Exception as e:
+        db.rollback()
+        print(f"\n✗ Error fixing locations: {e}")
+        return False
+    finally:
+        db.close()
+
+
 def interactive_mode():
     """Interactive mode for comprehensive database management."""
     db = SessionLocal()
@@ -576,6 +644,7 @@ def interactive_mode():
             print("11. Database Statistics")
             print("12. Execute Raw SQL")
             print("13. Clear ALL Data")
+            print("14. Fix Order Locations (Re-map based on current logic)")
             print("")
             print("0. Exit")
             print("="*70)
@@ -738,6 +807,10 @@ def interactive_mode():
             elif choice == "13":
                 clear_all_orders()
 
+            elif choice == "14":
+                order_num = input("Enter specific order number (optional, press Enter for all): ").strip() or None
+                fix_order_locations(order_number=order_num)
+
             elif choice == "0":
                 print("\nExiting...")
                 break
@@ -787,6 +860,7 @@ Examples:
     # Maintenance operations
     parser.add_argument("--reset", type=str, help="Reset order for testing (by order number)")
     parser.add_argument("--clear-all", action="store_true", help="Clear all orders and related data")
+    parser.add_argument("--fix-locations", action="store_true", help="Re-process order locations using current mapping logic")
     parser.add_argument("--stats", action="store_true", help="Show database statistics")
 
     # Utility options
@@ -881,6 +955,11 @@ Examples:
     # Handle clear operation
     if args.clear_all:
         clear_all_orders(confirm=not args.no_confirm)
+        return
+
+    # Handle location fix
+    if args.fix_locations:
+        fix_order_locations(order_number=args.order_number, confirm=not args.no_confirm)
         return
 
     # Handle stats operation
