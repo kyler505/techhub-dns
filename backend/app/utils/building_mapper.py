@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Force git update for JCAIN fix
+
 # ArcGIS service endpoint for TAMU buildings
 ARCGIS_BUILDINGS_URL = "https://gis.cstx.gov/csgis/rest/services/IT_GIS/ITS_TAMU_Parking/MapServer/3/query"
 
