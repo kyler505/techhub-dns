@@ -215,8 +215,13 @@ def serve_frontend(path):
     # Check if frontend dist exists (production mode)
     if os.path.exists(FRONTEND_DIST_PATH):
         # Serve static assets (js, css, images, etc.)
-        if path and os.path.exists(os.path.join(FRONTEND_DIST_PATH, path)):
-            return send_from_directory(FRONTEND_DIST_PATH, path)
+        if path:
+            # Normalize path separators for the OS
+            normalized_path = path.replace('/', os.path.sep)
+            full_path = os.path.join(FRONTEND_DIST_PATH, normalized_path)
+            if os.path.exists(full_path):
+                return send_from_directory(FRONTEND_DIST_PATH, normalized_path)
+
         # Fallback to index.html for SPA routing
         return send_from_directory(FRONTEND_DIST_PATH, 'index.html')
     else:
