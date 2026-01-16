@@ -575,11 +575,47 @@ def fix_order_locations(order_number: Optional[str] = None, confirm: bool = True
             if not current_location:
                 continue
 
-            # Skip if already a simple code (optional optimization)
-            if len(current_location) <= 6 and current_location.isalpha() and current_location.isupper():
+            # Check if it's a non-local order (e.g. Houston) that was incorrectly mapped
+            inflow_data = order.inflow_data or {}
+            shipping_addr = inflow_data.get("shippingAddress", {})
+            city = shipping_addr.get("city", "").strip()
+
+            addr1 = shipping_addr.get("address1", "")
+            addr2 = shipping_addr.get("address2", "")
+            full_addr = " ".join(filter(None, [addr1, addr2]))
+
+            inferred_city = city
+            if not city and "HOUSTON" in full_addr.upper():
+                inferred_city = "Houston"
+
+            is_local = True
+            if inferred_city:
+                 if inferred_city.upper() not in ["BRYAN", "COLLEGE STATION"]:
+                      is_local = False
+
+            new_code = None
+
+            if not is_local:
+                # If non-local, location should be the city or full address
+                # If current location is a code (like NGPO), we should fix it
+                target_location = inferred_city or full_addr
+                if current_location != target_location:
+                    orders_to_update.append((order, target_location))
                 continue
 
+            # Skip if already a simple code (optional optimization)
+            # But only if we are sure it's valid?
+            # If we are running fix-locations, we probably want to re-verify everything.
+            # Commenting out optimization to be safe.
+            # if len(current_location) <= 6 and current_location.isalpha() and current_location.isupper():
+            #    continue
+
             new_code = extract_building_code_from_location(current_location)
+            if not new_code:
+                 # Try using the full address from inflow data if available, as delivery_location might be truncated/modified
+                 location_to_check = full_addr if full_addr else current_location
+                 new_code = extract_building_code_from_location(location_to_check)
+
             if not new_code:
                  new_code = get_building_code_from_address(current_location)
 
