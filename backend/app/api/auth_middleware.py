@@ -39,6 +39,13 @@ def init_auth_middleware(app):
         REFACTORED: Store only IDs (strings) in g, not ORM objects.
         This avoids DetachedInstanceError - routes query fresh from DB when needed.
         """
+        # Check strict auth requirements first - BYPASS EVERYTHING if public
+        path = request.path
+        is_public = any(path.startswith(r) for r in PUBLIC_ROUTES)
+
+        if is_public:
+            return None
+
         # Initialize with None - routes check these IDs
         g.user_id = None
         g.session_id = None
@@ -66,13 +73,6 @@ def init_auth_middleware(app):
                     g.session_id = str(session.id)
                 else:
                     logger.debug(f"Invalid session: {session_id_cookie[:8]}...")
-
-        # Check strict auth requirements
-        path = request.path
-        is_public = any(path.startswith(r) for r in PUBLIC_ROUTES)
-
-        if is_public:
-            return None
 
         # Protected route without valid session
         if not g.user_id:
