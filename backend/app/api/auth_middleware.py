@@ -52,10 +52,7 @@ def init_auth_middleware(app):
         g.session = None
         g._auth_session = None
 
-        # Check strict auth requirements first (after init globals)
-        path = request.path
-        if any(path.startswith(r) for r in PUBLIC_ROUTES):
-            return None
+        g._auth_session = None
 
         # Check if SAML is configured
         if not saml_auth_service.is_configured():
@@ -88,6 +85,13 @@ def init_auth_middleware(app):
                     g._auth_session.close()
                     g._auth_session = None
                 raise
+
+        # Check strict auth requirements (Authorization Phase)
+        # We do this AFTER attempting to load the session so that public routes
+        # (like /auth/me) can still access user info if logged in.
+        path = request.path
+        if any(path.startswith(r) for r in PUBLIC_ROUTES):
+            return None
 
         # Protected route without valid session
         if not g.user_id:
