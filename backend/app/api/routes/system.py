@@ -10,6 +10,7 @@ from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
 from app.services.graph_service import graph_service
 from app.services.inflow_service import InflowService
+import logging
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
 
@@ -69,6 +70,101 @@ def sync_orders():
         })
     finally:
         db.close()
+
+
+@bp.route("/deploy", methods=["POST"])
+def deploy_webhook():
+    """
+    GitHub webhook endpoint for auto-deployment.
+
+    Receives push events from GitHub, pulls latest code, and reloads the app.
+    Verifies GitHub's HMAC signature for security.
+    """
+    import hmac
+    import hashlib
+    import subprocess
+    import os
+    from flask import request
+
+    # Check if deploy webhook is enabled
+    if not settings.deploy_webhook_enabled:
+        return jsonify({"error": "Deploy webhook is disabled"}), 403
+
+    # Verify the secret is configured
+    if not settings.deploy_webhook_secret:
+        logger = logging.getLogger(__name__)
+        logger.error("Deploy webhook secret not configured")
+        return jsonify({"error": "Webhook not configured"}), 500
+
+    # Get the signature from GitHub
+    signature_header = request.headers.get("X-Hub-Signature-256")
+    if not signature_header:
+        return jsonify({"error": "Missing signature"}), 403
+
+    # Verify HMAC signature
+    payload = request.get_data()
+    expected_signature = "sha256=" + hmac.new(
+        settings.deploy_webhook_secret.encode("utf-8"),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature_header, expected_signature):
+        return jsonify({"error": "Invalid signature"}), 403
+
+    # Signature verified - execute deploy script
+    logger = logging.getLogger(__name__)
+    logger.info("GitHub webhook received - starting deployment")
+
+    # Determine project root (works on PythonAnywhere)
+    project_root = "/home/techhub/techhub-dns"
+    deploy_script = os.path.join(project_root, "scripts", "deploy.sh")
+
+    # Check if deploy script exists
+    if not os.path.exists(deploy_script):
+        logger.error(f"Deploy script not found: {deploy_script}")
+        return jsonify({
+            "success": False,
+            "error": "Deploy script not found"
+        }), 500
+
+    try:
+        # Run the deploy script
+        result = subprocess.run(
+            ["bash", deploy_script],
+            capture_output=True,
+            text=True,
+            timeout=120,  # 2 minute timeout
+            cwd=project_root
+        )
+
+        if result.returncode == 0:
+            logger.info(f"Deployment successful: {result.stdout}")
+            return jsonify({
+                "success": True,
+                "message": "Deployment successful",
+                "output": result.stdout[-500:] if len(result.stdout) > 500 else result.stdout
+            })
+        else:
+            logger.error(f"Deployment failed: {result.stderr}")
+            return jsonify({
+                "success": False,
+                "error": "Deployment failed",
+                "output": result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
+            }), 500
+
+    except subprocess.TimeoutExpired:
+        logger.error("Deployment timed out")
+        return jsonify({
+            "success": False,
+            "error": "Deployment timed out"
+        }), 500
+    except Exception as e:
+        logger.error(f"Deployment error: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 def _get_saml_status():

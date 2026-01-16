@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # Flask environment
     flask_env: str = "development"
 
+    # GitHub Deploy Webhook (auto-pull on push)
+    deploy_webhook_enabled: bool = False
+    deploy_webhook_secret: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
