@@ -504,9 +504,25 @@ class OrderService:
         if not order_number:
             raise ValidationError("Order number is required", field="orderNumber")
 
-        # Check if order is in Bryan/College Station for delivery routing
+        # Extract order remarks and shipping addresses
+        order_remarks = inflow_data.get("orderRemarks", "")
         shipping_addr_obj = inflow_data.get("shippingAddress", {})
+        address1 = shipping_addr_obj.get("address1", "")
+        address2 = shipping_addr_obj.get("address2", "")
+
+        # Combine address1 and address2 if both exist
+        shipping_address_parts = [part for part in [address1, address2] if part]
+        shipping_address = " ".join(shipping_address_parts) if shipping_address_parts else address1
+
+        # Check if order is in Bryan/College Station for delivery routing
         city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+
+        # If city is missing, try to detect it from the full address string for common non-local locations (like Houston)
+        if not city and shipping_address:
+            if "HOUSTON" in shipping_address.upper():
+                city = "Houston"
+                logger.info(f"City not specified but 'Houston' found in address for order {order_number}. inferred_city='Houston'")
+
         is_local_delivery = False
 
         # Determine if this is a local delivery (Bryan/College Station) or shipping order
@@ -516,18 +532,9 @@ class OrderService:
             if not is_local_delivery:
                 logger.info(f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order.")
         else:
-            # If no city specified, assume it's local delivery (might be data issue)
+            # If no city specified and couldn't be inferred, assume it's local delivery (might be data issue)
             is_local_delivery = True
             logger.debug(f"No city specified for order {order_number}, assuming local delivery")
-
-        # Extract order remarks and shipping addresses
-        order_remarks = inflow_data.get("orderRemarks", "")
-        address1 = shipping_addr_obj.get("address1", "")
-        address2 = shipping_addr_obj.get("address2", "")
-
-        # Combine address1 and address2 if both exist
-        shipping_address_parts = [part for part in [address1, address2] if part]
-        shipping_address = " ".join(shipping_address_parts) if shipping_address_parts else address1
 
         building_code = None
 
