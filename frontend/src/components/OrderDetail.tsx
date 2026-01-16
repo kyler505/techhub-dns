@@ -172,6 +172,44 @@ export default function OrderDetail({
                 </div>
             </div>
 
+            {order.inflow_data?.lines && order.inflow_data.lines.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h3 className="text-xl font-bold mb-4">Order Items</h3>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        #
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Product
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Quantity
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {order.inflow_data.lines.map((line: any, index: number) => (
+                                    <tr key={line.productId || index}>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                            {index + 1}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                            {line.productName || line.product?.name || line.productId || 'Unknown Product'}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                                            {line.quantity?.standardQuantity ?? line.quantity ?? 'N/A'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {latestNotification && (
                 <div className="bg-white rounded-lg shadow p-6">
                     <h3 className="text-xl font-bold mb-4">Teams Notification</h3>
