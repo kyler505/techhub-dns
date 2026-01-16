@@ -86,19 +86,25 @@ def deploy_webhook():
     import os
     from flask import request
 
+    logger = logging.getLogger(__name__)
+
+    # Log entry (careful not to log secrets)
+    logger.info(f"Deploy webhook hit from {request.remote_addr}")
+
     # Check if deploy webhook is enabled
     if not settings.deploy_webhook_enabled:
+        logger.warning("Deploy access denied: Webhook disabled in config")
         return jsonify({"error": "Deploy webhook is disabled"}), 403
 
     # Verify the secret is configured
     if not settings.deploy_webhook_secret:
-        logger = logging.getLogger(__name__)
-        logger.error("Deploy webhook secret not configured")
+        logger.error("Deploy access denied: Secret not configured")
         return jsonify({"error": "Webhook not configured"}), 500
 
     # Get the signature from GitHub
     signature_header = request.headers.get("X-Hub-Signature-256")
     if not signature_header:
+        logger.warning("Deploy access denied: Missing X-Hub-Signature-256 header")
         return jsonify({"error": "Missing signature"}), 403
 
     # Verify HMAC signature
@@ -110,11 +116,11 @@ def deploy_webhook():
     ).hexdigest()
 
     if not hmac.compare_digest(signature_header, expected_signature):
+        logger.warning("Deploy access denied: Invalid signature")
         return jsonify({"error": "Invalid signature"}), 403
 
     # Signature verified - execute deploy script
-    logger = logging.getLogger(__name__)
-    logger.info("GitHub webhook received - starting deployment")
+    logger.info("Signature verified - starting deployment")
 
     # Determine project root (works on PythonAnywhere)
     project_root = "/home/techhub/techhub-dns"
