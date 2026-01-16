@@ -9,7 +9,7 @@ from functools import wraps
 from flask import request, g, jsonify
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, get_db_session
 from app.services.saml_auth_service import saml_auth_service
 
 logger = logging.getLogger(__name__)
@@ -28,23 +28,29 @@ def init_auth_middleware(app):
     Initialize authentication middleware for the Flask app.
 
     This runs before every request to validate session and attach user ID.
-    REFACTORED: No longer stores ORM objects, only IDs - no teardown needed.
+    REFACTORED: Request-Scoped Session Pattern.
+    Keeps DB session open request-wide to prevent DetachedInstanceError.
     """
+
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        """Close the auth session at the end of the request."""
+        db = getattr(g, '_auth_session', None)
+        if db is not None:
+            db.close()
 
     @app.before_request
     def authenticate_request():
         """
-        Validate session and attach user ID to request context.
-
-        REFACTORED: Store only IDs (strings) in g, not ORM objects.
-        This avoids DetachedInstanceError - routes query fresh from DB when needed.
+        Validate session and attach user ID into request context.
+        Uses a persistent session (g._auth_session) to keep objects attached.
         """
-        # Initialize with None - routes check these IDs
+        # Initialize defaults
         g.user_id = None
         g.session_id = None
-        # Legacy compatibility - some routes may still check g.user
         g.user = None
         g.session = None
+        g._auth_session = None
 
         # Check strict auth requirements first (after init globals)
         path = request.path
@@ -61,18 +67,27 @@ def init_auth_middleware(app):
             # No session cookie - check auth requirements below
             pass
         else:
-            # Validate session using a short-lived DB session
-            with get_db() as db:
+            # Create a dedicated session for auth that lives for the request
+            db = get_db_session()
+            g._auth_session = db
+
+            try:
                 result = saml_auth_service.validate_session(db, session_id_cookie)
                 if result:
                     user, session = result
-                    # Store only IDs - routes will query fresh when needed
+                    # User remains attached to g._auth_session for duration of request
+                    g.user = user
+                    g.session = session
                     g.user_id = str(user.id)
                     g.session_id = str(session.id)
                 else:
                     logger.debug(f"Invalid session: {session_id_cookie[:8]}...")
-
-
+            except Exception:
+                # If validation fails, ensure we don't hold a bad session
+                if g._auth_session:
+                    g._auth_session.close()
+                    g._auth_session = None
+                raise
 
         # Protected route without valid session
         if not g.user_id:
