@@ -1,6 +1,6 @@
 # TechHub Delivery Workflow App
 
-An internal web application for managing delivery orders from Inflow inventory system through a complete delivery pipeline with automated Teams notifications and intelligent location extraction.
+An internal web application that consolidates multiple operational processes, automations, and custom scripts into a unified pipeline for managing delivery orders from the Inflow inventory system.
 
 ## Overview
 
