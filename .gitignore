@@ -16,6 +16,7 @@ frontend/.env
 # IDE
 .vscode/
 .cursor/
+.agent/
 .idea/
 *.swp
 *.swo
@@ -23,9 +24,6 @@ frontend/.env
 # OS
 .DS_Store
 Thumbs.db
-
-# Local logging and documentation
-docs/
 
 # Logs
 .logs/
