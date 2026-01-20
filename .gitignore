@@ -9,7 +9,7 @@ backend/storage/
 
 # Frontend
 frontend/node_modules/
-# frontend/dist/  # Uncomment to exclude production build from git
+frontend/dist/
 frontend/.vite/
 frontend/.env
 
