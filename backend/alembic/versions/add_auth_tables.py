@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_auth_tables'
-down_revision = None  # Update this to chain after your latest migration
+down_revision = '0003_add_remainder_fields'  # Chain after remainder fields migration
 branch_labels = None
 depends_on = None
 
