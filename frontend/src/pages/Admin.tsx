@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
+import { settingsApi, SystemSettings } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
 
 interface FeatureStatus {
@@ -17,12 +18,12 @@ interface SystemStatus {
     graph_api: FeatureStatus;
     sharepoint: FeatureStatus;
     inflow_sync: FeatureStatus;
-
 }
 
 export default function Admin() {
     const { user } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+    const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -30,29 +31,41 @@ export default function Admin() {
     const [inflowWebhooks, setInflowWebhooks] = useState<WebhookResponse[]>([]);
     const [registeringWebhook, setRegisteringWebhook] = useState(false);
 
+    // Testing state
+    const [testEmailAddress, setTestEmailAddress] = useState("");
+    const [testRecipientEmail, setTestRecipientEmail] = useState("");
+    const [testingService, setTestingService] = useState<string | null>(null);
+
     useEffect(() => {
         loadSystemStatus();
         loadInflowWebhooks();
+        loadSystemSettings();
     }, []);
 
     const loadSystemStatus = async () => {
         setLoading(true);
         try {
-            // Get backend feature status
             const response = await apiClient.get("/system/status");
             setSystemStatus(response.data);
         } catch (error) {
             console.error("Failed to load system status:", error);
-            // Fallback to basic status based on what we know
             setSystemStatus({
                 saml_auth: { name: "TAMU SSO", enabled: false, configured: false, status: "disabled" },
                 graph_api: { name: "Microsoft Graph", enabled: false, configured: false, status: "disabled" },
                 sharepoint: { name: "SharePoint Storage", enabled: false, configured: false, status: "disabled" },
                 inflow_sync: { name: "Inflow Sync", enabled: true, configured: true, status: "active" },
-
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadSystemSettings = async () => {
+        try {
+            const settings = await settingsApi.getSettings();
+            setSystemSettings(settings);
+        } catch (error) {
+            console.error("Failed to load system settings:", error);
         }
     };
 
@@ -62,6 +75,18 @@ export default function Admin() {
             setInflowWebhooks(response.webhooks);
         } catch (error) {
             console.error("Failed to load Inflow webhooks:", error);
+        }
+    };
+
+    const handleToggleSetting = async (key: string, currentValue: string) => {
+        const newValue = currentValue === "true" ? "false" : "true";
+        try {
+            await settingsApi.updateSetting(key, newValue, user?.email || "admin");
+            await loadSystemSettings();
+            setMessage({ type: "success", text: `Setting updated: ${key} = ${newValue}` });
+        } catch (error: any) {
+            console.error("Failed to update setting:", error);
+            setMessage({ type: "error", text: error.response?.data?.error || "Failed to update setting" });
         }
     };
 
@@ -105,6 +130,75 @@ export default function Admin() {
         }
     };
 
+    // Testing handlers
+    const handleTestEmail = async () => {
+        if (!testEmailAddress) {
+            setMessage({ type: "error", text: "Please enter an email address" });
+            return;
+        }
+        setTestingService("email");
+        try {
+            const result = await settingsApi.testEmail(testEmailAddress);
+            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
+        } catch (error: any) {
+            setMessage({ type: "error", text: error.response?.data?.error || "Test email failed" });
+        } finally {
+            setTestingService(null);
+        }
+    };
+
+    const handleTestTeamsWebhook = async () => {
+        setTestingService("teams-webhook");
+        try {
+            const result = await settingsApi.testTeamsWebhook();
+            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
+        } catch (error: any) {
+            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams webhook failed" });
+        } finally {
+            setTestingService(null);
+        }
+    };
+
+    const handleTestTeamsRecipient = async () => {
+        if (!testRecipientEmail) {
+            setMessage({ type: "error", text: "Please enter a recipient email address" });
+            return;
+        }
+        setTestingService("teams-recipient");
+        try {
+            const result = await settingsApi.testTeamsRecipient(testRecipientEmail, "Test User");
+            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
+        } catch (error: any) {
+            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams recipient failed" });
+        } finally {
+            setTestingService(null);
+        }
+    };
+
+    const handleTestInflow = async () => {
+        setTestingService("inflow");
+        try {
+            const result = await settingsApi.testInflow();
+            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
+        } catch (error: any) {
+            setMessage({ type: "error", text: error.response?.data?.error || "Test Inflow connection failed" });
+        } finally {
+            setTestingService(null);
+        }
+    };
+
+    const handleTestSharePoint = async () => {
+        setTestingService("sharepoint");
+        try {
+            const result = await settingsApi.testSharePoint();
+            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
+        } catch (error: any) {
+            setMessage({ type: "error", text: error.response?.data?.error || "Test SharePoint connection failed" });
+        } finally {
+            setTestingService(null);
+        }
+    };
+
     const getStatusColor = (status: FeatureStatus["status"]) => {
         switch (status) {
             case "active": return "bg-green-100 border-green-300 text-green-800";
@@ -130,33 +224,196 @@ export default function Admin() {
     const activeWebhook = inflowWebhooks.find((w) => w.status === "active");
 
     return (
-        <div className="p-4 w-full max-w-4xl mx-auto space-y-6 flex-1 flex flex-col justify-center">
+        <div className="p-4 w-full max-w-4xl mx-auto space-y-6 flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl font-bold">System Status</h1>
+                <h1 className="text-2xl font-bold">Admin Panel</h1>
                 {user && (
                     <span className="text-sm text-gray-500">Logged in as {user.email}</span>
                 )}
             </div>
 
+            {/* Message Display - Fixed at top */}
+            {message && (
+                <div
+                    className={`p-3 rounded ${message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                        }`}
+                >
+                    {message.text}
+                    <button onClick={() => setMessage(null)} className="float-right font-bold">×</button>
+                </div>
+            )}
+
             {/* Feature Status Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {systemStatus && Object.values(systemStatus).map((feature) => (
-                    <div
-                        key={feature.name}
-                        className={`border rounded-lg p-4 ${getStatusColor(feature.status)}`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="text-lg">{getStatusIcon(feature.status)}</span>
-                            <h3 className="font-semibold">{feature.name}</h3>
+            <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold mb-4">System Status</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {systemStatus && Object.values(systemStatus).map((feature) => (
+                        <div
+                            key={feature.name}
+                            className={`border rounded-lg p-4 ${getStatusColor(feature.status)}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">{getStatusIcon(feature.status)}</span>
+                                <h3 className="font-semibold">{feature.name}</h3>
+                            </div>
+                            {feature.details && (
+                                <p className="text-sm mt-1 opacity-80">{feature.details}</p>
+                            )}
+                            {feature.error && (
+                                <p className="text-sm mt-1 text-red-600">{feature.error}</p>
+                            )}
                         </div>
-                        {feature.details && (
-                            <p className="text-sm mt-1 opacity-80">{feature.details}</p>
-                        )}
-                        {feature.error && (
-                            <p className="text-sm mt-1 text-red-600">{feature.error}</p>
-                        )}
+                    ))}
+                </div>
+            </div>
+
+            {/* Notification Settings */}
+            <div className="bg-white rounded-lg shadow p-6 space-y-4">
+                <h2 className="text-xl font-semibold">Notification Settings</h2>
+                <p className="text-sm text-gray-600">Enable or disable notification services. Changes take effect immediately.</p>
+
+                {systemSettings && (
+                    <div className="space-y-3">
+                        {/* Email Notifications */}
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                            <div>
+                                <p className="font-medium text-gray-900">Email Notifications</p>
+                                <p className="text-sm text-gray-600">{systemSettings.email_notifications_enabled.description}</p>
+                            </div>
+                            <button
+                                onClick={() => handleToggleSetting("email_notifications_enabled", systemSettings.email_notifications_enabled.value)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.email_notifications_enabled.value === "true" ? "bg-green-500" : "bg-gray-300"
+                                    }`}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.email_notifications_enabled.value === "true" ? "translate-x-6" : "translate-x-1"
+                                        }`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Teams Webhook Notifications */}
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                            <div>
+                                <p className="font-medium text-gray-900">Teams Webhook Notifications</p>
+                                <p className="text-sm text-gray-600">{systemSettings.teams_webhook_notifications_enabled.description}</p>
+                            </div>
+                            <button
+                                onClick={() => handleToggleSetting("teams_webhook_notifications_enabled", systemSettings.teams_webhook_notifications_enabled.value)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.teams_webhook_notifications_enabled.value === "true" ? "bg-green-500" : "bg-gray-300"
+                                    }`}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.teams_webhook_notifications_enabled.value === "true" ? "translate-x-6" : "translate-x-1"
+                                        }`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Teams Recipient Notifications */}
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                            <div>
+                                <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
+                                <p className="text-sm text-gray-600">{systemSettings.teams_recipient_notifications_enabled.description}</p>
+                            </div>
+                            <button
+                                onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", systemSettings.teams_recipient_notifications_enabled.value)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.teams_recipient_notifications_enabled.value === "true" ? "bg-green-500" : "bg-gray-300"
+                                    }`}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.teams_recipient_notifications_enabled.value === "true" ? "translate-x-6" : "translate-x-1"
+                                        }`}
+                                />
+                            </button>
+                        </div>
                     </div>
-                ))}
+                )}
+            </div>
+
+            {/* Service Testing */}
+            <div className="bg-white rounded-lg shadow p-6 space-y-4">
+                <h2 className="text-xl font-semibold">Service Testing</h2>
+                <p className="text-sm text-gray-600">Test individual services to verify configuration.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Test Email */}
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                        <p className="font-medium text-gray-900">Test Email</p>
+                        <input
+                            type="email"
+                            placeholder="recipient@tamu.edu"
+                            value={testEmailAddress}
+                            onChange={(e) => setTestEmailAddress(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                        <button
+                            onClick={handleTestEmail}
+                            disabled={testingService === "email"}
+                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {testingService === "email" ? "Sending..." : "Send Test Email"}
+                        </button>
+                    </div>
+
+                    {/* Test Teams Webhook */}
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                        <p className="font-medium text-gray-900">Test Teams Webhook</p>
+                        <p className="text-xs text-gray-500">Sends a test message to the configured Teams channel.</p>
+                        <button
+                            onClick={handleTestTeamsWebhook}
+                            disabled={testingService === "teams-webhook"}
+                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {testingService === "teams-webhook" ? "Sending..." : "Send Test Message"}
+                        </button>
+                    </div>
+
+                    {/* Test Teams Recipient */}
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                        <p className="font-medium text-gray-900">Test Teams Recipient</p>
+                        <input
+                            type="email"
+                            placeholder="recipient@tamu.edu"
+                            value={testRecipientEmail}
+                            onChange={(e) => setTestRecipientEmail(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                        <button
+                            onClick={handleTestTeamsRecipient}
+                            disabled={testingService === "teams-recipient"}
+                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {testingService === "teams-recipient" ? "Sending..." : "Queue Test Notification"}
+                        </button>
+                    </div>
+
+                    {/* Test Inflow */}
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                        <p className="font-medium text-gray-900">Test Inflow API</p>
+                        <p className="text-xs text-gray-500">Tests connection to Inflow inventory system.</p>
+                        <button
+                            onClick={handleTestInflow}
+                            disabled={testingService === "inflow"}
+                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {testingService === "inflow" ? "Testing..." : "Test Connection"}
+                        </button>
+                    </div>
+
+                    {/* Test SharePoint */}
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                        <p className="font-medium text-gray-900">Test SharePoint</p>
+                        <p className="text-xs text-gray-500">Tests connection to SharePoint document storage.</p>
+                        <button
+                            onClick={handleTestSharePoint}
+                            disabled={testingService === "sharepoint"}
+                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {testingService === "sharepoint" ? "Testing..." : "Test Connection"}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Inflow Webhook Section */}
@@ -239,16 +496,6 @@ export default function Admin() {
                     </button>
                 </div>
             </div>
-
-            {/* Message Display */}
-            {message && (
-                <div
-                    className={`p-3 rounded ${message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                        }`}
-                >
-                    {message.text}
-                </div>
-            )}
         </div>
     );
 }

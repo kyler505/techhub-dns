@@ -6,6 +6,7 @@ from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.models.delivery_run import DeliveryRun, VehicleEnum, DeliveryRunStatus
 from app.models.user import User
 from app.models.session import Session
+from app.models.system_setting import SystemSetting
 
 __all__ = [
     "Order",
@@ -21,4 +22,5 @@ __all__ = [
     "DeliveryRunStatus",
     "User",
     "Session",
+    "SystemSetting",
 ]
