@@ -216,11 +216,11 @@ def serve_frontend(path):
     if os.path.exists(FRONTEND_DIST_PATH):
         # Serve static assets (js, css, images, etc.)
         if path:
-            # Normalize path separators for the OS
-            normalized_path = path.replace('/', os.path.sep)
-            full_path = os.path.join(FRONTEND_DIST_PATH, normalized_path)
+            # Check if the file exists (use os.path.join for filesystem check)
+            full_path = os.path.join(FRONTEND_DIST_PATH, path.replace('/', os.path.sep))
             if os.path.exists(full_path):
-                return send_from_directory(FRONTEND_DIST_PATH, normalized_path)
+                # send_from_directory expects forward slashes, not OS separators
+                return send_from_directory(FRONTEND_DIST_PATH, path)
 
         # Fallback to index.html for SPA routing
         return send_from_directory(FRONTEND_DIST_PATH, 'index.html')
