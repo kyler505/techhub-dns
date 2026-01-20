@@ -202,6 +202,49 @@ def health():
     return jsonify({"status": "healthy"})
 
 
+@app.route("/health/frontend")
+def frontend_health():
+    """Check if frontend assets match index.html references - detects deploy mismatches"""
+    import re
+
+    index_path = os.path.join(FRONTEND_DIST_PATH, 'index.html')
+    if not os.path.exists(index_path):
+        return jsonify({
+            "status": "error",
+            "message": "Frontend not deployed - index.html missing"
+        }), 500
+
+    with open(index_path, 'r') as f:
+        content = f.read()
+
+    # Extract referenced JS and CSS files from index.html
+    asset_refs = re.findall(r'/assets/([^"\']+)', content)
+    assets_dir = os.path.join(FRONTEND_DIST_PATH, 'assets')
+
+    missing = []
+    found = []
+    for asset in asset_refs:
+        asset_path = os.path.join(assets_dir, asset)
+        if os.path.exists(asset_path):
+            found.append(asset)
+        else:
+            missing.append(asset)
+
+    if missing:
+        return jsonify({
+            "status": "error",
+            "message": "Asset mismatch - index.html references files that don't exist",
+            "missing": missing,
+            "found": found
+        }), 500
+
+    return jsonify({
+        "status": "ok",
+        "message": "All frontend assets in sync",
+        "assets": found
+    })
+
+
 @app.route("/api")
 def api_root():
     return jsonify({"message": "TechHub Delivery Workflow API", "version": "1.0.0"})
