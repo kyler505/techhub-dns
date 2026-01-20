@@ -155,6 +155,28 @@ def update_order_status(order_id):
             reason=status_update.reason
         )
 
+        # Send notifications based on new status
+        if status_update.status == OrderStatus.IN_DELIVERY:
+            # 1. Send Teams notification to recipient (if enabled)
+            try:
+                from app.services.teams_recipient_service import teams_recipient_service
+
+                # Get item names from inflow_data or use generic fallback
+                item_names = []
+                if order.inflow_data and "lines" in order.inflow_data:
+                    item_names = [line.get("productName", "Item") for line in order.inflow_data.get("lines", [])]
+
+                teams_recipient_service.send_delivery_notification(
+                    recipient_email=order.recipient_contact,
+                    recipient_name=order.recipient_name,
+                    order_number=order.inflow_order_id,
+                    delivery_runner=order.assigned_deliverer or "TechHub Staff",
+                    estimated_time="Shortly",
+                    order_items=item_names
+                )
+            except Exception as e:
+                logger.error(f"Failed to trigger Teams recipient notification: {e}")
+
 
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
