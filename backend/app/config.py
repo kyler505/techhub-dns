@@ -26,8 +26,7 @@ class Settings(BaseSettings):
     inflow_polling_sync_enabled: bool = True
     inflow_polling_sync_interval_minutes: Optional[int] = None
 
-    # Teams
-    # Teams webhook URL is stored in database, not here
+
 
     # Storage
     storage_root: str = "storage"
@@ -56,9 +55,7 @@ class Settings(BaseSettings):
     smtp_from_address: Optional[str] = None  # e.g., techhub@tamu.edu
     email_from_name: str = "TechHub Technology Services"
 
-    # Power Automate Teams Notifications (direct messaging - separate from email)
-    teams_recipient_notifications_enabled: bool = False  # Safety: disabled by default
-    power_automate_teams_flow_url: Optional[str] = None  # HTTP trigger URL for Teams flow
+
 
     # ===========================================
     # TAMU Entra ID Authentication (SAML + Service Principal)

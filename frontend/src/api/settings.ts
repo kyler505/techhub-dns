@@ -13,8 +13,6 @@ export interface SystemSettingValue {
 
 export interface SystemSettings {
     email_notifications_enabled: SystemSettingValue;
-    teams_webhook_notifications_enabled: SystemSettingValue;
-    teams_recipient_notifications_enabled: SystemSettingValue;
 }
 
 export interface TestResult {
@@ -53,24 +51,6 @@ export const settingsApi = {
         return response.data;
     },
 
-    /**
-     * Send a test Teams webhook message.
-     */
-    async testTeamsWebhook(): Promise<TestResult> {
-        const response = await apiClient.post("/system/test/teams-webhook");
-        return response.data;
-    },
-
-    /**
-     * Queue a test Teams recipient notification.
-     */
-    async testTeamsRecipient(recipientEmail: string, recipientName?: string): Promise<TestResult> {
-        const response = await apiClient.post("/system/test/teams-recipient", {
-            recipient_email: recipientEmail,
-            recipient_name: recipientName,
-        });
-        return response.data;
-    },
 
     /**
      * Test Inflow API connection.

@@ -41,7 +41,7 @@ export default function Admin() {
 
     // Testing state
     const [testEmailAddress, setTestEmailAddress] = useState("");
-    const [testRecipientEmail, setTestRecipientEmail] = useState("");
+
     const [testingService, setTestingService] = useState<string | null>(null);
 
     useEffect(() => {
@@ -155,33 +155,6 @@ export default function Admin() {
         }
     };
 
-    const handleTestTeamsWebhook = async () => {
-        setTestingService("teams-webhook");
-        try {
-            const result = await settingsApi.testTeamsWebhook();
-            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
-        } catch (error: any) {
-            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams webhook failed" });
-        } finally {
-            setTestingService(null);
-        }
-    };
-
-    const handleTestTeamsRecipient = async () => {
-        if (!testRecipientEmail) {
-            setMessage({ type: "error", text: "Please enter a recipient email address" });
-            return;
-        }
-        setTestingService("teams-recipient");
-        try {
-            const result = await settingsApi.testTeamsRecipient(testRecipientEmail, "Test User");
-            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
-        } catch (error: any) {
-            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams recipient failed" });
-        } finally {
-            setTestingService(null);
-        }
-    };
 
     const handleTestInflow = async () => {
         setTestingService("inflow");
@@ -299,41 +272,6 @@ export default function Admin() {
                         </button>
                     </div>
 
-                    {/* Teams Webhook Notifications */}
-                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                        <div>
-                            <p className="font-medium text-gray-900">Teams Webhook Notifications</p>
-                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_webhook_notifications_enabled").description}</p>
-                        </div>
-                        <button
-                            onClick={() => handleToggleSetting("teams_webhook_notifications_enabled", getSetting(systemSettings, "teams_webhook_notifications_enabled").value)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_webhook_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
-                                }`}
-                        >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_webhook_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
-                                    }`}
-                            />
-                        </button>
-                    </div>
-
-                    {/* Teams Recipient Notifications */}
-                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                        <div>
-                            <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
-                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
-                        </div>
-                        <button
-                            onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
-                                }`}
-                        >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
-                                    }`}
-                            />
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -362,37 +300,6 @@ export default function Admin() {
                         </button>
                     </div>
 
-                    {/* Test Teams Webhook */}
-                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test Teams Webhook</p>
-                        <p className="text-xs text-gray-500">Sends a test message to the configured Teams channel.</p>
-                        <button
-                            onClick={handleTestTeamsWebhook}
-                            disabled={testingService === "teams-webhook"}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
-                        >
-                            {testingService === "teams-webhook" ? "Sending..." : "Send Test Message"}
-                        </button>
-                    </div>
-
-                    {/* Test Teams Recipient */}
-                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test Teams Recipient</p>
-                        <input
-                            type="email"
-                            placeholder="recipient@tamu.edu"
-                            value={testRecipientEmail}
-                            onChange={(e) => setTestRecipientEmail(e.target.value)}
-                            className="w-full px-3 py-2 border rounded text-sm"
-                        />
-                        <button
-                            onClick={handleTestTeamsRecipient}
-                            disabled={testingService === "teams-recipient"}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
-                        >
-                            {testingService === "teams-recipient" ? "Sending..." : "Queue Test Notification"}
-                        </button>
-                    </div>
 
                     {/* Test Inflow */}
                     <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">

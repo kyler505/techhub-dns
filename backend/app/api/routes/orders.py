@@ -8,7 +8,7 @@ import threading
 
 from app.database import get_db
 from app.services.order_service import OrderService
-from app.services.teams_service import TeamsService
+
 from app.services.inflow_service import InflowService
 from app.schemas.order import (
     OrderResponse,
@@ -155,20 +155,6 @@ def update_order_status(order_id):
             reason=status_update.reason
         )
 
-        # Send Teams notification in background if transitioning to In Delivery
-        if status_update.status == OrderStatus.IN_DELIVERY:
-            teams_service = TeamsService(db)
-            thread = threading.Thread(
-                target=lambda: teams_service.send_delivery_notification_sync(order, order.assigned_deliverer)
-            )
-            thread.start()
-
-        if status_update.status == OrderStatus.PRE_DELIVERY:
-            teams_service = TeamsService(db)
-            thread = threading.Thread(
-                target=lambda: teams_service.send_ready_notification_sync(order)
-            )
-            thread.start()
 
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
@@ -268,12 +254,7 @@ def submit_qa(order_id):
                 changed_by=submission.technician
             )
 
-            # Only send ready notification for delivery orders
-            if next_status == OrderStatus.PRE_DELIVERY:
-                teams_service = TeamsService(db)
-                threading.Thread(
-                    target=lambda: teams_service.send_ready_notification_sync(order)
-                ).start()
+
 
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
@@ -334,33 +315,7 @@ def get_picklist(order_id):
             return send_file(path.resolve(), mimetype="application/pdf", download_name=path.name)
 
 
-@bp.route("/<uuid:order_id>/retry-notification", methods=["POST"])
-def retry_notification(order_id):
-    """Retry Teams notification for an order"""
-    from app.services.teams_service import TeamsService
-    from app.models.teams_notification import TeamsNotification, NotificationStatus
 
-    with get_db() as db:
-        service = OrderService(db)
-        order = service.get_order_detail(order_id)
-        if not order:
-            abort(404, description="Order not found")
-
-        teams_service = TeamsService(db)
-        notification = db.query(TeamsNotification).filter(
-            TeamsNotification.order_id == order_id,
-            TeamsNotification.status == NotificationStatus.FAILED
-        ).order_by(TeamsNotification.created_at.desc()).first()
-
-        if notification:
-            notification = teams_service.retry_notification_sync(notification.id)
-        else:
-            notification = teams_service.send_delivery_notification_sync(
-                order,
-                order.assigned_deliverer
-            )
-
-        return jsonify({"success": True, "notification_id": str(notification.id)})
 
 
 @bp.route("/<uuid:order_id>/fulfill", methods=["POST"])
@@ -424,10 +379,7 @@ def sign_order(order_id):
         db.commit()
         db.refresh(order)
 
-        # Send notification in background
-        threading.Thread(
-            target=lambda: service.teams_service.send_delivery_complete_notification_sync(order)
-        ).start()
+
 
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()

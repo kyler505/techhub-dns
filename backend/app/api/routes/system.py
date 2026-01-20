@@ -19,16 +19,12 @@ bp = Blueprint("system", __name__, url_prefix="/api/system")
 
 logger = logging.getLogger(__name__)
 
-# ============ Setting Keys ============
 SETTING_EMAIL_ENABLED = "email_notifications_enabled"
-SETTING_TEAMS_WEBHOOK_ENABLED = "teams_webhook_notifications_enabled"
-SETTING_TEAMS_RECIPIENT_ENABLED = "teams_recipient_notifications_enabled"
 
 DEFAULT_SETTINGS = {
     SETTING_EMAIL_ENABLED: {"value": "true", "description": "Enable sending email notifications (Order Details PDFs)"},
-    SETTING_TEAMS_WEBHOOK_ENABLED: {"value": "true", "description": "Enable Teams channel webhook notifications"},
-    SETTING_TEAMS_RECIPIENT_ENABLED: {"value": "true", "description": "Enable Teams recipient notifications via Power Automate"},
 }
+
 
 
 def get_setting(db, key: str) -> str:
@@ -157,92 +153,6 @@ def test_email_notification():
         return jsonify({"success": False, "error": "Failed to send email. Check server logs."}), 500
 
 
-@bp.route("/test/teams-webhook", methods=["POST"])
-def test_teams_webhook():
-    """Send a test message to the Teams webhook."""
-    from app.services.teams_service import TeamsService
-    import httpx
-
-    db = get_db_session()
-    try:
-        teams_service = TeamsService(db)
-        webhook_url = teams_service.get_webhook_url()
-
-        if not webhook_url:
-            return jsonify({
-                "success": False,
-                "error": "Teams webhook URL not configured. Set it in the Admin Panel."
-            }), 400
-
-        # Build test message
-        message = {
-            "@type": "MessageCard",
-            "@context": "https://schema.org/extensions",
-            "summary": "TechHub DNS - Test Notification",
-            "themeColor": "500000",
-            "title": "Test Notification",
-            "sections": [{
-                "activityTitle": "TechHub Delivery System",
-                "facts": [
-                    {"name": "Type:", "value": "Test Message"},
-                    {"name": "Status:", "value": "Configuration Verified"},
-                ],
-                "text": "This is a test message to verify your Teams webhook is working correctly."
-            }]
-        }
-
-        # Send synchronously
-        with httpx.Client() as client:
-            response = client.post(webhook_url, json=message, timeout=10.0)
-            response.raise_for_status()
-
-        return jsonify({"success": True, "message": "Test message sent to Teams channel"})
-
-    except httpx.HTTPStatusError as e:
-        return jsonify({"success": False, "error": f"HTTP error: {e.response.status_code}"}), 500
-    except Exception as e:
-        logger.error(f"Teams webhook test failed: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
-    finally:
-        db.close()
-
-
-@bp.route("/test/teams-recipient", methods=["POST"])
-def test_teams_recipient():
-    """Queue a test Teams notification via SharePoint (Power Automate flow)."""
-    from app.services.teams_recipient_service import teams_recipient_service
-
-    data = request.get_json() or {}
-    recipient_email = data.get("recipient_email")
-    recipient_name = data.get("recipient_name", "Test User")
-
-    if not recipient_email:
-        return jsonify({"error": "Missing 'recipient_email' in request body"}), 400
-
-    if not teams_recipient_service.is_configured():
-        return jsonify({
-            "success": False,
-            "error": "Teams recipient notifications not configured. Requires SharePoint and TEAMS_RECIPIENT_NOTIFICATIONS_ENABLED=true."
-        }), 400
-
-    # Send test notification (force=True to bypass enabled check)
-    success = teams_recipient_service.send_delivery_notification(
-        recipient_email=recipient_email,
-        recipient_name=recipient_name,
-        order_number="TEST-0000",
-        delivery_runner="System Test",
-        estimated_time="Now",
-        order_items=["Test Item 1", "Test Item 2"],
-        force=True
-    )
-
-    if success:
-        return jsonify({
-            "success": True,
-            "message": f"Test notification queued for {recipient_email}. Power Automate will send the Teams message."
-        })
-    else:
-        return jsonify({"success": False, "error": "Failed to queue notification. Check server logs."}), 500
 
 
 @bp.route("/test/inflow", methods=["POST"])

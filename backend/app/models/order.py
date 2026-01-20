@@ -91,5 +91,5 @@ class Order(Base):
 
     # Relationships
     audit_logs = relationship("AuditLog", back_populates="order", cascade="all, delete-orphan")
-    teams_notifications = relationship("TeamsNotification", back_populates="order", cascade="all, delete-orphan")
+
     delivery_run = relationship("DeliveryRun", back_populates="orders")
