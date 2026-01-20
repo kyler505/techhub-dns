@@ -4,15 +4,288 @@ System status API routes.
 Provides endpoints for checking backend feature statuses.
 """
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
+from typing import Dict, Any
 
 from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
 from app.services.graph_service import graph_service
 from app.services.inflow_service import InflowService
+from app.database import get_db_session
+from app.models.system_setting import SystemSetting
 import logging
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
+
+logger = logging.getLogger(__name__)
+
+# ============ Setting Keys ============
+SETTING_EMAIL_ENABLED = "email_notifications_enabled"
+SETTING_TEAMS_WEBHOOK_ENABLED = "teams_webhook_notifications_enabled"
+SETTING_TEAMS_RECIPIENT_ENABLED = "teams_recipient_notifications_enabled"
+
+DEFAULT_SETTINGS = {
+    SETTING_EMAIL_ENABLED: {"value": "true", "description": "Enable sending email notifications (Order Details PDFs)"},
+    SETTING_TEAMS_WEBHOOK_ENABLED: {"value": "true", "description": "Enable Teams channel webhook notifications"},
+    SETTING_TEAMS_RECIPIENT_ENABLED: {"value": "true", "description": "Enable Teams recipient notifications via Power Automate"},
+}
+
+
+def get_setting(db, key: str) -> str:
+    """Get a setting value from DB, or default if not set."""
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    if setting:
+        return setting.value
+    return DEFAULT_SETTINGS.get(key, {}).get("value", "false")
+
+
+def set_setting(db, key: str, value: str, updated_by: str = None) -> SystemSetting:
+    """Set a setting value in the DB."""
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    if not setting:
+        setting = SystemSetting(
+            key=key,
+            value=value,
+            description=DEFAULT_SETTINGS.get(key, {}).get("description"),
+            updated_by=updated_by
+        )
+        db.add(setting)
+    else:
+        setting.value = value
+        setting.updated_by = updated_by
+    db.commit()
+    db.refresh(setting)
+    return setting
+
+
+def is_setting_enabled(db, key: str) -> bool:
+    """Check if a boolean setting is enabled."""
+    value = get_setting(db, key)
+    return value.lower() in ("true", "1", "yes", "on")
+
+
+# ============ Settings Endpoints ============
+
+@bp.route("/settings", methods=["GET"])
+def get_system_settings():
+    """Get all system settings."""
+    db = get_db_session()
+    try:
+        result = {}
+        for key, defaults in DEFAULT_SETTINGS.items():
+            setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+            result[key] = {
+                "value": setting.value if setting else defaults["value"],
+                "description": defaults["description"],
+                "updated_at": setting.updated_at.isoformat() if setting and setting.updated_at else None,
+                "updated_by": setting.updated_by if setting else None,
+            }
+        return jsonify(result)
+    finally:
+        db.close()
+
+
+@bp.route("/settings/<key>", methods=["PUT"])
+def update_system_setting(key: str):
+    """Update a system setting."""
+    if key not in DEFAULT_SETTINGS:
+        return jsonify({"error": f"Unknown setting: {key}"}), 400
+
+    data = request.get_json()
+    if not data or "value" not in data:
+        return jsonify({"error": "Missing 'value' in request body"}), 400
+
+    db = get_db_session()
+    try:
+        updated_by = data.get("updated_by", "admin")
+        setting = set_setting(db, key, str(data["value"]), updated_by)
+        return jsonify({
+            "key": setting.key,
+            "value": setting.value,
+            "updated_at": setting.updated_at.isoformat() if setting.updated_at else None,
+            "updated_by": setting.updated_by,
+        })
+    finally:
+        db.close()
+
+
+# ============ Testing Endpoints ============
+
+@bp.route("/test/email", methods=["POST"])
+def test_email_notification():
+    """Send a test email to verify email configuration."""
+    from app.services.email_service import email_service
+
+    data = request.get_json() or {}
+    to_address = data.get("to_address")
+
+    if not to_address:
+        return jsonify({"error": "Missing 'to_address' in request body"}), 400
+
+    if not email_service.is_configured():
+        return jsonify({
+            "success": False,
+            "error": "Email not configured. Check SMTP_* environment variables."
+        }), 400
+
+    # Send test email (force=True to bypass enabled check)
+    subject = "TechHub DNS - Test Email"
+    body_html = """
+    <html>
+    <body style="font-family: Arial, sans-serif;">
+        <h2 style="color: #500000;">Test Email from TechHub</h2>
+        <p>This is a test email to verify your email configuration is working correctly.</p>
+        <p>If you received this, your SMTP settings are properly configured!</p>
+        <hr>
+        <p style="font-size: 12px; color: #666;">TechHub Delivery Notification System</p>
+    </body>
+    </html>
+    """
+    body_text = "Test Email from TechHub\n\nThis is a test email to verify your email configuration is working correctly."
+
+    success = email_service.send_email(
+        to_address=to_address,
+        subject=subject,
+        body_html=body_html,
+        body_text=body_text,
+        force=True
+    )
+
+    if success:
+        return jsonify({"success": True, "message": f"Test email sent to {to_address}"})
+    else:
+        return jsonify({"success": False, "error": "Failed to send email. Check server logs."}), 500
+
+
+@bp.route("/test/teams-webhook", methods=["POST"])
+def test_teams_webhook():
+    """Send a test message to the Teams webhook."""
+    from app.services.teams_service import TeamsService
+    import httpx
+
+    db = get_db_session()
+    try:
+        teams_service = TeamsService(db)
+        webhook_url = teams_service.get_webhook_url()
+
+        if not webhook_url:
+            return jsonify({
+                "success": False,
+                "error": "Teams webhook URL not configured. Set it in the Admin Panel."
+            }), 400
+
+        # Build test message
+        message = {
+            "@type": "MessageCard",
+            "@context": "https://schema.org/extensions",
+            "summary": "TechHub DNS - Test Notification",
+            "themeColor": "500000",
+            "title": "Test Notification",
+            "sections": [{
+                "activityTitle": "TechHub Delivery System",
+                "facts": [
+                    {"name": "Type:", "value": "Test Message"},
+                    {"name": "Status:", "value": "Configuration Verified"},
+                ],
+                "text": "This is a test message to verify your Teams webhook is working correctly."
+            }]
+        }
+
+        # Send synchronously
+        with httpx.Client() as client:
+            response = client.post(webhook_url, json=message, timeout=10.0)
+            response.raise_for_status()
+
+        return jsonify({"success": True, "message": "Test message sent to Teams channel"})
+
+    except httpx.HTTPStatusError as e:
+        return jsonify({"success": False, "error": f"HTTP error: {e.response.status_code}"}), 500
+    except Exception as e:
+        logger.error(f"Teams webhook test failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@bp.route("/test/teams-recipient", methods=["POST"])
+def test_teams_recipient():
+    """Queue a test Teams notification via SharePoint (Power Automate flow)."""
+    from app.services.teams_recipient_service import teams_recipient_service
+
+    data = request.get_json() or {}
+    recipient_email = data.get("recipient_email")
+    recipient_name = data.get("recipient_name", "Test User")
+
+    if not recipient_email:
+        return jsonify({"error": "Missing 'recipient_email' in request body"}), 400
+
+    if not teams_recipient_service.is_configured():
+        return jsonify({
+            "success": False,
+            "error": "Teams recipient notifications not configured. Requires SharePoint and TEAMS_RECIPIENT_NOTIFICATIONS_ENABLED=true."
+        }), 400
+
+    # Send test notification (force=True to bypass enabled check)
+    success = teams_recipient_service.send_delivery_notification(
+        recipient_email=recipient_email,
+        recipient_name=recipient_name,
+        order_number="TEST-0000",
+        delivery_runner="System Test",
+        estimated_time="Now",
+        order_items=["Test Item 1", "Test Item 2"],
+        force=True
+    )
+
+    if success:
+        return jsonify({
+            "success": True,
+            "message": f"Test notification queued for {recipient_email}. Power Automate will send the Teams message."
+        })
+    else:
+        return jsonify({"success": False, "error": "Failed to queue notification. Check server logs."}), 500
+
+
+@bp.route("/test/inflow", methods=["POST"])
+def test_inflow_connection():
+    """Test connection to Inflow API."""
+    service = InflowService()
+
+    try:
+        # Try to fetch a small number of orders to verify connection
+        orders = service.sync_recent_started_orders_sync(max_pages=1, target_matches=1)
+        return jsonify({
+            "success": True,
+            "message": f"Inflow API connected. Found {len(orders)} order(s) in sample query."
+        })
+    except Exception as e:
+        logger.error(f"Inflow connection test failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/test/sharepoint", methods=["POST"])
+def test_sharepoint_connection():
+    """Test connection to SharePoint."""
+    from app.services.sharepoint_service import get_sharepoint_service
+
+    try:
+        sp_service = get_sharepoint_service()
+
+        if not sp_service.is_enabled:
+            return jsonify({
+                "success": False,
+                "error": "SharePoint not enabled. Check SHAREPOINT_ENABLED and Azure configuration."
+            }), 400
+
+        # Test authentication and site access
+        sp_service._get_access_token()
+
+        return jsonify({
+            "success": True,
+            "message": f"SharePoint connected. Site: {settings.sharepoint_site_url}"
+        })
+    except Exception as e:
+        logger.error(f"SharePoint connection test failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @bp.route("/status", methods=["GET"])
