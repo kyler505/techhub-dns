@@ -20,10 +20,14 @@ bp = Blueprint("system", __name__, url_prefix="/api/system")
 logger = logging.getLogger(__name__)
 
 SETTING_EMAIL_ENABLED = "email_notifications_enabled"
+SETTING_TEAMS_RECIPIENT_ENABLED = "teams_recipient_notifications_enabled"
+
 
 DEFAULT_SETTINGS = {
     SETTING_EMAIL_ENABLED: {"value": "true", "description": "Enable sending email notifications (Order Details PDFs)"},
+    SETTING_TEAMS_RECIPIENT_ENABLED: {"value": "false", "description": "Enable sending delivery notifications to recipients via Teams"},
 }
+
 
 
 
@@ -119,9 +123,15 @@ def test_email_notification():
         return jsonify({"error": "Missing 'to_address' in request body"}), 400
 
     if not email_service.is_configured():
+        missing = []
+        if not settings.azure_tenant_id: missing.append("AZURE_TENANT_ID")
+        if not settings.azure_client_id: missing.append("AZURE_CLIENT_ID")
+        if not settings.azure_client_secret: missing.append("AZURE_CLIENT_SECRET")
+        if not settings.smtp_from_address: missing.append("SMTP_FROM_ADDRESS")
+
         return jsonify({
             "success": False,
-            "error": "Email not configured. Check SMTP_* environment variables."
+            "error": f"Email not configured. Missing environment variables: {', '.join(missing)}"
         }), 400
 
     # Send test email (force=True to bypass enabled check)
@@ -151,6 +161,46 @@ def test_email_notification():
         return jsonify({"success": True, "message": f"Test email sent to {to_address}"})
     else:
         return jsonify({"success": False, "error": "Failed to send email. Check server logs."}), 500
+
+
+@bp.route("/test/teams-recipient", methods=["POST"])
+def test_teams_recipient():
+    """Queue a test Teams notification to a recipient via Graph API."""
+    from app.services.teams_recipient_service import teams_recipient_service
+
+    data = request.get_json() or {}
+    recipient_email = data.get("recipient_email")
+    recipient_name = data.get("recipient_name", "Test User")
+
+    if not recipient_email:
+        return jsonify({"error": "Missing 'recipient_email' in request body"}), 400
+
+    if not teams_recipient_service.is_configured():
+        # Even if not configured, we might want to try forced send if enabled in settings?
+        # Actually is_configured checks settings. Let's send a warning if disabled.
+        pass
+
+    try:
+        # Send test notification
+        success = teams_recipient_service.send_delivery_notification(
+            recipient_email=recipient_email,
+            recipient_name=recipient_name,
+            order_number="TEST-123",
+            delivery_runner="System Administrator",
+            estimated_time="Currently (Test)",
+            order_items=["Test Item 1", "Test Item 2"],
+            force=True  # Force send even if disabled in settings
+        )
+
+        if success:
+            return jsonify({"success": True, "message": f"Test message sent to {recipient_email}"})
+        else:
+            return jsonify({"success": False, "error": "Failed to send Teams message. Check logs."}), 500
+
+    except Exception as e:
+        logger.error(f"Teams recipient test failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 

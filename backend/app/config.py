@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     smtp_from_address: Optional[str] = None  # e.g., techhub@tamu.edu
     email_from_name: str = "TechHub Technology Services"
 
+    # Teams Recipient Notifications (Graph API)
+    teams_recipient_notifications_enabled: bool = False
+
+
 
 
     # ===========================================
