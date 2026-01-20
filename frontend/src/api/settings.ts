@@ -13,7 +13,9 @@ export interface SystemSettingValue {
 
 export interface SystemSettings {
     email_notifications_enabled: SystemSettingValue;
+    teams_recipient_notifications_enabled: SystemSettingValue;
 }
+
 
 export interface TestResult {
     success: boolean;
@@ -48,6 +50,14 @@ export const settingsApi = {
      */
     async testEmail(toAddress: string): Promise<TestResult> {
         const response = await apiClient.post("/system/test/email", { to_address: toAddress });
+        return response.data;
+    },
+
+    /**
+     * Send a test Teams message to recipient.
+     */
+    async testTeamsRecipient(recipientEmail: string): Promise<TestResult> {
+        const response = await apiClient.post("/system/test/teams-recipient", { recipient_email: recipientEmail });
         return response.data;
     },
 

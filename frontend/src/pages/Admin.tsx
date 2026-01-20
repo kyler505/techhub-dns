@@ -155,8 +155,25 @@ export default function Admin() {
         }
     };
 
+    const handleTestTeamsRecipient = async () => {
+        if (!testEmailAddress) {
+            setMessage({ type: "error", text: "Please enter an email address" });
+            return;
+        }
+        setTestingService("teams");
+        try {
+            const result = await settingsApi.testTeamsRecipient(testEmailAddress);
+            setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
+        } catch (error: any) {
+            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams message failed" });
+        } finally {
+            setTestingService(null);
+        }
+    };
+
 
     const handleTestInflow = async () => {
+
         setTestingService("inflow");
         try {
             const result = await settingsApi.testInflow();
@@ -301,6 +318,27 @@ export default function Admin() {
                     </div>
 
 
+                    {/* Test Teams Recipient */}
+                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                        <p className="font-medium text-gray-900">Test Teams Recipient</p>
+                        <p className="text-xs text-gray-500">Sends a test Teams message to the specified email.</p>
+                        <input
+                            type="email"
+                            placeholder="recipient@tamu.edu"
+                            value={testEmailAddress}
+                            onChange={(e) => setTestEmailAddress(e.target.value)}
+                            className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                        <button
+                            onClick={handleTestTeamsRecipient}
+                            disabled={testingService === "teams"}
+                            className="w-full px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {testingService === "teams" ? "Sending..." : "Send Test Message"}
+                        </button>
+                    </div>
+
+
                     {/* Test Inflow */}
                     <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
                         <p className="font-medium text-gray-900">Test Inflow API</p>
@@ -409,6 +447,6 @@ export default function Admin() {
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

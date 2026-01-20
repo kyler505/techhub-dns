@@ -63,7 +63,7 @@ class EmailService:
             return False
 
         if not self.is_configured():
-            logger.warning("Email not configured. Set AZURE_* and SMTP_FROM_ADDRESS in .env")
+            logger.warning("Email not configured. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and SMTP_FROM_ADDRESS in .env")
             return False
 
         return graph_service.send_email(
