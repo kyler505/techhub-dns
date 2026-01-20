@@ -165,11 +165,14 @@ export default function Admin() {
             const result = await settingsApi.testTeamsRecipient(testEmailAddress);
             setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
         } catch (error: any) {
-            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams message failed" });
+            const errorMsg = error.response?.data?.error;
+            const displayText = typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : (errorMsg || "Test Teams message failed");
+            setMessage({ type: "error", text: displayText });
         } finally {
             setTestingService(null);
         }
     };
+
 
 
     const handleTestInflow = async () => {
