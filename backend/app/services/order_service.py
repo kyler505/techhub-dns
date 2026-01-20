@@ -18,8 +18,7 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 from app.models.order import Order, OrderStatus, ShippingWorkflowStatus
 from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
-from app.models.teams_notification import TeamsNotification, NotificationStatus
-from app.services.teams_service import TeamsService
+
 from app.utils.building_mapper import get_building_abbreviation, extract_building_code_from_location
 from app.utils.exceptions import NotFoundError, ValidationError, StatusTransitionError, FileOperationError
 from app.config import settings
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 class OrderService:
     def __init__(self, db: Session):
         self.db = db
-        self.teams_service = TeamsService(db)
+
 
     def _prep_steps_complete(self, order: Order) -> bool:
         return bool(order.tagged_at and order.picklist_generated_at and order.qa_completed_at)
@@ -341,7 +340,7 @@ class OrderService:
         order_id_str = str(order_id)
         return self.db.query(Order).options(
             selectinload(Order.audit_logs),
-            selectinload(Order.teams_notifications)
+
         ).filter(Order.id == order_id_str).first()
 
     def transition_status(

@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
 from app.models.order import OrderStatus, ShippingWorkflowStatus
-from app.schemas.teams import TeamsNotificationResponse
+
 
 
 class OrderBase(BaseModel):
@@ -112,7 +112,7 @@ class OrderResponse(OrderBase):
 
 class OrderDetailResponse(OrderResponse):
     inflow_data: Optional[Dict[str, Any]] = None
-    teams_notifications: Optional[List[TeamsNotificationResponse]] = None
+
 
 
 class BulkStatusUpdate(BaseModel):

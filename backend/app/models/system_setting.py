@@ -26,5 +26,3 @@ class SystemSetting(Base):
 
     # Common settings keys (for reference)
     # - email_notifications_enabled: "true" / "false"
-    # - teams_webhook_notifications_enabled: "true" / "false"
-    # - teams_recipient_notifications_enabled: "true" / "false"
