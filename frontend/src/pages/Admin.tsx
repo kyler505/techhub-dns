@@ -20,6 +20,14 @@ interface SystemStatus {
     inflow_sync: FeatureStatus;
 }
 
+// Default values when settings haven't been loaded yet
+const DEFAULT_SETTING = { value: "true", description: "Loading...", updated_at: null, updated_by: null };
+
+// Helper to safely get a setting value
+const getSetting = (settings: SystemSettings | null, key: keyof SystemSettings) => {
+    return settings?.[key] ?? DEFAULT_SETTING;
+};
+
 export default function Admin() {
     const { user } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -272,63 +280,61 @@ export default function Admin() {
                 <h2 className="text-xl font-semibold">Notification Settings</h2>
                 <p className="text-sm text-gray-600">Enable or disable notification services. Changes take effect immediately.</p>
 
-                {systemSettings && (
-                    <div className="space-y-3">
-                        {/* Email Notifications */}
-                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                            <div>
-                                <p className="font-medium text-gray-900">Email Notifications</p>
-                                <p className="text-sm text-gray-600">{systemSettings.email_notifications_enabled.description}</p>
-                            </div>
-                            <button
-                                onClick={() => handleToggleSetting("email_notifications_enabled", systemSettings.email_notifications_enabled.value)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.email_notifications_enabled.value === "true" ? "bg-green-500" : "bg-gray-300"
-                                    }`}
-                            >
-                                <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.email_notifications_enabled.value === "true" ? "translate-x-6" : "translate-x-1"
-                                        }`}
-                                />
-                            </button>
+                <div className="space-y-3">
+                    {/* Email Notifications */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Email Notifications</p>
+                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "email_notifications_enabled").description}</p>
                         </div>
-
-                        {/* Teams Webhook Notifications */}
-                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                            <div>
-                                <p className="font-medium text-gray-900">Teams Webhook Notifications</p>
-                                <p className="text-sm text-gray-600">{systemSettings.teams_webhook_notifications_enabled.description}</p>
-                            </div>
-                            <button
-                                onClick={() => handleToggleSetting("teams_webhook_notifications_enabled", systemSettings.teams_webhook_notifications_enabled.value)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.teams_webhook_notifications_enabled.value === "true" ? "bg-green-500" : "bg-gray-300"
+                        <button
+                            onClick={() => handleToggleSetting("email_notifications_enabled", getSetting(systemSettings, "email_notifications_enabled").value)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
                                     }`}
-                            >
-                                <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.teams_webhook_notifications_enabled.value === "true" ? "translate-x-6" : "translate-x-1"
-                                        }`}
-                                />
-                            </button>
-                        </div>
-
-                        {/* Teams Recipient Notifications */}
-                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                            <div>
-                                <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
-                                <p className="text-sm text-gray-600">{systemSettings.teams_recipient_notifications_enabled.description}</p>
-                            </div>
-                            <button
-                                onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", systemSettings.teams_recipient_notifications_enabled.value)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.teams_recipient_notifications_enabled.value === "true" ? "bg-green-500" : "bg-gray-300"
-                                    }`}
-                            >
-                                <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.teams_recipient_notifications_enabled.value === "true" ? "translate-x-6" : "translate-x-1"
-                                        }`}
-                                />
-                            </button>
-                        </div>
+                            />
+                        </button>
                     </div>
-                )}
+
+                    {/* Teams Webhook Notifications */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Teams Webhook Notifications</p>
+                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_webhook_notifications_enabled").description}</p>
+                        </div>
+                        <button
+                            onClick={() => handleToggleSetting("teams_webhook_notifications_enabled", getSetting(systemSettings, "teams_webhook_notifications_enabled").value)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_webhook_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_webhook_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
+                                    }`}
+                            />
+                        </button>
+                    </div>
+
+                    {/* Teams Recipient Notifications */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
+                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
+                        </div>
+                        <button
+                            onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
+                                    }`}
+                            />
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Service Testing */}
