@@ -27,11 +27,5 @@ Thumbs.db
 # Local logging and documentation
 docs/
 
-# Certificates
-# certs/ (Uncommented to allow IdP cert deployment)
-
 # Logs
 .logs/
-
-# Automation scripts (may contain credentials)
-automation_scripts/

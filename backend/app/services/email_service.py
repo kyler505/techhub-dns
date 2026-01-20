@@ -1,51 +1,34 @@
 """
-Email Service using TAMU authenticated SMTP relay.
+Email Service using Microsoft Graph API.
 
-Uses relay.tamu.edu:587 with TLS authentication.
-Requires a shared NetID authorized for SMTP by TAMU security.
+Sends emails via Microsoft Graph API using Service Principal authentication.
+Replaces the previous SMTP relay approach for unified Microsoft integration.
 
-Configuration:
-  SMTP_HOST=relay.tamu.edu
-  SMTP_PORT=587
-  SMTP_USERNAME=shared_netid@tamu.edu
-  SMTP_PASSWORD=<password>
-  SMTP_FROM_ADDRESS=techhub@tamu.edu
+Requires Azure AD app with Mail.Send permission.
 """
 
-import base64
 import logging
-import smtplib
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
 
 from app.config import settings
+from app.services.graph_service import graph_service
 
 logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Service for sending emails via TAMU SMTP relay."""
+    """Service for sending emails via Microsoft Graph API."""
 
     def __init__(self):
         self.from_name = settings.email_from_name
-
-        # SMTP settings
-        self.smtp_enabled = settings.smtp_enabled
-        self.smtp_host = settings.smtp_host
-        self.smtp_port = settings.smtp_port
-        self.smtp_username = settings.smtp_username
-        self.smtp_password = settings.smtp_password
-        self.smtp_from_address = settings.smtp_from_address
+        self.from_address = settings.smtp_from_address  # Reusing this config for "from" address
+        self.enabled = settings.smtp_enabled  # Reusing this as email enabled toggle
 
     def is_configured(self) -> bool:
-        """Check if SMTP is properly configured."""
+        """Check if email is properly configured (Graph API must be configured)."""
         return bool(
-            self.smtp_host and
-            self.smtp_username and
-            self.smtp_password and
-            self.smtp_from_address
+            graph_service.is_configured() and
+            self.from_address
         )
 
     def send_email(
@@ -60,67 +43,39 @@ class EmailService:
         force: bool = False
     ) -> bool:
         """
-        Send an email via TAMU SMTP relay.
+        Send an email via Microsoft Graph API.
 
         Args:
             to_address: Recipient email address
             subject: Email subject
             body_html: HTML body content
-            body_text: Optional plain text body
+            body_text: Optional plain text body (kept for compatibility, not used by Graph)
             attachment_name: Optional attachment filename
             attachment_content: Optional attachment content as bytes
-            attachment_type: MIME type of attachment
+            attachment_type: MIME type of attachment (kept for compatibility)
             force: If True, bypass the enabled check (for testing)
 
         Returns:
             True if email sent successfully, False otherwise
         """
-        if not force and not self.smtp_enabled:
+        if not force and not self.enabled:
             logger.info("Email sending is disabled (SMTP_ENABLED=false)")
             return False
 
         if not self.is_configured():
-            logger.warning("SMTP not configured. Set SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_ADDRESS in .env")
+            logger.warning("Email not configured. Set AZURE_* and SMTP_FROM_ADDRESS in .env")
             return False
 
-        try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = f"{self.from_name} <{self.smtp_from_address}>"
-            msg['To'] = to_address
-
-            # Add plain text and HTML parts
-            if body_text:
-                msg.attach(MIMEText(body_text, 'plain'))
-            msg.attach(MIMEText(body_html, 'html'))
-
-            # Add attachment if provided
-            if attachment_name and attachment_content:
-                attachment = MIMEApplication(attachment_content, Name=attachment_name)
-                attachment['Content-Disposition'] = f'attachment; filename="{attachment_name}"'
-                msg.attach(attachment)
-
-            # Send via SMTP with TLS
-            logger.info(f"Sending email to {to_address} via {self.smtp_host}:{self.smtp_port}")
-
-            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
-                server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
-                server.sendmail(self.smtp_from_address, [to_address], msg.as_string())
-
-            logger.info(f"Email sent successfully to {to_address}")
-            return True
-
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(f"SMTP authentication failed: {e}")
-            return False
-        except smtplib.SMTPException as e:
-            logger.error(f"SMTP error sending email: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error sending email: {e}")
-            return False
+        return graph_service.send_email(
+            to_address=to_address,
+            subject=subject,
+            body_html=body_html,
+            body_text=body_text,
+            from_address=self.from_address,
+            attachment_name=attachment_name,
+            attachment_content=attachment_content,
+            initiated_by="email_service"
+        )
 
     def send_order_details_email(
         self,
