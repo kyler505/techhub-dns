@@ -1,90 +1,66 @@
 """
-Teams Recipient Notification Service using SharePoint Queue.
+Teams Recipient Notification Service using Microsoft Graph API.
 
-Flow:
-1. App writes notification request JSON to SharePoint (teams-queue folder)
-2. Power Automate triggers on new file in SharePoint
-3. Flow sends Teams chat message to recipient
-4. Flow deletes the processed file
+Sends 1:1 Teams chat messages directly to order recipients using Graph API.
+Replaces the previous SharePoint queue + Power Automate approach.
 
-This bypasses SAS authentication issues with HTTP triggers.
+Requires Azure AD app with Chat.Create and ChatMessage.Send permissions.
 """
 
-import json
 import logging
-from datetime import datetime
 from typing import Dict, Any, Optional, List
-from uuid import uuid4
 
 from app.config import settings
+from app.services.graph_service import graph_service
 
 logger = logging.getLogger(__name__)
 
 
 class TeamsRecipientService:
-    """Service for sending Teams notifications via SharePoint queue."""
+    """Service for sending Teams notifications via Graph API."""
 
     def __init__(self):
         self.enabled = settings.teams_recipient_notifications_enabled
 
     def is_configured(self) -> bool:
-        """Check if the service is properly configured (SharePoint must be enabled)."""
-        try:
-            from app.services.sharepoint_service import get_sharepoint_service
-            sp_service = get_sharepoint_service()
-            return self.enabled and sp_service.is_enabled
-        except Exception:
-            return False
+        """Check if the service is properly configured (Graph API must be configured)."""
+        return self.enabled and graph_service.is_configured()
 
-    def _queue_notification_to_sharepoint(
+    def _build_delivery_message(
         self,
-        recipient_email: str,
         recipient_name: str,
         order_number: str,
         delivery_runner: str,
         estimated_time: Optional[str] = None,
         order_items: Optional[List[str]] = None
-    ) -> bool:
+    ) -> str:
         """
-        Queue a Teams notification request to SharePoint.
+        Build an HTML message for delivery notification.
 
-        Writes a JSON file to the teams-queue folder.
-        Power Automate flow monitors this folder and sends Teams messages.
+        Returns HTML string suitable for Teams chat message.
         """
-        from app.services.sharepoint_service import get_sharepoint_service
+        # Build items list if provided
+        items_html = ""
+        if order_items:
+            items_list = "".join(f"<li>{item}</li>" for item in order_items)
+            items_html = f"<br/><b>Items:</b><ul>{items_list}</ul>"
 
-        try:
-            sp_service = get_sharepoint_service()
-            if not sp_service.is_enabled:
-                logger.warning("SharePoint not enabled, cannot queue Teams notification")
-                return False
+        # Build time info if provided
+        time_html = ""
+        if estimated_time:
+            time_html = f"<br/><b>Estimated arrival:</b> {estimated_time}"
 
-            # Create notification request JSON
-            request_id = str(uuid4())[:8]
-            timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-            filename = f"teams-{timestamp}-{request_id}.json"
-
-            notification_request = {
-                "id": request_id,
-                "type": "delivery_notification",
-                "recipientEmail": recipient_email,
-                "recipientName": recipient_name,
-                "orderNumber": order_number,
-                "deliveryRunner": delivery_runner,
-                "estimatedTime": estimated_time,
-                "orderItems": order_items,
-                "createdAt": datetime.utcnow().isoformat() + "Z",
-                "status": "pending"
-            }
-
-            # Upload to teams-queue folder
-            url = sp_service.upload_json(notification_request, "teams-queue", filename)
-            logger.info(f"Teams notification queued to SharePoint: {url}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to queue Teams notification to SharePoint: {e}")
-            return False
+        message = f"""
+<h3>🚚 TechHub Delivery Notification</h3>
+<p>Hi {recipient_name},</p>
+<p>Your TechHub order <b>{order_number}</b> is out for delivery!</p>
+<p><b>Delivered by:</b> {delivery_runner}{time_html}</p>
+{items_html}
+<p>Please ensure someone is available to receive the delivery. If you have any questions, contact TechHub.</p>
+<hr/>
+<p style="font-size: 12px; color: #666;">TechHub Technology Services • WCDC • 474 Agronomy Rd</p>
+"""
+        return message
 
     def send_delivery_notification(
         self,
@@ -97,7 +73,7 @@ class TeamsRecipientService:
         force: bool = False
     ) -> bool:
         """
-        Queue a Teams notification to the recipient about their delivery.
+        Send a Teams notification to the recipient about their delivery.
 
         Args:
             recipient_email: Recipient's TAMU email (must have Teams)
@@ -109,19 +85,30 @@ class TeamsRecipientService:
             force: If True, bypass the enabled check (for testing)
 
         Returns:
-            True if notification queued successfully, False otherwise
+            True if notification sent successfully, False otherwise
         """
         if not force and not self.enabled:
             logger.info("Teams recipient notifications are disabled")
             return False
 
-        return self._queue_notification_to_sharepoint(
-            recipient_email=recipient_email,
+        if not graph_service.is_configured():
+            logger.warning("Graph API not configured, cannot send Teams notification")
+            return False
+
+        # Build the message content
+        message_html = self._build_delivery_message(
             recipient_name=recipient_name,
             order_number=order_number,
             delivery_runner=delivery_runner,
             estimated_time=estimated_time,
             order_items=order_items
+        )
+
+        # Send via Graph API
+        return graph_service.send_teams_message(
+            recipient_email=recipient_email,
+            message_content=message_html,
+            initiated_by=delivery_runner
         )
 
     def send_bulk_delivery_notifications(
@@ -130,7 +117,7 @@ class TeamsRecipientService:
         delivery_runner: str
     ) -> Dict[str, bool]:
         """
-        Queue notifications for multiple orders (e.g., when starting a delivery run).
+        Send notifications for multiple orders (e.g., when starting a delivery run).
 
         Args:
             orders: List of order dicts with recipient_email, recipient_name, order_number

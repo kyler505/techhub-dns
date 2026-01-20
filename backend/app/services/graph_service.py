@@ -133,7 +133,10 @@ class GraphService:
         to_address: str,
         subject: str,
         body_html: str,
+        body_text: str = None,
         from_address: str = None,
+        attachment_name: str = None,
+        attachment_content: bytes = None,
         initiated_by: str = "system"
     ) -> bool:
         """
@@ -143,12 +146,17 @@ class GraphService:
             to_address: Recipient email address
             subject: Email subject
             body_html: HTML body content
+            body_text: Optional plain text (not used by Graph, but accepted for compatibility)
             from_address: Sender email (must be authorized in Azure)
+            attachment_name: Optional attachment filename
+            attachment_content: Optional attachment as bytes
             initiated_by: User who triggered this action (for audit)
 
         Returns:
             True if email sent successfully
         """
+        import base64
+
         if not from_address:
             from_address = settings.smtp_from_address or "techhub@tamu.edu"
 
@@ -165,6 +173,17 @@ class GraphService:
             },
             "saveToSentItems": True
         }
+
+        # Add attachment if provided
+        if attachment_name and attachment_content:
+            message["message"]["attachments"] = [
+                {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": attachment_name,
+                    "contentType": "application/octet-stream",
+                    "contentBytes": base64.b64encode(attachment_content).decode("utf-8")
+                }
+            ]
 
         try:
             # Use /users/{email}/sendMail for application permissions
@@ -244,21 +263,24 @@ class GraphService:
         initiated_by: str = "system"
     ) -> bool:
         """
-        Send a Teams chat message to a user.
+        Send a Teams chat message to a user via Graph API.
 
-        Note: Requires Chat.ReadWrite.All permission and the recipient
-        must be in the same organization.
+        Creates or retrieves a 1:1 chat between the app and the recipient,
+        then sends a message to that chat.
+
+        Note: Requires Chat.Create and ChatMessage.Send application permissions.
+        The recipient must be in the same organization.
 
         Args:
             recipient_email: Recipient's email address
-            message_content: Message text (can include HTML)
+            message_content: Message text (HTML supported)
             initiated_by: User who triggered this action (for audit)
 
         Returns:
             True if message sent successfully
         """
         try:
-            # First, get the recipient's user ID
+            # Step 1: Get the recipient's user ID
             user_result = self._graph_request("GET", f"/users/{recipient_email}")
             recipient_id = user_result.get("id")
 
@@ -266,16 +288,36 @@ class GraphService:
                 logger.error(f"Could not find Teams user: {recipient_email}")
                 return False
 
-            # Create or get existing chat with the user
-            # For 1:1 chats, we need to use the service principal's ID as well
-            # This requires the app to have a Teams presence, which may need setup
+            # Step 2: Create a 1:1 chat with the user
+            # Using the "oneOnOne" chat type - Graph API will return existing chat if one exists
+            chat_payload = {
+                "chatType": "oneOnOne",
+                "members": [
+                    {
+                        "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                        "roles": ["owner"],
+                        "user@odata.bind": f"https://graph.microsoft.com/v1.0/users/{recipient_id}"
+                    }
+                ]
+            }
 
-            # Alternative: Use activity feed notification (simpler, requires different permissions)
-            # For now, log that this would be sent
-            logger.info(f"Teams message queued for {recipient_email} (initiated by: {initiated_by})")
+            chat_result = self._graph_request("POST", "/chats", json_data=chat_payload)
+            chat_id = chat_result.get("id")
 
-            # Note: Full Teams chat implementation requires additional setup
-            # Consider using Teams incoming webhook for simpler channel notifications
+            if not chat_id:
+                logger.error(f"Failed to create/get chat with user: {recipient_email}")
+                return False
+
+            # Step 3: Send message to the chat
+            message_payload = {
+                "body": {
+                    "contentType": "html",
+                    "content": message_content
+                }
+            }
+
+            self._graph_request("POST", f"/chats/{chat_id}/messages", json_data=message_payload)
+            logger.info(f"Teams message sent to {recipient_email} (initiated by: {initiated_by})")
             return True
 
         except Exception as e:
