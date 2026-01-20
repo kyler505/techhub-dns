@@ -29,7 +29,7 @@ The application solves the challenge of managing delivery orders from the point 
 - Intelligent extraction of building codes from addresses
 - Parsing of alternative delivery locations from order remarks
 - Status workflow management with audit trails
-- Automated Teams notifications for delivery personnel
+
 - Bulk operations for efficient queue management
 
 ### Technology Stack
@@ -58,7 +58,7 @@ The application solves the challenge of managing delivery orders from the point 
 - Inflow API (Order source)
 - ArcGIS Service (Building data)
 - **Microsoft Entra ID** (Authentication & Authorization)
-- **Microsoft Graph API** (Email, SharePoint, Teams)
+- **Microsoft Graph API** (Email, SharePoint)
 
 ## Architecture
 
@@ -89,8 +89,7 @@ The application solves the challenge of managing delivery orders from the point 
 6. **Delivery Run Creation**: Users create delivery runs, assign orders and vehicles.
 7. **Status Changes**: User actions trigger status transitions (locked > pre-delivery > in-delivery).
 8. **Real-time Updates**: Socket.IO broadcasts delivery run changes to connected clients.
-9. **Notifications**: Backend (as Service Principal) sends Teams channel notifications via Graph API.
-10. **Audit Logging**: All changes recorded in audit log.
+9. **Audit Logging**: All changes recorded in audit log.
 
 ## System Components
 
@@ -113,21 +112,20 @@ backend/
 │   │   └── routes/
 │   │       ├── orders.py          # Order CRUD and status management
 │   │       ├── inflow.py          # Inflow sync endpoints and webhooks
-│   │       ├── teams.py           # Teams configuration
+
 │   │       ├── delivery_runs.py   # Delivery run management
 │   │       └── audit.py           # Audit log endpoints
 │   ├── models/
 │   │   ├── order.py               # Order model
 │   │   ├── delivery_run.py        # Delivery run model
 │   │   ├── audit_log.py           # Audit log model
-│   │   ├── teams_config.py        # Teams configuration model
-│   │   ├── teams_notification.py  # Notification tracking
+
 │   │   └── inflow_webhook.py      # Webhook management
 │   ├── services/
 │   │   ├── order_service.py       # Order business logic
 │   │   ├── delivery_run_service.py # Delivery run management
 │   │   ├── inflow_service.py      # Inflow API integration
-│   │   └── teams_service.py       # Teams notification service
+
 │   ├── utils/
 │   │   └── building_mapper.py     # Building code extraction (ArcGIS)
 │   ├── schemas/
@@ -151,7 +149,7 @@ frontend/
 │   │   ├── client.ts         # Axios configuration
 │   │   ├── orders.ts         # Order API calls
 │   │   ├── inflow.ts         # Inflow sync API
-│   │   ├── teams.ts          # Teams API calls
+
 │   │   └── deliveryRuns.ts   # Delivery run API calls
 │   ├── components/
 │   │   ├── OrderTable.tsx    # Order listing table
@@ -227,8 +225,8 @@ Picked -> PreDelivery -> Shipping -> Delivered
 
 - **Picked**: Order pulled from Inflow, awaiting prep steps
 - **PreDelivery**: Asset tagging, picklist, and QA completed
-- **InDelivery**: Order is out for local delivery (triggers Teams notification)
-- **Shipping**: Order is prepared for external shipping (no Teams notification)
+- **InDelivery**: Order is out for local delivery
+- **Shipping**: Order is prepared for external shipping (no notifications)
 - **Delivered**: Order has been successfully delivered/shipped (terminal state)
 - **Issue**: Order has a problem (can return to Picked or PreDelivery after resolution)
 
@@ -279,21 +277,7 @@ Order Details PDFs can be generated and emailed to recipients. These documents m
 
 **Services**: `backend/app/services/pdf_service.py`, `backend/app/services/email_service.py`
 
-### Teams Notification Model
 
-Tracks Teams notification delivery:
-
-```python
-class TeamsNotification:
-    id: String(36)              # Primary key (UUID stored as string)
-    order_id: String(36)        # Foreign key to Order
-    teams_message_id: String    # Teams message ID
-    sent_at: DateTime
-    status: Enum                # pending, sent, failed
-    notification_type: String  # ready, in_delivery
-    error_message: Text
-    retry_count: Integer
-```
 
 ### Delivery Run Model
 
@@ -349,7 +333,7 @@ class InflowWebhook:
 - `POST /api/orders/{order_id}/fulfill` - Mark order fulfilled in Inflow (best-effort)
 - `POST /api/orders/bulk-transition` - Bulk status transition
 - `GET /api/orders/{order_id}/audit` - Get audit logs for order
-- `POST /api/orders/{order_id}/retry-notification` - Retry Teams notification
+
 
 ### Inflow API (`/api/inflow`)
 
@@ -392,11 +376,7 @@ curl -X POST http://localhost:8000/api/inflow/sync -H "Content-Type: application
 - Troubleshooting sync issues
 - Initial data population after setup
 
-### Teams API (`/api/teams`)
 
-- `GET /api/teams/config` - Get Teams webhook configuration
-- `PUT /api/teams/config` - Update Teams webhook URL
-- `POST /api/teams/test` - Test Teams webhook connection
 
 ### Delivery Runs API (`/api/delivery-runs`)
 
@@ -444,7 +424,7 @@ Tracking page for orders currently out for delivery:
 - Lists all In Delivery status orders
 - Shows assigned deliverer
 - Quick transition to Delivered or Issue
-- Link to Teams notification status
+
 
 ### Order Detail Page (`/orders/:orderId`)
 
@@ -452,7 +432,7 @@ Detailed view of a single order:
 - Complete order information
 - Status transition interface
 - Audit log history
-- Teams notification status and retry
+
 - Full Inflow data (if available)
 
 ### Delivery Run Detail Page (`/delivery/runs/:runId`)
@@ -473,7 +453,7 @@ Dedicated page for managing shipping workflow:
 ### Admin Page (`/admin`)
 
 System configuration:
-- Teams webhook URL configuration
+
 - Inflow webhook management and registration
 - Webhook connection testing
 - System status information
@@ -563,7 +543,7 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 3. Based on method selection:
    - **Delivery**: Order transitions to PreDelivery → InDelivery → Delivered
    - **Shipping**: Order transitions to PreDelivery → Shipping → Delivered
-4. Teams notifications only sent for local delivery orders
+
 
 **Form Fields**:
 - Order verification
@@ -596,7 +576,7 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 - Runner accountability and audit trails
 - Real-time dashboard updates
 - Bulk order transitions
-- Automatic Teams notifications when runs start
+
 
 **Service**: `backend/app/services/delivery_run_service.py`
 **API**: `/api/delivery-runs/`
@@ -623,26 +603,11 @@ Picklists (generated from inFlow order data) and QA responses are stored on disk
 - Carrier and tracking number capture
 - Audit trail for all shipping transitions
 - Separate from local delivery workflow
-- No Teams notifications (external shipping)
+- No notifications (external shipping)
 
 **Database Fields**: `shipping_workflow_status`, `carrier_name`, `tracking_number`, `shipped_to_carrier_at`
 
-### 8. Teams Notifications
 
-**Trigger**: When order status changes to "PreDelivery" (ready) or "In Delivery"
-
-**Content**:
-- Order ID
-- Recipient name
-- Delivery location (building code)
-- Assigned deliverer
-- Status
-
-**Delivery**: Sent via background task to avoid blocking
-**Tracking**: All notifications logged with status (sent/failed)
-**Retry**: Failed notifications can be retried manually
-
-**Service**: `backend/app/services/teams_service.py`
 
 ### 9. Audit Logging
 
@@ -718,15 +683,7 @@ https://gis.cstx.gov/csgis/rest/services/IT_GIS/ITS_TAMU_Parking/MapServer/3/que
 
 **Service**: `backend/app/utils/building_mapper.py`
 
-### Microsoft Teams
 
-**Purpose**: Delivery notifications
-
-**Configuration**: Webhook URL stored in database
-
-**Message Format**: Adaptive Card with order details
-
-**Service**: `backend/app/services/teams_service.py`
 
 ### Azure Key Vault (Optional)
 
@@ -893,39 +850,7 @@ CREATE INDEX ix_system_audit_logs_entity_id ON system_audit_logs(entity_id);
 CREATE INDEX ix_system_audit_logs_timestamp ON system_audit_logs(timestamp);
 ```
 
-### Teams Config Table
 
-```sql
-CREATE TABLE teams_config (
-    id VARCHAR(36) PRIMARY KEY,
-    webhook_url VARCHAR(500),
-    updated_at DATETIME NOT NULL,
-    updated_by VARCHAR(255)
-);
-```
-
-### Teams Notifications Table
-
-```sql
-CREATE TABLE teams_notifications (
-    id VARCHAR(36) PRIMARY KEY,
-    order_id VARCHAR(36) NOT NULL,
-    teams_message_id VARCHAR(255),
-    sent_at DATETIME,
-    status ENUM('pending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
-    notification_type VARCHAR(50) NOT NULL DEFAULT 'in_delivery',
-    error_message TEXT,
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    webhook_url VARCHAR(500),
-    created_at DATETIME NOT NULL,
-    FOREIGN KEY (order_id) REFERENCES orders(id)
-);
-
-CREATE INDEX ix_teams_notifications_order_id ON teams_notifications(order_id);
-CREATE INDEX ix_teams_notifications_teams_message_id ON teams_notifications(teams_message_id);
-CREATE INDEX ix_teams_notifications_status ON teams_notifications(status);
-CREATE INDEX ix_teams_notifications_notification_type ON teams_notifications(notification_type);
-```
 
 
 ## Deployment
@@ -946,7 +871,7 @@ INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
 AZURE_KEY_VAULT_URL=https://your-keyvault.vault.azure.net/
 FRONTEND_URL=http://localhost:5173
 SECRET_KEY=your-secret-key-here
-TEAMS_WEBHOOK_URL=your_teams_webhook_url (optional)
+
 STORAGE_ROOT=storage
 ```
 
@@ -1186,7 +1111,7 @@ python scripts/manage_inflow_webhook.py reset --url https://your-app.com/api/inf
 
 1. **Orders not syncing**: Check Inflow API credentials and scheduler status
 2. **Building codes not showing**: Verify ArcGIS service is accessible
-3. **Teams notifications failing**: Check webhook URL configuration
+
 4. **Database connection errors**: Verify DATABASE_URL in .env
 
 ### Logs

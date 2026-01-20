@@ -18,7 +18,7 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 - **Delivery Run Management**: Group orders into delivery runs with vehicle assignment and runner tracking
 - **Live Delivery Dashboard**: Real-time tracking of active delivery runs with Socket.IO updates
 - **Prep Gating**: Asset tagging, picklist generation, and QA are required before Pre-Delivery
-- **Teams Integration**: System-automated notifications via Microsoft Graph API
+
 - **Audit Logging**: Complete audit trail of all status changes and delivery run actions
 - **Admin Status Dashboard**: Real-time view of system health and feature configuration
 
@@ -27,7 +27,7 @@ The TechHub Delivery Workflow App streamlines the order delivery process for Tex
 - **Backend**: Flask with MySQL, MSAL (Graph API), python3-saml (SSO), APScheduler
 - **Frontend**: React + Vite with TypeScript, TailwindCSS, Socket.IO client
 - **Authentication**: TAMU Entra ID (SAML for users, Client Credentials for backend)
-- **Services**: Microsoft Graph (Email, SharePoint, Teams), Inflow API, ArcGIS
+- **Services**: Microsoft Graph (Email, SharePoint), Inflow API, ArcGIS
 - **Real-time**: Socket.IO for delivery tracking, Webhooks for order sync
 
 ## Setup
@@ -114,8 +114,7 @@ The frontend will be available at `http://localhost:5173`
 ### Initial Configuration
 
 1. Access the admin page at `http://localhost:5173/admin`
-2. Configure the Teams webhook URL
-3. Test the webhook connection
+
 4. Manually trigger an Inflow sync from the API or wait for automatic sync (every 5 minutes)
 
    **Manual Sync Command (PowerShell)**:
@@ -208,7 +207,7 @@ For production environments or when real-time updates are preferred, set up Infl
 - **Shipping**: Manage shipping workflow (Work Area → Dock → Shipped to Carrier)
 - **Delivery Run Detail**: Detailed view of delivery runs with order tracking
 - **Order Detail**: Detailed view with audit logs and notification history
-- **Admin**: Configure Teams webhook, manage Inflow webhooks, and system settings
+- **Admin**: Configure Inflow webhooks and system settings
 - **Document Signing**: Sign and download delivery PDFs
 
 ## Scripts
