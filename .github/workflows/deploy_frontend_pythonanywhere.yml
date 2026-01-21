@@ -4,9 +4,6 @@ on:
   workflow_dispatch:  # Allows manual trigger from GitHub Actions UI
   push:
     branches: ["main"]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy_frontend_pythonanywhere.yml"
 
 jobs:
   build-and-deploy:
