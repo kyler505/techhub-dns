@@ -193,7 +193,7 @@ def test_teams_recipient():
         )
 
         if success:
-            return jsonify({"success": True, "message": f"Test message sent to {recipient_email}"})
+            return jsonify({"success": True, "message": f"Notification queued for {recipient_email}"})
         else:
             return jsonify({"success": False, "error": "Failed to send Teams message. Check logs."}), 500
 
