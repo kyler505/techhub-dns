@@ -288,25 +288,29 @@ class GraphService:
                 logger.error(f"Could not find Teams user: {recipient_email}")
                 return False
 
-            # Step 2: Create a 1:1 chat with the user
-            # Using the "oneOnOne" chat type - Graph API will return existing chat if one exists
+            # Step 2: Create or get a 1:1 chat with the user
+            # Attempt to create (or get existing) using POST
+            # Note: Removing 'roles' as it can cause 400 Bad Request for oneOnOne chats in some contexts
             chat_payload = {
                 "chatType": "oneOnOne",
                 "members": [
                     {
                         "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                        "roles": ["owner"],
                         "user@odata.bind": f"https://graph.microsoft.com/v1.0/users/{recipient_id}"
                     }
                 ]
             }
 
-            chat_result = self._graph_request("POST", "/chats", json_data=chat_payload)
-            chat_id = chat_result.get("id")
+            chat_id = None
+            try:
+                chat_result = self._graph_request("POST", "/chats", json_data=chat_payload)
+                chat_id = chat_result.get("id")
+            except Exception as e:
+                logger.error(f"POST /chats failed: {e}")
 
             if not chat_id:
-                logger.error(f"Failed to create/get chat with user: {recipient_email}")
-                return False
+                 logger.error(f"Failed to create/get chat with user: {recipient_email}")
+                 return False
 
             # Step 3: Send message to the chat
             message_payload = {
