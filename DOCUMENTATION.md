@@ -1,97 +1,74 @@
-# TechHub Delivery Workflow - Detailed Documentation
+# TechHub Delivery Workflow - Technical Documentation
+
+Complete technical documentation for the TechHub Delivery Workflow application covering all system components, features, APIs, and implementation details.
+
+---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [System Components](#system-components)
-4. [Data Models](#data-models)
-5. [API Endpoints](#api-endpoints)
-6. [Frontend Pages](#frontend-pages)
-7. [Key Features](#key-features)
-8. [External Integrations](#external-integrations)
-9. [Database Schema](#database-schema)
-10. [Deployment](#deployment)
-11. [Development](#development)
-12. [Scripts](#scripts)
-13. [Troubleshooting](#troubleshooting)
-14. [Support](#support)
+1. [System Architecture](#system-architecture)
+2. [Order Synchronization](#order-synchronization)
+3. [Location Intelligence](#location-intelligence)
+4. [Order Status Workflow](#order-status-workflow)
+5. [QA Checklist System](#qa-checklist-system)
+6. [Delivery Run Management](#delivery-run-management)
+7. [Shipping Workflow](#shipping-workflow)
+8. [PDF Generation](#pdf-generation)
+9. [Email Service](#email-service)
+10. [Teams Notification Service](#teams-notification-service)
+11. [Document Signing](#document-signing)
+12. [Real-time Updates](#real-time-updates)
+13. [Audit Logging](#audit-logging)
+14. [Authentication & Sessions](#authentication--sessions)
+15. [SharePoint Storage](#sharepoint-storage)
+16. [Admin Dashboard](#admin-dashboard)
+17. [API Reference](#api-reference)
+18. [Database Schema](#database-schema)
+19. [Configuration Reference](#configuration-reference)
+20. [Troubleshooting](#troubleshooting)
 
-## Overview
+---
 
-The TechHub Delivery Workflow App is an internal web application designed to manage the complete lifecycle of delivery orders for Texas A&M University's TechHub. The system integrates with Inflow inventory management to automatically sync picked orders, manages their status through delivery workflows, and provides intelligent location extraction using ArcGIS services.
+## System Architecture
 
-### Purpose
+### Overview
 
-The application solves the challenge of managing delivery orders from the point they are "picked" in the Inflow system through final delivery. It provides:
-
-- Automated synchronization of orders from Inflow
-- Intelligent extraction of building codes from addresses
-- Parsing of alternative delivery locations from order remarks
-- Status workflow management with audit trails
-
-- Bulk operations for efficient queue management
-
-### Technology Stack
-
-**Backend:**
-- Flask (Python web framework)
-- MySQL (Database)
-- SQLAlchemy (ORM)
-- Alembic (Database migrations)
-- APScheduler (Background task scheduling)
-- Flask-SocketIO (Real-time communications)
-- **MSAL** (Microsoft Authentication Library for Graph API)
-- **python3-saml** (SAML 2.0 User Authentication)
-- httpx (HTTP client for external APIs)
-
-**Frontend:**
-- React 18 (UI framework)
-- TypeScript (Type safety)
-- Vite (Build tool)
-- React Router (Routing)
-- TailwindCSS (Styling)
-- Socket.IO Client (Real-time updates)
-- Axios (HTTP client)
-
-**External Services:**
-- Inflow API (Order source)
-- ArcGIS Service (Building data)
-- **Microsoft Entra ID** (Authentication & Authorization)
-- **Microsoft Graph API** (Email, SharePoint)
-
-## Architecture
-
-### System Architecture
+The TechHub Delivery Workflow is a full-stack application with a Flask backend serving a React frontend, integrated with multiple external services.
 
 ```
-┌─────────────┐         ┌──────────────┐         ┌─────────────┐
-│   Frontend  │◄───────►│    Backend   │◄───────►│    MySQL    │
-│  (React)    │ HTTP/   │   (Flask)    │   SQL   │  (Database) │
-│             │   WS    │              │         │             │
-└─────────────┘         └──────────────┘         └─────────────┘
-       │                       │
-       │ (SAML Redirect)       │ (Graph API)
-       ▼                       ▼
-┌──────────────┐        ┌──────────────┐      ┌─────────────┐
-│  Microsoft   │        │   Microsoft  │◄────►│   Inflow    │
-│   Entra ID   │        │     Graph    │      │  API/Webhk  │
-└──────────────┘        └──────────────┘      └─────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              FRONTEND (React)                                │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│  │  Orders  │ │    QA    │ │ Delivery │ │ Shipping │ │  Admin   │          │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                    │ HTTP/REST │ WebSocket (Socket.IO)
+                    ▼           ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              BACKEND (Flask)                                 │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                          API Routes                                   │   │
+│  │  orders.py │ inflow.py │ delivery_runs.py │ auth.py │ system.py     │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                          Services                                     │   │
+│  │  order_service │ inflow_service │ delivery_run_service │ pdf_service │   │
+│  │  graph_service │ email_service │ teams_recipient_service             │   │
+│  │  saml_auth_service │ sharepoint_service │ audit_service              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                          Utils                                        │   │
+│  │  building_mapper.py                                                   │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                    │
+    ┌───────────────┼───────────────┬───────────────┬───────────────┐
+    ▼               ▼               ▼               ▼               ▼
+┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
+│  MySQL  │   │ Inflow  │   │  Graph  │   │ ArcGIS  │   │SharePoint│
+│Database │   │  API    │   │  API    │   │ Service │   │ Storage  │
+└─────────┘   └─────────┘   └─────────┘   └─────────┘   └─────────┘
 ```
-
-### Request Flow
-
-1. **Authentication**: User logs in via TAMU SSO (SAML). Backend verifies identity and establishes session.
-2. **Order Sync**: APScheduler triggers sync every 5 minutes OR real-time webhook updates from Inflow.
-3. **Inflow API/Webhooks**: Fetches picked orders from Inflow (polling) or receives instant updates (webhooks).
-4. **Order Processing**: Extracts locations, building codes, determines delivery vs shipping workflow.
-5. **Database**: Stores orders with extracted information and workflow classification.
-6. **Delivery Run Creation**: Users create delivery runs, assign orders and vehicles.
-7. **Status Changes**: User actions trigger status transitions (locked > pre-delivery > in-delivery).
-8. **Real-time Updates**: Socket.IO broadcasts delivery run changes to connected clients.
-9. **Audit Logging**: All changes recorded in audit log.
-
-## System Components
 
 ### Backend Structure
 
@@ -99,45 +76,44 @@ The application solves the challenge of managing delivery orders from the point 
 backend/
 ├── app/
 │   ├── api/
-│   │   ├── routes/         # Blueprints (orders, auth, system, etc.)
-│   │   └── middleware/     # Auth middleware, error handlers
-│   ├── models/             # SQLAlchemy models (User, Session, Order)
-│   ├── services/           # Business logic
-│   │   ├── saml_auth_service.py # SAML handling
-│   │   ├── graph_service.py     # Microsoft Graph (Email/SharePoint)
-│   │   ├── inflow_service.py    # Inventory sync
-│   ├── utils/              # Helpers
-└── ...
-```│   ├── api/
-│   │   └── routes/
-│   │       ├── orders.py          # Order CRUD and status management
-│   │       ├── inflow.py          # Inflow sync endpoints and webhooks
-
-│   │       ├── delivery_runs.py   # Delivery run management
-│   │       └── audit.py           # Audit log endpoints
+│   │   ├── routes/
+│   │   │   ├── orders.py          # Order CRUD and status management
+│   │   │   ├── inflow.py          # Inflow sync and webhooks
+│   │   │   ├── delivery_runs.py   # Delivery run management
+│   │   │   ├── auth.py            # SAML authentication
+│   │   │   ├── system.py          # Admin and system endpoints
+│   │   │   ├── audit.py           # Audit log queries
+│   │   │   └── sharepoint.py      # SharePoint operations
+│   │   └── middleware/            # Auth middleware, error handlers
 │   ├── models/
 │   │   ├── order.py               # Order model
 │   │   ├── delivery_run.py        # Delivery run model
 │   │   ├── audit_log.py           # Audit log model
-
-│   │   └── inflow_webhook.py      # Webhook management
+│   │   ├── inflow_webhook.py      # Webhook tracking
+│   │   ├── user.py                # User model
+│   │   └── session.py             # Session model
 │   ├── services/
 │   │   ├── order_service.py       # Order business logic
-│   │   ├── delivery_run_service.py # Delivery run management
 │   │   ├── inflow_service.py      # Inflow API integration
-
+│   │   ├── delivery_run_service.py # Delivery run logic
+│   │   ├── graph_service.py       # Microsoft Graph API
+│   │   ├── email_service.py       # Email via Graph
+│   │   ├── teams_recipient_service.py # Teams notifications
+│   │   ├── pdf_service.py         # PDF generation
+│   │   ├── saml_auth_service.py   # SAML authentication
+│   │   ├── sharepoint_service.py  # SharePoint storage
+│   │   └── audit_service.py       # Audit logging
 │   ├── utils/
-│   │   └── building_mapper.py     # Building code extraction (ArcGIS)
-│   ├── schemas/
-│   │   ├── order.py               # Pydantic schemas
-│   │   └── delivery_run.py        # Delivery run schemas
-│   ├── database.py                # Database connection
+│   │   └── building_mapper.py     # ArcGIS building code extraction
+│   ├── schemas/                   # Pydantic schemas
 │   ├── config.py                  # Configuration management
+│   ├── database.py                # Database connection
 │   ├── main.py                    # Flask application
-│   └── scheduler.py               # Background task scheduler
+│   └── scheduler.py               # APScheduler background tasks
 ├── scripts/
-│   └── analyze_order_patterns.py  # Pattern discovery script
-└── alembic/                   # Database migrations
+│   ├── database_manager.py        # Database management tool
+│   └── manage_inflow_webhook.py   # Webhook management
+└── alembic/                       # Database migrations
 ```
 
 ### Frontend Structure
@@ -145,579 +121,839 @@ backend/
 ```
 frontend/
 ├── src/
-│   ├── api/                   # API client functions
-│   │   ├── client.ts         # Axios configuration
-│   │   ├── orders.ts         # Order API calls
-│   │   ├── inflow.ts         # Inflow sync API
-
-│   │   └── deliveryRuns.ts   # Delivery run API calls
+│   ├── api/
+│   │   ├── client.ts              # Axios configuration
+│   │   ├── orders.ts              # Order API calls
+│   │   ├── inflow.ts              # Inflow sync API
+│   │   ├── deliveryRuns.ts        # Delivery run API
+│   │   ├── settings.ts            # System settings API
+│   │   └── sharepoint.ts          # SharePoint API
 │   ├── components/
-│   │   ├── OrderTable.tsx    # Order listing table
-│   │   ├── OrderDetail.tsx   # Order detail view
-│   │   ├── StatusBadge.tsx   # Status display component
-│   │   ├── StatusTransition.tsx  # Status change dialog
-│   │   ├── Filters.tsx       # Filter controls
-│   │   └── LiveDeliveryDashboard.tsx # Real-time delivery tracking
+│   │   ├── OrderTable.tsx         # Order listing table
+│   │   ├── OrderDetail.tsx        # Order detail view
+│   │   ├── StatusBadge.tsx        # Status display
+│   │   ├── StatusTransition.tsx   # Status change dialog
+│   │   ├── Filters.tsx            # Filter controls
+│   │   ├── LiveDeliveryDashboard.tsx # Real-time dashboard
+│   │   ├── CreateDeliveryDialog.tsx  # Delivery run creation
+│   │   └── ProtectedRoute.tsx     # Auth route wrapper
 │   ├── pages/
-│   │   ├── DeliveryDashboard.tsx   # Live delivery overview
-│   │   ├── Orders.tsx        # Main orders dashboard
-│   │   ├── PreDeliveryQueue.tsx  # Pre-delivery queue
-│   │   ├── InDelivery.tsx    # In-delivery tracking
-│   │   ├── Shipping.tsx      # Shipping workflow management
-│   │   ├── OrderDetailPage.tsx   # Order detail page
+│   │   ├── Orders.tsx             # Orders dashboard
+│   │   ├── OrderDetailPage.tsx    # Order detail page
+│   │   ├── OrderQAChecklist.tsx   # QA checklist page
+│   │   ├── DeliveryDashboard.tsx  # Delivery overview
 │   │   ├── DeliveryRunDetailPage.tsx # Delivery run detail
-│   │   └── Admin.tsx         # Admin configuration
+│   │   ├── PreDeliveryQueue.tsx   # Pre-delivery queue
+│   │   ├── InDelivery.tsx         # In-delivery tracking
+│   │   ├── Shipping.tsx           # Shipping workflow
+│   │   ├── DocumentSigningPage.tsx # Document signing
+│   │   ├── Admin.tsx              # Admin panel
+│   │   ├── Sessions.tsx           # Session management
+│   │   └── Login.tsx              # Login page
 │   ├── hooks/
-│   │   ├── useOrders.ts      # Order data hook
-│   │   ├── useStatusTransition.ts  # Status transition hook
-│   │   └── useDeliveryRuns.ts # Delivery runs hook with Socket.IO
-│   ├── types/
-│   │   ├── order.ts          # TypeScript type definitions
-│   │   └── websocket.ts      # Socket.IO message types
-│   └── App.tsx               # Main application component
+│   │   ├── useOrders.ts           # Order data hook
+│   │   ├── useOrdersWebSocket.ts  # WebSocket hook
+│   │   ├── useDeliveryRuns.ts     # Delivery runs hook
+│   │   └── useStatusTransition.ts # Status transition hook
+│   ├── contexts/
+│   │   └── AuthContext.tsx        # Authentication context
+│   └── types/
+│       ├── order.ts               # TypeScript types
+│       └── websocket.ts           # WebSocket types
+└── public/
 ```
 
-## Data Models
+---
 
-### Order Model
+## Order Synchronization
 
-The core order model stores order information synced from Inflow:
+### Inflow API Integration
 
-```python
-class Order:
-    id: String(36)              # Primary key (UUID stored as string)
-    inflow_order_id: String     # Order number from Inflow (e.g., "TH3270")
-    inflow_sales_order_id: String  # Inflow sales order UUID
-    recipient_name: String      # Recipient name
-    recipient_contact: String    # Email address
-    delivery_location: String   # Building code or address (e.g., "ACAD", "LAAH 424")
-    po_number: String          # PO number
-    status: OrderStatus         # Current status (Picked, PreDelivery, InDelivery, Delivered, Issue)
-    assigned_deliverer: String   # Person assigned for delivery
-    issue_reason: Text          # Reason if status is Issue
-    tagged_at: DateTime         # Asset tagging timestamp
-    tagged_by: String           # Asset tagging technician
-    tag_data: JSON              # Asset tag details
-    picklist_generated_at: DateTime
-    picklist_generated_by: String
-    picklist_path: String
-    qa_completed_at: DateTime
-    qa_completed_by: String
-    qa_data: JSON
-    qa_path: String
-    qa_method: String           # "Delivery" or "Shipping"
-    signature_captured_at: DateTime
-    signed_picklist_path: String
-    inflow_data: JSON           # Full Inflow payload (for reference)
-    created_at: DateTime
-    updated_at: DateTime
-```
+The system synchronizes orders from Inflow Cloud inventory management through two mechanisms:
 
-### Order Status Workflow
-
-```
-Picked -> PreDelivery -> InDelivery -> Delivered
-   \\-> Issue -> Picked/PreDelivery
-
-Picked -> PreDelivery -> Shipping -> Delivered
-   \\-> Issue -> Picked/PreDelivery
-```
-
-- **Picked**: Order pulled from Inflow, awaiting prep steps
-- **PreDelivery**: Asset tagging, picklist, and QA completed
-- **InDelivery**: Order is out for local delivery
-- **Shipping**: Order is prepared for external shipping (no notifications)
-- **Delivered**: Order has been successfully delivered/shipped (terminal state)
-- **Issue**: Order has a problem (can return to Picked or PreDelivery after resolution)
-
-The QA checklist determines whether an order follows the Delivery or Shipping workflow based on the selected method.
-
-### Audit Log Model
-
-Tracks all status changes:
-
-```python
-class AuditLog:
-    id: String(36)              # Primary key (UUID stored as string)
-    order_id: String(36)        # Foreign key to Order
-    changed_by: String          # User who made the change
-    from_status: String         # Previous status
-    to_status: String           # New status
-    reason: Text                # Optional reason for change
-    timestamp: DateTime
-```
-
-### Picklist Generation
-
-Picklists are automatically generated from inFlow order data when requested via the API. The system creates professional PDF documents containing:
-
-- **Order Header**: PO number, customer information, shipping address, recipient details
-- **Item Details**: Product names, SKUs, quantities, and serial numbers (if applicable)
-- **Smart Filtering**: Only shows unshipped items by subtracting already shipped quantities from picked quantities
-- **Order Remarks**: Any special instructions or notes from the order
-- **Signature Line**: Space for customer signature upon delivery
-
-Picklists are generated using the ReportLab PDF library and stored in `STORAGE_ROOT/picklists/` with filenames matching the order number (e.g., `TH3950.pdf`).
-
-### Order Details PDF
-
-Order Details PDFs can be generated and emailed to recipients. These documents match inFlow's Document Designer format and include:
-
-- **Header**: Texas A&M Technology Services logo, TechHub address, barcode
-- **Order Metadata**: Order number, PO #, date
-- **Addresses**: Billing and shipping addresses
-- **Line Items**: Product names, SKUs (italicized), serial numbers, quantities, unit prices, subtotals
-- **Totals**: Subtotal and total amounts
-- **Remarks**: Order notes
-
-**Features**:
-- Generated on-demand via API endpoint
-- Can be viewed in-browser or downloaded
-- Email integration for sending to recipients
-
-**Services**: `backend/app/services/pdf_service.py`, `backend/app/services/email_service.py`
-
-
-
-### Delivery Run Model
-
-Manages delivery runs with vehicle and runner assignment:
-
-```python
-class DeliveryRun:
-    id: String(36)              # Primary key (UUID stored as string)
-    name: String                # Auto-generated run name (e.g., "Morning Run 1")
-    runner: String              # Person assigned to the run
-    vehicle: String             # van, golf_cart
-    status: String              # Active, Completed, Cancelled
-    start_time: DateTime        # When run was created/started
-    end_time: DateTime          # When run was completed
-    created_at: DateTime
-    updated_at: DateTime
-    orders: Relationship        # Orders assigned to this run
-```
-
-### Inflow Webhook Model
-
-Tracks webhook subscriptions for real-time updates:
-
-```python
-class InflowWebhook:
-    id: String(36)              # Primary key (UUID stored as string)
-    webhook_id: String          # Inflow webhook subscription ID
-    url: String                 # Webhook endpoint URL
-    events: JSON                # Events to subscribe to
-    status: Enum                # active, inactive, failed
-    last_received_at: DateTime  # Last webhook received
-    failure_count: Integer      # Consecutive failures
-    secret: String              # Webhook signature secret
-    created_at: DateTime
-    updated_at: DateTime
-```
-
-## API Endpoints
-
-### Orders API (`/api/orders`)
-
-- `GET /api/orders` - List orders with filtering and pagination
-  - Query params: `status`, `search`, `skip`, `limit`
-- `GET /api/orders/{order_id}` - Get order details with audit logs
-- `PATCH /api/orders/{order_id}` - Update order fields
-- `PATCH /api/orders/{order_id}/status` - Transition order status
-- `POST /api/orders/{order_id}/tag` - Record asset tagging (mock)
-- `POST /api/orders/{order_id}/picklist` - Generate picklist PDF from inFlow order data
-- `GET /api/orders/{order_id}/picklist` - Download generated picklist PDF
-- `GET /api/orders/{order_id}/order-details.pdf` - Generate and download Order Details PDF
-- `POST /api/orders/{order_id}/send-order-details` - Generate Order Details PDF and email to recipient
-- `POST /api/orders/{order_id}/qa` - Submit QA checklist responses
-- `POST /api/orders/{order_id}/fulfill` - Mark order fulfilled in Inflow (best-effort)
-- `POST /api/orders/bulk-transition` - Bulk status transition
-- `GET /api/orders/{order_id}/audit` - Get audit logs for order
-
-
-### Inflow API (`/api/inflow`)
-
-- `POST /api/inflow/sync` - Manually trigger Inflow sync
-- `GET /api/inflow/sync-status` - Get last sync status
-
-#### Manual Order Sync
-
-**Purpose**: Manually trigger the Inflow order synchronization process (same as the automatic 5-minute sync).
-
-**Command (PowerShell)**:
-```powershell
-Invoke-WebRequest -Uri "http://localhost:8000/api/inflow/sync" -Method POST -ContentType "application/json"
-```
-
-**Command (curl)**:
-```bash
-curl -X POST http://localhost:8000/api/inflow/sync -H "Content-Type: application/json"
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "orders_synced": 25,
-  "orders_created": 5,
-  "orders_updated": 20,
-  "message": "Synced 25 orders"
-}
-```
-
-**Process**:
-1. Fetches recent "started" orders from Inflow API (up to 3 pages, 100 orders per page, targeting 100 total matches)
-2. Creates or updates orders in the local database
-3. Returns summary statistics of the sync operation
-
-**Use Cases**:
-- Testing Inflow integration
-- Forcing immediate sync outside the 5-minute schedule
-- Troubleshooting sync issues
-- Initial data population after setup
-
-
-
-### Delivery Runs API (`/api/delivery-runs`)
-
-- `POST /api/delivery-runs` - Create a new delivery run with assigned orders and vehicle
-- `GET /api/delivery-runs/active` - Get all active delivery runs with order details
-- `GET /api/delivery-runs/{run_id}` - Get detailed information about a specific delivery run
-- `PUT /api/delivery-runs/{run_id}/finish` - Complete a delivery run (requires all orders delivered)
-- `GET /api/delivery-runs/vehicles/available` - Get availability status of all vehicles
-- `WebSocket /api/delivery-runs/ws` - Real-time updates for delivery run changes
-
-### Audit API (`/api/audit`)
-
-- `GET /api/audit/orders/{order_id}` - Get audit logs for order
-
-## Frontend Pages
-
-### Delivery Dashboard (`/`)
-
-Main delivery operations dashboard:
-- Live delivery run tracking with real-time WebSocket updates
-- Pre-delivery, in-delivery, and shipping queues in tabs
-- Delivery statistics (ready for delivery, active deliveries, completed today)
-- Quick access to delivery run creation and management
-
-### Orders Dashboard (`/orders`)
-
-Main overview page displaying all orders with:
-- Status filter tabs (All, Picked, Pre-Delivery, In Delivery, Delivered, Issue)
-- Search functionality (order ID, recipient, location, PO number)
-- Order table with key information
-- Quick status transitions
-- Link to order detail pages
-
-### Pre-Delivery Queue (`/pre-delivery`)
-
-Dedicated page for managing orders ready for delivery:
-- Lists all Pre-Delivery status orders
-- Bulk selection and status transition
-- Assign deliverer functionality
-- Filter and search capabilities
-
-### In Delivery (`/in-delivery`)
-
-Tracking page for orders currently out for delivery:
-- Lists all In Delivery status orders
-- Shows assigned deliverer
-- Quick transition to Delivered or Issue
-
-
-### Order Detail Page (`/orders/:orderId`)
-
-Detailed view of a single order:
-- Complete order information
-- Status transition interface
-- Audit log history
-
-- Full Inflow data (if available)
-
-### Delivery Run Detail Page (`/delivery/runs/:runId`)
-
-Detailed view of a specific delivery run:
-- Run information (runner, vehicle, status, timing)
-- List of assigned orders with current status
-- Order transition capabilities
-- Run completion functionality
-
-### Shipping Operations (`/shipping`)
-
-Dedicated page for managing shipping workflow:
-- Orders in shipping workflow stages (Work Area, Dock, Shipped to Carrier)
-- Stage transitions with carrier and tracking information
-- Shipping coordinator tools
-
-### Admin Page (`/admin`)
-
-System configuration:
-
-- Inflow webhook management and registration
-- Webhook connection testing
-- System status information
-
-### Document Signing (`/document-signing`)
-
-Document signing tool:
-- Select PDFs stored in `frontend/public/pdfs`
-- Draw a signature directly on top of the PDF
-- Download a flattened copy after signing
-
-### Local Storage
-
-Picklists (generated from inFlow order data) and QA responses are stored on disk under `STORAGE_ROOT` (defaults to `storage`). QA submissions are written as JSON files in `storage/qa`.
-
-## Key Features
-
-### 1. Automated Order Synchronization
-
-**Scheduler**: APScheduler runs every 5 minutes to sync orders from Inflow.
-
-**Process**:
-1. Fetches orders with `inventoryStatus="started"` (picked orders)
-2. For each order:
-   - Extracts order remarks for alternative locations
-   - Extracts building code from location or address using ArcGIS
-   - Creates or updates order in database
-   - Sets status to Picked (orders are already picked in Inflow)
+#### Polling Sync
 
 **Service**: `backend/app/services/inflow_service.py`
 **Scheduler**: `backend/app/scheduler.py`
 
-### 2. Building Code Extraction
-
-**ArcGIS Integration**: Uses AggieMap's ArcGIS service to map addresses to building codes.
-
 **Process**:
-1. First checks if location string contains building code (e.g., "LAAH 424" → "LAAH")
-2. If not found, queries ArcGIS service with address
-3. Matches address against building data
-4. Returns building abbreviation (e.g., "ACAD", "ZACH")
-5. Falls back to original address if no match
+1. APScheduler triggers sync at configured interval (default: 20 minutes)
+2. Fetches orders with `inventoryStatus="started"` (picked orders)
+3. Processes up to 3 pages (100 orders per page)
+4. For each order:
+   - Extracts order metadata (ID, recipient, location, PO number)
+   - Parses order remarks for alternative delivery locations
+   - Extracts building code using ArcGIS
+   - Creates or updates order in database
+   - Sets initial status to `Picked`
 
-**Caching**: Building data cached for 1 day to reduce API calls.
+**Configuration**:
+```env
+INFLOW_POLLING_SYNC_ENABLED=true
+INFLOW_POLLING_SYNC_INTERVAL_MINUTES=20
+```
+
+#### Webhook Sync
+
+**Endpoint**: `POST /api/inflow/webhook`
+
+Real-time order updates via Inflow webhooks:
+
+1. Inflow sends webhook on order creation/update
+2. Backend verifies webhook signature
+3. Processes order data immediately
+4. Falls back to polling if webhooks fail
+
+**Configuration**:
+```env
+INFLOW_WEBHOOK_ENABLED=true
+INFLOW_WEBHOOK_URL=https://your-domain/api/inflow/webhook
+INFLOW_WEBHOOK_EVENTS=["orderCreated","orderUpdated"]
+INFLOW_WEBHOOK_AUTO_REGISTER=true
+```
+
+**Webhook Management**:
+```bash
+# List webhooks
+python scripts/manage_inflow_webhook.py list
+
+# Register webhook
+python scripts/manage_inflow_webhook.py register \
+  --url https://your-domain/api/inflow/webhook \
+  --events orderCreated,orderUpdated
+
+# Reset webhook
+python scripts/manage_inflow_webhook.py reset \
+  --url https://your-domain/api/inflow/webhook \
+  --events orderCreated,orderUpdated
+```
+
+---
+
+## Location Intelligence
+
+### Building Code Extraction
 
 **Service**: `backend/app/utils/building_mapper.py`
 
-### 3. Order Remarks Parsing
-
-**Pattern Matching**: Extracts alternative delivery locations from order remarks.
-
-**Patterns**:
-- "deliver to [location]"
-- "delivery to [location]"
-- "deliver at [location]"
-- "located at [location]"
-- And more (auto-discovered via pattern analysis script)
-
-**Example**:
-- Remarks: "deliver to LAAH 424"
-- Extracted: "LAAH 424"
-- Building code: "LAAH"
-
-**Service**: `backend/app/services/order_service.py::_extract_delivery_location_from_remarks()`
-
-### 4. Status Transition Validation
-
-**Rules**:
-- Picked -> PreDelivery or Issue
-- PreDelivery -> InDelivery (local delivery) or Shipping (external shipping) or Issue
-- InDelivery -> Delivered or Issue
-- Shipping -> Delivered or Issue
-- Issue -> Picked or PreDelivery (after resolution)
-- Delivered -> (terminal, no transitions)
-
-**QA Integration**: The QA checklist determines whether PreDelivery transitions to InDelivery or Shipping based on the selected delivery method.
-
-**Validation**: Enforced in `OrderService._is_valid_transition()`
-
-### 5. QA Checklist Integration
-
-**Purpose**: Comprehensive QA checklist that validates order preparation and determines workflow routing.
+Maps addresses to TAMU building abbreviations using ArcGIS:
 
 **Process**:
-1. QA form checks asset tagging, packaging, documentation, and labeling
-2. Technician selects delivery method: "Delivery" (local) or "Shipping" (external)
-3. Based on method selection:
-   - **Delivery**: Order transitions to PreDelivery → InDelivery → Delivered
-   - **Shipping**: Order transitions to PreDelivery → Shipping → Delivered
+1. Check if location string contains known building code (e.g., "LAAH 424" → "LAAH")
+2. If not found, query ArcGIS service with address
+3. Match against building data attributes
+4. Return building abbreviation or original address
 
-
-**Form Fields**:
-- Order verification
-- Asset tag and serial matching
-- Template notifications sent
-- Proper packaging verification
-- Packing slip accuracy
-- Electronic documentation
-- Box labeling verification
-- QA signature
-- **Delivery method selection** (determines workflow path)
-
-**Integration**: QA data is stored in the database and workflow automatically routes based on method selection.
-
-**Filtering**: QA page defaults to showing only "Picked" status orders that haven't completed QA, with toggle to view all eligible orders.
-
-### 6. Delivery Run Management
-
-**Purpose**: Coordinate and track local deliveries by grouping orders into delivery runs with vehicle and runner assignment.
-
-**Process**:
-1. **Run Creation**: Select multiple Pre-Delivery orders and assign to a runner with vehicle
-2. **Automatic Naming**: Runs are auto-named based on time (e.g., "Morning Run 1", "Afternoon Run 2")
-3. **Order Assignment**: Orders transition to "In Delivery" status when run is created
-4. **Live Tracking**: Real-time WebSocket updates show run status to all connected clients
-5. **Run Completion**: Mark run complete only when all orders are delivered, triggers Inflow fulfillment
-
-**Key Features**:
-- Vehicle availability checking (no double-booking)
-- Runner accountability and audit trails
-- Real-time dashboard updates
-- Bulk order transitions
-
-
-**Service**: `backend/app/services/delivery_run_service.py`
-**API**: `/api/delivery-runs/`
-**Frontend**: Live delivery dashboard with WebSocket integration
-
-### 7. Shipping Workflow Management
-
-**Purpose**: Handle orders requiring external shipping with structured workflow stages and carrier tracking.
-
-**Workflow Stages**:
-1. **Work Area** (initial): Order ready for shipping preparation
-2. **At Dock**: Order physically prepared and ready for carrier pickup
-3. **Shipped to Carrier**: Order handed to carrier with tracking information
-
-**Process**:
-1. **Automatic Classification**: Orders classified as shipping based on delivery address (outside Bryan/College Station)
-2. **QA Selection**: During QA, technician selects "Shipping" method
-3. **Stage Transitions**: Manual progression through Work Area → Dock → Shipped to Carrier
-4. **Carrier Integration**: Capture carrier name and tracking number
-5. **Final Delivery**: Order marked delivered when shipping is confirmed
-
-**Key Features**:
-- Blocking stage progression (must complete each stage in order)
-- Carrier and tracking number capture
-- Audit trail for all shipping transitions
-- Separate from local delivery workflow
-- No notifications (external shipping)
-
-**Database Fields**: `shipping_workflow_status`, `carrier_name`, `tracking_number`, `shipped_to_carrier_at`
-
-
-
-### 9. Audit Logging
-
-**Automatic**: All status changes automatically logged
-
-**Information Captured**:
-- Order ID
-- User who made change (if provided)
-- Previous status
-- New status
-- Reason (if provided)
-- Timestamp
-
-**Access**: Available via API and order detail page
-
-## External Integrations
-
-### Inflow API
-
-**Purpose**: Source of order data with polling and webhook support
-
-**Authentication**:
-- API key from environment variable or Azure Key Vault
-- Bearer token authentication
-
-**Endpoints Used**:
-- `GET /{company_id}/sales-orders` - Fetch orders (polling)
-- Filters: `inventoryStatus="started"` (picked orders)
-- `PUT /{company_id}/sales-orders` - Update orders for fulfillment (pick/pack/ship lines)
-- `POST /webhooks` - Register webhook subscriptions
-- `GET /webhooks` - List webhook subscriptions
-- `DELETE /webhooks/{id}` - Delete webhook subscriptions
-
-**Service**: `backend/app/services/inflow_service.py`
-
-### Inflow Webhooks
-
-**Purpose**: Real-time order updates with fallback to polling
-
-**Configuration**:
-```
-INFLOW_WEBHOOK_ENABLED=true
-INFLOW_WEBHOOK_URL=https://your-public-url/api/inflow/webhook
-INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
-```
-
-**Features**:
-- Automatic webhook registration via management script
-- Signature verification for security
-- Fallback to 5-minute polling if webhooks fail
-- Local database tracking of webhook subscriptions
-- Failure counting and automatic deactivation
-
-**Management Script**: `backend/scripts/manage_inflow_webhook.py`
-
-**Webhook Endpoint**: `POST /api/inflow/webhook` - Receives real-time order updates
-
-### ArcGIS Service (AggieMap)
-
-**Purpose**: Building code mapping
-
-**Endpoint**:
+**ArcGIS Endpoint**:
 ```
 https://gis.cstx.gov/csgis/rest/services/IT_GIS/ITS_TAMU_Parking/MapServer/3/query
 ```
 
-**Usage**:
-- Queries all building data
-- Matches addresses to building attributes
-- Returns building codes
+**Caching**: Building data cached for 24 hours to reduce API calls.
 
-**Caching**: 1 day cache duration
+**Common Building Codes**:
+| Code | Building |
+|------|----------|
+| ACAD | Academic Building |
+| ZACH | Zachry Engineering Education Complex |
+| LAAH | Liberal Arts and Humanities |
+| MPHY | Mitchell Physics |
+| BLOC | Blocker Building |
+| HRBB | H.R. Bright Building |
 
-**Service**: `backend/app/utils/building_mapper.py`
+### Order Remarks Parsing
 
+**Service**: `backend/app/services/order_service.py`
 
+Extracts alternative delivery locations from order notes:
 
-### Azure Key Vault (Optional)
+**Patterns Matched**:
+- "deliver to [location]"
+- "delivery to [location]"
+- "deliver at [location]"
+- "located at [location]"
+- "alternative location: [location]"
 
-**Purpose**: Secure API key storage
+**Example**:
+- Remarks: "Please deliver to LAAH 424"
+- Extracted Location: "LAAH 424"
+- Building Code: "LAAH"
 
-**Usage**: If `AZURE_KEY_Vault_URL` is set, retrieves Inflow API key from Key Vault
+---
 
-**Fallback**: Uses `INFLOW_API_KEY` environment variable
+## Order Status Workflow
 
-### Socket.IO Integration
+### Status Definitions
 
-**Purpose**: Real-time updates for delivery run tracking and live dashboard
+| Status | Description |
+|--------|-------------|
+| `Picked` | Order synced from Inflow, awaiting prep steps |
+| `QA` | QA checklist in progress |
+| `PreDelivery` | All prep steps complete, ready for assignment |
+| `InDelivery` | Assigned to active delivery run |
+| `Shipping` | In shipping workflow (external delivery) |
+| `Delivered` | Successfully delivered (terminal state) |
+| `Issue` | Problem encountered, requires resolution |
 
-**Implementation**:
-- Flask-SocketIO server integrated with Flask app
-- Broadcasts active delivery runs to all connected clients
-- Socket.IO client with automatic reconnection
-- Message format: `{"type": "active_runs", "data": [...run objects...]}`
+### Workflow Transitions
 
-**Frontend Integration**:
-- `useDeliveryRuns` hook manages Socket.IO connection
-- Automatic fallback to HTTP polling if Socket.IO fails
-- Real-time updates without page refresh
-- Connection status indicators
+**Local Delivery**:
+```
+Picked → QA → PreDelivery → InDelivery → Delivered
+              ↓
+            Issue → Picked/PreDelivery
+```
 
-**Backend Features**:
-- Global Socket.IO event emission
-- Database session management per event
-- Best-effort broadcasting (non-blocking)
-- threading.Thread for background broadcasts
+**Shipping**:
+```
+Picked → QA → PreDelivery → Shipping → Delivered
+              ↓
+            Issue → Picked/PreDelivery
+```
+
+### Transition Validation
+
+**Service**: `backend/app/services/order_service.py`
+
+Valid transitions enforced by `_is_valid_transition()`:
+
+| From | Valid To |
+|------|----------|
+| Picked | QA, PreDelivery, Issue |
+| QA | PreDelivery, Issue |
+| PreDelivery | InDelivery, Shipping, Issue |
+| InDelivery | Delivered, Issue |
+| Shipping | Delivered, Issue |
+| Issue | Picked, PreDelivery |
+| Delivered | (terminal) |
+
+---
+
+## QA Checklist System
+
+### Overview
+
+In-app quality assurance replacing Google Forms with workflow routing.
+
+**Page**: `frontend/src/pages/OrderQAChecklist.tsx`
+**Endpoint**: `POST /api/orders/{order_id}/qa`
+
+### Checklist Items
+
+| Item | Description |
+|------|-------------|
+| Order Verification | Confirm order details match Inflow |
+| Asset Tag Check | Verify asset tags match serial numbers |
+| Template Notifications | Confirm notifications were sent |
+| Packaging Verification | Check proper packaging |
+| Packing Slip | Verify packing slip accuracy |
+| Electronic Documentation | Confirm digital records |
+| Box Labeling | Verify box labels |
+| QA Signature | Technician sign-off |
+| **Delivery Method** | Select "Delivery" or "Shipping" |
+
+### Workflow Routing
+
+The **Delivery Method** selection determines workflow path:
+
+- **"Delivery"**: Order follows local delivery workflow → `InDelivery`
+- **"Shipping"**: Order follows shipping workflow → `Shipping`
+
+### Prep Step Gating
+
+Orders cannot advance to PreDelivery without completing:
+1. Asset tagging (`tagged_at` not null)
+2. Picklist generation (`picklist_generated_at` not null)
+3. QA completion (`qa_completed_at` not null)
+
+---
+
+## Delivery Run Management
+
+### Overview
+
+Groups multiple orders into coordinated delivery runs with vehicle and runner tracking.
+
+**Service**: `backend/app/services/delivery_run_service.py`
+**Page**: `frontend/src/pages/DeliveryDashboard.tsx`
+
+### Delivery Run Model
+
+```python
+class DeliveryRun:
+    id: String(36)           # UUID
+    name: String             # Auto-generated (e.g., "Morning Run 1")
+    runner: String           # Assigned runner name
+    vehicle: Enum            # 'van' or 'golf_cart'
+    status: Enum             # 'Active', 'Completed', 'Cancelled'
+    start_time: DateTime     # Run creation time
+    end_time: DateTime       # Completion time
+    orders: Relationship     # Assigned orders
+```
+
+### Run Creation Process
+
+1. Select Pre-Delivery orders from queue
+2. Assign runner and vehicle
+3. System generates run name based on time:
+   - Morning (before 12:00): "Morning Run N"
+   - Afternoon (12:00-17:00): "Afternoon Run N"
+   - Evening (after 17:00): "Evening Run N"
+4. Orders transition to `InDelivery` status
+5. WebSocket broadcasts update to all clients
+
+### Vehicle Management
+
+| Vehicle | Description |
+|---------|-------------|
+| `van` | Full-size delivery van |
+| `golf_cart` | Campus golf cart |
+
+**Availability Check**: Only one active run per vehicle.
+
+### Run Completion
+
+Requirements for completion:
+1. All orders in `Delivered` status
+2. All orders have signatures (for local delivery)
+
+On completion:
+- Run status → `Completed`
+- End time recorded
+- Orders marked fulfilled in Inflow (best-effort)
+
+---
+
+## Shipping Workflow
+
+### Overview
+
+Structured workflow for orders requiring external shipping.
+
+**Page**: `frontend/src/pages/Shipping.tsx`
+
+### Shipping Stages
+
+```
+Work Area → At Dock → Shipped to Carrier → Delivered
+```
+
+| Stage | Description |
+|-------|-------------|
+| `work_area` | Initial stage, order ready for shipping prep |
+| `dock` | Order physically prepared, awaiting carrier |
+| `shipped` | Handed to carrier with tracking info |
+
+### Stage Transitions
+
+**Blocking Requirements**:
+- Cannot skip stages (must progress sequentially)
+- Cannot proceed to Shipped without being at Dock
+- Carrier name required for Shipped transition
+- Tracking number optional but recommended
+
+### Shipping Data Model
+
+```python
+# Order shipping fields
+shipping_workflow_status: Enum       # work_area, dock, shipped
+shipping_workflow_status_updated_at: DateTime
+shipping_workflow_status_updated_by: String
+shipped_to_carrier_at: DateTime
+shipped_to_carrier_by: String
+carrier_name: String                 # FedEx, UPS, etc.
+tracking_number: String              # Carrier tracking number
+```
+
+### Automatic Delivery
+
+When order reaches `shipped` status, system automatically transitions to `Delivered`.
+
+---
+
+## PDF Generation
+
+### Overview
+
+ReportLab-based PDF generation for picklists and order details.
+
+**Service**: `backend/app/services/pdf_service.py`
+
+### Picklist Generation
+
+**Endpoint**: `POST /api/orders/{order_id}/picklist`
+
+**Contents**:
+- Order header (PO number, customer info, shipping address)
+- Item details (products, SKUs, quantities, serial numbers)
+- Smart filtering (only unshipped items)
+- Order remarks
+- Signature line
+
+**Storage**: `STORAGE_ROOT/picklists/{order_number}.pdf`
+
+### Order Details PDF
+
+**Endpoint**: `GET /api/orders/{order_id}/order-details.pdf`
+
+**Contents**:
+- TAMU Technology Services header with logo
+- Barcode for order number
+- Billing and shipping addresses
+- Line items with prices
+- Subtotals and totals
+- Order remarks
+
+**Features**:
+- In-browser viewing
+- Download option
+- Email delivery to recipient
+
+### PDF Email Delivery
+
+**Endpoint**: `POST /api/orders/{order_id}/send-order-details`
+
+Generates Order Details PDF and emails to recipient with:
+- Professional HTML email template
+- Plain text fallback
+- PDF attachment
+
+---
+
+## Email Service
+
+### Overview
+
+Email sending via Microsoft Graph API using Service Principal authentication.
+
+**Service**: `backend/app/services/email_service.py`
+
+### Configuration
+
+```env
+SMTP_ENABLED=true                    # Enable/disable email sending
+SMTP_FROM_ADDRESS=techhub@tamu.edu   # Sender address
+EMAIL_FROM_NAME=TechHub              # Display name
+```
+
+**Required Graph Permissions**: `Mail.Send`
+
+### Email Methods
+
+#### General Email
+```python
+email_service.send_email(
+    to_address="recipient@tamu.edu",
+    subject="Subject Line",
+    body_html="<p>HTML content</p>",
+    body_text="Plain text fallback",
+    attachment_name="document.pdf",
+    attachment_content=pdf_bytes
+)
+```
+
+#### Order Details Email
+```python
+email_service.send_order_details_email(
+    to_address="recipient@tamu.edu",
+    order_number="TH4013",
+    customer_name="John Smith",
+    pdf_content=pdf_bytes
+)
+```
+
+---
+
+## Teams Notification Service
+
+### Overview
+
+Teams notifications via SharePoint folder queue + Power Automate flow.
+
+**Service**: `backend/app/services/teams_recipient_service.py`
+
+### Architecture
+
+```
+Backend → SharePoint Queue Folder → Power Automate Flow → Teams Message
+```
+
+### Queue Strategy
+
+1. Backend creates JSON notification file
+2. Uploads to SharePoint queue folder
+3. Power Automate monitors folder for new files
+4. Flow reads JSON and sends Teams message
+5. Flow deletes processed file
+
+### Notification Payload
+
+```json
+{
+  "id": "notif_TH4013_1737500000",
+  "type": "delivery_notification",
+  "recipientEmail": "recipient@tamu.edu",
+  "recipientName": "John Smith",
+  "orderNumber": "TH4013",
+  "deliveryRunner": "Jane Doe",
+  "estimatedTime": "Shortly",
+  "createdAt": "2026-01-21T15:00:00"
+}
+```
+
+### Configuration
+
+```env
+TEAMS_RECIPIENT_NOTIFICATIONS_ENABLED=true
+TEAMS_NOTIFICATION_QUEUE_FOLDER=notifications-queue
+```
+
+See [docs/Teams_PowerAutomate_Setup.md](docs/Teams_PowerAutomate_Setup.md) for Power Automate configuration.
+
+---
+
+## Document Signing
+
+### Overview
+
+In-app PDF signature capture for delivery confirmation.
+
+**Page**: `frontend/src/pages/DocumentSigningPage.tsx`
+
+### Features
+
+- Load PDF documents from storage
+- Stylus/touch signature input
+- Overlay signature on PDF
+- Save signed version
+- Download signed document
+
+### Process
+
+1. Load picklist PDF for order
+2. Recipient draws signature
+3. Signature embedded in PDF
+4. Signed document saved to storage
+5. Order `signature_captured_at` updated
+
+---
+
+## Real-time Updates
+
+### Overview
+
+Socket.IO WebSocket integration for live delivery tracking.
+
+**Backend**: Flask-SocketIO in `backend/app/main.py`
+**Frontend**: `frontend/src/hooks/useDeliveryRuns.ts`
+
+### Events
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `connect` | Client→Server | Client connects |
+| `active_runs` | Server→Client | Broadcast active delivery runs |
+| `disconnect` | Client→Server | Client disconnects |
+
+### Message Format
+
+```json
+{
+  "type": "active_runs",
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Morning Run 1",
+      "runner": "Jane Doe",
+      "vehicle": "van",
+      "status": "Active",
+      "orders": [...]
+    }
+  ]
+}
+```
+
+### Fallback
+
+If WebSocket connection fails, frontend falls back to HTTP polling.
+
+---
+
+## Audit Logging
+
+### Overview
+
+Complete audit trail of all status changes and actions.
+
+**Service**: `backend/app/services/audit_service.py`
+**Model**: `backend/app/models/audit_log.py`
+
+### Order Audit Log
+
+```python
+class AuditLog:
+    id: String(36)           # UUID
+    order_id: String(36)     # Foreign key to Order
+    changed_by: String       # User who made change
+    from_status: String      # Previous status
+    to_status: String        # New status
+    reason: Text             # Optional reason
+    timestamp: DateTime      # When change occurred
+    metadata: JSON           # Additional context
+```
+
+### System Audit Log
+
+```python
+class SystemAuditLog:
+    id: String(36)
+    entity_type: String      # 'order', 'delivery_run', 'webhook'
+    entity_id: String
+    action: String           # 'create', 'update', 'delete'
+    description: Text
+    user_id: String
+    user_role: String
+    old_value: JSON
+    new_value: JSON
+    metadata: JSON
+    ip_address: String
+    user_agent: Text
+    timestamp: DateTime
+```
+
+### Viewing Audit Logs
+
+**Endpoint**: `GET /api/orders/{order_id}/audit`
+
+Audit logs displayed on order detail page with:
+- Timestamp
+- User attribution
+- Status change details
+- Reason (if provided)
+
+---
+
+## Authentication & Sessions
+
+### SAML Authentication
+
+**Service**: `backend/app/services/saml_auth_service.py`
+
+Texas A&M SSO via SAML 2.0:
+
+1. User clicks "Sign In"
+2. Redirect to TAMU IdP
+3. User authenticates
+4. IdP POSTs assertion to `/auth/saml/callback`
+5. Backend creates session
+6. User redirected to application
+
+**Configuration**:
+```env
+SAML_ENABLED=true
+SAML_IDP_ENTITY_ID=<Microsoft Entra Identifier>
+SAML_IDP_SSO_URL=<Login URL>
+SAML_IDP_CERT_PATH=certs/saml_idp_cert.crt
+SAML_SP_ENTITY_ID=https://your-domain
+SAML_ACS_URL=https://your-domain/auth/saml/callback
+```
+
+### Session Management
+
+**Model**: `backend/app/models/session.py`
+
+```python
+class Session:
+    id: String(36)           # Session ID (cookie value)
+    user_id: String(36)      # Foreign key to User
+    created_at: DateTime
+    expires_at: DateTime
+    ip_address: String
+    user_agent: Text
+```
+
+**Configuration**:
+```env
+SESSION_COOKIE_NAME=techhub_session
+SESSION_MAX_AGE_HOURS=168
+```
+
+### User Model
+
+```python
+class User:
+    id: String(36)           # UUID
+    email: String            # UPN from SAML
+    display_name: String     # From SAML assertion
+    department: String       # Optional
+    employee_id: String      # Optional
+    created_at: DateTime
+    last_login_at: DateTime
+```
+
+---
+
+## SharePoint Storage
+
+### Overview
+
+Document storage via Microsoft Graph API.
+
+**Service**: `backend/app/services/sharepoint_service.py`
+
+### Configuration
+
+```env
+SHAREPOINT_ENABLED=true
+SHAREPOINT_SITE_URL=https://tamucs.sharepoint.com/teams/Team-TechHub
+SHAREPOINT_FOLDER_PATH=General/delivery-storage
+```
+
+**Required Graph Permissions**: `Sites.ReadWrite.All`
+
+### Storage Structure
+
+```
+SharePoint Site/
+└── Documents/
+    └── General/
+        └── delivery-storage/
+            ├── picklists/
+            │   └── TH4013.pdf
+            ├── qa/
+            │   └── TH4013_qa.json
+            ├── signed/
+            │   └── TH4013_signed.pdf
+            └── notifications-queue/
+                └── notification_TH4013_*.json
+```
+
+### Methods
+
+```python
+# Upload file
+sharepoint_service.upload_file(content, subfolder, filename)
+
+# Upload JSON
+sharepoint_service.upload_json(data, subfolder, filename)
+
+# Download file
+content = sharepoint_service.download_file(subfolder, filename)
+
+# Check existence
+exists = sharepoint_service.file_exists(subfolder, filename)
+```
+
+---
+
+## Admin Dashboard
+
+### Overview
+
+System administration and monitoring interface.
+
+**Page**: `frontend/src/pages/Admin.tsx`
+
+### System Status Cards
+
+| Service | Status Check |
+|---------|--------------|
+| Database | Connection test |
+| Inflow API | API connectivity |
+| SharePoint | Graph API + site access |
+| Email | Graph API configuration |
+| Teams | Queue folder access |
+
+### Webhook Management
+
+- View registered webhooks
+- Register new webhooks
+- Delete webhooks
+- View webhook status and failure counts
+
+### Testing Tools
+
+| Tool | Purpose |
+|------|---------|
+| Manual Sync | Trigger Inflow sync |
+| Test SharePoint | Upload test file |
+| Test Email | Send test email |
+| Test Teams | Queue test notification |
+
+### System Settings
+
+- Feature toggles
+- Environment configuration display
+- Sync status and history
+
+---
+
+## API Reference
+
+### Orders API (`/api/orders`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/orders` | List orders (filter by status, search) |
+| GET | `/api/orders/{id}` | Get order details with audit logs |
+| PATCH | `/api/orders/{id}` | Update order fields |
+| PATCH | `/api/orders/{id}/status` | Transition order status |
+| POST | `/api/orders/{id}/tag` | Record asset tagging |
+| POST | `/api/orders/{id}/picklist` | Generate picklist PDF |
+| GET | `/api/orders/{id}/picklist` | Download picklist |
+| GET | `/api/orders/{id}/order-details.pdf` | Generate Order Details PDF |
+| POST | `/api/orders/{id}/send-order-details` | Email Order Details |
+| POST | `/api/orders/{id}/qa` | Submit QA checklist |
+| POST | `/api/orders/{id}/fulfill` | Mark fulfilled in Inflow |
+| POST | `/api/orders/bulk-transition` | Bulk status transition |
+| GET | `/api/orders/{id}/audit` | Get audit logs |
+
+### Inflow API (`/api/inflow`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/inflow/sync` | Trigger manual sync |
+| GET | `/api/inflow/sync-status` | Get sync status |
+| POST | `/api/inflow/webhook` | Webhook receiver |
+| GET | `/api/inflow/webhooks` | List webhooks |
+| POST | `/api/inflow/webhooks/register` | Register webhook |
+| DELETE | `/api/inflow/webhooks/{id}` | Delete webhook |
+
+### Delivery Runs API (`/api/delivery-runs`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/delivery-runs` | Create delivery run |
+| GET | `/api/delivery-runs/active` | Get active runs |
+| GET | `/api/delivery-runs/{id}` | Get run details |
+| PUT | `/api/delivery-runs/{id}/finish` | Complete run |
+| GET | `/api/delivery-runs/vehicles/available` | Vehicle availability |
+
+### Auth API (`/auth`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/auth/me` | Get current user |
+| GET | `/auth/saml/login` | Initiate SAML login |
+| POST | `/auth/saml/callback` | SAML assertion consumer |
+| POST | `/auth/logout` | Logout |
+| GET | `/auth/sessions` | List user sessions |
+| DELETE | `/auth/sessions/{id}` | Revoke session |
+
+### System API (`/api/system`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/system/status` | System health status |
+| GET | `/api/system/settings` | Get settings |
+| POST | `/api/system/test-sharepoint` | Test SharePoint |
+| POST | `/api/system/test-email` | Test email |
+| POST | `/api/system/test-teams` | Test Teams notification |
+| POST | `/api/system/deploy` | GitHub webhook deploy |
+
+---
 
 ## Database Schema
-
-> **Note:** The database uses MySQL 8.0+. UUIDs are stored as VARCHAR(36) strings.
 
 ### Orders Table
 
@@ -734,6 +970,8 @@ CREATE TABLE orders (
     assigned_deliverer VARCHAR(255),
     issue_reason TEXT,
     delivery_run_id VARCHAR(36),
+
+    -- Prep steps
     tagged_at DATETIME,
     tagged_by VARCHAR(255),
     tag_data JSON,
@@ -745,10 +983,16 @@ CREATE TABLE orders (
     qa_data JSON,
     qa_path VARCHAR(500),
     qa_method VARCHAR(50),
+
+    -- Signature
     signature_captured_at DATETIME,
     signed_picklist_path VARCHAR(500),
+
+    -- Order details
     order_details_path VARCHAR(500),
     order_details_generated_at DATETIME,
+
+    -- Shipping
     shipping_workflow_status VARCHAR(50) DEFAULT 'work_area',
     shipping_workflow_status_updated_at DATETIME,
     shipping_workflow_status_updated_by VARCHAR(255),
@@ -756,9 +1000,14 @@ CREATE TABLE orders (
     shipped_to_carrier_by VARCHAR(255),
     carrier_name VARCHAR(100),
     tracking_number VARCHAR(255),
+
+    -- Inflow data
     inflow_data JSON,
+
+    -- Timestamps
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
+
     FOREIGN KEY (delivery_run_id) REFERENCES delivery_runs(id)
 );
 
@@ -781,29 +1030,34 @@ CREATE TABLE delivery_runs (
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL
 );
-
--- Vehicle values: 'van', 'golf_cart'
--- Status values: 'Active', 'Completed', 'Cancelled'
 ```
 
-### Inflow Webhooks Table
+### Users Table
 
 ```sql
-CREATE TABLE inflow_webhooks (
+CREATE TABLE users (
     id VARCHAR(36) PRIMARY KEY,
-    webhook_id VARCHAR(255) NOT NULL UNIQUE,
-    url VARCHAR(500) NOT NULL,
-    events JSON NOT NULL,
-    status ENUM('active', 'inactive', 'failed') NOT NULL DEFAULT 'active',
-    last_received_at DATETIME,
-    failure_count INTEGER NOT NULL DEFAULT 0,
-    secret VARCHAR(255),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    display_name VARCHAR(255),
+    department VARCHAR(255),
+    employee_id VARCHAR(255),
     created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
+    last_login_at DATETIME
 );
+```
 
-CREATE INDEX ix_inflow_webhooks_status ON inflow_webhooks(status);
-CREATE INDEX ix_inflow_webhooks_webhook_id ON inflow_webhooks(webhook_id);
+### Sessions Table
+
+```sql
+CREATE TABLE sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    created_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 ```
 
 ### Audit Logs Table
@@ -825,299 +1079,125 @@ CREATE INDEX ix_audit_logs_order_id ON audit_logs(order_id);
 CREATE INDEX ix_audit_logs_timestamp ON audit_logs(timestamp);
 ```
 
-### System Audit Logs Table
+### Inflow Webhooks Table
 
 ```sql
-CREATE TABLE system_audit_logs (
+CREATE TABLE inflow_webhooks (
     id VARCHAR(36) PRIMARY KEY,
-    entity_type VARCHAR(100) NOT NULL,
-    entity_id VARCHAR(36) NOT NULL,
-    action VARCHAR(100) NOT NULL,
-    description TEXT,
-    user_id VARCHAR(255),
-    user_role VARCHAR(100),
-    old_value JSON,
-    new_value JSON,
-    metadata JSON,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    timestamp DATETIME NOT NULL,
-    created_at DATETIME NOT NULL
+    webhook_id VARCHAR(255) NOT NULL UNIQUE,
+    url VARCHAR(500) NOT NULL,
+    events JSON NOT NULL,
+    status ENUM('active', 'inactive', 'failed') NOT NULL DEFAULT 'active',
+    last_received_at DATETIME,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    secret VARCHAR(255),
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
 );
-
-CREATE INDEX ix_system_audit_logs_entity_type ON system_audit_logs(entity_type);
-CREATE INDEX ix_system_audit_logs_entity_id ON system_audit_logs(entity_id);
-CREATE INDEX ix_system_audit_logs_timestamp ON system_audit_logs(timestamp);
 ```
 
+---
 
+## Configuration Reference
 
+### Required Variables
 
-## Deployment
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | MySQL connection string |
+| `INFLOW_API_URL` | Inflow Cloud API base URL |
+| `INFLOW_API_KEY` | Inflow API key |
+| `INFLOW_COMPANY_ID` | Inflow company ID |
+| `SECRET_KEY` | Flask secret key |
 
-### Environment Variables
+### Authentication
 
-**Backend** (`.env` file in `backend` directory):
-```
-DATABASE_URL=mysql+pymysql://user:password@localhost:3306/techhub_delivery
-# For Docker MySQL (default):
-# DATABASE_URL=mysql+pymysql://techhub:techhub_password@localhost:3306/techhub_delivery
-INFLOW_API_URL=https://your-inflow-api-url.com
-INFLOW_API_KEY=your_api_key_here
-INFLOW_WEBHOOK_ENABLED=true
-INFLOW_WEBHOOK_URL=https://your-public-url/api/inflow/webhook
-INFLOW_WEBHOOK_EVENTS=orderCreated,orderUpdated
-# OR
-AZURE_KEY_VAULT_URL=https://your-keyvault.vault.azure.net/
-FRONTEND_URL=http://localhost:5173
-SECRET_KEY=your-secret-key-here
+| Variable | Description |
+|----------|-------------|
+| `SAML_ENABLED` | Enable SAML authentication |
+| `SAML_IDP_ENTITY_ID` | IdP entity ID |
+| `SAML_IDP_SSO_URL` | IdP login URL |
+| `SAML_IDP_CERT_PATH` | Path to IdP certificate |
+| `SAML_SP_ENTITY_ID` | Service provider entity ID |
+| `SAML_ACS_URL` | Assertion consumer service URL |
+| `AZURE_TENANT_ID` | Azure AD tenant ID |
+| `AZURE_CLIENT_ID` | Service principal client ID |
+| `AZURE_CLIENT_SECRET` | Service principal secret |
 
-STORAGE_ROOT=storage
-```
+### Features
 
-### Database Migrations
+| Variable | Description |
+|----------|-------------|
+| `SHAREPOINT_ENABLED` | Enable SharePoint storage |
+| `SHAREPOINT_SITE_URL` | SharePoint site URL |
+| `SHAREPOINT_FOLDER_PATH` | Base folder path |
+| `SMTP_ENABLED` | Enable email sending |
+| `SMTP_FROM_ADDRESS` | Sender email address |
+| `TEAMS_RECIPIENT_NOTIFICATIONS_ENABLED` | Enable Teams notifications |
+| `TEAMS_NOTIFICATION_QUEUE_FOLDER` | SharePoint queue folder |
 
-Run migrations before starting:
-```bash
-cd backend
+### Sync Configuration
 
-# Activate virtual environment first
-# Windows (PowerShell):
-.venv\Scripts\Activate.ps1
-# Windows (Command Prompt):
-.venv\Scripts\activate.bat
-# Linux/Mac:
-source .venv/bin/activate
+| Variable | Description |
+|----------|-------------|
+| `INFLOW_POLLING_SYNC_ENABLED` | Enable polling sync |
+| `INFLOW_POLLING_SYNC_INTERVAL_MINUTES` | Sync interval |
+| `INFLOW_WEBHOOK_ENABLED` | Enable webhook sync |
+| `INFLOW_WEBHOOK_URL` | Webhook receiver URL |
+| `INFLOW_WEBHOOK_EVENTS` | Events to subscribe |
+| `INFLOW_WEBHOOK_AUTO_REGISTER` | Auto-register on startup |
 
-# Run migrations
-alembic upgrade head
-```
+### Deployment
 
-### Production Considerations
+| Variable | Description |
+|----------|-------------|
+| `FLASK_ENV` | Environment (development/production) |
+| `FRONTEND_URL` | Frontend URL for CORS |
+| `DEPLOY_WEBHOOK_ENABLED` | Enable GitHub deploy webhook |
+| `DEPLOY_WEBHOOK_SECRET` | Webhook signature secret |
 
-1. **Database**: Use managed MySQL service
-2. **API Keys**: Store in Azure Key Vault or secure secret management
-3. **CORS**: Update `FRONTEND_URL` to production domain
-4. **HTTPS**: Use reverse proxy (nginx) with SSL certificates
-5. **Logging**: Configure proper logging levels and outputs
-6. **Monitoring**: Set up health checks and monitoring
-7. **Backups**: Regular database backups
-
-## Development
-
-### Prerequisites
-
-Before setting up the development environment, ensure you have the following installed:
-
-- **Python 3.9+** - Download from [python.org](https://www.python.org/downloads/)
-- **Node.js 18+** - Download from [nodejs.org](https://nodejs.org/)
-- **MySQL 8.0+** - Download from [mysql.com](https://dev.mysql.com/downloads/mysql/) or use Docker
-- **Docker** (optional, for local MySQL) - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
-- Note: No additional Visual Studio Build Tools required for MySQL driver (pymysql is pure Python)
-
-### Running Locally
-
-**Backend Setup**:
-
-1. Navigate to the backend directory:
-```bash
-cd backend
-```
-
-2. Create a virtual environment named `.venv`:
-```bash
-python -m venv .venv
-```
-
-3. Activate the virtual environment:
-   - **Windows (PowerShell)**:
-   ```powershell
-   .venv\Scripts\Activate.ps1
-   ```
-   - **Windows (Command Prompt)**:
-   ```cmd
-   .venv\Scripts\activate.bat
-   ```
-   - **Linux/Mac**:
-   ```bash
-   source .venv/bin/activate
-   ```
-
-4. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-5. Set up MySQL (using Docker Compose from project root):
-```bash
-# From the project root directory
-docker compose up -d mysql
-```
-
-6. Create a `.env` file in the `backend` directory with your configuration (see Deployment section for details)
-
-7. Run database migrations:
-```bash
-alembic upgrade head
-```
-
-8. Start the server:
-```bash
-uvicorn app.main:app --reload
-```
-
-**Frontend Setup**:
-
-1. Navigate to the frontend directory:
-```bash
-cd frontend
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the development server:
-```bash
-npm run dev
-```
-
-### Testing
-
-**Backend**: Add tests in `backend/tests/`
-**Frontend**: Add tests using Jest/Vitest
-
-### Code Style
-
-**Backend**: Follow PEP 8, use type hints
-**Frontend**: Follow ESLint rules, use TypeScript strictly
-
-### Adding New Features
-
-1. **Database Changes**: Create Alembic migration
-2. **API Changes**: Add route in `backend/app/api/routes/`
-3. **Business Logic**: Add service method in `backend/app/services/`
-4. **Frontend**: Add component/page in `frontend/src/`
-
-## Scripts
-
-### Database Manager
-
-**Location**: `backend/scripts/database_manager.py`
-
-**Purpose**: Comprehensive database and order management tool for development, testing, and maintenance operations.
-
-**Interactive Mode**:
-```bash
-cd backend
-python scripts/database_manager.py
-```
-
-**Command Line Usage**:
-```bash
-# Listing and searching
-python scripts/database_manager.py --list
-python scripts/database_manager.py --list --status PreDelivery
-python scripts/database_manager.py --search TH3970
-python scripts/database_manager.py --details TH3970
-
-# Order management
-python scripts/database_manager.py --delete TH3970
-python scripts/database_manager.py --update-status TH3970 Delivered
-python scripts/database_manager.py --create --order-number TH9999 --recipient "Test User"
-
-# Testing and maintenance
-python scripts/database_manager.py --reset TH3970
-python scripts/database_manager.py --clear-all
-python scripts/database_manager.py --stats
-```
-
-**Capabilities**:
-- **Order CRUD**: Create, read, update, delete orders with full validation
-- **Bulk Operations**: Efficient bulk status transitions and data management
-- **Search & Filter**: Advanced filtering by status, order number, date ranges
-- **Testing Utilities**: Reset orders to specific states for testing workflows
-- **Database Maintenance**: Clear data, view statistics, health checks
-- **Interactive Mode**: User-friendly menu system for complex operations
-- **Safety Features**: Confirmation prompts and transaction safety
-
-### Pattern Discovery Script
-
-**Location**: `backend/scripts/analyze_order_patterns.py`
-
-**Purpose**: Analyzes historical orders from Inflow API to discover patterns in order remarks that indicate alternative delivery locations.
-
-**Usage**:
-```bash
-cd backend
-python scripts/analyze_order_patterns.py --dry-run              # Preview analysis
-python scripts/analyze_order_patterns.py                        # Generate report
-python scripts/analyze_order_patterns.py --update-code          # Update code with patterns
-python scripts/analyze_order_patterns.py --min-frequency 10     # Custom frequency threshold
-```
-
-**Process**:
-1. Fetches all orders from Inflow API (including fulfilled/historical orders)
-2. Analyzes order remarks to find patterns like "deliver to", "location:", etc.
-3. Generates JSON report with statistics, patterns, and examples
-4. Optionally updates `order_service.py` with discovered patterns
-
-**Output**: JSON report file containing discovered patterns, frequencies, and suggested regex patterns.
-
-### Inflow Webhook Management Script
-
-**Location**: `backend/scripts/manage_inflow_webhook.py`
-
-**Purpose**: Comprehensive webhook subscription management for real-time Inflow order updates.
-
-**Usage**:
-```bash
-cd backend
-python scripts/manage_inflow_webhook.py list                    # List remote webhooks
-python scripts/manage_inflow_webhook.py list --local           # List local webhooks
-python scripts/manage_inflow_webhook.py register --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
-python scripts/manage_inflow_webhook.py delete --url https://your-app.com/api/inflow/webhook
-python scripts/manage_inflow_webhook.py reset --url https://your-app.com/api/inflow/webhook --events orderCreated,orderUpdated
-```
-
-**Features**:
-- **Remote Management**: Register, list, and delete webhooks with Inflow API
-- **Local Synchronization**: Track webhook state in local database
-- **Security**: Automatic secret handling and signature verification
-- **Monitoring**: Failure tracking and automatic status updates
-- **Batch Operations**: Cleanup and reset operations for webhook management
-
-**Supported Events**: `orderCreated`, `orderUpdated` (configurable)
-
-### Legacy Picklist Generator
-
-**Location**: `legacy scripts/pick_list_generator.py`
-
-**Purpose**: Legacy GUI application for generating picklists from inFlow data. This was the original system used before the web application was developed.
-
-**Features**:
-- GUI interface for selecting orders by PO number
-- Direct integration with inFlow API
-- PDF generation with ReportLab
-- Google Drive upload functionality
-- Automatic browser opening for order verification
-
-**Note**: The modern web application (`POST /api/orders/{order_id}/picklist`) provides the same functionality through a REST API with improved integration and audit trails. The legacy script remains for reference and potential migration purposes.
+---
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Orders not syncing**: Check Inflow API credentials and scheduler status
-2. **Building codes not showing**: Verify ArcGIS service is accessible
-
-4. **Database connection errors**: Verify DATABASE_URL in .env
+| Issue | Solution |
+|-------|----------|
+| Orders not syncing | Check Inflow API credentials and scheduler status |
+| Building codes not showing | Verify ArcGIS service accessibility |
+| Database connection errors | Verify DATABASE_URL in .env |
+| WebSocket not connecting | Check CORS configuration |
+| SAML login fails | Verify certificate path and IdP URLs |
+| SharePoint upload fails | Check Graph API permissions and site URL |
+| Email not sending | Verify Graph API configuration |
 
 ### Logs
 
-Backend logs are output to console. Check application logs for detailed error messages.
+Backend logs output to console. Check application logs for detailed error messages.
+
+For PythonAnywhere:
+```bash
+cat /var/log/techhub.pythonanywhere.com.error.log
+cat /var/log/techhub.pythonanywhere.com.server.log
+```
+
+### Database Management
+
+Use the database manager script for maintenance:
+
+```bash
+cd backend
+python scripts/database_manager.py
+
+# Or direct commands:
+python scripts/database_manager.py --stats
+python scripts/database_manager.py --list --status PreDelivery
+python scripts/database_manager.py --search TH4013
+```
+
+---
 
 ## Support
 
-For issues or questions, contact the development team or refer to the codebase documentation.
+For issues or questions, contact the TechHub development team.
