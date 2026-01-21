@@ -308,6 +308,28 @@ class OrderService:
             }
         )
 
+
+
+        # Automatically transition status based on QA method
+        target_status = None
+        method = qa_data.get("method")
+
+        if method == "Delivery":
+            target_status = OrderStatus.PRE_DELIVERY
+        elif method == "Shipping":
+            target_status = OrderStatus.SHIPPING
+
+        if target_status:
+            # We already committed the QA data, but transition_status will commit again
+            # We use transition_status to ensure valid transitions and audit logging
+            # Note: transition_status refetches the order, so we return its result
+            return self.transition_status(
+                order_id=order.id,
+                new_status=target_status,
+                changed_by=technician,
+                reason=f"QA passed via {method} method"
+            )
+
         return order
 
     def get_orders(
