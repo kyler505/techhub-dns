@@ -125,20 +125,27 @@ class OrderService:
         filename = f"{order.inflow_order_id or order.id}.pdf"
         destination = picklist_dir / filename
 
-        # Generate the actual picklist PDF from inFlow data
-        self._generate_picklist_pdf(order.inflow_data, str(destination))
+        # Generate the actual picklist PDF from inFlow data using PicklistService
+        from app.services.picklist_service import PicklistService
+        picklist_svc = PicklistService()
+        picklist_svc.generate_picklist_pdf(order.inflow_data, str(destination))
 
-        # Upload to SharePoint if enabled
-        picklist_path = str(destination)
-        try:
-            from app.services.sharepoint_service import get_sharepoint_service
-            sp_service = get_sharepoint_service()
-            if sp_service.is_enabled:
-                sp_url = sp_service.upload_pdf(str(destination), "picklists", filename)
-                picklist_path = sp_url
-                logger.info(f"Picklist uploaded to SharePoint: {sp_url}")
-        except Exception as e:
-            logger.warning(f"SharePoint upload failed for picklist, using local path: {e}")
+        # Upload to SharePoint asynchronously (non-blocking)
+        picklist_path = str(destination)  # Use local path immediately
+
+        def async_sharepoint_upload():
+            """Background task for SharePoint upload"""
+            try:
+                from app.services.sharepoint_service import get_sharepoint_service
+                sp_service = get_sharepoint_service()
+                if sp_service.is_enabled:
+                    sp_service.upload_pdf(str(destination), "picklists", filename)
+                    logger.info(f"[Background] Picklist uploaded to SharePoint: {filename}")
+            except Exception as e:
+                logger.warning(f"[Background] SharePoint upload failed for picklist: {e}")
+
+        from app.services.background_tasks import run_in_background
+        run_in_background(async_sharepoint_upload, task_name=f"upload_picklist_{filename}")
 
         order.picklist_generated_at = datetime.utcnow()
         order.picklist_generated_by = generated_by
@@ -311,7 +318,10 @@ class OrderService:
         limit: int = 100
     ) -> tuple[List[Order], int]:
         """Get orders with filters and pagination"""
-        query = self.db.query(Order)
+        from sqlalchemy.orm import selectinload
+
+        # Use selectinload to avoid N+1 queries when accessing delivery_run
+        query = self.db.query(Order).options(selectinload(Order.delivery_run))
 
         if status:
             query = query.filter(Order.status == status.value)
@@ -450,17 +460,18 @@ class OrderService:
         changed_by: Optional[str] = None,
         reason: Optional[str] = None
     ) -> List[Order]:
-        """Bulk transition multiple orders"""
-        orders = []
+        """Bulk transition multiple orders with logging."""
+        successful_orders = []
         for order_id in order_ids:
             try:
                 order = self.transition_status(order_id, new_status, changed_by, reason)
-                orders.append(order)
+                successful_orders.append(order)
             except Exception as e:
                 # Log error but continue with other orders
+                logger.warning(f"Failed to transition order {order_id}: {e}")
                 continue
 
-        return orders
+        return successful_orders
 
     def _extract_delivery_location_from_remarks(self, order_remarks: str) -> Optional[str]:
         """

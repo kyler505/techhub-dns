@@ -221,7 +221,7 @@ See `.env.example` for all configuration options. Key sections:
 | [docs/PYTHONANYWHERE_DEPLOYMENT.md](docs/PYTHONANYWHERE_DEPLOYMENT.md) | PythonAnywhere deployment guide |
 | [docs/Teams_PowerAutomate_Setup.md](docs/Teams_PowerAutomate_Setup.md) | Power Automate flow setup |
 | [docs/app-flow.md](docs/app-flow.md) | Product requirements document |
-| [DEPLOY_SETUP.md](DEPLOY_SETUP.md) | GitHub webhook auto-deploy setup |
+| [docs/DEPLOY_SETUP.md](docs/DEPLOY_SETUP.md) | GitHub webhook auto-deploy setup |
 
 ---
 
