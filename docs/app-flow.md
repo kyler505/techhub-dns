@@ -2,6 +2,8 @@
 
 **Product Requirements Document (PRD)**
 
+---
+
 ## 1. Overview
 
 The TechHub Delivery Workflow App is an internal system that manages the full lifecycle of hardware orders from **picked** in inFlow through **delivery, signature capture, QA documentation, and final fulfillment**.
@@ -12,78 +14,67 @@ The goal is to replace fragmented scripts, Google Forms, and manual document han
 
 ## 2. Goals
 
-* Centralize all delivery prep, execution, and documentation in one app
-* Enforce required steps before delivery (tagging, picklist, QA)
-* Eliminate Google Forms dependency
-* Provide clear delivery run tracking and accountability
-* Ensure signed and QA’d documentation is bundled and verified before inFlow fulfillment
-* Reduce human error and missing documentation
+- Centralize all delivery prep, execution, and documentation in one app
+- Enforce required steps before delivery (tagging, picklist, QA)
+- Eliminate Google Forms dependency
+- Provide clear delivery run tracking and accountability
+- Ensure signed and QA'd documentation is bundled and verified before inFlow fulfillment
+- Reduce human error and missing documentation
+- Support both local delivery and external shipping workflows
 
 ---
 
 ## 3. Non-Goals
 
-* Route optimization or GPS tracking
-* External recipient-facing portal
-* Fully automated QA validation (QA remains human-driven)
-* Replacing inFlow as the source of truth for inventory
+- Route optimization or GPS tracking
+- External recipient-facing portal
+- Fully automated QA validation (QA remains human-driven)
+- Replacing inFlow as the source of truth for inventory
+- Carrier API integrations (manual tracking number entry)
 
 ---
 
 ## 4. Order Lifecycle & Status Model
 
-### Order Classification & Status Flows
+### Order Classification
 
-Orders are automatically classified based on shipping destination:
+Orders are classified based on delivery method selected during QA:
+- **Local Delivery**: Campus deliveries within Bryan/College Station
+- **Shipping**: External deliveries via carrier (FedEx, UPS, etc.)
 
-#### Local Delivery Orders (Bryan/College Station)
+### Status Flows
+
+**Local Delivery Orders:**
 ```
-Picked → Pre-Delivery → In Delivery → Delivered
+Picked → QA → Pre-Delivery → In Delivery → Delivered
 ```
 
-#### Shipping Orders (Outside Bryan/College Station)
+**Shipping Orders:**
 ```
-Picked → Pre-Delivery → Shipping → Delivered
+Picked → QA → Pre-Delivery → Shipping → Delivered
 ```
 
 ### Status Definitions
 
-* **Picked**
-
-  * Order pulled from inFlow after being picked
-  * Awaiting internal preparation steps (tagging, QA, picklist)
-* **Pre-Delivery**
-
-  * Asset tagging, picklist generation, and QA completed
-  * Order is ready for next workflow step
-* **In Delivery**
-
-  * Order assigned to active local delivery run
-  * Runner transporting to recipient
-* **Shipping**
-
-  * Order prepared for shipping (FedEx, etc.)
-  * Awaiting carrier pickup or processing
-* **Delivered**
-
-  * Local: Recipient signature captured
-  * Shipping: Order confirmed shipped to recipient
-  * QA + documentation bundled and stored
-  * Awaiting final inFlow fulfillment confirmation
-* **Issue**
-
-  * Order has encountered a problem
-  * Requires manual review and resolution
+| Status | Description |
+|--------|-------------|
+| **Picked** | Order synced from inFlow after being picked. Awaiting prep steps. |
+| **QA** | QA checklist in progress (asset tagging, picklist, QA form). |
+| **Pre-Delivery** | All prep steps complete. Ready for delivery assignment or shipping. |
+| **In Delivery** | Assigned to active local delivery run. Runner transporting to recipient. |
+| **Shipping** | In shipping workflow (Work Area → Dock → Shipped to Carrier). |
+| **Delivered** | Successfully delivered or shipped. Terminal state. |
+| **Issue** | Problem encountered. Requires manual review and resolution. |
 
 ---
 
 ## 5. User Roles
 
-| Role                | Capabilities                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| Technician / Runner | Perform tagging, generate picklists, complete QA, run local deliveries, capture signatures, process shipping orders |
-| Shipping Coordinator| Prepare orders for shipping, coordinate with carriers (FedEx), track shipping status |
-| Admin / Lead        | Verify completed orders, finalize delivery runs, trigger inFlow fulfillment, oversee shipping operations |
+| Role | Capabilities |
+|------|--------------|
+| **Technician / Runner** | Asset tagging, picklist generation, QA completion, delivery runs, signature capture, shipping processing |
+| **Shipping Coordinator** | Prepare orders for shipping, coordinate with carriers, track shipping status |
+| **Admin / Lead** | Verify completed orders, finalize delivery runs, trigger inFlow fulfillment, system configuration |
 
 ---
 
@@ -91,11 +82,16 @@ Picked → Pre-Delivery → Shipping → Delivered
 
 ### 6.1 Order Ingest (inFlow → App)
 
-* System periodically pulls orders from inFlow that are **picked**
-* New records are created with:
+**Sync Methods:**
+- Automatic polling (configurable interval, default 20 minutes)
+- Real-time webhooks (with polling fallback)
 
-  * `status = Picked`
-  * Order metadata (ID, recipient, location, items)
+**Process:**
+1. Fetch orders with `inventoryStatus="started"` from inFlow
+2. Extract order metadata (ID, recipient, location, PO number)
+3. Parse order remarks for alternative delivery locations
+4. Extract building codes using ArcGIS service
+5. Create or update order with `status = Picked`
 
 ---
 
@@ -103,51 +99,30 @@ Picked → Pre-Delivery → Shipping → Delivered
 
 #### 6.2.1 Asset Tagging
 
-* App provides an “Asset Tag” action per order
-* Existing tagging script is integrated into backend
-* System records:
-
-  * Tag IDs
-  * Technician
-  * Timestamp
-  * Success/failure
-
-**Blocking requirement:** Order cannot advance without successful tagging.
-
----
+- App provides "Asset Tag" action per order
+- System records: Tag IDs, Technician, Timestamp, Success/failure
+- **Blocking requirement:** Order cannot advance without successful tagging
 
 #### 6.2.2 Picklist Generator
 
-* App generates a **picklist PDF** after tagging
-* Picklist is:
+- App generates picklist PDF from inFlow order data
+- Contains: Order header, items, quantities, serials, signature line
+- Saved to SharePoint storage, linked to order
+- **Blocking requirement:** Picklist must exist before QA
 
-  * Saved to storage
-  * Linked to the order
-  * Printable (physical copy)
+#### 6.2.3 QA Checklist
 
-**Blocking requirement:** Picklist must exist before QA.
-
----
-
-#### 6.2.3 QA Module (In-App Replacement)
-
-* App includes a QA checklist matching the current Google Form
-* QA submission:
-
-  * Stores responses
-  * Generates a QA record (and/or PDF)
-  * Records technician + timestamp
-
-**Blocking requirement:** QA must be completed to proceed.
-
----
+- In-app checklist replacing Google Form
+- Items: Order verification, asset tags, packaging, documentation, labeling
+- Includes **delivery method selection** (Delivery vs Shipping)
+- Records: Responses, technician, timestamp, method
+- **Blocking requirement:** QA must be completed to proceed
 
 #### 6.2.4 Transition to Pre-Delivery
 
-Once all three steps are complete:
-
-* Order status → **Pre-Delivery**
-* Recipient is notified that delivery is ready (Teams integration)
+Once all three steps complete:
+- Order status → **Pre-Delivery**
+- Ready for delivery run assignment or shipping workflow
 
 ---
 
@@ -155,279 +130,257 @@ Once all three steps are complete:
 
 #### Create Delivery Run
 
-* Only **Pre-Delivery** orders are selectable
-* User assigns:
-
-  * Runner
-  * Orders
-* System records:
-
-  * Start time
-  * DeliveryRun ID
+- Only **Pre-Delivery** orders selectable
+- Assign: Runner, Vehicle (van/golf_cart), Orders
+- System generates run name based on time of day
+- Records: Start time, DeliveryRun ID
 
 **On creation:**
+- Orders transition to `In Delivery` status
+- Teams notification sent to recipients
+- WebSocket broadcast to all connected clients
 
-* Orders → `status = In Delivery`
-* Teams notification is sent
+#### Complete Delivery Run
+
+**Requirements:**
+- All orders in "Delivered" status
+- All orders have signatures captured
+
+**Process:**
+- Validate all orders delivered
+- Bulk mark orders as fulfilled in inFlow
+- Record success/failure per order
+- Close run with completion timestamp
 
 ---
 
-### 6.4 Shipping Order Processing
+### 6.4 Shipping Workflow
 
-#### 6.4.1 Shipping vs Delivery Classification
+#### 6.4.1 Classification
 
-* Orders are automatically classified based on shipping address city:
-  * **Local Delivery**: Bryan, College Station → Follows delivery workflow
-  * **Shipping**: All other cities → Follows shipping workflow
-* Classification happens during order import from inFlow
+Orders are classified as shipping during QA when technician selects "Shipping" method.
 
-#### 6.4.2 Shipping Workflow
+#### 6.4.2 Shipping Stages
 
-Shipping orders follow a structured, blocking requirement workflow with three distinct stages:
-
-**Shipping Workflow Stages:**
 ```
-Work Area → Dock → Shipped to Carrier
+Work Area → At Dock → Shipped to Carrier → Delivered
 ```
 
-**Stage 1: Work Area**
-* **Pre-Delivery** orders marked as shipping orders transition to **Shipping** status
-* Shipping coordinator reviews order details and shipping requirements
-* Order remains in **Work Area** status until ready for dock preparation
-* **Blocking:** Cannot proceed to Dock stage until explicitly moved
+| Stage | Description |
+|-------|-------------|
+| **Work Area** | Initial stage. Order ready for shipping preparation. |
+| **At Dock** | Order physically prepared, ready for carrier pickup. |
+| **Shipped to Carrier** | Handed to carrier with tracking information. |
 
-**Stage 2: At Dock**
-* Order moved from Work Area to **Dock** status
-* Order prepared for carrier (FedEx, UPS, etc.)
-* Physical preparation and labeling completed
-* **Blocking:** Cannot proceed to Shipped stage until moved to Dock
+#### 6.4.3 Stage Transitions
 
-**Stage 3: Shipped to Carrier**
-* Order marked as **Shipped to Carrier** with carrier name and optional tracking number
-* Shipping coordinator confirms order handed to carrier
-* Order status automatically transitions to **Delivered**
-* **Blocking:** Cannot be marked as shipped until at Dock stage
-
-**Key Features:**
-* Each stage must be completed in sequence - no skipping stages
-* All transitions are audited with user attribution and timestamps
-* Carrier information and tracking numbers are captured
-* Automatic status transition to Delivered upon shipping confirmation
-
-#### 6.4.3 QA Method Selection
-
-* QA checklist includes method selection:
-  * **"Delivery"**: For local delivery orders
-  * **"Shipping"**: For shipping orders
-* Different QA requirements based on fulfillment method
+- Sequential progression required (no stage skipping)
+- Carrier name required for "Shipped to Carrier"
+- Tracking number optional but recommended
+- Automatic transition to "Delivered" upon shipping confirmation
 
 ---
 
 ### 6.5 Local Delivery & Signature Capture
 
-* Runner opens the order's picklist in the in-app PDF editor
-* Recipient signs using stylus
-* Signed picklist is saved as a new document version
+1. Runner opens order's picklist in PDF viewer
+2. Recipient signs using stylus/touch input
+3. Signed picklist saved as new document version
+4. Order transition to "Delivered" status
 
 **Requirement:** Signature must be captured to complete delivery.
 
 ---
 
-### 6.5 Delivered Document Bundling
+### 6.6 Document Bundling
 
 After signature capture:
-
-* System bundles:
-
-  * Signed picklist
-  * QA form
-* Creates a folder/package:
-
-  ```
-  Completed/
-    TH3950/
-      signed_picklist.pdf
-      qa_form.pdf
-  ```
-* Order status → **Delivered**
+- System bundles: Signed picklist, QA form
+- Creates folder structure in SharePoint:
+```
+delivery-storage/
+├── picklists/
+│   └── TH3950.pdf
+├── qa/
+│   └── TH3950_qa.json
+└── signed/
+    └── TH3950_signed.pdf
+```
 
 ---
 
-### 6.6 Order Completion & inFlow Fulfillment
+### 6.7 Order Completion & inFlow Fulfillment
 
-#### 6.6.1 Delivery Run Completion
+#### Local Delivery Completion
 
-* Staff manually verifies all orders in delivery run are delivered
-* User clicks **Complete Delivery** on the Delivery Run
+1. Staff verifies all orders in run are delivered
+2. Click "Complete Delivery" on Delivery Run
+3. System validates all orders properly delivered
+4. Bulk marks orders as fulfilled in inFlow
+5. Records success/failure per order
+6. Closes run with completion timestamp
 
-**Requirements:**
-* All orders in run must be in "Delivered" status
-* All orders must have been signed (for local deliveries)
+#### Shipping Completion
 
-**System behavior:**
-* Validates all orders are properly delivered
-* Bulk marks orders as **fulfilled** in inFlow
-* Records success/failure per order
-* Closes Delivery Run with completion timestamp
-
-#### 6.6.2 Shipping Order Completion
-
-* Shipping coordinator confirms order shipped via carrier
-* Updates shipping status and tracking information
-* Order transitions to **Delivered** status
-* System marks order as fulfilled in inFlow
+1. Shipping coordinator confirms order shipped
+2. Updates shipping status with carrier and tracking
+3. Order transitions to "Delivered" status
+4. System marks order as fulfilled in inFlow
 
 ---
 
 ## 7. Key Screens / UX Modules
 
 ### Orders Dashboard
+- Status tabs: Picked / QA / Pre-Delivery / In Delivery / Shipping / Delivered / Issue
+- Search: Order ID, recipient, location, PO number
+- Quick actions: View details, transition status
 
-* Status tabs: Picked / Pre-Delivery / In Delivery / Delivered / Issue
-* Search: Order ID, recipient, location
+### QA Checklist Page
+- Order selection with filtering
+- In-app checklist form
+- Delivery method selection
+- Submit and advance to Pre-Delivery
+
+### Delivery Dashboard
+- Live delivery run tracking
+- Create new delivery runs
+- View active and completed runs
+- Real-time WebSocket updates
+
+### Delivery Run Detail
+- Run information (runner, vehicle, timing)
+- Order list with status tracking
+- Individual order transitions
+- Run completion functionality
+
+### Shipping Page
+- Orders in shipping workflow stages
+- Stage transitions with carrier info
+- Tracking number capture
 
 ### Order Detail View
+- Complete order metadata
+- Prep step status (tagged, picklist, QA)
+- Audit trail history
+- Document links
 
-* Order metadata
-* Stepper showing:
+### Document Signing
+- PDF viewer with signature overlay
+- Stylus/touch input capture
+- Save and download signed document
 
-  * Asset Tagging
-  * Picklist
-  * QA
-  * Signature
-* Document links and audit trail
-
-### QA Module
-
-* Internal checklist UI
-* Submit + export/store responses
-
-### Delivery Runs
-
-* Create run (local deliveries only)
-* Active run view with order status tracking
-* Complete Delivery action (requires all orders delivered)
-
-### Shipping Operations
-
-* Shipping queue management
-* Dock status tracking
-* Carrier coordination (FedEx, UPS, etc.)
-* Shipping confirmation and tracking updates
-
-### PDF Signing Interface
-
-* Stylus input for signature capture
-* Save signed version
-* Order status update to Delivered
-
-### Document Manager
-
-* View completed bundles
-* Per-order folder access
+### Admin Panel
+- System status overview
+- Service health indicators
+- Webhook management
+- Testing tools (sync, email, Teams)
 
 ---
 
-## 8. Data Model (Conceptual)
+## 8. Data Model
 
 ### Order
 
-* `id`
-* `status` (Picked, Pre-Delivery, In Delivery, Shipping, Delivered, Issue)
-* `recipient`
-* `location`
-* `orderType` ("delivery" or "shipping" based on destination)
-* `qaMethod` ("Delivery" or "Shipping")
-* `stepFlags { tagged, picklistGenerated, qaComplete }`
-* `documents[]`
-* `deliveryRunId` (only for local delivery orders)
-* `signatureCapturedAt`
-* `shippingWorkflowStatus` (work_area, dock, shipped) - only for shipping orders
-* `shippingWorkflowStatusUpdatedAt`
-* `shippingWorkflowStatusUpdatedBy`
-* `shippedToCarrierAt`
-* `shippedToCarrierBy`
-* `carrierName` (FedEx, UPS, etc.)
-* `trackingNumber`
-* `inflowFulfillmentStatus`
-* timestamps
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| inflow_order_id | String | Order number from inFlow |
+| status | Enum | Picked, QA, PreDelivery, InDelivery, Shipping, Delivered, Issue |
+| recipient_name | String | Recipient name |
+| recipient_contact | String | Email address |
+| delivery_location | String | Building code or address |
+| qa_method | String | "Delivery" or "Shipping" |
+| tagged_at | DateTime | Asset tagging timestamp |
+| picklist_generated_at | DateTime | Picklist generation timestamp |
+| qa_completed_at | DateTime | QA completion timestamp |
+| signature_captured_at | DateTime | Signature capture timestamp |
+| shipping_workflow_status | Enum | work_area, dock, shipped |
+| carrier_name | String | FedEx, UPS, etc. |
+| tracking_number | String | Carrier tracking number |
 
 ### DeliveryRun
 
-* `id`
-* `runner`
-* `orders[]`
-* `startTime`
-* `endTime`
-* `status`
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| name | String | Generated name (e.g., "Morning Run 1") |
+| runner | String | Assigned runner |
+| vehicle | Enum | van, golf_cart |
+| status | Enum | Active, Completed, Cancelled |
+| orders | Relationship | Assigned orders |
 
-### Document
+### AuditLog
 
-* `type` (picklist, signed_picklist, qa, bundle)
-* `storagePath`
-* `createdBy`
-* `createdAt`
-
-### Audit Log (Recommended)
-
-* entity
-* action
-* user
-* timestamp
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| order_id | UUID | Foreign key to Order |
+| from_status | String | Previous status |
+| to_status | String | New status |
+| changed_by | String | User who made change |
+| timestamp | DateTime | When change occurred |
 
 ---
 
 ## 9. Integrations
 
-* **inFlow**
+### inFlow
+- Order ingest (picked orders with pickLines)
+- Order classification (delivery vs shipping)
+- Fulfillment confirmation (pick/pack/ship lines)
+- Webhook subscriptions for real-time updates
 
-  * Order ingest (picked orders with pickLines)
-  * Order classification (delivery vs shipping)
-  * Fulfillment confirmation for completed orders
-* **Shipping Carriers (FedEx, UPS, etc.)**
+### Microsoft Graph API
+- Email sending with PDF attachments
+- SharePoint file storage
+- Service Principal authentication
 
-  * Shipping label generation
-  * Tracking number integration
-  * Shipping confirmation callbacks
-* **Microsoft Teams**
+### Teams (via Power Automate)
+- Delivery notification messages
+- SharePoint queue folder monitoring
+- Recipient chat messaging
 
-  * Ready-to-deliver notification
-  * Delivery started notification
-  * Shipping status updates
-* **Asset Tagging System**
+### ArcGIS
+- Building code extraction
+- Address to building mapping
+- Campus location intelligence
 
-  * Existing script wrapped as service
-* **File/Object Storage**
-
-  * PDFs and completed bundles
-  * Shipping documentation storage
+### SharePoint
+- Document storage (picklists, QA, signed docs)
+- Notification queue folder
+- Completed order bundles
 
 ---
 
 ## 10. Error & Exception Handling
 
-* Step failures block status transitions
-* Orders can be marked **Issue** with reason
-* inFlow fulfillment failures keep run open with alerts
+- Prep step failures block status transitions
+- Orders can be marked "Issue" with reason
+- Issue orders can return to Picked or PreDelivery after resolution
+- inFlow fulfillment failures keep run open with alerts
+- Webhook failures fall back to polling sync
+- Service failures (email, Teams) logged but non-blocking
 
 ---
 
 ## 11. Success Metrics
 
-* **Delivery Metrics:**
-  * % of deliveries completed without missing documentation
-  * Average time from Picked → Delivered
-  * On-time delivery rate
-  * Customer signature capture rate
+### Delivery Metrics
+- % of deliveries completed without missing documentation
+- Average time from Picked → Delivered
+- On-time delivery rate
+- Customer signature capture rate
 
-* **Shipping Metrics:**
-  * % of shipping orders completed without issues
-  * Average time from Picked → Shipped
-  * Carrier on-time pickup rate
-  * Shipping documentation completeness
+### Shipping Metrics
+- % of shipping orders completed without issues
+- Average time from Picked → Shipped
+- Carrier on-time pickup rate
+- Shipping documentation completeness
 
-* **Overall:**
-  * Time from Picked → Pre-Delivery readiness
-  * Reduction in manual verification errors
-  * Zero missing QA cases at fulfillment
-  * Order classification accuracy (delivery vs shipping)
+### Overall
+- Time from Picked → Pre-Delivery readiness
+- Reduction in manual verification errors
+- Zero missing QA cases at fulfillment
+- Order classification accuracy (delivery vs shipping)
+- System uptime and reliability
