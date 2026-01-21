@@ -97,3 +97,6 @@ class TeamsRecipientService:
         except Exception as e:
             logger.error(f"Error queuing Teams notification for {order_number}: {e}")
             return False
+
+
+teams_recipient_service = TeamsRecipientService()
