@@ -57,6 +57,7 @@ class Settings(BaseSettings):
 
     # Teams Recipient Notifications (Graph API)
     teams_recipient_notifications_enabled: bool = False
+    teams_notification_queue_folder: str = "teams-queue"  # Relative to sharepoint_folder_path
 
 
 
