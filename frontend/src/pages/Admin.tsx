@@ -323,8 +323,7 @@ export default function Admin() {
 
                     {/* Test Teams Recipient */}
                     <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test Teams Recipient</p>
-                        <p className="text-xs text-gray-500">Sends a test Teams message to the specified email.</p>
+                        <p className="font-medium text-gray-900">Test Delivery Notification</p>
                         <input
                             type="email"
                             placeholder="recipient@tamu.edu"
@@ -337,7 +336,7 @@ export default function Admin() {
                             disabled={testingService === "teams"}
                             className="w-full px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:bg-gray-400 text-sm"
                         >
-                            {testingService === "teams" ? "Sending..." : "Send Test Message"}
+                            {testingService === "teams" ? "Queueing..." : "Queue Notification"}
                         </button>
                     </div>
 
