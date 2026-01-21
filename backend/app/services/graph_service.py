@@ -101,6 +101,7 @@ class GraphService:
         """
         token = self._get_access_token()
         url = f"https://graph.microsoft.com/v1.0{endpoint}"
+        logger.info(f"Graph Request: {method} {url}")
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -206,48 +207,85 @@ class GraphService:
         initiated_by: str = "system"
     ) -> Optional[str]:
         """
-        Upload a file to SharePoint.
-
-        Args:
-            file_content: File content as bytes
-            file_name: Name for the file
-            folder_path: Subfolder within configured SharePoint folder
-            initiated_by: User who triggered this action (for audit)
-
-        Returns:
-            SharePoint URL of uploaded file, or None on failure
+        Upload a file to SharePoint by resolving Site -> Drive (Documents) -> Path.
         """
         if not settings.sharepoint_site_url:
             logger.warning("SharePoint not configured")
             return None
 
-        # Build path
-        base_folder = settings.sharepoint_folder_path.strip("/")
-        if folder_path:
-            full_path = f"{base_folder}/{folder_path.strip('/')}/{file_name}"
-        else:
-            full_path = f"{base_folder}/{file_name}"
-
-        # Get site ID from site URL
-        # Format: /sites/{hostname}:/{path}:/drive/root:/{itemPath}:/content
-        site_url = settings.sharepoint_site_url.rstrip("/")
-        # Extract hostname and path from URL like https://tamucs.sharepoint.com/teams/Team-TechHub
         from urllib.parse import urlparse
-        parsed = urlparse(site_url)
-        site_path = parsed.path  # e.g., /teams/Team-TechHub
+        import requests
 
         try:
-            endpoint = f"/sites/{parsed.netloc}:{site_path}:/drive/root:/{full_path}:/content"
+            token = self._get_access_token()
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+
+            # 1. Get Site ID
+            site_url = settings.sharepoint_site_url
+            parsed = urlparse(site_url)
+            hostname = parsed.netloc
+            site_path = parsed.path
+
+            site_endpoint = f"https://graph.microsoft.com/v1.0/sites/{hostname}:{site_path}"
+            logger.info(f"Resolving Site ID: {site_endpoint}")
+            site_resp = requests.get(site_endpoint, headers=headers)
+            if site_resp.status_code != 200:
+                logger.error(f"Failed to get site: {site_resp.text}")
+                return None
+            site_id = site_resp.json().get('id')
+
+            # 2. Get Drive ID (Documents)
+            drives_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives"
+            drives_resp = requests.get(drives_endpoint, headers=headers)
+            if drives_resp.status_code != 200:
+                logger.error(f"Failed to list drives: {drives_resp.text}")
+                return None
+
+            drives = drives_resp.json().get('value', [])
+            drive_id = None
+            for d in drives:
+                if d.get('name') == "Documents":
+                    drive_id = d.get('id')
+                    break
+
+            if not drive_id and drives:
+                drive_id = drives[0].get('id')
+                logger.warning("Documents drive not found, using first available drive.")
+
+            if not drive_id:
+                logger.error("No drives found for site.")
+                return None
+
+            # 3. Construct Path
+            base_folder = settings.sharepoint_folder_path.strip("/")
+            if folder_path:
+                full_path = f"{base_folder}/{folder_path.strip('/')}/{file_name}"
+            else:
+                full_path = f"{base_folder}/{file_name}"
+
+            # Normalize path
+            full_path = full_path.replace("\\", "/").replace("//", "/")
+
+            # 4. Upload via Drive ID
+            endpoint = f"/drives/{drive_id}/root:/{full_path}:/content"
+
+            # Use _graph_request to handle token refresh if needed, but endpoint needs to be relative to v1.0
+            # Note: _graph_request expects endpoint starting with /
+
             result = self._graph_request(
                 "PUT",
                 endpoint,
                 content=file_content,
-                content_type="application/octet-stream"
+                content_type="application/octet-stream" # Use octet-stream for raw bytes
             )
 
             web_url = result.get("webUrl")
             logger.info(f"File uploaded to SharePoint: {file_name} (initiated by: {initiated_by})")
             return web_url
+
         except Exception as e:
             logger.error(f"Failed to upload file to SharePoint: {e}")
             return None
@@ -263,70 +301,12 @@ class GraphService:
         initiated_by: str = "system"
     ) -> bool:
         """
-        Send a Teams chat message to a user via Graph API.
-
-        Creates or retrieves a 1:1 chat between the app and the recipient,
-        then sends a message to that chat.
-
-        Note: Requires Chat.Create and ChatMessage.Send application permissions.
-        The recipient must be in the same organization.
-
-        Args:
-            recipient_email: Recipient's email address
-            message_content: Message text (HTML supported)
-            initiated_by: User who triggered this action (for audit)
-
-        Returns:
-            True if message sent successfully
+        [DEPRECATED] Send a Teams chat message via Graph API.
+        This method is deprecated in favor of the Folder Queue strategy.
         """
-        try:
-            # Step 1: Get the recipient's user ID
-            user_result = self._graph_request("GET", f"/users/{recipient_email}")
-            recipient_id = user_result.get("id")
+        logger.warning(f"[DEPRECATED] send_teams_message called for {recipient_email}. This method is no longer supported.")
+        return False
 
-            if not recipient_id:
-                logger.error(f"Could not find Teams user: {recipient_email}")
-                return False
-
-            # Step 2: Create or get a 1:1 chat with the user
-            # Attempt to create (or get existing) using POST
-            # Note: Removing 'roles' as it can cause 400 Bad Request for oneOnOne chats in some contexts
-            chat_payload = {
-                "chatType": "oneOnOne",
-                "members": [
-                    {
-                        "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                        "user@odata.bind": f"https://graph.microsoft.com/v1.0/users/{recipient_id}"
-                    }
-                ]
-            }
-
-            chat_id = None
-            try:
-                chat_result = self._graph_request("POST", "/chats", json_data=chat_payload)
-                chat_id = chat_result.get("id")
-            except Exception as e:
-                logger.error(f"POST /chats failed: {e}")
-
-            if not chat_id:
-                 logger.error(f"Failed to create/get chat with user: {recipient_email}")
-                 return False
-
-            # Step 3: Send message to the chat
-            message_payload = {
-                "body": {
-                    "contentType": "html",
-                    "content": message_content
-                }
-            }
-
-            self._graph_request("POST", f"/chats/{chat_id}/messages", json_data=message_payload)
-            logger.info(f"Teams message sent to {recipient_email} (initiated by: {initiated_by})")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to send Teams message to {recipient_email}: {e}")
-            return False
 
 
 # Singleton instance

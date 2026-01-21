@@ -1,10 +1,11 @@
 import logging
 from typing import Optional, List
 from datetime import datetime
+import json
 
 from app.config import settings
 from app.services.graph_service import graph_service
-from app.models.order import Order
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class TeamsRecipientService:
             return False
         return graph_service.is_configured()
 
+
     def send_delivery_notification(
         self,
         recipient_email: str,
@@ -35,7 +37,8 @@ class TeamsRecipientService:
         force: bool = False
     ) -> bool:
         """
-        Send a delivery notification to the recipient via Teams.
+        Send a delivery notification by dropping a JSON file in the SharePoint queue.
+        This triggers a Power Automate Flow to send the actual Teams message.
 
         Args:
             recipient_email: Email address of the recipient
@@ -45,9 +48,6 @@ class TeamsRecipientService:
             estimated_time: Estimated delivery time
             order_items: List of items in the order
             force: If True, send even if disabled in settings
-
-        Returns:
-            True if sent successfully, False otherwise
         """
         if not self.is_configured() and not force:
             logger.info(f"Teams recipient notifications disabled or not configured. Skipping for {order_number}.")
@@ -57,47 +57,43 @@ class TeamsRecipientService:
             logger.warning(f"No recipient email provided for order {order_number}. Skipping Teams notification.")
             return False
 
-        # Format item list
-        items_html = ""
-        if order_items:
-            items_list = "".join([f"<li>{item}</li>" for item in order_items])
-            items_html = f"<ul>{items_list}</ul>"
+        # Construct payload matching the Power Automate "Parse JSON" schema
+        # Schema fields: id, type, recipientEmail, recipientName, orderNumber,
+        # deliveryRunner, estimatedTime, createdAt
+        payload = {
+            "id": f"notif_{order_number}_{int(datetime.now().timestamp())}",
+            "type": "delivery_notification",
+            "recipientEmail": recipient_email,
+            "recipientName": recipient_name,
+            "orderNumber": order_number,
+            "deliveryRunner": delivery_runner,
+            "estimatedTime": estimated_time,
+            "createdAt": datetime.now().isoformat()
+        }
 
-        # Build message using HTML
-        message_content = f"""
-        <h3>Your Order is Out for Delivery!</h3>
-        <p>Hello <strong>{recipient_name}</strong>,</p>
-        <p>Your order <strong>#{order_number}</strong> is currently out for delivery via the TechHub Delivery System.</p>
-
-        <p><strong>Standard delivery location:</strong> Your office/lab</p>
-        <p><strong>Deliverer:</strong> {delivery_runner}</p>
-        <p><strong>Estimated Arrival:</strong> {estimated_time}</p>
-
-        <p><strong>Order Contents:</strong></p>
-        {items_html}
-
-        <p>Please be present to sign for your items.</p>
-        <p style="font-size: small; color: #888;">TechHub Delivery Notification System</p>
-        """
+        # note: order_items is not in the schema provided by user, so it is omitted from payload
+        # The Flow likely has a generic message template.
 
         try:
-            success = graph_service.send_teams_message(
-                recipient_email=recipient_email,
-                message_content=message_content,
+            # Create file content
+            file_content = json.dumps(payload, indent=2).encode('utf-8')
+            filename = f"notification_{order_number}_{int(datetime.now().timestamp())}.json"
+
+            # Upload to queue folder
+            sharepoint_url = graph_service.upload_file_to_sharepoint(
+                file_content=file_content,
+                file_name=filename,
+                folder_path=settings.teams_notification_queue_folder,
                 initiated_by="system-delivery-process"
             )
 
-            if success:
-                logger.info(f"Teams delivery notification sent to {recipient_email} for order {order_number}")
+            if sharepoint_url:
+                logger.info(f"Queued Teams notification for {order_number} (File: {filename})")
+                return True
             else:
-                logger.warning(f"Failed to send Teams delivery notification to {recipient_email} for order {order_number}")
-
-            return success
+                logger.error(f"Failed to queue Teams notification for {order_number}")
+                return False
 
         except Exception as e:
-            logger.error(f"Error sending Teams delivery notification for {order_number}: {e}")
+            logger.error(f"Error queuing Teams notification for {order_number}: {e}")
             return False
-
-
-# Singleton instance
-teams_recipient_service = TeamsRecipientService()
