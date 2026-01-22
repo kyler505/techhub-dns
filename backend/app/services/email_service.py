@@ -20,20 +20,8 @@ class EmailService:
     """Service for sending emails via Microsoft Graph API."""
 
     def __init__(self):
-        # All settings are now dynamic via properties
-        pass
-
-    @property
-    def from_name(self) -> str:
-        """Get sender name from system settings."""
-        from app.services.system_setting_service import SystemSettingService, SETTING_EMAIL_FROM_NAME
-        return SystemSettingService.get_value(SETTING_EMAIL_FROM_NAME) or "TechHub Orders"
-
-    @property
-    def from_address(self) -> str:
-        """Get sender address from system settings."""
-        from app.services.system_setting_service import SystemSettingService, SETTING_EMAIL_FROM_ADDRESS
-        return SystemSettingService.get_value(SETTING_EMAIL_FROM_ADDRESS) or "techhub@tamu.edu"
+        self.from_name = settings.email_from_name
+        self.from_address = settings.smtp_from_address
 
     @property
     def is_enabled(self) -> bool:

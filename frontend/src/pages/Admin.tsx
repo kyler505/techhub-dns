@@ -41,7 +41,6 @@ export default function Admin() {
 
     // Testing state
     const [testEmailAddress, setTestEmailAddress] = useState("");
-
     const [testingService, setTestingService] = useState<string | null>(null);
 
     useEffect(() => {
@@ -60,7 +59,7 @@ export default function Admin() {
             setSystemStatus({
                 saml_auth: { name: "TAMU SSO", enabled: false, configured: false, status: "disabled" },
                 graph_api: { name: "Microsoft Graph", enabled: false, configured: false, status: "disabled" },
-                sharepoint: { name: "SharePoint Storage", enabled: false, configured: false, status: "disabled" },
+                sharepoint: { name: "SharePoint Storage", enabled: true, configured: true, status: "active" },
                 inflow_sync: { name: "Inflow Sync", enabled: true, configured: true, status: "active" },
             });
         } finally {
@@ -88,14 +87,10 @@ export default function Admin() {
 
     const handleToggleSetting = async (key: string, currentValue: string) => {
         const newValue = currentValue === "true" ? "false" : "true";
-        await handleUpdateSetting(key, newValue);
-    };
-
-    const handleUpdateSetting = async (key: string, value: string) => {
         try {
-            await settingsApi.updateSetting(key, value, user?.email || "admin");
+            await settingsApi.updateSetting(key, newValue, user?.email || "admin");
             await loadSystemSettings();
-            setMessage({ type: "success", text: `Setting updated: ${key}` });
+            setMessage({ type: "success", text: `Setting updated: ${key} = ${newValue}` });
         } catch (error: any) {
             console.error("Failed to update setting:", error);
             setMessage({ type: "error", text: error.response?.data?.error || "Failed to update setting" });
@@ -142,7 +137,6 @@ export default function Admin() {
         }
     };
 
-    // Testing handlers
     const handleTestEmail = async () => {
         if (!testEmailAddress) {
             setMessage({ type: "error", text: "Please enter an email address" });
@@ -169,18 +163,13 @@ export default function Admin() {
             const result = await settingsApi.testTeamsRecipient(testEmailAddress);
             setMessage({ type: result.success ? "success" : "error", text: result.message || result.error || "Unknown result" });
         } catch (error: any) {
-            const errorMsg = error.response?.data?.error;
-            const displayText = typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : (errorMsg || "Test Teams message failed");
-            setMessage({ type: "error", text: displayText });
+            setMessage({ type: "error", text: error.response?.data?.error || "Test Teams message failed" });
         } finally {
             setTestingService(null);
         }
     };
 
-
-
     const handleTestInflow = async () => {
-
         setTestingService("inflow");
         try {
             const result = await settingsApi.testInflow();
@@ -237,14 +226,13 @@ export default function Admin() {
                 )}
             </div>
 
-            {/* Message Display - Fixed at top */}
             {message && (
                 <div
-                    className={`p-3 rounded ${message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    className={`p-3 rounded flex items-center justify-between ${message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                         }`}
                 >
-                    {message.text}
-                    <button onClick={() => setMessage(null)} className="float-right font-bold">×</button>
+                    <span>{message.text}</span>
+                    <button onClick={() => setMessage(null)} className="font-bold">×</button>
                 </div>
             )}
 
@@ -275,163 +263,45 @@ export default function Admin() {
             {/* Notification Settings */}
             <div className="bg-white rounded-lg shadow p-6 space-y-4">
                 <h2 className="text-xl font-semibold">Notification Settings</h2>
-                <p className="text-sm text-gray-600">Enable or disable notification services. Changes take effect immediately.</p>
+                <p className="text-sm text-gray-600">Enable or disable notification services. Core configuration is managed via environment variables.</p>
 
-                <div className="space-y-6">
-                    {/* Toggles Group */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Email Notifications Toggle */}
-                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                            <div>
-                                <p className="font-medium text-gray-900">Email Notifications</p>
-                                <p className="text-sm text-gray-600">{getSetting(systemSettings, "email_notifications_enabled").description}</p>
-                            </div>
-                            <button
-                                onClick={() => handleToggleSetting("email_notifications_enabled", getSetting(systemSettings, "email_notifications_enabled").value)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
-                            >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
-                            </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Email Notifications Toggle */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Email Notifications</p>
+                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "email_notifications_enabled").description}</p>
                         </div>
-
-                        {/* SharePoint Upload Toggle */}
-                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                            <div>
-                                <p className="font-medium text-gray-900">SharePoint Storage</p>
-                                <p className="text-sm text-gray-600">{getSetting(systemSettings, "sharepoint_enabled").description}</p>
-                            </div>
-                            <button
-                                onClick={() => handleToggleSetting("sharepoint_enabled", getSetting(systemSettings, "sharepoint_enabled").value)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "sharepoint_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
-                            >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "sharepoint_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
-                            </button>
-                        </div>
-
-                        {/* Teams Recipient Notifications Toggle */}
-                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                            <div>
-                                <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
-                                <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
-                            </div>
-                            <button
-                                onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
-                            >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => handleToggleSetting("email_notifications_enabled", getSetting(systemSettings, "email_notifications_enabled").value)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
+                        </button>
                     </div>
 
-                    {/* Azure / Graph Configuration */}
-                    <div className="space-y-3">
-                        <h3 className="text-lg font-medium text-gray-800">Microsoft Entra (Azure) Configuration</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <ConfigField
-                                label="Tenant ID"
-                                settingKey="azure_tenant_id"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="Client ID"
-                                settingKey="azure_client_id"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="Client Secret"
-                                settingKey="azure_client_secret"
-                                settings={systemSettings}
-                                isSecret
-                                onSave={handleUpdateSetting}
-                            />
+                    {/* Teams Recipient Notifications Toggle */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
+                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
                         </div>
+                        <button
+                            onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
+                        </button>
                     </div>
-
-                    {/* SharePoint Configuration */}
-                    <div className="space-y-3">
-                        <h3 className="text-lg font-medium text-gray-800">SharePoint Configuration</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <ConfigField
-                                label="Site URL"
-                                settingKey="sharepoint_site_url"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="Base Folder Path"
-                                settingKey="sharepoint_folder_path"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="Teams Queue Folder"
-                                settingKey="teams_notification_queue_folder"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Inflow Configuration */}
-                    <div className="space-y-3">
-                        <h3 className="text-lg font-medium text-gray-800">Inflow Configuration</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <ConfigField
-                                label="Company ID"
-                                settingKey="inflow_company_id"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="API V2 Key"
-                                settingKey="inflow_api_key"
-                                settings={systemSettings}
-                                isSecret
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="Webhook Secret"
-                                settingKey="inflow_webhook_secret"
-                                settings={systemSettings}
-                                isSecret
-                                onSave={handleUpdateSetting}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Email Sender Configuration */}
-                    <div className="space-y-3">
-                        <h3 className="text-lg font-medium text-gray-800">Email Sender Identity</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <ConfigField
-                                label="Sender Name"
-                                settingKey="email_from_name"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                            <ConfigField
-                                label="Sender Address"
-                                settingKey="email_from_address"
-                                settings={systemSettings}
-                                onSave={handleUpdateSetting}
-                            />
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
             {/* Service Testing */}
             <div className="bg-white rounded-lg shadow p-6 space-y-4">
                 <h2 className="text-xl font-semibold">Service Testing</h2>
-                <p className="text-sm text-gray-600">Test individual services to verify configuration.</p>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Test Email */}
                     <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test Email</p>
+                        <p className="font-medium text-gray-900 text-sm">Test Email / Notifications</p>
                         <input
                             type="email"
                             placeholder="recipient@tamu.edu"
@@ -439,60 +309,42 @@ export default function Admin() {
                             onChange={(e) => setTestEmailAddress(e.target.value)}
                             className="w-full px-3 py-2 border rounded text-sm"
                         />
-                        <button
-                            onClick={handleTestEmail}
-                            disabled={testingService === "email"}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
-                        >
-                            {testingService === "email" ? "Sending..." : "Send Test Email"}
-                        </button>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={handleTestEmail}
+                                disabled={testingService !== null}
+                                className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-xs"
+                            >
+                                {testingService === "email" ? "Sending..." : "Test Email"}
+                            </button>
+                            <button
+                                onClick={handleTestTeamsRecipient}
+                                disabled={testingService !== null}
+                                className="px-3 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:bg-gray-400 text-xs"
+                            >
+                                {testingService === "teams" ? "Queueing..." : "Test Teams"}
+                            </button>
+                        </div>
                     </div>
 
-
-                    {/* Test Teams Recipient */}
                     <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test Delivery Notification</p>
-                        <input
-                            type="email"
-                            placeholder="recipient@tamu.edu"
-                            value={testEmailAddress}
-                            onChange={(e) => setTestEmailAddress(e.target.value)}
-                            className="w-full px-3 py-2 border rounded text-sm"
-                        />
-                        <button
-                            onClick={handleTestTeamsRecipient}
-                            disabled={testingService === "teams"}
-                            className="w-full px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:bg-gray-400 text-sm"
-                        >
-                            {testingService === "teams" ? "Queueing..." : "Queue Notification"}
-                        </button>
-                    </div>
-
-
-                    {/* Test Inflow */}
-                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test Inflow API</p>
-                        <p className="text-xs text-gray-500">Tests connection to Inflow inventory system.</p>
-                        <button
-                            onClick={handleTestInflow}
-                            disabled={testingService === "inflow"}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
-                        >
-                            {testingService === "inflow" ? "Testing..." : "Test Connection"}
-                        </button>
-                    </div>
-
-                    {/* Test SharePoint */}
-                    <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
-                        <p className="font-medium text-gray-900">Test SharePoint</p>
-                        <p className="text-xs text-gray-500">Tests connection to SharePoint document storage.</p>
-                        <button
-                            onClick={handleTestSharePoint}
-                            disabled={testingService === "sharepoint"}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
-                        >
-                            {testingService === "sharepoint" ? "Testing..." : "Test Connection"}
-                        </button>
+                        <p className="font-medium text-gray-900 text-sm">System Connections</p>
+                        <div className="grid grid-cols-2 gap-2 mt-auto">
+                            <button
+                                onClick={handleTestInflow}
+                                disabled={testingService !== null}
+                                className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-400 text-xs"
+                            >
+                                {testingService === "inflow" ? "Testing..." : "Test Inflow"}
+                            </button>
+                            <button
+                                onClick={handleTestSharePoint}
+                                disabled={testingService !== null}
+                                className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-400 text-xs"
+                            >
+                                {testingService === "sharepoint" ? "Testing..." : "Test SharePoint"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -500,23 +352,12 @@ export default function Admin() {
             {/* Inflow Webhook Section */}
             <div className="bg-white rounded-lg shadow p-6 space-y-4">
                 <h2 className="text-xl font-semibold">Inflow Webhook</h2>
-
                 {activeWebhook ? (
                     <div className="bg-green-50 border border-green-200 rounded p-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="font-medium text-green-800">✓ Webhook Active</p>
-                                <p className="text-sm text-green-600 mt-1">
-                                    {activeWebhook.url}
-                                </p>
-                                <p className="text-sm text-green-600">
-                                    Events: {activeWebhook.events.join(", ")}
-                                </p>
-                                {activeWebhook.last_received_at && (
-                                    <p className="text-sm text-green-600">
-                                        Last event: {new Date(activeWebhook.last_received_at).toLocaleString()}
-                                    </p>
-                                )}
+                                <p className="text-xs text-green-600 mt-1">{activeWebhook.url}</p>
                             </div>
                             <button
                                 onClick={() => handleDeleteInflowWebhook(activeWebhook.webhook_id)}
@@ -527,93 +368,40 @@ export default function Admin() {
                         </div>
                     </div>
                 ) : (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
-                        <div className="flex items-center justify-between">
-                            <p className="text-yellow-800">No active webhook registered</p>
-                            <button
-                                onClick={handleAutoRegisterWebhook}
-                                disabled={registeringWebhook}
-                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
-                            >
-                                {registeringWebhook ? "Registering..." : "Register Webhook"}
-                            </button>
-                        </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-4 flex items-center justify-between">
+                        <p className="text-yellow-800 text-sm">No active webhook registered</p>
+                        <button
+                            onClick={handleAutoRegisterWebhook}
+                            disabled={registeringWebhook}
+                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 text-sm"
+                        >
+                            {registeringWebhook ? "Registering..." : "Register Webhook"}
+                        </button>
                     </div>
                 )}
             </div>
 
-            {/* Manual Actions */}
-            <div className="bg-white rounded-lg shadow p-6 space-y-4">
-                <h2 className="text-xl font-semibold">Manual Actions</h2>
-                <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                    <div>
-                        <p className="font-medium text-gray-900">Sync Orders</p>
-                        <p className="text-sm text-gray-600">
-                            Manually fetch recent "Started" orders from Inflow and update the database.
-                        </p>
-                    </div>
-                    <button
-                        onClick={async () => {
-                            if (confirm("This will fetch recent orders from Inflow. Continue?")) {
-                                try {
-                                    setMessage({ type: "success", text: "Syncing started..." });
-                                    const res = await apiClient.post("/system/sync");
-                                    setMessage({
-                                        type: "success",
-                                        text: res.data.message || "Sync completed successfully"
-                                    });
-                                } catch (error: any) {
-                                    console.error("Sync failed:", error);
-                                    setMessage({
-                                        type: "error",
-                                        text: error.response?.data?.message || "Sync failed"
-                                    });
-                                }
-                            }
-                        }}
-                        className="px-4 py-2 bg-[#800000] text-white rounded hover:bg-[#660000]"
-                    >
-                        Sync Orders
-                    </button>
+            {/* Manual Sync */}
+            <div className="bg-white rounded-lg shadow p-6 flex items-center justify-between">
+                <div>
+                    <h2 className="text-xl font-semibold">Manual Order Sync</h2>
+                    <p className="text-sm text-gray-600">Manually fetch recent "Started" orders from Inflow.</p>
                 </div>
-            </div>
-        </div>
-    );
-}
-
-interface ConfigFieldProps {
-    label: string;
-    settingKey: string;
-    settings: SystemSettings | null;
-    onSave: (key: string, value: string) => void;
-    isSecret?: boolean;
-}
-
-function ConfigField({ label, settingKey, settings, onSave, isSecret }: ConfigFieldProps) {
-    const setting = settings?.[settingKey as keyof SystemSettings] || DEFAULT_SETTING;
-    const [tempValue, setTempValue] = useState(setting.value);
-
-    // Update temp value when settings change
-    useEffect(() => {
-        setTempValue(setting.value);
-    }, [setting.value]);
-
-    return (
-        <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</label>
-            <div className="flex gap-2">
-                <input
-                    type={isSecret ? "password" : "text"}
-                    value={tempValue}
-                    onChange={(e) => setTempValue(e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded-md text-sm shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder={setting.description || `Enter ${label}`}
-                />
                 <button
-                    onClick={() => onSave(settingKey, tempValue)}
-                    className="px-3 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 text-sm font-medium transition-colors"
+                    onClick={async () => {
+                        if (confirm("This will fetch recent orders from Inflow. Continue?")) {
+                            try {
+                                setMessage({ type: "success", text: "Syncing started..." });
+                                const res = await apiClient.post("/system/sync");
+                                setMessage({ type: "success", text: res.data.message || "Sync completed" });
+                            } catch (error: any) {
+                                setMessage({ type: "error", text: "Sync failed" });
+                            }
+                        }
+                    }}
+                    className="px-6 py-2 bg-[#800000] text-white rounded hover:bg-[#660000] font-medium"
                 >
-                    Save
+                    Sync Now
                 </button>
             </div>
         </div>
