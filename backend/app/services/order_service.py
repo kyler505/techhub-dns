@@ -32,18 +32,11 @@ class OrderService:
 
 
     def _prep_steps_complete(self, order: Order) -> bool:
-        return bool(order.tagged_at and order.picklist_generated_at and order.qa_completed_at)
-
-    def _get_incomplete_steps(self, order: Order) -> List[str]:
-        """Get list of incomplete preparation steps for an order"""
-        incomplete = []
-        if not order.tagged_at:
-            incomplete.append("asset_tagging")
-        if not order.picklist_generated_at:
-            incomplete.append("picklist_generation")
-        if not order.qa_completed_at:
-            incomplete.append("qa_checklist")
-        return incomplete
+        complete = bool(order.tagged_at and order.picklist_generated_at and order.qa_completed_at)
+        if not complete:
+            steps = self._get_incomplete_steps(order)
+            logger.info(f"Order {order.inflow_order_id} prep steps incomplete: {steps}")
+        return complete
 
     def _is_shipping_order(self, order: Order) -> bool:
         """Determine if an order is a shipping order (not local delivery)"""
@@ -284,15 +277,13 @@ class OrderService:
         except Exception as e:
             logger.warning(f"SharePoint upload failed for QA data, using local path: {e}")
 
+        # Update order object (BUT DO NOT COMMIT YET to keep transition atomic)
         order.qa_completed_at = datetime.utcnow()
         order.qa_completed_by = technician
         order.qa_data = qa_data
         order.qa_path = qa_path
         order.qa_method = qa_data.get("method")  # "Delivery" or "Shipping"
         order.updated_at = datetime.utcnow()
-
-        self.db.commit()
-        self.db.refresh(order)
 
         # Audit logging for QA completion
         audit_service = AuditService(self.db)
@@ -322,16 +313,27 @@ class OrderService:
             target_status = OrderStatus.SHIPPING
 
         if target_status:
-            # We already committed the QA data, but transition_status will commit again
-            # We use transition_status to ensure valid transitions and audit logging
-            # Note: transition_status refetches the order, so we return its result
-            return self.transition_status(
-                order_id=order.id,
-                new_status=target_status,
-                changed_by=technician,
-                reason=f"QA passed via {method} method"
-            )
+            logger.info(f"Triggering auto-transition for order {order.inflow_order_id} to {target_status.value}")
+            try:
+                # We use transition_status to ensure valid transitions and audit logging.
+                # It will handle the final commit.
+                return self.transition_status(
+                    order_id=order.id,
+                    new_status=target_status,
+                    changed_by=technician,
+                    reason=f"QA passed via {method} method"
+                )
+            except Exception as e:
+                logger.error(f"Auto-transition failed for order {order.inflow_order_id}: {e}")
+                # We do NOT commit the QA data if transition fails to maintain atomicity
+                # provided this whole method is wrapped in a transaction (which it is by default in Flask context).
+                # But to be explicit and safe:
+                self.db.rollback()
+                raise
 
+        # If no auto-transition (e.g. invalid method), commit QA data now
+        self.db.commit()
+        self.db.refresh(order)
         return order
 
     def get_orders(
@@ -398,11 +400,15 @@ class OrderService:
         if not self._is_valid_transition(old_status, new_status.value):
             raise StatusTransitionError(old_status, new_status.value)
 
-        if new_status == OrderStatus.PRE_DELIVERY and not self._prep_steps_complete(order):
-            raise ValidationError(
-                "Asset tagging, picklist, and QA must be completed before Pre-Delivery",
-                details={"missing_steps": self._get_incomplete_steps(order)}
-            )
+        if new_status == OrderStatus.PRE_DELIVERY:
+            # Log exact state for debugging
+            logger.info(f"Checking PRE_DELIVERY requirements for {order.inflow_order_id}: tagged={bool(order.tagged_at)}, picklist={bool(order.picklist_generated_at)}, qa={bool(order.qa_completed_at)}")
+
+            if not self._prep_steps_complete(order):
+                raise ValidationError(
+                    "Asset tagging, picklist, and QA must be completed before Pre-Delivery",
+                    details={"missing_steps": self._get_incomplete_steps(order), "order_id": order.inflow_order_id}
+                )
 
         if new_status in (OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING):
             if not qa_method:
