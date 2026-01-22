@@ -105,5 +105,37 @@ class TeamsRecipientService:
             logger.error(f"Error queuing Teams notification for {order_number}: {e}")
             return False
 
+    def notify_orders_in_delivery(self, orders: List, force: bool = False):
+        """
+        Trigger Teams notifications for a list of orders in the background.
+        Calculates item names and recipient info for each order.
+        """
+        if not self.is_configured() and not force:
+            return
+
+        from app.services.background_tasks import run_in_background
+
+        def _notify_task():
+            for order in orders:
+                try:
+                    # Get item names from inflow_data or use generic fallback
+                    item_names = []
+                    if order.inflow_data and "lines" in order.inflow_data:
+                        item_names = [line.get("productName", "Item") for line in order.inflow_data.get("lines", [])]
+
+                    self.send_delivery_notification(
+                        recipient_email=order.recipient_contact,
+                        recipient_name=order.recipient_name,
+                        order_number=order.inflow_order_id,
+                        delivery_runner=order.assigned_deliverer or "TechHub Staff",
+                        estimated_time="Shortly",
+                        order_items=item_names,
+                        force=force
+                    )
+                except Exception as ex:
+                    logger.error(f"Failed to trigger Teams notification for {getattr(order, 'inflow_order_id', 'unknown')}: {ex}")
+
+        run_in_background(_notify_task, task_name="batch_teams_notifications")
+
 
 teams_recipient_service = TeamsRecipientService()
