@@ -20,9 +20,15 @@ class EmailService:
     """Service for sending emails via Microsoft Graph API."""
 
     def __init__(self):
+        # self.enabled removed, we check dynamically now
         self.from_name = settings.email_from_name
         self.from_address = settings.smtp_from_address  # Reusing this config for "from" address
-        self.enabled = settings.smtp_enabled  # Reusing this as email enabled toggle
+
+    @property
+    def is_enabled(self) -> bool:
+        """Check if email sending is enabled in system settings."""
+        from app.services.system_setting_service import SystemSettingService, SETTING_EMAIL_ENABLED
+        return SystemSettingService.is_setting_enabled(SETTING_EMAIL_ENABLED)
 
     def is_configured(self) -> bool:
         """Check if email is properly configured (Graph API must be configured)."""
@@ -58,8 +64,8 @@ class EmailService:
         Returns:
             True if email sent successfully, False otherwise
         """
-        if not force and not self.enabled:
-            logger.info("Email sending is disabled (SMTP_ENABLED=false)")
+        if not force and not self.is_enabled:
+            logger.info("Email sending is disabled in System Settings")
             return False
 
         if not self.is_configured():

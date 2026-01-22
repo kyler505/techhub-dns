@@ -19,70 +19,21 @@ bp = Blueprint("system", __name__, url_prefix="/api/system")
 
 logger = logging.getLogger(__name__)
 
-SETTING_EMAIL_ENABLED = "email_notifications_enabled"
-SETTING_TEAMS_RECIPIENT_ENABLED = "teams_recipient_notifications_enabled"
-
-
-DEFAULT_SETTINGS = {
-    SETTING_EMAIL_ENABLED: {"value": "true", "description": "Enable sending email notifications (Order Details PDFs)"},
-    SETTING_TEAMS_RECIPIENT_ENABLED: {"value": "false", "description": "Enable sending delivery notifications to recipients via Teams"},
-}
-
-
-
-
-def get_setting(db, key: str) -> str:
-    """Get a setting value from DB, or default if not set."""
-    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-    if setting:
-        return setting.value
-    return DEFAULT_SETTINGS.get(key, {}).get("value", "false")
-
-
-def set_setting(db, key: str, value: str, updated_by: str = None) -> SystemSetting:
-    """Set a setting value in the DB."""
-    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-    if not setting:
-        setting = SystemSetting(
-            key=key,
-            value=value,
-            description=DEFAULT_SETTINGS.get(key, {}).get("description"),
-            updated_by=updated_by
-        )
-        db.add(setting)
-    else:
-        setting.value = value
-        setting.updated_by = updated_by
-    db.commit()
-    db.refresh(setting)
-    return setting
-
-
-def is_setting_enabled(db, key: str) -> bool:
-    """Check if a boolean setting is enabled."""
-    value = get_setting(db, key)
-    return value.lower() in ("true", "1", "yes", "on")
-
+from app.services.system_setting_service import (
+    SystemSettingService,
+    DEFAULT_SETTINGS,
+    SETTING_EMAIL_ENABLED,
+    SETTING_TEAMS_RECIPIENT_ENABLED
+)
 
 # ============ Settings Endpoints ============
 
 @bp.route("/settings", methods=["GET"])
 def get_system_settings():
     """Get all system settings."""
-    db = get_db_session()
-    try:
-        result = {}
-        for key, defaults in DEFAULT_SETTINGS.items():
-            setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-            result[key] = {
-                "value": setting.value if setting else defaults["value"],
-                "description": defaults["description"],
-                "updated_at": setting.updated_at.isoformat() if setting and setting.updated_at else None,
-                "updated_by": setting.updated_by if setting else None,
-            }
-        return jsonify(result)
-    finally:
-        db.close()
+    # SystemSettingService handles its own DB session if not provided
+    result = SystemSettingService.get_all_settings()
+    return jsonify(result)
 
 
 @bp.route("/settings/<key>", methods=["PUT"])
@@ -95,18 +46,17 @@ def update_system_setting(key: str):
     if not data or "value" not in data:
         return jsonify({"error": "Missing 'value' in request body"}), 400
 
-    db = get_db_session()
-    try:
-        updated_by = data.get("updated_by", "admin")
-        setting = set_setting(db, key, str(data["value"]), updated_by)
-        return jsonify({
-            "key": setting.key,
-            "value": setting.value,
-            "updated_at": setting.updated_at.isoformat() if setting.updated_at else None,
-            "updated_by": setting.updated_by,
-        })
-    finally:
-        db.close()
+    updated_by = data.get("updated_by", "admin")
+
+    # SystemSettingService handles its own DB session
+    setting = SystemSettingService.set_setting(key, str(data["value"]), updated_by)
+
+    return jsonify({
+        "key": setting.key,
+        "value": setting.value,
+        "updated_at": setting.updated_at.isoformat() if setting.updated_at else None,
+        "updated_by": setting.updated_by,
+    })
 
 
 # ============ Testing Endpoints ============
