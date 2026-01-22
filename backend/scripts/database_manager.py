@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.database import SessionLocal
 from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
-from app.models.teams_notification import TeamsNotification
+
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.utils.building_mapper import extract_building_code_from_location, get_building_code_from_address
 
@@ -146,7 +146,7 @@ def delete_order(order_id: UUID, confirm: bool = True, cascade: bool = True) -> 
 
         # Delete related data if cascade is enabled
         if cascade:
-            db.query(TeamsNotification).filter(TeamsNotification.order_id == order_id_str).delete()
+            db.query(AuditLog).filter(AuditLog.order_id == order_id_str).delete()
             db.query(AuditLog).filter(AuditLog.order_id == order_id_str).delete()
 
         # Delete the order
@@ -171,7 +171,6 @@ def clear_all_orders(confirm: bool = True) -> bool:
     try:
         if confirm:
             # Get counts
-            notifications_count = db.query(TeamsNotification).count()
             audit_logs_count = db.query(AuditLog).count()
             orders_count = db.query(Order).count()
             delivery_runs_count = db.query(DeliveryRun).count()
@@ -180,7 +179,6 @@ def clear_all_orders(confirm: bool = True) -> bool:
             print("DATABASE CLEAR OPERATION")
             print("="*60)
             print(f"Orders to delete: {orders_count}")
-            print(f"Teams notifications: {notifications_count}")
             print(f"Audit logs: {audit_logs_count}")
             print(f"Delivery runs: {delivery_runs_count}")
             print("="*60)
@@ -193,7 +191,6 @@ def clear_all_orders(confirm: bool = True) -> bool:
         print("Clearing all data...")
 
         # Delete in order (respecting foreign key constraints)
-        notifications_deleted = db.query(TeamsNotification).delete()
         audit_logs_deleted = db.query(AuditLog).delete()
         orders_deleted = db.query(Order).delete()
         delivery_runs_deleted = db.query(DeliveryRun).delete()
@@ -202,7 +199,7 @@ def clear_all_orders(confirm: bool = True) -> bool:
 
         print(f"\n✓ Deleted {orders_deleted} orders")
         print(f"✓ Deleted {audit_logs_deleted} audit logs")
-        print(f"✓ Deleted {notifications_deleted} Teams notifications")
+
         print(f"✓ Deleted {delivery_runs_deleted} delivery runs")
         print("\nAll data cleared successfully!")
 
@@ -534,7 +531,6 @@ def get_database_stats() -> Dict[str, Any]:
         # Other entity counts
         stats['delivery_runs'] = db.query(DeliveryRun).count()
         stats['audit_logs'] = db.query(AuditLog).count()
-        stats['teams_notifications'] = db.query(TeamsNotification).count()
 
         # Recent activity
         recent_orders = db.query(Order).order_by(Order.created_at.desc()).limit(5).all()
