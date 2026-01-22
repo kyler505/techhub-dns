@@ -11,41 +11,28 @@ logger = logging.getLogger(__name__)
 
 class InflowService:
     def __init__(self):
+        self.base_url = settings.inflow_api_url
+        self.company_id = settings.inflow_company_id
         self._api_key: Optional[str] = None
         self._headers: Optional[Dict[str, str]] = None
 
     @property
-    def base_url(self) -> str:
-        """Get base URL from system settings."""
-        from app.services.system_setting_service import SystemSettingService, SETTING_INFLOW_API_URL
-        return SystemSettingService.get_value(SETTING_INFLOW_API_URL) or "https://api.inflowinventory.com"
-
-    @property
-    def company_id(self) -> str:
-        """Get company ID from system settings."""
-        from app.services.system_setting_service import SystemSettingService, SETTING_INFLOW_COMPANY_ID
-        return SystemSettingService.get_value(SETTING_INFLOW_COMPANY_ID)
-
-    @property
     def api_key(self) -> str:
-        """Lazy API key retrieval - pulls from system settings first."""
+        """Lazy API key retrieval - prevents crash on startup if Service Principal not ready."""
         if self._api_key is None:
-            from app.services.system_setting_service import SystemSettingService, SETTING_INFLOW_API_KEY
-            self._api_key = SystemSettingService.get_value(SETTING_INFLOW_API_KEY)
-
-            # Fallback to the old logic if setting is empty
-            if not self._api_key:
-                self._api_key = self._get_api_key()
+            self._api_key = self._get_api_key()
         return self._api_key
 
     @property
     def headers(self) -> Dict[str, str]:
-        """Header with latest API key."""
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json;version=2024-03-12"
-        }
+        """Lazy headers - depends on api_key property."""
+        if self._headers is None:
+            self._headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json;version=2024-03-12"
+            }
+        return self._headers
 
     def _is_fully_picked(self, order: Dict[str, Any]) -> bool:
         """
