@@ -87,10 +87,13 @@ class TeamsRecipientService:
             filename = f"notification_{order_number}_{int(datetime.now().timestamp())}.json"
 
             # Upload to queue folder
+            from app.services.system_setting_service import SystemSettingService, SETTING_TEAMS_NOTIFICATION_QUEUE_FOLDER
+            queue_folder = SystemSettingService.get_value(SETTING_TEAMS_NOTIFICATION_QUEUE_FOLDER) or "TeamsQueue"
+
             sharepoint_url = graph_service.upload_file_to_sharepoint(
                 file_content=file_content,
                 file_name=filename,
-                folder_path=settings.teams_notification_queue_folder,
+                folder_path=queue_folder,
                 initiated_by="system-delivery-process"
             )
 

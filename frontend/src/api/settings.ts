@@ -12,8 +12,30 @@ export interface SystemSettingValue {
 }
 
 export interface SystemSettings {
+    // Toggles
     email_notifications_enabled: SystemSettingValue;
     teams_recipient_notifications_enabled: SystemSettingValue;
+    sharepoint_enabled: SystemSettingValue;
+
+    // Azure
+    azure_tenant_id: SystemSettingValue;
+    azure_client_id: SystemSettingValue;
+    azure_client_secret: SystemSettingValue;
+
+    // Email
+    email_from_address: SystemSettingValue;
+    email_from_name: SystemSettingValue;
+
+    // SharePoint
+    sharepoint_site_url: SystemSettingValue;
+    sharepoint_folder_path: SystemSettingValue;
+    teams_notification_queue_folder: SystemSettingValue;
+
+    // Inflow
+    inflow_api_url: SystemSettingValue;
+    inflow_company_id: SystemSettingValue;
+    inflow_api_key: SystemSettingValue;
+    inflow_webhook_secret: SystemSettingValue;
 }
 
 
