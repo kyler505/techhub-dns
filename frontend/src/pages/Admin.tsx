@@ -88,10 +88,14 @@ export default function Admin() {
 
     const handleToggleSetting = async (key: string, currentValue: string) => {
         const newValue = currentValue === "true" ? "false" : "true";
+        await handleUpdateSetting(key, newValue);
+    };
+
+    const handleUpdateSetting = async (key: string, value: string) => {
         try {
-            await settingsApi.updateSetting(key, newValue, user?.email || "admin");
+            await settingsApi.updateSetting(key, value, user?.email || "admin");
             await loadSystemSettings();
-            setMessage({ type: "success", text: `Setting updated: ${key} = ${newValue}` });
+            setMessage({ type: "success", text: `Setting updated: ${key}` });
         } catch (error: any) {
             console.error("Failed to update setting:", error);
             setMessage({ type: "error", text: error.response?.data?.error || "Failed to update setting" });
@@ -273,41 +277,147 @@ export default function Admin() {
                 <h2 className="text-xl font-semibold">Notification Settings</h2>
                 <p className="text-sm text-gray-600">Enable or disable notification services. Changes take effect immediately.</p>
 
-                <div className="space-y-3">
-                    {/* Email Notifications */}
-                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                        <div>
-                            <p className="font-medium text-gray-900">Email Notifications</p>
-                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "email_notifications_enabled").description}</p>
+                <div className="space-y-6">
+                    {/* Toggles Group */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Email Notifications Toggle */}
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                            <div>
+                                <p className="font-medium text-gray-900">Email Notifications</p>
+                                <p className="text-sm text-gray-600">{getSetting(systemSettings, "email_notifications_enabled").description}</p>
+                            </div>
+                            <button
+                                onClick={() => handleToggleSetting("email_notifications_enabled", getSetting(systemSettings, "email_notifications_enabled").value)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
                         </div>
-                        <button
-                            onClick={() => handleToggleSetting("email_notifications_enabled", getSetting(systemSettings, "email_notifications_enabled").value)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
-                                }`}
-                        >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "email_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
-                                    }`}
-                            />
-                        </button>
+
+                        {/* SharePoint Upload Toggle */}
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                            <div>
+                                <p className="font-medium text-gray-900">SharePoint Storage</p>
+                                <p className="text-sm text-gray-600">{getSetting(systemSettings, "sharepoint_enabled").description}</p>
+                            </div>
+                            <button
+                                onClick={() => handleToggleSetting("sharepoint_enabled", getSetting(systemSettings, "sharepoint_enabled").value)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "sharepoint_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "sharepoint_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
+                        </div>
+
+                        {/* Teams Recipient Notifications Toggle */}
+                        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                            <div>
+                                <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
+                                <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
+                            </div>
+                            <button
+                                onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Teams Recipient Notifications */}
-                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
-                        <div>
-                            <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
-                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
-                        </div>
-                        <button
-                            onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
-                                }`}
-                        >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
-                                    }`}
+                    {/* Azure / Graph Configuration */}
+                    <div className="space-y-3">
+                        <h3 className="text-lg font-medium text-gray-800">Microsoft Entra (Azure) Configuration</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <ConfigField
+                                label="Tenant ID"
+                                settingKey="azure_tenant_id"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
                             />
-                        </button>
+                            <ConfigField
+                                label="Client ID"
+                                settingKey="azure_client_id"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                            <ConfigField
+                                label="Client Secret"
+                                settingKey="azure_client_secret"
+                                settings={systemSettings}
+                                isSecret
+                                onSave={handleUpdateSetting}
+                            />
+                        </div>
+                    </div>
+
+                    {/* SharePoint Configuration */}
+                    <div className="space-y-3">
+                        <h3 className="text-lg font-medium text-gray-800">SharePoint Configuration</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <ConfigField
+                                label="Site URL"
+                                settingKey="sharepoint_site_url"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                            <ConfigField
+                                label="Base Folder Path"
+                                settingKey="sharepoint_folder_path"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                            <ConfigField
+                                label="Teams Queue Folder"
+                                settingKey="teams_notification_queue_folder"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Inflow Configuration */}
+                    <div className="space-y-3">
+                        <h3 className="text-lg font-medium text-gray-800">Inflow Configuration</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <ConfigField
+                                label="Company ID"
+                                settingKey="inflow_company_id"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                            <ConfigField
+                                label="API V2 Key"
+                                settingKey="inflow_api_key"
+                                settings={systemSettings}
+                                isSecret
+                                onSave={handleUpdateSetting}
+                            />
+                            <ConfigField
+                                label="Webhook Secret"
+                                settingKey="inflow_webhook_secret"
+                                settings={systemSettings}
+                                isSecret
+                                onSave={handleUpdateSetting}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Email Sender Configuration */}
+                    <div className="space-y-3">
+                        <h3 className="text-lg font-medium text-gray-800">Email Sender Identity</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <ConfigField
+                                label="Sender Name"
+                                settingKey="email_from_name"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                            <ConfigField
+                                label="Sender Address"
+                                settingKey="email_from_address"
+                                settings={systemSettings}
+                                onSave={handleUpdateSetting}
+                            />
+                        </div>
                     </div>
 
                 </div>
@@ -467,6 +577,45 @@ export default function Admin() {
                     </button>
                 </div>
             </div>
-        </div >
+        </div>
+    );
+}
+
+interface ConfigFieldProps {
+    label: string;
+    settingKey: string;
+    settings: SystemSettings | null;
+    onSave: (key: string, value: string) => void;
+    isSecret?: boolean;
+}
+
+function ConfigField({ label, settingKey, settings, onSave, isSecret }: ConfigFieldProps) {
+    const setting = settings?.[settingKey as keyof SystemSettings] || DEFAULT_SETTING;
+    const [tempValue, setTempValue] = useState(setting.value);
+
+    // Update temp value when settings change
+    useEffect(() => {
+        setTempValue(setting.value);
+    }, [setting.value]);
+
+    return (
+        <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</label>
+            <div className="flex gap-2">
+                <input
+                    type={isSecret ? "password" : "text"}
+                    value={tempValue}
+                    onChange={(e) => setTempValue(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded-md text-sm shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={setting.description || `Enter ${label}`}
+                />
+                <button
+                    onClick={() => onSave(settingKey, tempValue)}
+                    className="px-3 py-1 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 text-sm font-medium transition-colors"
+                >
+                    Save
+                </button>
+            </div>
+        </div>
     );
 }
