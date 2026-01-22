@@ -157,25 +157,8 @@ def update_order_status(order_id):
 
         # Send notifications based on new status
         if status_update.status == OrderStatus.IN_DELIVERY:
-            # 1. Send Teams notification to recipient (if enabled)
-            try:
-                from app.services.teams_recipient_service import teams_recipient_service
-
-                # Get item names from inflow_data or use generic fallback
-                item_names = []
-                if order.inflow_data and "lines" in order.inflow_data:
-                    item_names = [line.get("productName", "Item") for line in order.inflow_data.get("lines", [])]
-
-                teams_recipient_service.send_delivery_notification(
-                    recipient_email=order.recipient_contact,
-                    recipient_name=order.recipient_name,
-                    order_number=order.inflow_order_id,
-                    delivery_runner=order.assigned_deliverer or "TechHub Staff",
-                    estimated_time="Shortly",
-                    order_items=item_names
-                )
-            except Exception as e:
-                logger.error(f"Failed to trigger Teams recipient notification: {e}")
+            from app.services.teams_recipient_service import teams_recipient_service
+            teams_recipient_service.notify_orders_in_delivery([order])
 
 
         # Broadcast order update via SocketIO
@@ -199,6 +182,11 @@ def bulk_transition_status():
             changed_by=changed_by,
             reason=bulk_update.reason
         )
+
+        # Trigger Teams notifications for bulk transitions to In Delivery
+        if bulk_update.status == OrderStatus.IN_DELIVERY:
+            from app.services.teams_recipient_service import teams_recipient_service
+            teams_recipient_service.notify_orders_in_delivery(orders)
 
         # Broadcast order updates via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()

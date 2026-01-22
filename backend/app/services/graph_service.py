@@ -136,6 +136,7 @@ class GraphService:
         body_html: str,
         body_text: str = None,
         from_address: str = None,
+        from_name: str = None,
         attachment_name: str = None,
         attachment_content: bytes = None,
         initiated_by: str = "system"
@@ -149,6 +150,7 @@ class GraphService:
             body_html: HTML body content
             body_text: Optional plain text (not used by Graph, but accepted for compatibility)
             from_address: Sender email (must be authorized in Azure)
+            from_name: Optional display name for the sender
             attachment_name: Optional attachment filename
             attachment_content: Optional attachment as bytes
             initiated_by: User who triggered this action (for audit)
@@ -174,6 +176,15 @@ class GraphService:
             },
             "saveToSentItems": True
         }
+
+        # Add sender name if provided
+        if from_name:
+            message["message"]["from"] = {
+                "emailAddress": {
+                    "name": from_name,
+                    "address": from_address
+                }
+            }
 
         # Add attachment if provided
         if attachment_name and attachment_content:

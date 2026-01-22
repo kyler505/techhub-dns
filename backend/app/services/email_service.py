@@ -77,6 +77,7 @@ class EmailService:
             body_html=body_html,
             body_text=body_text,
             from_address=self.from_address,
+            from_name=self.from_name,
             attachment_name=attachment_name,
             attachment_content=attachment_content,
             initiated_by="email_service"

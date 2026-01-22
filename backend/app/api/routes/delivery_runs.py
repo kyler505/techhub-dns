@@ -58,6 +58,15 @@ def create_run():
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()
 
+            # Trigger Teams notifications for orders in delivery
+            try:
+                from app.services.teams_recipient_service import teams_recipient_service
+                teams_recipient_service.notify_orders_in_delivery(run.orders)
+            except Exception as e:
+                # Log but don't fail the request
+                from app.api.routes.orders import logger as order_logger
+                order_logger.error(f"Failed to trigger Teams notifications for delivery run: {e}")
+
             response = DeliveryRunResponse(
                 id=run.id,
                 name=run.name,
