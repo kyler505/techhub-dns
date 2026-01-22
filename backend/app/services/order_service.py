@@ -314,6 +314,8 @@ class OrderService:
         target_status = None
         method = qa_data.get("method")
 
+        logger.info(f"Checking for auto-transition. Method: '{method}'")
+
         if method == "Delivery":
             target_status = OrderStatus.PRE_DELIVERY
         elif method == "Shipping":
