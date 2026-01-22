@@ -292,6 +292,24 @@ export default function Admin() {
                         </button>
                     </div>
 
+                    {/* Teams Recipient Notifications */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded p-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Teams Recipient Notifications</p>
+                            <p className="text-sm text-gray-600">{getSetting(systemSettings, "teams_recipient_notifications_enabled").description}</p>
+                        </div>
+                        <button
+                            onClick={() => handleToggleSetting("teams_recipient_notifications_enabled", getSetting(systemSettings, "teams_recipient_notifications_enabled").value)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "bg-green-500" : "bg-gray-300"
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${getSetting(systemSettings, "teams_recipient_notifications_enabled").value === "true" ? "translate-x-6" : "translate-x-1"
+                                    }`}
+                            />
+                        </button>
+                    </div>
+
                 </div>
             </div>
 
