@@ -23,23 +23,27 @@ class SystemSettingService:
         return DEFAULT_SETTINGS.get(key, {}).get("value", "false")
 
     @staticmethod
-    def set_setting(db: Session, key: str, value: str, updated_by: str = None) -> SystemSetting:
+    def set_setting(key: str, value: str, updated_by: str = None) -> SystemSetting:
         """Set a setting value in the DB."""
-        setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-        if not setting:
-            setting = SystemSetting(
-                key=key,
-                value=value,
-                description=DEFAULT_SETTINGS.get(key, {}).get("description"),
-                updated_by=updated_by
-            )
-            db.add(setting)
-        else:
-            setting.value = value
-            setting.updated_by = updated_by
-        db.commit()
-        db.refresh(setting)
-        return setting
+        db = get_db_session()
+        try:
+            setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+            if not setting:
+                setting = SystemSetting(
+                    key=key,
+                    value=value,
+                    description=DEFAULT_SETTINGS.get(key, {}).get("description"),
+                    updated_by=updated_by
+                )
+                db.add(setting)
+            else:
+                setting.value = value
+                setting.updated_by = updated_by
+            db.commit()
+            db.refresh(setting)
+            return setting
+        finally:
+            db.close()
 
     @staticmethod
     def is_setting_enabled(key: str) -> bool:
