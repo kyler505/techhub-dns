@@ -29,28 +29,17 @@ class SharePointService:
 
     @property
     def is_enabled(self) -> bool:
-        """Check if SharePoint storage is enabled and configured."""
-        from app.services.system_setting_service import SystemSettingService, SETTING_SHAREPOINT_ENABLED
-        return SystemSettingService.is_setting_enabled(SETTING_SHAREPOINT_ENABLED)
+        """SharePoint storage is always enabled."""
+        return True
 
     def _get_msal_app(self) -> msal.ConfidentialClientApplication:
         """Get or create MSAL confidential client application."""
-        from app.services.system_setting_service import (
-            SystemSettingService,
-            SETTING_AZURE_TENANT_ID,
-            SETTING_AZURE_CLIENT_ID,
-            SETTING_AZURE_CLIENT_SECRET
-        )
         if self._msal_app is None:
-            tenant_id = SystemSettingService.get_value(SETTING_AZURE_TENANT_ID)
-            client_id = SystemSettingService.get_value(SETTING_AZURE_CLIENT_ID)
-            client_secret = SystemSettingService.get_value(SETTING_AZURE_CLIENT_SECRET)
-
-            authority = f"https://login.microsoftonline.com/{tenant_id}"
+            authority = f"https://login.microsoftonline.com/{settings.azure_tenant_id}"
             self._msal_app = msal.ConfidentialClientApplication(
-                client_id,
+                settings.azure_client_id,
                 authority=authority,
-                client_credential=client_secret,
+                client_credential=settings.azure_client_secret,
             )
         return self._msal_app
 
@@ -85,10 +74,9 @@ class SharePointService:
         if self._site_id:
             return self._site_id
 
-        from app.services.system_setting_service import SystemSettingService, SETTING_SHAREPOINT_SITE_URL
-        site_url = SystemSettingService.get_value(SETTING_SHAREPOINT_SITE_URL).rstrip("/")
+        site_url = settings.sharepoint_site_url.rstrip("/")
         if not site_url:
-            raise ValueError("SharePoint Site URL not configured in System Settings.")
+            raise ValueError("SharePoint Site URL not configured in .env")
 
         # Parse site URL: https://tamucs.sharepoint.com/teams/Team-TechHub
         parsed = urlparse(site_url)
@@ -123,8 +111,7 @@ class SharePointService:
 
     def _get_folder_path(self, subfolder: str) -> str:
         """Build the full folder path within the document library."""
-        from app.services.system_setting_service import SystemSettingService, SETTING_SHAREPOINT_FOLDER_PATH
-        base_path = SystemSettingService.get_value(SETTING_SHAREPOINT_FOLDER_PATH).strip("/")
+        base_path = settings.sharepoint_folder_path.strip("/")
         subfolder = subfolder.strip("/")
         return f"{base_path}/{subfolder}" if subfolder else base_path
 

@@ -36,39 +36,20 @@ class GraphService:
 
     def is_configured(self) -> bool:
         """Check if Graph API is properly configured."""
-        from app.services.system_setting_service import (
-            SystemSettingService,
-            SETTING_AZURE_TENANT_ID,
-            SETTING_AZURE_CLIENT_ID,
-            SETTING_AZURE_CLIENT_SECRET
-        )
         return bool(
-            SystemSettingService.get_value(SETTING_AZURE_TENANT_ID) and
-            SystemSettingService.get_value(SETTING_AZURE_CLIENT_ID) and
-            SystemSettingService.get_value(SETTING_AZURE_CLIENT_SECRET)
+            settings.azure_tenant_id and
+            settings.azure_client_id and
+            settings.azure_client_secret
         )
 
     def _get_msal_app(self) -> msal.ConfidentialClientApplication:
         """Get or create MSAL confidential client application."""
-        from app.services.system_setting_service import (
-            SystemSettingService,
-            SETTING_AZURE_TENANT_ID,
-            SETTING_AZURE_CLIENT_ID,
-            SETTING_AZURE_CLIENT_SECRET
-        )
-        # Always recreate or check if config changed?
-        # For simplicity, we create it when needed if not already cached.
-        # However, if settings change, we might need to invalidate the cache.
         if self._msal_app is None:
-            tenant_id = SystemSettingService.get_value(SETTING_AZURE_TENANT_ID)
-            client_id = SystemSettingService.get_value(SETTING_AZURE_CLIENT_ID)
-            client_secret = SystemSettingService.get_value(SETTING_AZURE_CLIENT_SECRET)
-
-            authority = f"https://login.microsoftonline.com/{tenant_id}"
+            authority = f"https://login.microsoftonline.com/{settings.azure_tenant_id}"
             self._msal_app = msal.ConfidentialClientApplication(
-                client_id,
+                settings.azure_client_id,
                 authority=authority,
-                client_credential=client_secret,
+                client_credential=settings.azure_client_secret,
             )
         return self._msal_app
 
@@ -80,7 +61,7 @@ class GraphService:
         Token is cached and reused until expiry.
         """
         if not self.is_configured():
-            raise RuntimeError("Graph API not configured. Please set Azure credentials in System Settings.")
+            raise RuntimeError("Graph API not configured. Set AZURE_* environment variables.")
 
         if scopes is None:
             scopes = ["https://graph.microsoft.com/.default"]
@@ -178,8 +159,7 @@ class GraphService:
         import base64
 
         if not from_address:
-            from app.services.system_setting_service import SystemSettingService, SETTING_EMAIL_FROM_ADDRESS
-            from_address = SystemSettingService.get_value(SETTING_EMAIL_FROM_ADDRESS) or "techhub@tamu.edu"
+            from_address = settings.smtp_from_address or "techhub@tamu.edu"
 
         message = {
             "message": {
