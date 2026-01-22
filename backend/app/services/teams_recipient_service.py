@@ -17,11 +17,18 @@ class TeamsRecipientService:
     """
 
     def __init__(self):
-        self.enabled = settings.teams_recipient_notifications_enabled
+        # We check enabled status dynamically via SystemSettingService
+        pass
+
+    @property
+    def is_enabled(self) -> bool:
+        """Check if teams recipient notifications are enabled in system settings."""
+        from app.services.system_setting_service import SystemSettingService, SETTING_TEAMS_RECIPIENT_ENABLED
+        return SystemSettingService.is_setting_enabled(SETTING_TEAMS_RECIPIENT_ENABLED)
 
     def is_configured(self) -> bool:
         """Check if service is configured and enabled."""
-        if not self.enabled:
+        if not self.is_enabled:
             return False
         return graph_service.is_configured()
 
