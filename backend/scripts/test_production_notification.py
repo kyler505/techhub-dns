@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from app.services.teams_recipient_service import teams_recipient_service
-from app.models.models import Order # Assuming Order model exists
+# No model import needed for basic notification test
 
 def test_notification():
     print("Testing Teams Notification on Production...")
