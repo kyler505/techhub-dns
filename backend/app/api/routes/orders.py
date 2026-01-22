@@ -263,18 +263,7 @@ def submit_qa(order_id):
             technician=submission.technician
         )
 
-        if order.status == OrderStatus.PICKED and service._prep_steps_complete(order):
-            qa_method = order.qa_method
-            if qa_method == "Shipping":
-                next_status = OrderStatus.SHIPPING
-            else:
-                next_status = OrderStatus.PRE_DELIVERY
 
-            order = service.transition_status(
-                order_id=order_id,
-                new_status=next_status,
-                changed_by=submission.technician
-            )
 
 
 
