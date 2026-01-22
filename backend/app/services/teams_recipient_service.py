@@ -111,6 +111,7 @@ class TeamsRecipientService:
         Calculates item names and recipient info for each order.
         """
         if not self.is_configured() and not force:
+            logger.info("Teams recipient notifications skipped: service not configured or disabled")
             return
 
         from app.services.background_tasks import run_in_background
