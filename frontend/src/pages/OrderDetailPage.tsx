@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { OrderDetail, OrderStatus, AuditLog, TeamsNotification } from "../types/order";
 import { ordersApi } from "../api/orders";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
+import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 
 export default function OrderDetailPage() {
     const { orderId } = useParams<{ orderId: string }>();
@@ -18,6 +19,26 @@ export default function OrderDetailPage() {
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
+
+    // WebSocket hook for real-time order updates
+    const { orders: websocketOrders } = useOrdersWebSocket();
+    const lastWebSocketUpdate = useRef<number>(0);
+
+    // Track WebSocket updates and refetch if this order might have changed
+    useEffect(() => {
+        if (websocketOrders.length > 0 && orderId) {
+            const updateTime = Date.now();
+            // Only refetch if this is a new update (not the initial connection)
+            // and the current order is in the updated list
+            if (lastWebSocketUpdate.current > 0) {
+                const orderUpdated = websocketOrders.some(wo => wo.id === orderId);
+                if (orderUpdated) {
+                    loadOrder();
+                }
+            }
+            lastWebSocketUpdate.current = updateTime;
+        }
+    }, [websocketOrders, orderId]);
 
     useEffect(() => {
         if (orderId) {
