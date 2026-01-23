@@ -9,6 +9,7 @@ import InDelivery from "./pages/InDelivery";
 import Admin from "./pages/Admin";
 import DocumentSigningPage from "./pages/DocumentSigningPage";
 import OrderQAChecklist from "./pages/OrderQAChecklist";
+import OrderQAPage from "./pages/OrderQAPage";
 import Shipping from "./pages/Shipping";
 import DeliveryRunDetailPage from "./pages/DeliveryRunDetailPage";
 import Login from "./pages/Login";
@@ -91,6 +92,7 @@ function AppContent() {
                     {/* Protected routes */}
                     <Route path="/" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
                     <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+                    <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
                     <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
                     <Route path="/delivery" element={<ProtectedRoute><DeliveryDashboard /></ProtectedRoute>} />
                     <Route path="/delivery/runs/:runId" element={<ProtectedRoute><DeliveryRunDetailPage /></ProtectedRoute>} />
