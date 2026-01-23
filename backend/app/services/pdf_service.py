@@ -212,7 +212,7 @@ class PDFService:
             line_items.append({
                 "product_name": product_name,
                 "sku": product_sku,
-                "quantity": int(qty) if qty == int(qty) else qty,
+                "quantity": int(qty),
                 "unit_price": self._format_currency(price),
                 "subtotal": self._format_currency(item_subtotal),
                 "serials": serials
