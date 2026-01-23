@@ -108,14 +108,14 @@ export default function OrderQAPage() {
                 setForm(parsed.form);
                 setLastSavedAt(parsed.submittedAt);
             } catch {
-                setupDefaults(order, orderNumber);
+                setupDefaults(orderNumber);
             }
         } else {
-            setupDefaults(order, orderNumber);
+            setupDefaults(orderNumber);
         }
     };
 
-    const setupDefaults = (order: Order, orderNumber: string) => {
+    const setupDefaults = (orderNumber: string) => {
         const defaults = defaultForm(orderNumber);
         // Auto-fill QA signature with current user if possible
         if (user?.display_name) {
