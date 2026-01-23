@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
@@ -6,6 +6,7 @@ import OrderTable from "../components/OrderTable";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 import { Card, CardContent } from "../components/ui/card";
+import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -18,6 +19,22 @@ export default function Orders() {
         requireReason: boolean;
     } | null>(null);
     const navigate = useNavigate();
+
+    // WebSocket hook for real-time order updates
+    const { orders: websocketOrders } = useOrdersWebSocket();
+    const lastWebSocketUpdate = useRef<number>(0);
+
+    // Track WebSocket updates and refetch when orders change
+    useEffect(() => {
+        if (websocketOrders.length > 0) {
+            const updateTime = Date.now();
+            // Only refetch if this is a new update (not the initial connection)
+            if (lastWebSocketUpdate.current > 0) {
+                loadOrders();
+            }
+            lastWebSocketUpdate.current = updateTime;
+        }
+    }, [websocketOrders]);
 
     useEffect(() => {
         loadOrders();

@@ -8,12 +8,14 @@ from app.services.order_service import OrderService
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.config import settings
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 
 def sync_inflow_orders():
     """Background task to sync orders from Inflow (sync version)"""
+    from app.api.routes.orders import _broadcast_orders_sync
     db = get_db_session()
     try:
         inflow_service = InflowService()
@@ -52,6 +54,10 @@ def sync_inflow_orders():
                 continue
 
         logger.info(f"Inflow sync completed: {len(inflow_orders)} synced, {orders_created} created, {orders_updated} updated")
+
+        # Broadcast order updates via SocketIO
+        if orders_created > 0 or orders_updated > 0:
+            threading.Thread(target=_broadcast_orders_sync).start()
 
     except Exception as e:
         logger.error(f"Inflow sync failed: {e}", exc_info=True)
