@@ -265,7 +265,7 @@ class InflowService:
         """Fetch a specific order by sales order ID (UUID)."""
         url = f"{self.base_url}/{self.company_id}/sales-orders/{sales_order_id}"
         params = {
-            "include": "pickLines.product,shipLines,packLines.product,lines"
+            "include": "pickLines.product,shipLines,packLines.product,lines.product,lines"
         }
 
         async with httpx.AsyncClient() as client:
@@ -624,7 +624,7 @@ class InflowService:
     def get_order_by_id_sync(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
         """Fetch a specific order by sales order ID (sync version)"""
         url = f"{self.base_url}/{self.company_id}/sales-orders/{sales_order_id}"
-        params = {"include": "pickLines.product,shipLines,packLines.product,lines"}
+        params = {"include": "pickLines.product,shipLines,packLines.product,lines.product,lines"}
 
         with httpx.Client() as client:
             try:

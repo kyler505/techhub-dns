@@ -197,7 +197,7 @@ export default function OrderDetail({
                                             {index + 1}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                            {line.productName || line.product?.name || line.productId || 'Unknown Product'}
+                                            {line.productName || line.product?.name || line.description || line.productId || 'Unknown Product'}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
                                             {line.quantity?.standardQuantity ?? line.quantity ?? 'N/A'}

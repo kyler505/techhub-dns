@@ -178,7 +178,19 @@ class PDFService:
 
         for line in lines:
             product = line.get("product", {})
-            product_name = product.get("name", "Unknown Product")
+            # Robust product name retrieval:
+            # 1. line.get("productName") - often available in inFlow lines
+            # 2. line.get("product", {}).get("name") - expanded product data
+            # 3. line.get("description") - fallback
+            # 4. line.get("productId") - final fallback (the hash)
+            product_name = (
+                line.get("productName") or
+                product.get("name") or
+                line.get("description") or
+                line.get("productId") or
+                "Unknown Product"
+            )
+
             product_sku = product.get("sku", "")
             unit_price = line.get("unitPrice", 0)
             quantity_data = line.get("quantity", {})
@@ -194,6 +206,7 @@ class PDFService:
                 item_subtotal = 0
 
             # Get serials for this product
+            # Use product_name for serial mapping consistency
             serials = serials_by_product.get(product_name, [])
 
             line_items.append({
