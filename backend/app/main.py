@@ -10,6 +10,16 @@ from app.scheduler import start_scheduler
 import logging
 import atexit
 import os
+import mimetypes
+
+# Ensure common web file types have correct MIME types
+mimetypes.add_type('text/javascript', '.js')
+mimetypes.add_type('text/javascript', '.mjs')
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('image/svg+xml', '.svg')
+mimetypes.add_type('application/json', '.json')
+mimetypes.add_type('text/html', '.html')
+mimetypes.add_type('application/wasm', '.wasm')
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -219,11 +229,13 @@ def serve_frontend(path):
             # Check if the file exists (use os.path.join for filesystem check)
             full_path = os.path.join(FRONTEND_DIST_PATH, path.replace('/', os.path.sep))
             if os.path.exists(full_path):
+                # Determine the correct MIME type for the file
+                mime_type, _ = mimetypes.guess_type(path)
                 # send_from_directory expects forward slashes, not OS separators
-                return send_from_directory(FRONTEND_DIST_PATH, path)
+                return send_from_directory(FRONTEND_DIST_PATH, path, mimetype=mime_type)
 
         # Fallback to index.html for SPA routing
-        return send_from_directory(FRONTEND_DIST_PATH, 'index.html')
+        return send_from_directory(FRONTEND_DIST_PATH, 'index.html', mimetype='text/html')
     else:
         # Development mode - frontend served by Vite
         return jsonify({
