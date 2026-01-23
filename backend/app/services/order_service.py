@@ -212,6 +212,11 @@ class OrderService:
         if not order.picklist_generated_at:
             raise ValidationError("Picklist must be generated before QA can be completed")
 
+        # Inject authenticated technician into QA data if provided
+        # This ensures consistency between the audit log and the stored form data
+        if technician:
+            qa_data['technician'] = technician
+
         # Validate QA data format - must use detailed shipping QA format
         required_fields = [
             'orderNumber', 'technician', 'qaSignature', 'method',

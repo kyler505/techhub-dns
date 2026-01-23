@@ -27,6 +27,7 @@ from app.schemas.order import (
 from app.models.order import OrderStatus
 from app.schemas.audit import AuditLogResponse
 from app.utils.exceptions import DNSApiError, NotFoundError, ValidationError
+from app.api.auth_middleware import get_current_user_email
 
 bp = Blueprint('orders', __name__)
 bp.strict_slashes = False
@@ -214,10 +215,15 @@ def tag_order(order_id):
     with get_db() as db:
         service = OrderService(db)
         tag_update = AssetTagUpdate(**data)
+
+        # Auto-assign technician from auth context, fallback to payload for tests/systems
+        current_user = get_current_user_email()
+        technician = current_user if current_user != "system" else tag_update.technician
+
         order = service.mark_asset_tagged(
             order_id=order_id,
             tag_ids=tag_update.tag_ids,
-            technician=tag_update.technician
+            technician=technician
         )
         return jsonify(OrderResponse.model_validate(order).model_dump())
 
@@ -230,9 +236,14 @@ def generate_picklist(order_id):
     with get_db() as db:
         service = OrderService(db)
         gen_request = PicklistGenerationRequest(**data)
+
+        # Auto-assign generator from auth context
+        current_user = get_current_user_email()
+        generated_by = current_user if current_user != "system" else gen_request.generated_by
+
         order = service.generate_picklist(
             order_id=order_id,
-            generated_by=gen_request.generated_by
+            generated_by=generated_by
         )
         return jsonify(OrderResponse.model_validate(order).model_dump())
 
@@ -245,10 +256,15 @@ def submit_qa(order_id):
     with get_db() as db:
         service = OrderService(db)
         submission = QASubmission(**data)
+
+        # Auto-assign technician from auth context
+        current_user = get_current_user_email()
+        technician = current_user if current_user != "system" else submission.technician
+
         order = service.submit_qa(
             order_id=order_id,
             qa_data=submission.responses,
-            technician=submission.technician
+            technician=technician
         )
 
 
