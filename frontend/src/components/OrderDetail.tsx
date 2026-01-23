@@ -200,7 +200,7 @@ export default function OrderDetail({
                                             {line.productName || line.product?.name || line.description || line.productId || 'Unknown Product'}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
-                                            {line.quantity?.standardQuantity ?? line.quantity ?? 'N/A'}
+                                            {Math.floor(Number(line.quantity?.standardQuantity ?? line.quantity ?? 0))}
                                         </td>
                                     </tr>
                                 ))}
