@@ -28,14 +28,7 @@ type SavedQAChecklist = {
     form: QAFormState;
 };
 
-const TECHNICIANS = [
-    "Joshua Pullum",
-    "Aaron Pizzitola",
-    "Stormy Brewer",
-    "Lilly Tran",
-    "Jevin Joy",
-    "Kyler Cao",
-];
+
 
 const defaultForm = (orderNumber: string): QAFormState => ({
     orderNumber,
@@ -62,7 +55,7 @@ function isFormComplete(form: QAFormState) {
         form.verifyPackingSlipSerialsMatch &&
         form.verifyElectronicPackingSlipSaved &&
         form.verifyBoxesLabeledCorrectly &&
-        form.qaSignature.trim().length > 0 &&
+        // qaSignature checked implicitly via auto-assignment in backend/frontend state
         (form.method === "Delivery" || form.method === "Shipping")
     );
 }
@@ -138,7 +131,10 @@ export default function OrderQAPage() {
             // Note: 'technician' is sent as empty string or whatever is in state,
             // but backend will override it with the authenticated user.
             await ordersApi.submitQa(order.id, {
-                responses: form,
+                responses: {
+                    ...form,
+                    qaSignature: user?.display_name || user?.email || "System", // Force auto-assign signature
+                },
                 technician: user?.email || "system", // Fallback for types, backend ignores this for auth user
             });
 
@@ -266,23 +262,17 @@ export default function OrderQAPage() {
                         ))}
                     </div>
 
-                    {/* Q9 */}
+                    {/* Q9 - Auto Assigned */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                             9. QA Signature (First and Last Name) <span className="text-red-600">*</span>
                         </label>
-                        <select
-                            value={form.qaSignature}
-                            onChange={(e) => setForm((p) => ({ ...p, qaSignature: e.target.value }))}
-                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-[#800000] focus:outline-none focus:ring-1 focus:ring-[#800000]"
-                        >
-                            <option value="">Select signature</option>
-                            {TECHNICIANS.map((t) => (
-                                <option key={t} value={t}>
-                                    {t}
-                                </option>
-                            ))}
-                        </select>
+                        <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600">
+                            {user?.display_name || user?.email || "Current User"}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Signature will be automatically recorded upon submission.
+                        </p>
                     </div>
 
                     {/* Q10 */}
