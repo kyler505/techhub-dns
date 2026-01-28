@@ -63,10 +63,20 @@ class QASubmission(BaseModel):
     technician: Optional[str] = None
 
 
+class SignaturePlacement(BaseModel):
+    page_number: int = 1
+    x: float
+    y: float
+    width: float
+    height: float
+
+
 class SignatureData(BaseModel):
     signature_image: str  # Base64 encoded PNG
-    page_number: int = 1
-    position: Dict[str, float] = Field(default_factory=dict)  # x, y coordinates for placement
+    placements: List[SignaturePlacement] = Field(default_factory=list)
+    # Backward compatibility (optional)
+    page_number: Optional[int] = None
+    position: Optional[Dict[str, float]] = None
 
 
 class OrderResponse(OrderBase):

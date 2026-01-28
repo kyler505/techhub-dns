@@ -56,7 +56,12 @@ export const ordersApi = {
     return response.data;
   },
 
-  signOrder: async (orderId: string, signatureData?: { signature_image: string; page_number: number; position: { x: number; y: number } }) => {
+  signOrder: async (orderId: string, signatureData?: {
+    signature_image: string;
+    placements?: Array<{ page_number: number; x: number; y: number; width: number; height: number }>;
+    page_number?: number;
+    position?: { x: number; y: number }
+  }) => {
     const response = await apiClient.post<{ success: boolean; message: string; bundled_document_path?: string }>(`/orders/${orderId}/sign`, signatureData);
     return response.data;
   },
