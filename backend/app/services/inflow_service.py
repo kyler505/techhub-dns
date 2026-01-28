@@ -630,7 +630,23 @@ class InflowService:
         """
         lines = order.get("lines", [])
         pick_lines = order.get("pickLines", [])
-        source_lines = pick_lines or lines
+
+        def has_serials(source: List[Dict[str, Any]]) -> bool:
+            return any(
+                bool(line.get("quantity", {}).get("serialNumbers"))
+                for line in source
+            )
+
+        pick_lines_have_serials = has_serials(pick_lines)
+        source_lines = pick_lines if pick_lines_have_serials else lines
+
+        line_serials_by_product: Dict[str, List[str]] = {}
+        for line in lines:
+            product_id = line.get("productId")
+            serials = list(line.get("quantity", {}).get("serialNumbers", []) or [])
+            if not product_id or not serials:
+                continue
+            line_serials_by_product.setdefault(product_id, []).extend(serials)
 
         line_products: Dict[str, Dict[str, Any]] = {}
         for line in lines:
@@ -671,6 +687,8 @@ class InflowService:
                 continue
 
             serial_numbers = list(line.get("quantity", {}).get("serialNumbers", []) or [])
+            if not serial_numbers and product_id in line_serials_by_product:
+                serial_numbers = list(line_serials_by_product.get(product_id, []))
 
             if product_id in index_by_product:
                 asset_tag_serials[index_by_product[product_id]]["serials"].extend(serial_numbers)
