@@ -548,12 +548,21 @@ class InflowService:
     def _normalize_category_name(self, name: str) -> str:
         return " ".join(name.lower().replace("-", " ").split())
 
-    def _is_asset_tag_category(self, category_name: Optional[str], product_name: Optional[str] = None) -> bool:
+    def _is_asset_tag_category(
+        self,
+        category_name: Optional[str],
+        product_name: Optional[str] = None,
+        custom_fields: Optional[Dict[str, Any]] = None
+    ) -> bool:
         normalized_category = self._normalize_category_name(category_name) if category_name else ""
         normalized_product = self._normalize_category_name(product_name) if product_name else ""
         normalized = normalized_category or normalized_product
 
-        return any(keyword in normalized for keyword in ["laptop", "desktop", "all in one", "aio"])
+        if any(keyword in normalized for keyword in ["laptop", "desktop", "all in one", "aio"]):
+            return True
+
+        custom2 = (custom_fields or {}).get("custom2")
+        return str(custom2).startswith("432115") if custom2 is not None else False
 
     def _extract_product_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> str:
         product = line.get("product", {})
@@ -570,20 +579,33 @@ class InflowService:
         product = line.get("product", {})
         return product.get("categoryId") or (fallback or {}).get("category_id")
 
+    def _extract_category_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        product = line.get("product", {})
+        category = product.get("category", {})
+        return category.get("name") or (fallback or {}).get("category_name")
+
     def fetch_categories_sync(self) -> List[Dict[str, Any]]:
         """Fetch product categories from Inflow API (sync version)."""
-        url = f"{self.base_url}/{self.company_id}/categories"
+        endpoints = ["categories", "product-categories", "productCategories"]
 
         with httpx.Client() as client:
-            response = client.get(url, headers=self.headers)
-            response.raise_for_status()
-            data = response.json()
+            for endpoint in endpoints:
+                url = f"{self.base_url}/{self.company_id}/{endpoint}"
+                try:
+                    response = client.get(url, headers=self.headers)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    logger.warning(f"Failed to fetch inflow categories from {endpoint}: {exc}")
+                    continue
 
-            if isinstance(data, dict) and "items" in data:
-                return data["items"]
-            if isinstance(data, list):
-                return data
-            return []
+                data = response.json()
+
+                if isinstance(data, dict) and "items" in data:
+                    return data["items"]
+                if isinstance(data, list):
+                    return data
+
+        return []
 
     def get_category_map_sync(self) -> Dict[str, str]:
         categories = self.fetch_categories_sync()
@@ -618,6 +640,8 @@ class InflowService:
             line_products[product_id] = {
                 "product_name": self._extract_product_name(line),
                 "category_id": self._extract_category_id(line),
+                "category_name": self._extract_category_name(line),
+                "custom_fields": line.get("product", {}).get("customFields"),
             }
 
         category_map: Dict[str, str] = {}
@@ -634,9 +658,16 @@ class InflowService:
             fallback_info = line_products.get(product_id or "")
             product_name = self._extract_product_name(line, fallback_info)
             category_id = self._extract_category_id(line, fallback_info)
-            category_name = category_map.get(str(category_id)) if category_id else None
+            category_name = self._extract_category_name(line, fallback_info) or (
+                category_map.get(str(category_id)) if category_id else None
+            )
+            custom_fields = (line.get("product") or {}).get("customFields") or (fallback_info or {}).get("custom_fields")
 
-            if not self._is_asset_tag_category(category_name, product_name if not category_name else None):
+            if not self._is_asset_tag_category(
+                category_name,
+                product_name if not category_name else None,
+                custom_fields
+            ):
                 continue
 
             serial_numbers = list(line.get("quantity", {}).get("serialNumbers", []) or [])
