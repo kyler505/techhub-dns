@@ -24,6 +24,21 @@ export default function OrderDetail({
     const latestNotification = notifications[0];
 
     const handleTagging = () => {
+        const assetTagSerials = order.asset_tag_serials || [];
+        const serialLines = assetTagSerials.map((item) => {
+            const categoryLabel = item.category_name ? ` (${item.category_name})` : "";
+            const serials = item.serials || [];
+            const serialText = serials.length > 0 ? serials.join(", ") : "No serials found";
+            return `${item.product_name}${categoryLabel}: ${serialText}`;
+        });
+
+        const confirmMessage = assetTagSerials.length > 0
+            ? `Verify these serials match the devices in order:\n\n${serialLines.join("\n")}`
+            : "No laptop/desktop/AIO serials were found from inflow. Verify device serials manually before tagging.";
+
+        if (!window.confirm(confirmMessage)) {
+            return;
+        }
         const raw = window.prompt("Enter tag IDs (comma-separated)", "");
         if (raw === null) return;
         const tagIds = raw

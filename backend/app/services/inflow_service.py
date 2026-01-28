@@ -545,6 +545,119 @@ class InflowService:
         secret_to_use = secret or settings.inflow_webhook_secret
         return verify_signature(payload, signature, secret_to_use) if secret_to_use else True
 
+    def _normalize_category_name(self, name: str) -> str:
+        return " ".join(name.lower().replace("-", " ").split())
+
+    def _is_asset_tag_category(self, category_name: Optional[str], product_name: Optional[str] = None) -> bool:
+        normalized_category = self._normalize_category_name(category_name) if category_name else ""
+        normalized_product = self._normalize_category_name(product_name) if product_name else ""
+        normalized = normalized_category or normalized_product
+
+        return any(keyword in normalized for keyword in ["laptop", "desktop", "all in one", "aio"])
+
+    def _extract_product_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> str:
+        product = line.get("product", {})
+        return (
+            product.get("name")
+            or line.get("productName")
+            or line.get("description")
+            or (fallback or {}).get("product_name")
+            or line.get("productId")
+            or "Unknown Product"
+        )
+
+    def _extract_category_id(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        product = line.get("product", {})
+        return product.get("categoryId") or (fallback or {}).get("category_id")
+
+    def fetch_categories_sync(self) -> List[Dict[str, Any]]:
+        """Fetch product categories from Inflow API (sync version)."""
+        url = f"{self.base_url}/{self.company_id}/categories"
+
+        with httpx.Client() as client:
+            response = client.get(url, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+
+            if isinstance(data, dict) and "items" in data:
+                return data["items"]
+            if isinstance(data, list):
+                return data
+            return []
+
+    def get_category_map_sync(self) -> Dict[str, str]:
+        categories = self.fetch_categories_sync()
+        category_map: Dict[str, str] = {}
+
+        for category in categories:
+            category_id = (
+                category.get("categoryId")
+                or category.get("id")
+                or category.get("category_id")
+            )
+            name = category.get("name") or category.get("categoryName") or category.get("label")
+            if category_id and name:
+                category_map[str(category_id)] = name
+
+        return category_map
+
+    def get_asset_tag_serials(self, order: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Extract serial numbers for laptop/desktop/AIO categories from inflow order data.
+        Uses pickLines when available to preserve device pick order.
+        """
+        lines = order.get("lines", [])
+        pick_lines = order.get("pickLines", [])
+        source_lines = pick_lines or lines
+
+        line_products: Dict[str, Dict[str, Any]] = {}
+        for line in lines:
+            product_id = line.get("productId")
+            if not product_id or product_id in line_products:
+                continue
+            line_products[product_id] = {
+                "product_name": self._extract_product_name(line),
+                "category_id": self._extract_category_id(line),
+            }
+
+        category_map: Dict[str, str] = {}
+        try:
+            category_map = self.get_category_map_sync()
+        except Exception as exc:
+            logger.warning(f"Failed to fetch inflow categories: {exc}")
+
+        asset_tag_serials: List[Dict[str, Any]] = []
+        index_by_product: Dict[str, int] = {}
+
+        for line in source_lines:
+            product_id = line.get("productId")
+            fallback_info = line_products.get(product_id or "")
+            product_name = self._extract_product_name(line, fallback_info)
+            category_id = self._extract_category_id(line, fallback_info)
+            category_name = category_map.get(str(category_id)) if category_id else None
+
+            if not self._is_asset_tag_category(category_name, product_name if not category_name else None):
+                continue
+
+            serial_numbers = list(line.get("quantity", {}).get("serialNumbers", []) or [])
+
+            if product_id in index_by_product:
+                asset_tag_serials[index_by_product[product_id]]["serials"].extend(serial_numbers)
+                continue
+
+            entry = {
+                "product_id": product_id,
+                "product_name": product_name,
+                "category_id": category_id,
+                "category_name": category_name,
+                "serials": serial_numbers,
+            }
+            asset_tag_serials.append(entry)
+            if product_id:
+                index_by_product[product_id] = len(asset_tag_serials) - 1
+
+        return asset_tag_serials
+
     # ========== SYNC VERSIONS FOR FLASK ==========
 
     def fetch_orders_sync(
