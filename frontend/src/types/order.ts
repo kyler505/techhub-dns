@@ -79,12 +79,21 @@ export interface Order {
   tracking_number?: string;
   inflow_data?: Record<string, any>;
   pick_status?: PickStatus;
+  asset_tag_serials?: AssetTagSerial[];
   created_at: string;
   updated_at: string;
 }
 
 export interface OrderDetail extends Order {
   inflow_data?: Record<string, any>;
+}
+
+export interface AssetTagSerial {
+  product_id?: string;
+  product_name: string;
+  category_id?: string;
+  category_name?: string;
+  serials: string[];
 }
 
 export interface OrderStatusUpdate {
