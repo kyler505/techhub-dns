@@ -1289,7 +1289,6 @@ class OrderService:
         """Apply signature overlay to existing PDF"""
         from pypdf import PdfReader, PdfWriter
         from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import letter
         from reportlab.lib.utils import ImageReader
         import base64
         import io
@@ -1299,82 +1298,128 @@ class OrderService:
 
         # Extract signature data
         signature_b64 = signature_data.get('signature_image', '')
-        page_number = signature_data.get('page_number', 1)
-        position = signature_data.get('position', {'x': 50, 'y': 60})  # Default position
+        placements = signature_data.get('placements', [])
+
+        # Backward compatibility for single placement
+        if not placements and 'page_number' in signature_data:
+            placements = [{
+                'page_number': signature_data.get('page_number', 1),
+                # If position is missing, default to some safe spot?
+                # Original code defaulted to x=50, y=60.
+                # Schema might return None for position if not passed.
+                'x': signature_data.get('position', {}).get('x', 50),
+                'y': signature_data.get('position', {}).get('y', 60),
+                'width': 100, # Default width if not specified in old format? Old format didn't have width/height in backend logic?
+                # Wait, old logic: c.drawImage(..., width=page_width, height=page_height)
+                # It stretched the canvas capture to the FULL PAGE.
+                # The design doc says: "Front end sends canvas capture that matches PDF aspect ratio...".
+                # If we are refactoring, we need to handle the new "sticker" style.
+                # If old style: we should probably stick to old behavior or migrating is tricky without frontend changes first.
+                # BUT: The plan says "Refactor... to accept image + placements".
+                # I will assume "placements" means "sticker placements".
+                # If legacy call comes in, I will map it to "full page stamp" if that was the old behavior?
+                # Old behavior: c.drawImage(..., 0, 0, width=page_width, height=page_height).
+                # So if no placements, treat as legacy full-page overlay.
+                 'legacy_full_page': True
+            }]
 
         if not signature_b64:
-            # No signature provided, return original PDF
             return pdf_path
 
-        # Decode base64 signature image
         try:
-            signature_data_bytes = base64.b64decode(signature_b64.split(',')[1])  # Remove data:image/png;base64, prefix
+            # Decode base64 signature image
+            header, encoded = signature_b64.split(',', 1)
+            signature_data_bytes = base64.b64decode(encoded)
             signature_image = Image.open(io.BytesIO(signature_data_bytes))
-
-            # Ensure we keep the image in a mode reportlab can handle (RGB or RGBA)
-            # reportlab supports RGBA with mask='auto'
         except Exception as e:
             logger.error(f"Error processing signature image: {e}")
             return pdf_path
 
         # Read the original PDF
         reader = PdfReader(pdf_path)
-
-        # Validate page number
-        if page_number < 1 or page_number > len(reader.pages):
-            page_number = len(reader.pages)  # Default to last page
-
-        # Get page dimensions (assuming all pages have same size for simplicity)
-        page = reader.pages[page_number - 1]
-        page_width = float(page.mediabox.width)
-        page_height = float(page.mediabox.height)
-
-        # Create overlay PDF with signature
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as overlay_file:
-            overlay_path = overlay_file.name
-
-        c = canvas.Canvas(overlay_path, pagesize=(page_width, page_height))
-
-        # Frontend sends a canvas capture that matches the PDF aspect ratio and covers the whole page
-        # So we draw it filling the page dimensions.
-        # mask='auto' ensures transparency from the alpha channel is respected.
-        c.drawImage(
-            ImageReader(signature_image),
-            0,
-            0,
-            width=page_width,
-            height=page_height,
-            mask='auto'
-        )
-        c.save()
-
-        # Merge overlay with original PDF
         writer = PdfWriter()
 
-        # Add pages from original PDF, overlaying signature on target page
-        for i, page in enumerate(reader.pages):
-            if i == page_number - 1:  # 0-indexed
-                # Read the overlay PDF
-                overlay_reader = PdfReader(overlay_path)
-                overlay_page = overlay_reader.pages[0]
+        # Group placements by page for efficiency
+        # placements_by_page = { page_index: [placemen1, placement2] }
+        placements_by_page = {}
+        for p in placements:
+            # Handle dictionary or object (if pydantic model passed directly, though dict expected here)
+            if hasattr(p, 'model_dump'):
+                p = p.model_dump()
 
-                # Merge overlay onto the page
-                page.merge_page(overlay_page)
+            page_num = p.get('page_number', 1)
+            if page_num not in placements_by_page:
+                placements_by_page[page_num] = []
+            placements_by_page[page_num].append(p)
 
-            writer.add_page(page)
+        # Create overlay pages
+        # dict mapping page_index (0-based) to overlay_pdf_path
+        overlay_map = {}
 
-        # Save signed PDF
-        signed_path = pdf_path.replace('.pdf', '-signed.pdf')
-        with open(signed_path, 'wb') as f:
-            writer.write(f)
-
-        # Clean up temporary overlay file
         try:
-            os.unlink(overlay_path)
-        except:
-            pass
+            for page_num, page_placements in placements_by_page.items():
+                if page_num < 1 or page_num > len(reader.pages):
+                    continue
 
-        return signed_path
+                page_idx = page_num - 1
+                page = reader.pages[page_idx]
+                page_width = float(page.mediabox.width)
+                page_height = float(page.mediabox.height)
+
+                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as overlay_file:
+                     overlay_path = overlay_file.name
+                     overlay_map[page_idx] = overlay_path
+
+                c = canvas.Canvas(overlay_path, pagesize=(page_width, page_height))
+
+                for placement in page_placements:
+                    # Check for legacy full page flag
+                    if placement.get('legacy_full_page'):
+                        c.drawImage(
+                            ImageReader(signature_image),
+                            0, 0, width=page_width, height=page_height,
+                            mask='auto'
+                        )
+                    else:
+                        # New sticker placement
+                        x = placement.get('x', 0)
+                        y = placement.get('y', 0)
+                        w = placement.get('width', 100)
+                        h = placement.get('height', 50)
+
+                        # Inverting Y is handled by frontend (sending PDF coords).
+                        # We just draw at (x, y). Use preserveAspectRatio=True?
+                        # Design doc implies w/h are explicit.
+                        c.drawImage(
+                             ImageReader(signature_image),
+                             x, y, width=w, height=h,
+                             mask='auto', preserveAspectRatio=True
+                        )
+
+                c.save()
+
+            # Merge
+            for i, page in enumerate(reader.pages):
+                if i in overlay_map:
+                    overlay_reader = PdfReader(overlay_map[i])
+                    overlay_page = overlay_reader.pages[0]
+                    page.merge_page(overlay_page)
+                writer.add_page(page)
+
+            # Save signed PDF
+            signed_path = pdf_path.replace('.pdf', '-signed.pdf')
+            with open(signed_path, 'wb') as f:
+                writer.write(f)
+
+            return signed_path
+
+        finally:
+            # Cleanup overlays
+            for path in overlay_map.values():
+                try:
+                    os.unlink(path)
+                except:
+                    pass
 
     def _generate_qa_pdf(self, qa_data: dict, order: Order) -> str:
         """Generate QA checklist PDF from JSON data"""

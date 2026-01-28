@@ -1,4 +1,4 @@
-import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
@@ -8,6 +8,10 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { ordersApi } from "../api/orders";
 import { OrderDetail } from "../types/order";
+import { SignatureModal } from "../components/SignatureModal";
+import { signatureCache } from "../lib/signatureCache";
+import { Button } from "../components/ui/button";
+import { PenTool, X } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -17,7 +21,18 @@ interface PdfEntry {
     url: string;
 }
 
-const DEVICE_PIXEL_RATIO = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+// Store basic placement info (normalized to PDF points)
+interface Placement {
+    id: string;
+    pageIndex: number; // 0-based
+    x: number; // PDF points (from left)
+    y: number; // PDF points (from bottom, ReportLab style)
+    width: number; // PDF points
+    height: number; // PDF points
+    dataUrl: string; // The image source
+}
+
+
 
 function DocumentSigningPage() {
     const [searchParams] = useSearchParams();
@@ -31,7 +46,14 @@ function DocumentSigningPage() {
     const [pageViewport, setPageViewport] = useState<{ width: number; height: number } | null>(null);
     const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
     const [containerWidth, setContainerWidth] = useState<number | null>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
+
+    // Signing State
+    const [modalOpen, setModalOpen] = useState(false);
+    const [placements, setPlacements] = useState<Placement[]>([]);
+    const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
+    const viewerRef = useRef<HTMLDivElement | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     // Load order when component mounts
     useEffect(() => {
@@ -49,7 +71,6 @@ function DocumentSigningPage() {
                 const orderData = await ordersApi.getOrder(orderId);
                 setOrder(orderData);
 
-                // Set up PDF entry for the order's picklist
                 if (orderData.picklist_path) {
                     setSelectedPdf({
                         name: `Picklist for Order ${orderData.inflow_order_id || orderData.id.slice(0, 8)}`,
@@ -70,55 +91,23 @@ function DocumentSigningPage() {
         loadOrder();
     }, [searchParams]);
 
-    // Immediate fallback: Try to set containerWidth when viewerRef becomes available
-    useEffect(() => {
-        if (viewerRef.current && !containerWidth) {
-            console.log('Immediate fallback: viewerRef available, trying to get container width');
-            const rect = viewerRef.current.getBoundingClientRect();
-            if (rect.width > 0) {
-                console.log('Immediate fallback: Setting containerWidth to:', rect.width);
-                setContainerWidth(rect.width);
-            }
-        }
-    }, [containerWidth]); // Run whenever containerWidth changes (or initially)
-    const [hasSignature, setHasSignature] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isPageRendering, setIsPageRendering] = useState(false);
-
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const viewerRef = useRef<HTMLDivElement | null>(null);
-    const pointerIdRef = useRef<number | null>(null);
-
     const selectedPdfUrl = useMemo(() => (selectedPdf ? selectedPdf.url : null), [selectedPdf]);
 
+    // Responsive sizing logic
     useEffect(() => {
-        if (!viewerRef.current) {
-            console.log('ResizeObserver: viewerRef.current is null');
-            return undefined;
-        }
-
-        console.log('ResizeObserver: Setting up observer on element:', viewerRef.current);
-
+        if (!viewerRef.current) return;
         const observer = new ResizeObserver((entries) => {
             const rect = entries[0]?.contentRect;
-            console.log('ResizeObserver fired, container width:', rect?.width, 'height:', rect?.height);
             if (rect && rect.width > 0) {
-                console.log('Setting containerWidth to:', rect.width);
                 setContainerWidth(rect.width);
             }
         });
-
         observer.observe(viewerRef.current);
-        return () => {
-            console.log('ResizeObserver: Disconnecting');
-            observer.disconnect();
-        };
+        return () => observer.disconnect();
     }, []);
 
     useEffect(() => {
-        console.log('Debug - pageViewport:', pageViewport, 'containerWidth:', containerWidth, 'renderSize:', renderSize, 'selectedPdf:', !!selectedPdf);
-        if (!pageViewport || containerWidth === null || containerWidth === 0) return;
+        if (!pageViewport || !containerWidth) return;
         const nextScale = containerWidth / pageViewport.width;
         setRenderSize({
             width: pageViewport.width * nextScale,
@@ -126,165 +115,140 @@ function DocumentSigningPage() {
         });
     }, [containerWidth, pageViewport]);
 
-    // Fallback: If we have viewport but no containerWidth, try to get it from the DOM
-    useEffect(() => {
-        if (pageViewport && !containerWidth && viewerRef.current && !loadingOrder) {
-            console.log('Fallback: Trying to get container width from DOM');
-            const rect = viewerRef.current.getBoundingClientRect();
-            if (rect.width > 0) {
-                console.log('Fallback: Got width from getBoundingClientRect:', rect.width);
-                setContainerWidth(rect.width);
-            }
-        }
-    }, [pageViewport, containerWidth, loadingOrder]);
-
-    // Fallback: If we have a selected PDF but no renderSize after a delay, try to force it
-    useEffect(() => {
-        if (selectedPdf && !renderSize && !loadingOrder && pageViewport && containerWidth) {
-            console.log('Fallback: Attempting to force renderSize calculation');
-            const timer = setTimeout(() => {
-                if (pageViewport && containerWidth && !renderSize) {
-                    console.log('Fallback: Setting renderSize');
-                    const nextScale = containerWidth / pageViewport.width;
-                    setRenderSize({
-                        width: pageViewport.width * nextScale,
-                        height: pageViewport.height * nextScale,
-                    });
-                }
-            }, 1000); // Reduced to 1 second since we have fallbacks now
-            return () => clearTimeout(timer);
-        }
-    }, [selectedPdf, renderSize, pageViewport, containerWidth, loadingOrder]);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !renderSize) return;
-
-        const context = canvas.getContext("2d");
-        if (!context) return;
-
-        canvas.width = renderSize.width * DEVICE_PIXEL_RATIO;
-        canvas.height = renderSize.height * DEVICE_PIXEL_RATIO;
-        canvas.style.width = `${renderSize.width}px`;
-        canvas.style.height = `${renderSize.height}px`;
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        context.scale(DEVICE_PIXEL_RATIO, DEVICE_PIXEL_RATIO);
-        context.lineCap = "round";
-        context.lineJoin = "round";
-        context.strokeStyle = "#111827";
-        setHasSignature(false);
-    }, [renderSize, pageNumber, selectedPdf]);
-
-    const clearSignature = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !renderSize) return;
-
-        const context = canvas.getContext("2d");
-        if (!context) return;
-
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        context.scale(DEVICE_PIXEL_RATIO, DEVICE_PIXEL_RATIO);
-        setHasSignature(false);
-    }, [renderSize]);
-
-    useEffect(() => {
-        if (!selectedPdf) return;
-        clearSignature();
-        setIsPageRendering(true);
-    }, [clearSignature, pageNumber, selectedPdf]);
+    const scale = useMemo(() => {
+        if (!pageViewport || !renderSize) return 1;
+        return renderSize.width / pageViewport.width;
+    }, [pageViewport, renderSize]);
 
     const handleLoadSuccess = useCallback(({ numPages: loadedPages }: { numPages: number }) => {
-        console.log('PDF loaded successfully with', loadedPages, 'pages');
         setNumPages(loadedPages);
         setPageNumber(1);
         setError(null);
     }, []);
 
     const handlePageLoad = useCallback((page: PDFPageProxy) => {
-        console.log('PDF page loaded, setting viewport');
         const viewport = page.getViewport({ scale: 1 });
-        console.log('Viewport:', viewport.width, 'x', viewport.height);
         setPageViewport({ width: viewport.width, height: viewport.height });
-        setIsPageRendering(false);
     }, []);
 
-    const handlePageRender = useCallback(() => {
-        setIsPageRendering(false);
-    }, []);
+    // --- Placement Logic ---
 
-    const pointerPosition = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return { x: 0, y: 0 };
-        const rect = canvas.getBoundingClientRect();
-        return {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
+    const addPlacement = (dataUrl: string, imgW: number, imgH: number) => {
+        if (!pageViewport) return;
+
+        // Default size logic: e.g. 150pt width, preserve aspect ratio
+        const targetWidthPt = 150;
+        const aspectRatio = imgW / imgH;
+        const targetHeightPt = targetWidthPt / aspectRatio;
+
+        // Center on page
+        // PDF coords (bottom-left origin) vs Viewport (top-left origin for width calc is same)
+        // Center X = (PageW - SigW) / 2
+        // Center Y (from bottom) = (PageH - SigH) / 2
+
+        const x = (pageViewport.width - targetWidthPt) / 2;
+        const y = (pageViewport.height - targetHeightPt) / 2;
+
+        const newPlacement: Placement = {
+            id: Math.random().toString(36).substr(2, 9),
+            pageIndex: pageNumber - 1, // Current page
+            x,
+            y,
+            width: targetWidthPt,
+            height: targetHeightPt,
+            dataUrl
         };
-    }, []);
 
-    const startDrawing = useCallback(
-        (event: PointerEvent<HTMLCanvasElement>) => {
-            if (!canvasRef.current || !renderSize || !selectedPdfUrl) return;
-            event.preventDefault();
-            const context = canvasRef.current.getContext("2d");
-            if (!context) return;
+        setPlacements(prev => [...prev.filter(p => p.id !== 'temp'), newPlacement]); // Remove any temp entries if we had them
+        setSelectedPlacementId(newPlacement.id);
+    };
 
-            const { x, y } = pointerPosition(event);
-            pointerIdRef.current = event.pointerId;
-            canvasRef.current.setPointerCapture(event.pointerId);
-            context.beginPath();
-            context.moveTo(x, y);
-            context.lineWidth = Math.max(2, 4 * (event.pressure || 0.5));
-            setIsDrawing(true);
-        },
-        [pointerPosition, renderSize, selectedPdfUrl],
-    );
+    const handleModalSave = (dataUrl: string, w: number, h: number) => {
+        addPlacement(dataUrl, w, h);
+    };
 
-    const drawStroke = useCallback(
-        (event: PointerEvent<HTMLCanvasElement>) => {
-            if (!isDrawing || !canvasRef.current) return;
-            event.preventDefault();
-            const context = canvasRef.current.getContext("2d");
-            if (!context) return;
+    const useLastSignature = () => {
+        const cached = signatureCache.load();
+        if (cached) {
+            addPlacement(cached.dataUrl, cached.width, cached.height);
+        } else {
+            setModalOpen(true);
+        }
+    };
 
-            const { x, y } = pointerPosition(event);
-            context.lineWidth = Math.max(2, 4 * (event.pressure || 0.5));
-            context.lineTo(x, y);
-            context.stroke();
-            setHasSignature(true);
-        },
-        [isDrawing, pointerPosition],
-    );
+    const removePlacement = (id: string) => {
+        setPlacements(prev => prev.filter(p => p.id !== id));
+        if (selectedPlacementId === id) setSelectedPlacementId(null);
+    };
 
-    const finishDrawing = useCallback(
-        (event: PointerEvent<HTMLCanvasElement>) => {
-            if (!isDrawing || !canvasRef.current) return;
-            event.preventDefault();
-            drawStroke(event);
+    // --- Dragging Logic ---
+    const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
 
-            const pointerId = pointerIdRef.current;
-            if (pointerId !== null) {
-                try {
-                    canvasRef.current.releasePointerCapture(pointerId);
-                } catch (releaseError) {
-                    console.warn("Pointer capture release failed", releaseError);
-                }
-            }
+    const handlePointerDown = (e: React.PointerEvent, id: string) => {
+        e.stopPropagation(); // Prevent PDF scrolling if possible? Or maybe just capture
+        const placement = placements.find(p => p.id === id);
+        if (!placement) return;
 
-            setIsDrawing(false);
-            pointerIdRef.current = null;
-        },
-        [drawStroke, isDrawing],
-    );
+        setSelectedPlacementId(id);
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
-    const isCanvasReady = Boolean(renderSize && selectedPdfUrl);
+        // Convert click screen coords -> PDF points not needed for Delta,
+        // we just need delta pixels converted to delta points.
 
-    const saveSignedPdf = useCallback(async () => {
-        if (!order || !canvasRef.current || !selectedPdfUrl) return;
-        if (!hasSignature) {
-            setError("Add a signature before saving.");
+        dragStartRef.current = {
+            id,
+            startX: e.clientX,
+            startY: e.clientY,
+            initX: placement.x,
+            initY: placement.y // stored as Bottom-Left
+        };
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        if (!dragStartRef.current || !pageViewport || !renderSize) return;
+
+        const { id, startX, startY, initX, initY } = dragStartRef.current;
+        e.preventDefault();
+
+        // Delta in Pixels
+        const dxPx = e.clientX - startX;
+        const dyPx = e.clientY - startY;
+
+        // Delta in PDF Points
+        // X grows right (same)
+        // Y grows down in DOM, but UP in PDF.
+        // So moving mouse DOWN (+dyPx) means moving CLOSER to bottom (decreasing Y in PDF? No.)
+        // Wait: PDF origin is Bottom-Left.
+        // Rendering: Top-Left is (0, PageH).
+        // Let's visualize:
+        // DOM y=0 is PDF y=PageH.
+        // DOM y=100 is PDF y=PageH - 100/scale.
+        // If I move DOWN (+10px), DOM y increases. PDF y decreases.
+        // So dyPt = -dyPx / scale.
+
+        const dxPt = dxPx / scale;
+        const dyPt = -dyPx / scale;
+
+        setPlacements(prev => prev.map(p => {
+            if (p.id !== id) return p;
+            return {
+                ...p,
+                x: initX + dxPt,
+                y: initY + dyPt
+            };
+        }));
+    };
+
+    const handlePointerUp = (e: React.PointerEvent) => {
+        if (dragStartRef.current) {
+            (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+            dragStartRef.current = null;
+        }
+    };
+
+    const saveSignedPdf = async () => {
+        if (!order || placements.length === 0) {
+            setError("Place a signature before saving.");
             return;
         }
 
@@ -292,20 +256,36 @@ function DocumentSigningPage() {
         setError(null);
 
         try {
-            // Convert canvas to base64 for transmission
-            const signatureImage = canvasRef.current.toDataURL('image/png');
+            // Pick the first signature image for the 'main' image (legacy field requirement?)
+            // The backend update said signature_image is required.
+            // We'll send the dataUrl of the first placement, or the last one used.
+            // And send the FULL list of placements.
 
-            // Send signature data to backend for bundling
-            await ordersApi.signOrder(order.id, {
-                signature_image: signatureImage,
-                page_number: pageNumber,
-                position: { x: 50, y: 60 } // Approximate position of signature line
-            });
+            const mainSig = placements[0].dataUrl;
 
-            // Navigate back to the delivery run or order detail
+            // Map frontend placements to backend format
+            // Backend expects { page_number, x, y, width, height }
+            // Backend x/y are drawing coordinates (Bottom-Left).
+            // Our state is ALREADY in PDF Points (Bottom-Left).
+
+            // Just double check boundaries? No, backend just stamps.
+
+            const payload = {
+                signature_image: mainSig, // Required by schema base
+                placements: placements.map(p => ({
+                    page_number: p.pageIndex + 1, // 1-based for Backend
+                    x: p.x,
+                    y: p.y,
+                    width: p.width,
+                    height: p.height
+                }))
+            };
+
+            await ordersApi.signOrder(order.id, payload as any); // Cast because frontend types might need update
+
             const returnTo = searchParams.get('returnTo') || `/orders/${order.id}`;
             navigate(returnTo, {
-                state: { message: 'Document signed successfully! Bundled documents generated and order marked as delivered.' }
+                state: { message: 'Document signed successfully!' }
             });
 
         } catch (saveError) {
@@ -314,174 +294,182 @@ function DocumentSigningPage() {
         } finally {
             setIsSaving(false);
         }
-    }, [hasSignature, order, selectedPdfUrl, pageNumber, searchParams, navigate]);
+    };
+
+    // Calculate DOM styles for a placement
+    const getPlacementStyle = (p: Placement) => {
+        if (!pageViewport || !renderSize) return { display: 'none' };
+
+        // Convert PDF Points (Bottom-Left) to DOM Pixels (Top-Left)
+        // xPx = xPt * scale
+        // yPx = (PageH - yPt - hPt) * scale
+
+        const xPx = p.x * scale;
+        const yPx = (pageViewport.height - p.y - p.height) * scale;
+        const wPx = p.width * scale;
+        const hPx = p.height * scale;
+
+        return {
+            left: `${xPx}px`,
+            top: `${yPx}px`,
+            width: `${wPx}px`,
+            height: `${hPx}px`,
+            position: 'absolute' as const,
+        };
+    };
+
+    // --- Render ---
 
     if (loadingOrder) {
-        return (
-            <div className="flex items-center justify-center py-12">
-                <div className="text-sm text-muted-foreground">Loading order details...</div>
-            </div>
-        );
+        return <div className="p-8 text-center text-gray-500">Loading document...</div>;
     }
 
     if (orderError || !order) {
-        return (
-            <div className="text-center py-12">
-                <div className="text-red-600 mb-4">{orderError || "Order not found"}</div>
-                <button
-                    onClick={() => navigate(-1)}
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                >
-                    Go Back
-                </button>
-            </div>
-        );
+        return <div className="p-8 text-center text-red-500">{orderError || "Order not found"}</div>;
     }
 
     return (
-        <div className="px-4 pb-8">
-            <div className="max-w-6xl mx-auto">
-                <header className="mb-6">
-                    <h1 className="text-2xl font-bold text-gray-900">Sign Delivery Document</h1>
-                    <p className="text-gray-600 mt-1">
-                        Order {order.inflow_order_id || order.id.slice(0, 8)} - {order.recipient_name || 'Unknown Recipient'}
-                    </p>
+        <div className="px-4 pb-8 min-h-screen bg-gray-50/50">
+            <SignatureModal
+                open={modalOpen}
+                onOpenChange={setModalOpen}
+                onSave={handleModalSave}
+            />
+
+            <div className="max-w-6xl mx-auto pt-6">
+                <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">Sign Delivery Document</h1>
+                        <p className="text-gray-600">
+                            Order {order.inflow_order_id} • {order.recipient_name}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={useLastSignature}
+                            className="hidden sm:flex"
+                        >
+                            <PenTool className="w-4 h-4 mr-2" />
+                            Add Signature
+                        </Button>
+                        <Button
+                            onClick={saveSignedPdf}
+                            disabled={placements.length === 0 || isSaving}
+                            className="bg-[#500000] hover:bg-[#300000]"
+                        >
+                            {isSaving ? "Saving..." : "Finish & Save"}
+                        </Button>
+                    </div>
                 </header>
 
-                {!selectedPdf && (
-                    <section className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <div className="text-yellow-800">
-                            <strong>No picklist available</strong> - This order doesn't have a generated picklist to sign.
-                        </div>
-                    </section>
-                )}
-
-                {selectedPdf && (
-                    <section className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="text-blue-800">
-                            <strong>Ready to sign:</strong> {selectedPdf.name}
-                        </div>
-                    </section>
-                )}
-
-                <section className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold text-gray-900">Document preview</h2>
-                            <p className="text-sm text-gray-600">Switch pages and draw directly on top of the PDF.</p>
-                        </div>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Toolbar */}
+                    <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
                         <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                className="px-4 py-2 rounded-md bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={() => setPageNumber((prev) => Math.max(1, prev - 1))}
-                                disabled={!numPages || pageNumber <= 1}
+                            <span className="text-sm font-medium text-gray-700">Page {pageNumber} of {numPages || '--'}</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setPageNumber(p => Math.max(1, p - 1))}
+                                disabled={pageNumber <= 1}
                             >
                                 Previous
-                            </button>
-                            <div className="text-sm text-gray-700">
-                                Page {pageNumber} {numPages ? `of ${numPages}` : ""}
-                            </div>
-                            <button
-                                type="button"
-                                className="px-4 py-2 rounded-md bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={() => setPageNumber((prev) => (numPages ? Math.min(numPages, prev + 1) : prev))}
-                                disabled={!numPages || (numPages ? pageNumber >= numPages : true)}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setPageNumber(p => Math.min(numPages || p, p + 1))}
+                                disabled={!numPages || pageNumber >= numPages}
                             >
                                 Next
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
+                    {/* PDF Viewer Area */}
                     <div
-                        className="mt-4 relative bg-gray-50 border border-dashed border-gray-300 rounded-lg min-h-[400px] flex items-center justify-center"
+                        className="relative bg-gray-100 min-h-[500px] flex justify-center p-4 overflow-hidden select-none"
                         ref={viewerRef}
                     >
                         {selectedPdfUrl ? (
-                            <div className="w-full flex justify-center py-4">
-                                <div
-                                    className={`relative ${isDrawing ? "ring-2 ring-[#800000] ring-offset-2" : ""}`}
-                                    style={{ width: renderSize?.width ?? "100%" }}
+                            <div className="relative shadow-lg ring-1 ring-gray-900/5">
+                                <Document
+                                    file={selectedPdfUrl}
+                                    onLoadSuccess={handleLoadSuccess}
+                                    loading={<div className="p-10 text-gray-500">Loading PDF...</div>}
+                                    error={<div className="p-10 text-red-500">Failed to load PDF</div>}
                                 >
-                                    <Document
-                                        key={selectedPdf?.filename ?? "pdf-document"}
-                                        file={selectedPdfUrl}
-                                        loading={<div className="text-gray-700">Loading PDF...</div>}
-                                        onLoadSuccess={handleLoadSuccess}
-                                        onLoadError={(loadError: Error) => setError(loadError.message)}
-                                        className="border border-gray-200 rounded-lg overflow-hidden bg-white"
+                                    <Page
+                                        pageNumber={pageNumber}
+                                        width={containerWidth || undefined}
+                                        onLoadSuccess={handlePageLoad}
+                                        renderTextLayer={false}
+                                        renderAnnotationLayer={false}
+                                        className="bg-white"
+                                    />
+                                </Document>
+
+                                {/* Overlay Layer */}
+                                {placements.filter(p => p.pageIndex === pageNumber - 1).map(p => (
+                                    <div
+                                        key={p.id}
+                                        style={getPlacementStyle(p)}
+                                        className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                                        onPointerDown={(e) => handlePointerDown(e, p.id)}
+                                        onPointerMove={handlePointerMove}
+                                        onPointerUp={handlePointerUp}
                                     >
-                                        <Page
-                                            key={`${selectedPdfUrl}-${pageNumber}`}
-                                            pageNumber={pageNumber}
-                                            width={renderSize?.width ?? containerWidth ?? undefined}
-                                            renderMode="canvas"
-                                            renderTextLayer={false}
-                                            renderAnnotationLayer={false}
-                                            loading={<div className="p-6 text-gray-700">Rendering page...</div>}
-                                            onLoadSuccess={handlePageLoad}
-                                            onRenderSuccess={handlePageRender}
-                                            onRenderError={(renderError: Error) => setError(renderError.message)}
+                                        <img
+                                            src={p.dataUrl}
+                                            alt="Signature"
+                                            className="w-full h-full object-contain pointer-events-none"
                                         />
-                                    </Document>
 
-                                    {renderSize && (
-                                        <canvas
-                                            ref={canvasRef}
-                                            className={`absolute inset-0 z-20 ${selectedPdf ? "cursor-crosshair" : "cursor-not-allowed"}`}
-                                            style={{ touchAction: "none" }}
-                                            onPointerDown={startDrawing}
-                                            onPointerMove={drawStroke}
-                                            onPointerUp={finishDrawing}
-                                            onPointerCancel={finishDrawing}
-                                            onPointerLeave={finishDrawing}
-                                        />
-                                    )}
+                                        {/* Delete Button (visible on hover/select) */}
+                                        {(selectedPlacementId === p.id) && (
+                                            <button
+                                                className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600"
+                                                onClick={(e) => { e.stopPropagation(); removePlacement(p.id); }}
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
 
-                                    {!isCanvasReady && (
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <div className="bg-white/80 border border-gray-200 rounded-md px-4 py-2 text-gray-700">
-                                                Select a PDF to start signing.
-                                            </div>
+                                {/* Empty State Hint */}
+                                {placements.length === 0 && (
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                                        <div className="bg-black/75 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm">
+                                            Tap "Add Signature" to begin
                                         </div>
-                                    )}
-
-                                    {isDrawing && (
-                                        <span className="absolute top-2 right-2 bg-[#800000] text-white text-xs font-semibold px-3 py-1 rounded-full shadow">
-                                            Drawing...
-                                        </span>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
-                            <div className="text-center text-gray-600 py-10">Choose a PDF above to begin.</div>
+                            <div className="text-gray-400 self-center">No PDF Loaded</div>
                         )}
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-3 items-center justify-between">
-                        {error && (
-                            <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-md">{error}</div>
-                        )}
-                        <div className="flex gap-3 ml-auto">
-                            <button
-                                type="button"
-                                className="px-4 py-2 rounded-md border border-gray-300 text-gray-800 text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={clearSignature}
-                                disabled={!isCanvasReady || !hasSignature}
-                            >
-                                Clear Signature
-                            </button>
-                            <button
-                                type="button"
-                                className="px-4 py-2 rounded-md bg-[#800000] text-white text-sm font-semibold hover:bg-[#660000] disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={saveSignedPdf}
-                                disabled={!isCanvasReady || !hasSignature || isSaving || isPageRendering}
-                            >
-                                {isSaving ? "Saving..." : "Save Signed PDF"}
-                            </button>
-                        </div>
+                    {/* Mobile Floating Action Button */}
+                    <div className="sm:hidden fixed bottom-6 right-6">
+                        <Button
+                            className="rounded-full shadow-lg h-14 w-14 p-0 bg-blue-600 hover:bg-blue-700"
+                            onClick={useLastSignature}
+                        >
+                            <PenTool className="w-6 h-6 text-white" />
+                        </Button>
                     </div>
-                </section>
+
+                    {error && (
+                        <div className="p-4 bg-red-50 border-t border-red-100 text-red-600 text-sm text-center">
+                            {error}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
