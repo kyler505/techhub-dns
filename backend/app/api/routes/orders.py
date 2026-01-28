@@ -116,8 +116,12 @@ def get_order(order_id):
         order = service.get_order_detail(order_id)
         if not order:
             abort(404, description="Order not found")
+        response_data = OrderDetailResponse.model_validate(order).model_dump()
+        if order.inflow_data:
+            inflow_service = InflowService()
+            response_data["asset_tag_serials"] = inflow_service.get_asset_tag_serials(order.inflow_data)
 
-        return jsonify(OrderDetailResponse.model_validate(order).model_dump())
+        return jsonify(response_data)
 
 
 @bp.route("/<uuid:order_id>", methods=["PATCH"])
