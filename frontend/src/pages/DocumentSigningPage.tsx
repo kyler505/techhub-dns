@@ -190,21 +190,59 @@ function DocumentSigningPage() {
 
     // --- Dragging Logic ---
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
+    const dragTypeRef = useRef<'pointer' | 'touch' | null>(null);
 
-    const windowListenersRef = useRef(false);
+    const windowPointerListenersRef = useRef(false);
+    const windowTouchListenersRef = useRef(false);
+    const touchListenerOptions = useRef<AddEventListenerOptions>({ passive: false });
 
-    const attachWindowListeners = () => {
-        if (windowListenersRef.current) return;
+    const attachPointerListeners = () => {
+        if (windowPointerListenersRef.current) return;
         window.addEventListener('pointermove', handlePointerMove as unknown as EventListener);
         window.addEventListener('pointerup', handleWindowPointerUp);
-        windowListenersRef.current = true;
+        windowPointerListenersRef.current = true;
     };
 
-    const detachWindowListeners = () => {
-        if (!windowListenersRef.current) return;
+    const detachPointerListeners = () => {
+        if (!windowPointerListenersRef.current) return;
         window.removeEventListener('pointermove', handlePointerMove as unknown as EventListener);
         window.removeEventListener('pointerup', handleWindowPointerUp);
-        windowListenersRef.current = false;
+        windowPointerListenersRef.current = false;
+    };
+
+    const attachTouchListeners = () => {
+        if (windowTouchListenersRef.current) return;
+        window.addEventListener('touchmove', handleTouchMove as unknown as EventListener, touchListenerOptions.current);
+        window.addEventListener('touchend', handleWindowTouchEnd);
+        window.addEventListener('touchcancel', handleWindowTouchEnd);
+        windowTouchListenersRef.current = true;
+    };
+
+    const detachTouchListeners = () => {
+        if (!windowTouchListenersRef.current) return;
+        window.removeEventListener('touchmove', handleTouchMove as unknown as EventListener, touchListenerOptions.current);
+        window.removeEventListener('touchend', handleWindowTouchEnd);
+        window.removeEventListener('touchcancel', handleWindowTouchEnd);
+        windowTouchListenersRef.current = false;
+    };
+
+    const updateDrag = (clientX: number, clientY: number) => {
+        if (!dragStartRef.current || !pageViewport) return;
+
+        const { id, startX, startY, initX, initY } = dragStartRef.current;
+        const dxPx = clientX - startX;
+        const dyPx = clientY - startY;
+        const dxPt = dxPx / scale;
+        const dyPt = -dyPx / scale;
+
+        setPlacements(prev => prev.map(p => {
+            if (p.id !== id) return p;
+            return {
+                ...p,
+                x: initX + dxPt,
+                y: initY + dyPt
+            };
+        }));
     };
 
     const handlePointerDown = (e: React.PointerEvent, id: string) => {
@@ -212,9 +250,10 @@ function DocumentSigningPage() {
         const placement = placements.find(p => p.id === id);
         if (!placement) return;
 
+        dragTypeRef.current = 'pointer';
         setSelectedPlacementId(id);
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-        attachWindowListeners();
+        attachPointerListeners();
 
         // Convert click screen coords -> PDF points not needed for Delta,
         // we just need delta pixels converted to delta points.
@@ -229,57 +268,70 @@ function DocumentSigningPage() {
     };
 
     const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
-        if (!dragStartRef.current || !pageViewport) return;
-
-        const { id, startX, startY, initX, initY } = dragStartRef.current;
+        if (dragTypeRef.current !== 'pointer') return;
         if ('preventDefault' in e) {
             e.preventDefault();
         }
+        updateDrag(e.clientX, e.clientY);
+    };
 
-        // Delta in Pixels
-        const dxPx = e.clientX - startX;
-        const dyPx = e.clientY - startY;
+    const handleTouchStart = (e: React.TouchEvent, id: string) => {
+        if (dragTypeRef.current === 'pointer') return;
+        const placement = placements.find(p => p.id === id);
+        const touch = e.touches[0];
+        if (!placement || !touch) return;
 
-        // Delta in PDF Points
-        // X grows right (same)
-        // Y grows down in DOM, but UP in PDF.
-        // So moving mouse DOWN (+dyPx) means moving CLOSER to bottom (decreasing Y in PDF? No.)
-        // Wait: PDF origin is Bottom-Left.
-        // Rendering: Top-Left is (0, PageH).
-        // Let's visualize:
-        // DOM y=0 is PDF y=PageH.
-        // DOM y=100 is PDF y=PageH - 100/scale.
-        // If I move DOWN (+10px), DOM y increases. PDF y decreases.
-        // So dyPt = -dyPx / scale.
+        e.stopPropagation();
+        e.preventDefault();
+        dragTypeRef.current = 'touch';
+        setSelectedPlacementId(id);
+        attachTouchListeners();
 
-        const dxPt = dxPx / scale;
-        const dyPt = -dyPx / scale;
+        dragStartRef.current = {
+            id,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            initX: placement.x,
+            initY: placement.y
+        };
+    };
 
-        setPlacements(prev => prev.map(p => {
-            if (p.id !== id) return p;
-            return {
-                ...p,
-                x: initX + dxPt,
-                y: initY + dyPt
-            };
-        }));
+    const handleTouchMove = (e: TouchEvent | React.TouchEvent) => {
+        if (dragTypeRef.current !== 'touch') return;
+        const touch = 'touches' in e ? (e.touches[0] || e.changedTouches[0]) : null;
+        if (!touch) return;
+        if ('preventDefault' in e) {
+            e.preventDefault();
+        }
+        updateDrag(touch.clientX, touch.clientY);
     };
 
     const handleWindowPointerUp = () => {
         dragStartRef.current = null;
-        detachWindowListeners();
+        dragTypeRef.current = null;
+        detachPointerListeners();
+    };
+
+    const handleWindowTouchEnd = () => {
+        dragStartRef.current = null;
+        dragTypeRef.current = null;
+        detachTouchListeners();
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
         if (dragStartRef.current) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
             dragStartRef.current = null;
-            detachWindowListeners();
+            dragTypeRef.current = null;
+            detachPointerListeners();
         }
     };
 
     useEffect(() => {
-        return () => detachWindowListeners();
+        return () => {
+            detachPointerListeners();
+            detachTouchListeners();
+        };
     }, []);
 
     const saveSignedPdf = async () => {
@@ -425,11 +477,15 @@ function DocumentSigningPage() {
                                 {placements.map(p => (
                                     <div
                                         key={p.id}
-                                        style={getPlacementStyle(p)}
                                         className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                                        style={{ ...getPlacementStyle(p), touchAction: 'none' }}
                                         onPointerDown={(e) => handlePointerDown(e, p.id)}
                                         onPointerMove={handlePointerMove}
                                         onPointerUp={handlePointerUp}
+                                        onPointerCancel={handlePointerUp}
+                                        onTouchStart={(e) => handleTouchStart(e, p.id)}
+                                        onTouchMove={handleTouchMove}
+                                        onTouchEnd={handleWindowTouchEnd}
                                     >
                                         <img
                                             src={p.dataUrl}
