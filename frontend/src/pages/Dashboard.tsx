@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { analyticsApi, StatusCountsResponse, DeliveryPerformanceResponse, ActivityItem } from "../api/analytics";
-import OrdersLineChart from "../components/charts/OrdersLineChart";
-import PeakHoursBarChart from "../components/charts/PeakHoursBarChart";
-import StatusTrendsChart from "../components/charts/StatusTrendsChart";
+import { Button } from "../components/ui/button";
+import { analyticsApi, StatusCountsResponse, DeliveryPerformanceResponse, TimeTrendDataPoint } from "../api/analytics";
+import { ordersApi } from "../api/orders";
+import { Order, OrderStatus } from "../types/order";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
+import OrdersLineChart from "../components/charts/OrdersLineChart";
+import OrdersBarChart from "../components/charts/OrdersBarChart";
 
 export default function Dashboard() {
   // State for analytics data
@@ -16,15 +17,14 @@ export default function Dashboard() {
     completed_today: 0,
     ready_for_delivery: 0,
   });
-  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
-  const [timeTrends, setTimeTrends] = useState<any[]>([]);
-  const [peakHours, setPeakHours] = useState<any[]>([]);
-
+  const [timeTrends, setTimeTrends] = useState<TimeTrendDataPoint[]>([]);
+  const [completedTodayOrders, setCompletedTodayOrders] = useState<Order[]>([]);
+  const [chartType, setChartType] = useState<"line" | "bar">("line");
   // Loading states
   const [statusLoading, setStatusLoading] = useState(true);
   const [perfLoading, setPerfLoading] = useState(true);
-  const [activityLoading, setActivityLoading] = useState(true);
   const [trendsLoading, setTrendsLoading] = useState(true);
+  const [completedLoading, setCompletedLoading] = useState(true);
 
   // Error states
   const [error, setError] = useState<string | null>(null);
@@ -35,47 +35,50 @@ export default function Dashboard() {
   const fetchAnalytics = async () => {
     try {
       setError(null);
+      setStatusLoading(true);
+      setPerfLoading(true);
+      setTrendsLoading(true);
+      setCompletedLoading(true);
       
       // Fetch all data in parallel
-      const [counts, perf, activity, trends] = await Promise.all([
+      const [counts, perf, trends, deliveredOrders] = await Promise.all([
         analyticsApi.getOrderStatusCounts().catch(() => ({})),
         analyticsApi.getDeliveryPerformance().catch(() => ({
           active_runs: 0,
           completed_today: 0,
           ready_for_delivery: 0,
         })),
-        analyticsApi.getRecentActivity().catch(() => ({ items: [] })),
         analyticsApi.getTimeTrends("day", 7).catch(() => ({ period: "day", data: [] })),
+        ordersApi.getOrders({ status: OrderStatus.DELIVERED }).catch(() => []),
       ]);
 
       setStatusCounts(counts);
       setDeliveryPerf(perf);
-      setRecentActivity(activity.items || []);
       setTimeTrends(trends.data || []);
 
-      // Calculate peak hours from time trends
-      // Group by hour of day (simplified - in production, backend should provide this)
-      const hourCounts: { [key: string]: number } = {};
-      (trends.data || []).forEach((point: any) => {
-        const hour = new Date(point.date).getHours();
-        hourCounts[hour] = (hourCounts[hour] || 0) + point.count;
-      });
-      const peakHoursData = Object.entries(hourCounts)
-        .map(([hour, count]) => ({
-          hour: `${hour}:00`,
-          count,
-        }))
-        .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
-      setPeakHours(peakHoursData);
-
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const completedToday = (deliveredOrders || [])
+        .filter((order) => {
+          if (!order.signature_captured_at) return false;
+          const signatureDate = new Date(order.signature_captured_at);
+          signatureDate.setHours(0, 0, 0, 0);
+          return signatureDate.getTime() === todayStart.getTime();
+        })
+        .sort((a, b) => {
+          const aTime = a.signature_captured_at ? new Date(a.signature_captured_at).getTime() : 0;
+          const bTime = b.signature_captured_at ? new Date(b.signature_captured_at).getTime() : 0;
+          return bTime - aTime;
+        });
+      setCompletedTodayOrders(completedToday);
     } catch (err) {
       console.error("Failed to fetch analytics:", err);
       setError("Failed to load dashboard data");
     } finally {
       setStatusLoading(false);
       setPerfLoading(false);
-      setActivityLoading(false);
       setTrendsLoading(false);
+      setCompletedLoading(false);
     }
   };
 
@@ -137,25 +140,13 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Helper to format status names
-  const formatStatus = (status: string): string => {
-    return status
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, (l) => l.toUpperCase());
-  };
-
-  // Helper to format timestamps
-  const formatTimestamp = (timestamp: string): string => {
+  const formatSignatureTime = (timestamp?: string) => {
+    if (!timestamp) return "-";
     try {
       const date = new Date(timestamp);
-      return date.toLocaleString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        hour: 'numeric', 
-        minute: '2-digit',
-      });
+      return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     } catch {
-      return timestamp;
+      return "-";
     }
   };
 
@@ -225,72 +216,61 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Charts Section - 2 column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Orders per Day (Last 7 Days)</CardTitle>
+            <CardTitle>Completed Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <OrdersLineChart data={timeTrends} loading={trendsLoading} />
+            {completedLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            ) : completedTodayOrders.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No completed orders today</div>
+            ) : (
+              <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                {completedTodayOrders.map((order) => (
+                  <div key={order.id} className="flex items-center justify-between text-sm">
+                    <div className="font-medium">{order.inflow_order_id || order.id.slice(0, 8)}</div>
+                    <div className="text-muted-foreground">
+                      {formatSignatureTime(order.signature_captured_at)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
-            <CardTitle>Peak Hours</CardTitle>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Orders Run (Last 7 Days)</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={chartType === "line" ? "default" : "outline"}
+                onClick={() => setChartType("line")}
+              >
+                Line
+              </Button>
+              <Button
+                size="sm"
+                variant={chartType === "bar" ? "default" : "outline"}
+                onClick={() => setChartType("bar")}
+              >
+                Bar
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <PeakHoursBarChart data={peakHours} loading={trendsLoading} />
+            {chartType === "line" ? (
+              <OrdersLineChart data={timeTrends} loading={trendsLoading} />
+            ) : (
+              <OrdersBarChart data={timeTrends} loading={trendsLoading} />
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Status Trends - full width */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Status Trends (Last 7 Days)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <StatusTrendsChart data={timeTrends} loading={trendsLoading} />
-        </CardContent>
-      </Card>
-
-      {/* Recent Activity - full width */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {activityLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : recentActivity.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No recent activity</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Order ID</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Changed By</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentActivity.slice(0, 20).map((activity, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="text-sm">{formatTimestamp(activity.timestamp)}</TableCell>
-                    <TableCell className="text-sm font-medium">{formatStatus(activity.type)}</TableCell>
-                    <TableCell className="text-sm font-mono">{activity.order_id}</TableCell>
-                    <TableCell className="text-sm">{activity.description}</TableCell>
-                    <TableCell className="text-sm">{activity.changed_by || "-"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
