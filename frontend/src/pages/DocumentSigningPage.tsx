@@ -191,13 +191,30 @@ function DocumentSigningPage() {
     // --- Dragging Logic ---
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
 
+    const windowListenersRef = useRef(false);
+
+    const attachWindowListeners = () => {
+        if (windowListenersRef.current) return;
+        window.addEventListener('pointermove', handlePointerMove as unknown as EventListener);
+        window.addEventListener('pointerup', handleWindowPointerUp);
+        windowListenersRef.current = true;
+    };
+
+    const detachWindowListeners = () => {
+        if (!windowListenersRef.current) return;
+        window.removeEventListener('pointermove', handlePointerMove as unknown as EventListener);
+        window.removeEventListener('pointerup', handleWindowPointerUp);
+        windowListenersRef.current = false;
+    };
+
     const handlePointerDown = (e: React.PointerEvent, id: string) => {
         e.stopPropagation(); // Prevent PDF scrolling if possible? Or maybe just capture
         const placement = placements.find(p => p.id === id);
         if (!placement) return;
 
         setSelectedPlacementId(id);
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        attachWindowListeners();
 
         // Convert click screen coords -> PDF points not needed for Delta,
         // we just need delta pixels converted to delta points.
@@ -211,11 +228,13 @@ function DocumentSigningPage() {
         };
     };
 
-    const handlePointerMove = (e: React.PointerEvent) => {
-        if (!dragStartRef.current || !pageViewport || !renderSize) return;
+    const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
+        if (!dragStartRef.current || !pageViewport) return;
 
         const { id, startX, startY, initX, initY } = dragStartRef.current;
-        e.preventDefault();
+        if ('preventDefault' in e) {
+            e.preventDefault();
+        }
 
         // Delta in Pixels
         const dxPx = e.clientX - startX;
@@ -246,12 +265,22 @@ function DocumentSigningPage() {
         }));
     };
 
+    const handleWindowPointerUp = () => {
+        dragStartRef.current = null;
+        detachWindowListeners();
+    };
+
     const handlePointerUp = (e: React.PointerEvent) => {
         if (dragStartRef.current) {
-            (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
             dragStartRef.current = null;
+            detachWindowListeners();
         }
     };
+
+    useEffect(() => {
+        return () => detachWindowListeners();
+    }, []);
 
     const saveSignedPdf = async () => {
         if (!order || placements.length === 0) {
