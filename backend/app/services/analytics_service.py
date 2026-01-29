@@ -137,16 +137,18 @@ class AnalyticsService:
 
         # Query orders grouped by date
         results = self.db.query(
-            func.date(Order.created_at).label('date'),
+            func.date(Order.signature_captured_at).label('date'),
             Order.status,
             func.count(Order.id).label('count')
         ).filter(
-            Order.created_at >= cutoff_date
+            Order.status == OrderStatus.DELIVERED.value,
+            Order.signature_captured_at.isnot(None),
+            Order.signature_captured_at >= cutoff_date
         ).group_by(
-            func.date(Order.created_at),
+            func.date(Order.signature_captured_at),
             Order.status
         ).order_by(
-            func.date(Order.created_at).desc()
+            func.date(Order.signature_captured_at).desc()
         ).all()
 
         if not results:
