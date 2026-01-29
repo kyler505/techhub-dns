@@ -114,9 +114,11 @@ function DocumentSigningPage() {
     }, [containerWidth, pageViewport]);
 
     const scale = useMemo(() => {
-        if (!pageViewport || !renderSize) return 1;
-        return renderSize.width / pageViewport.width;
-    }, [pageViewport, renderSize]);
+        if (!pageViewport) return 1;
+        const fallbackWidth = viewerRef.current?.clientWidth || pageViewport.width;
+        const targetWidth = renderSize?.width || containerWidth || fallbackWidth;
+        return targetWidth / pageViewport.width;
+    }, [pageViewport, renderSize, containerWidth]);
 
     const handlePageLoad = useCallback((page: PDFPageProxy) => {
         const viewport = page.getViewport({ scale: 1 });
@@ -169,19 +171,16 @@ function DocumentSigningPage() {
     };
 
     const handleModalSave = (dataUrl: string, w: number, h: number) => {
-        addPlacement(dataUrl, w, h);
+        const placed = addPlacement(dataUrl, w, h);
+        if (placed) {
+            setModalOpen(false);
+        }
+        return placed;
     };
 
     const useLastSignature = () => {
-        const cached = signatureCache.load();
-        if (cached) {
-            const placed = addPlacement(cached.dataUrl, cached.width, cached.height);
-            if (!placed) {
-                setModalOpen(true);
-            }
-        } else {
-            setModalOpen(true);
-        }
+        setError(null);
+        setModalOpen(true);
     };
 
     const removePlacement = (id: string) => {
@@ -306,7 +305,7 @@ function DocumentSigningPage() {
 
     // Calculate DOM styles for a placement
     const getPlacementStyle = (p: Placement) => {
-        if (!pageViewport || !renderSize) return { display: 'none' };
+        if (!pageViewport) return { display: 'none' };
 
         // Convert PDF Points (Bottom-Left) to DOM Pixels (Top-Left)
         // xPx = xPt * scale

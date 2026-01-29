@@ -7,7 +7,7 @@ import { signatureCache } from "../lib/signatureCache"; // Create this next
 interface SignatureModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSave: (dataUrl: string, width: number, height: number) => void;
+    onSave: (dataUrl: string, width: number, height: number) => boolean;
 }
 
 export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalProps) {
@@ -176,8 +176,10 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
             // Save to cache
             signatureCache.save(result.dataUrl, result.width, result.height);
             // Pass back to parent
-            onSave(result.dataUrl, result.width, result.height);
-            onOpenChange(false);
+            const didSave = onSave(result.dataUrl, result.width, result.height);
+            if (didSave) {
+                onOpenChange(false);
+            }
         }
     };
 
