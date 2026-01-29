@@ -287,12 +287,16 @@ export default function OrderDetail({
             </div>
 
             {order.inflow_data && (
-                <div className="bg-white rounded-lg shadow p-6">
-                    <h3 className="text-xl font-bold mb-4">Inflow Data</h3>
-                    <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm">
-                        {JSON.stringify(order.inflow_data, null, 2)}
-                    </pre>
-                </div>
+                <details className="bg-white rounded-lg shadow p-6">
+                    <summary className="cursor-pointer select-none text-xl font-bold">
+                        Inflow Data
+                    </summary>
+                    <div className="mt-4">
+                        <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm">
+                            {JSON.stringify(order.inflow_data, null, 2)}
+                        </pre>
+                    </div>
+                </details>
             )}
             <Dialog open={tagDialogOpen} onOpenChange={handleTagDialogOpenChange}>
                 <DialogContent className="sm:max-w-2xl">
