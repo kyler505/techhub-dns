@@ -537,7 +537,7 @@ function DocumentSigningPage() {
     }
 
     return (
-        <div className="px-4 pb-8 min-h-screen bg-gray-50/50">
+        <div className="px-4 pb-8 min-h-screen bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-white">
             <SignatureModal
                 open={modalOpen}
                 onOpenChange={setModalOpen}
@@ -572,6 +572,16 @@ function DocumentSigningPage() {
                 </header>
 
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div className="text-sm text-gray-600">
+                            <span className="font-medium text-gray-800">Picklist</span>
+                            <span className="mx-2 text-gray-300">•</span>
+                            <span>1 page</span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                            Drag to place • Resize from corner • Tap Save when finished
+                        </div>
+                    </div>
                     <div
                         className="relative bg-gray-100 min-h-[500px] flex justify-center p-4 overflow-hidden select-none"
                         ref={viewerRef}
@@ -643,7 +653,7 @@ function DocumentSigningPage() {
                                 {placements.length === 0 && (
                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
                                         <div className="bg-black/75 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm">
-                                            Tap "Add Signature" to begin
+                                            Tap "Add Signature" to draw, then drag to place
                                         </div>
                                     </div>
                                 )}

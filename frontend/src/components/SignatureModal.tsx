@@ -14,7 +14,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [hasSignature, setHasSignature] = useState(false);
-    const [penOnly, setPenOnly] = useState(true); // Default to true per requirements, but maybe allow fallback
+    const [requirePenInput, setRequirePenInput] = useState(true);
     const [debugInfo, setDebugInfo] = useState<string>("");
 
     // Reset canvas when opening
@@ -74,7 +74,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
     };
 
     const startDrawing = (e: React.PointerEvent) => {
-        if (penOnly && e.pointerType !== 'pen') {
+        if (requirePenInput && e.pointerType !== 'pen') {
             setDebugInfo(`Ignored ${e.pointerType} input (Pen only mode)`);
             return;
         }
@@ -192,8 +192,8 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         Add Signature
                     </DialogTitle>
                     <DialogDescription>
-                        Sign below using your Apple Pencil.
-                        {penOnly && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
+                        Sign below using your pencil. Use finger or mouse for the rest of the app.
+                        {requirePenInput && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -237,10 +237,10 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setPenOnly(!penOnly)}
+                            onClick={() => setRequirePenInput(!requirePenInput)}
                             className="text-gray-400 hover:text-gray-600"
                         >
-                            {penOnly ? "Enable Touch" : "Pen Only Input"}
+                            {requirePenInput ? "Allow Touch" : "Require Pen"}
                         </Button>
                     </div>
 
