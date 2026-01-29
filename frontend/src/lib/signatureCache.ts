@@ -26,7 +26,22 @@ export const signatureCache = {
         try {
             const raw = localStorage.getItem(CACHE_KEY);
             if (!raw) return null;
-            return JSON.parse(raw);
+            const parsed = JSON.parse(raw);
+            if (
+                !parsed ||
+                typeof parsed.dataUrl !== 'string' ||
+                !parsed.dataUrl.startsWith('data:') ||
+                typeof parsed.width !== 'number' ||
+                typeof parsed.height !== 'number' ||
+                !Number.isFinite(parsed.width) ||
+                !Number.isFinite(parsed.height) ||
+                parsed.width <= 0 ||
+                parsed.height <= 0
+            ) {
+                localStorage.removeItem(CACHE_KEY);
+                return null;
+            }
+            return parsed as LastSignature;
         } catch (e) {
             console.error('Failed to load signature from local storage', e);
             return null;

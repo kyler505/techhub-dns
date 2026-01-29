@@ -20,8 +20,18 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
     // Reset canvas when opening
     useEffect(() => {
         if (open) {
-            setTimeout(clearCanvas, 100); // Small delay to ensure render
+            setTimeout(() => {
+                resizeCanvas();
+                clearCanvas();
+            }, 100); // Small delay to ensure render
         }
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const handleResize = () => resizeCanvas();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, [open]);
 
     const clearCanvas = () => {
@@ -33,6 +43,24 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         setHasSignature(false);
         setDebugInfo("");
+    };
+
+    const resizeCanvas = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
+        const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
+
+        if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+            canvas.width = nextWidth;
+            canvas.height = nextHeight;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     const getPointerPos = (e: React.PointerEvent) => {
