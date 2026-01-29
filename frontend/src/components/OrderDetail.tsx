@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { OrderDetail as OrderDetailType, OrderStatus, AuditLog, TeamsNotification } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 
 interface OrderDetailProps {
     order: OrderDetailType;
@@ -22,30 +25,35 @@ export default function OrderDetail({
     onGeneratePicklist,
 }: OrderDetailProps) {
     const latestNotification = notifications[0];
+    const [tagDialogOpen, setTagDialogOpen] = useState(false);
+    const [tagIdsInput, setTagIdsInput] = useState("");
+    const [serialsConfirmed, setSerialsConfirmed] = useState(false);
+
+    const assetTagSerials = useMemo(() => order.asset_tag_serials || [], [order.asset_tag_serials]);
 
     const handleTagging = () => {
-        const assetTagSerials = order.asset_tag_serials || [];
-        const serialLines = assetTagSerials.map((item) => {
-            const categoryLabel = item.category_name ? ` (${item.category_name})` : "";
-            const serials = item.serials || [];
-            const serialText = serials.length > 0 ? serials.join(", ") : "No serials found";
-            return `${item.product_name}${categoryLabel}: ${serialText}`;
-        });
+        setTagDialogOpen(true);
+    };
 
-        const confirmMessage = assetTagSerials.length > 0
-            ? `Verify these serials match the devices in order:\n\n${serialLines.join("\n")}`
-            : "No laptop/desktop/AIO serials were found from inflow. Verify device serials manually before tagging.";
+    const resetTagDialog = () => {
+        setTagIdsInput("");
+        setSerialsConfirmed(false);
+    };
 
-        if (!window.confirm(confirmMessage)) {
-            return;
+    const handleTagDialogOpenChange = (open: boolean) => {
+        setTagDialogOpen(open);
+        if (!open) {
+            resetTagDialog();
         }
-        const raw = window.prompt("Enter tag IDs (comma-separated)", "");
-        if (raw === null) return;
-        const tagIds = raw
+    };
+
+    const handleTagSubmit = () => {
+        const tagIds = tagIdsInput
             .split(",")
             .map((tag) => tag.trim())
             .filter(Boolean);
         onTagOrder(tagIds);
+        handleTagDialogOpenChange(false);
     };
 
     return (
@@ -292,6 +300,72 @@ export default function OrderDetail({
                     </pre>
                 </div>
             )}
+            <Dialog open={tagDialogOpen} onOpenChange={handleTagDialogOpenChange}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Asset Tag Verification</DialogTitle>
+                        <DialogDescription>
+                            Confirm the serials match the devices in this order before tagging.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="rounded-lg border bg-white">
+                            <div className="border-b px-4 py-2 text-sm font-medium text-gray-700">
+                                Device Serials
+                            </div>
+                            <div className="max-h-56 space-y-3 overflow-y-auto px-4 py-3 text-sm">
+                                {assetTagSerials.length === 0 ? (
+                                    <p className="text-gray-600">
+                                        No laptop/desktop/AIO serials were found from inflow. Verify devices manually.
+                                    </p>
+                                ) : (
+                                    assetTagSerials.map((item) => (
+                                        <div key={item.product_id || item.product_name}>
+                                            <p className="font-medium text-gray-900">
+                                                {item.product_name}
+                                                {item.category_name ? ` (${item.category_name})` : ""}
+                                            </p>
+                                            <p className="text-gray-600">
+                                                {(item.serials || []).length > 0
+                                                    ? (item.serials || []).join(", ")
+                                                    : "No serials found"}
+                                            </p>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                        <label className="flex items-start gap-2 text-sm text-gray-700">
+                            <input
+                                type="checkbox"
+                                checked={serialsConfirmed}
+                                onChange={(event) => setSerialsConfirmed(event.target.checked)}
+                                className="mt-1 h-4 w-4 rounded border-gray-300 text-[#800000] focus:ring-[#800000]"
+                            />
+                            Serials match the devices in this order.
+                        </label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                Asset Tag IDs (comma-separated)
+                            </label>
+                            <input
+                                value={tagIdsInput}
+                                onChange={(event) => setTagIdsInput(event.target.value)}
+                                placeholder="e.g. TH-001, TH-002"
+                                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#800000] focus:outline-none focus:ring-1 focus:ring-[#800000]"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => handleTagDialogOpenChange(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleTagSubmit} disabled={!serialsConfirmed}>
+                            Mark Tagged
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
