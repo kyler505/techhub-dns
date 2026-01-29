@@ -59,7 +59,7 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
           strokeWidth={2}
           dot={{ fill: '#500000', r: 4 }}
           activeDot={{ r: 6 }}
-          name="Orders"
+          name="Delivered"
         />
       </LineChart>
     </ResponsiveContainer>

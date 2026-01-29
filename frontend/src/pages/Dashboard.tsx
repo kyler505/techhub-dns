@@ -243,7 +243,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Orders Run (Last 7 Days)</CardTitle>
+            <CardTitle>Orders Delivered (Last 7 Days)</CardTitle>
             <div className="flex gap-2">
               <Button
                 size="sm"

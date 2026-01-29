@@ -53,7 +53,7 @@ export default function OrdersBarChart({ data, loading }: OrdersBarChartProps) {
           }}
           cursor={{ fill: "hsl(var(--muted))" }}
         />
-        <Bar dataKey="count" fill="#500000" radius={[4, 4, 0, 0]} name="Orders" />
+        <Bar dataKey="count" fill="#500000" radius={[4, 4, 0, 0]} name="Delivered" />
       </BarChart>
     </ResponsiveContainer>
   );
