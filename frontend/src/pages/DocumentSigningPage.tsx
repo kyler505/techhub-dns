@@ -190,7 +190,17 @@ function DocumentSigningPage() {
 
     // --- Dragging Logic ---
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
-    const dragTypeRef = useRef<'pointer' | 'touch' | null>(null);
+    const resizeStartRef = useRef<{
+        id: string;
+        startX: number;
+        startY: number;
+        initW: number;
+        initH: number;
+        topRightX: number;
+        topRightY: number;
+    } | null>(null);
+    const interactionTypeRef = useRef<'pointer' | 'touch' | null>(null);
+    const interactionModeRef = useRef<'drag' | 'resize' | null>(null);
 
     const windowPointerListenersRef = useRef(false);
     const windowTouchListenersRef = useRef(false);
@@ -245,12 +255,62 @@ function DocumentSigningPage() {
         }));
     };
 
+    const updateResize = (clientX: number, clientY: number) => {
+        if (!resizeStartRef.current || !pageViewport) return;
+
+        const {
+            id,
+            startX,
+            startY,
+            initW,
+            initH,
+            topRightX,
+            topRightY
+        } = resizeStartRef.current;
+
+        const dxPx = clientX - startX;
+        const dyPx = clientY - startY;
+        const dxPt = dxPx / scale;
+        const dyPt = -dyPx / scale;
+
+        const proposedWidth = initW - dxPt;
+        const proposedHeight = initH - dyPt;
+        const scaleFromWidth = proposedWidth / initW;
+        const scaleFromHeight = proposedHeight / initH;
+        const rawScale = Math.max(scaleFromWidth, scaleFromHeight);
+
+        const minWidth = 40;
+        const minHeight = 20;
+        const maxWidth = Math.max(1, topRightX);
+        const maxHeight = Math.max(1, topRightY);
+        const minScale = Math.max(minWidth / initW, minHeight / initH);
+        const maxScale = Math.min(maxWidth / initW, maxHeight / initH);
+        const clampedScale = Math.min(maxScale, Math.max(minScale, rawScale));
+
+        const newWidth = initW * clampedScale;
+        const newHeight = initH * clampedScale;
+        const nextX = topRightX - newWidth;
+        const nextY = topRightY - newHeight;
+
+        setPlacements(prev => prev.map(p => {
+            if (p.id !== id) return p;
+            return {
+                ...p,
+                x: nextX,
+                y: nextY,
+                width: newWidth,
+                height: newHeight
+            };
+        }));
+    };
+
     const handlePointerDown = (e: React.PointerEvent, id: string) => {
         e.stopPropagation(); // Prevent PDF scrolling if possible? Or maybe just capture
         const placement = placements.find(p => p.id === id);
         if (!placement) return;
 
-        dragTypeRef.current = 'pointer';
+        interactionTypeRef.current = 'pointer';
+        interactionModeRef.current = 'drag';
         setSelectedPlacementId(id);
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         attachPointerListeners();
@@ -268,22 +328,27 @@ function DocumentSigningPage() {
     };
 
     const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
-        if (dragTypeRef.current !== 'pointer') return;
+        if (interactionTypeRef.current !== 'pointer') return;
         if ('preventDefault' in e) {
             e.preventDefault();
         }
-        updateDrag(e.clientX, e.clientY);
+        if (interactionModeRef.current === 'resize') {
+            updateResize(e.clientX, e.clientY);
+        } else {
+            updateDrag(e.clientX, e.clientY);
+        }
     };
 
     const handleTouchStart = (e: React.TouchEvent, id: string) => {
-        if (dragTypeRef.current === 'pointer') return;
+        if (interactionTypeRef.current === 'pointer') return;
         const placement = placements.find(p => p.id === id);
         const touch = e.touches[0];
         if (!placement || !touch) return;
 
         e.stopPropagation();
         e.preventDefault();
-        dragTypeRef.current = 'touch';
+        interactionTypeRef.current = 'touch';
+        interactionModeRef.current = 'drag';
         setSelectedPlacementId(id);
         attachTouchListeners();
 
@@ -297,34 +362,89 @@ function DocumentSigningPage() {
     };
 
     const handleTouchMove = (e: TouchEvent | React.TouchEvent) => {
-        if (dragTypeRef.current !== 'touch') return;
+        if (interactionTypeRef.current !== 'touch') return;
         const touch = 'touches' in e ? (e.touches[0] || e.changedTouches[0]) : null;
         if (!touch) return;
         if ('preventDefault' in e) {
             e.preventDefault();
         }
-        updateDrag(touch.clientX, touch.clientY);
+        if (interactionModeRef.current === 'resize') {
+            updateResize(touch.clientX, touch.clientY);
+        } else {
+            updateDrag(touch.clientX, touch.clientY);
+        }
     };
 
     const handleWindowPointerUp = () => {
         dragStartRef.current = null;
-        dragTypeRef.current = null;
+        resizeStartRef.current = null;
+        interactionTypeRef.current = null;
+        interactionModeRef.current = null;
         detachPointerListeners();
     };
 
     const handleWindowTouchEnd = () => {
         dragStartRef.current = null;
-        dragTypeRef.current = null;
+        resizeStartRef.current = null;
+        interactionTypeRef.current = null;
+        interactionModeRef.current = null;
         detachTouchListeners();
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
-        if (dragStartRef.current) {
+        if (dragStartRef.current || resizeStartRef.current) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
             dragStartRef.current = null;
-            dragTypeRef.current = null;
+            resizeStartRef.current = null;
+            interactionTypeRef.current = null;
+            interactionModeRef.current = null;
             detachPointerListeners();
         }
+    };
+
+    const handleResizePointerDown = (e: React.PointerEvent, id: string) => {
+        e.stopPropagation();
+        const placement = placements.find(p => p.id === id);
+        if (!placement) return;
+
+        interactionTypeRef.current = 'pointer';
+        interactionModeRef.current = 'resize';
+        setSelectedPlacementId(id);
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        attachPointerListeners();
+
+        resizeStartRef.current = {
+            id,
+            startX: e.clientX,
+            startY: e.clientY,
+            initW: placement.width,
+            initH: placement.height,
+            topRightX: placement.x + placement.width,
+            topRightY: placement.y + placement.height
+        };
+    };
+
+    const handleResizeTouchStart = (e: React.TouchEvent, id: string) => {
+        if (interactionTypeRef.current === 'pointer') return;
+        const placement = placements.find(p => p.id === id);
+        const touch = e.touches[0];
+        if (!placement || !touch) return;
+
+        e.stopPropagation();
+        e.preventDefault();
+        interactionTypeRef.current = 'touch';
+        interactionModeRef.current = 'resize';
+        attachTouchListeners();
+
+        resizeStartRef.current = {
+            id,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            initW: placement.width,
+            initH: placement.height,
+            topRightX: placement.x + placement.width,
+            topRightY: placement.y + placement.height
+        };
     };
 
     useEffect(() => {
@@ -501,6 +621,20 @@ function DocumentSigningPage() {
                                             >
                                                 <X className="w-3 h-3" />
                                             </button>
+                                        )}
+
+                                        {(selectedPlacementId === p.id) && (
+                                            <div
+                                                className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full border border-gray-300 bg-white shadow-sm flex items-center justify-center"
+                                                onPointerDown={(e) => handleResizePointerDown(e, p.id)}
+                                                onPointerUp={handlePointerUp}
+                                                onPointerCancel={handlePointerUp}
+                                                onTouchStart={(e) => handleResizeTouchStart(e, p.id)}
+                                                onTouchEnd={handleWindowTouchEnd}
+                                                style={{ touchAction: 'none' }}
+                                            >
+                                                <div className="h-3 w-3 border-b border-l border-gray-400" />
+                                            </div>
                                         )}
                                     </div>
                                 ))}
