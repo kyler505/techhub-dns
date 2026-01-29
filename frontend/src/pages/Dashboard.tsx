@@ -55,7 +55,7 @@ export default function Dashboard() {
       // Calculate peak hours from time trends
       // Group by hour of day (simplified - in production, backend should provide this)
       const hourCounts: { [key: string]: number } = {};
-      trends.data.forEach((point: any) => {
+      (trends.data || []).forEach((point: any) => {
         const hour = new Date(point.date).getHours();
         hourCounts[hour] = (hourCounts[hour] || 0) + point.count;
       });
