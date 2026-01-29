@@ -41,8 +41,6 @@ function DocumentSigningPage() {
     const [selectedPdf, setSelectedPdf] = useState<PdfEntry | null>(null);
     const [loadingOrder, setLoadingOrder] = useState(true);
     const [orderError, setOrderError] = useState<string | null>(null);
-    const [numPages, setNumPages] = useState<number>();
-    const [pageNumber, setPageNumber] = useState(1);
     const [pageViewport, setPageViewport] = useState<{ width: number; height: number } | null>(null);
     const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
     const [containerWidth, setContainerWidth] = useState<number | null>(null);
@@ -120,12 +118,6 @@ function DocumentSigningPage() {
         return renderSize.width / pageViewport.width;
     }, [pageViewport, renderSize]);
 
-    const handleLoadSuccess = useCallback(({ numPages: loadedPages }: { numPages: number }) => {
-        setNumPages(loadedPages);
-        setPageNumber(1);
-        setError(null);
-    }, []);
-
     const handlePageLoad = useCallback((page: PDFPageProxy) => {
         const viewport = page.getViewport({ scale: 1 });
         setPageViewport({ width: viewport.width, height: viewport.height });
@@ -136,14 +128,15 @@ function DocumentSigningPage() {
     const addPlacement = (dataUrl: string, imgW: number, imgH: number) => {
         if (!pageViewport) {
             setError("PDF is still loading. Try again in a moment.");
-            return;
+            setModalOpen(true);
+            return false;
         }
 
         if (!Number.isFinite(imgW) || !Number.isFinite(imgH) || imgW <= 0 || imgH <= 0) {
             signatureCache.clear();
             setError("Saved signature data was invalid. Please add a new signature.");
             setModalOpen(true);
-            return;
+            return false;
         }
 
         // Default size logic: e.g. 150pt width, preserve aspect ratio
@@ -161,7 +154,7 @@ function DocumentSigningPage() {
 
         const newPlacement: Placement = {
             id: Math.random().toString(36).substr(2, 9),
-            pageIndex: pageNumber - 1, // Current page
+            pageIndex: 0,
             x,
             y,
             width: targetWidthPt,
@@ -172,6 +165,7 @@ function DocumentSigningPage() {
         setError(null);
         setPlacements(prev => [...prev.filter(p => p.id !== 'temp'), newPlacement]);
         setSelectedPlacementId(newPlacement.id);
+        return true;
     };
 
     const handleModalSave = (dataUrl: string, w: number, h: number) => {
@@ -181,7 +175,10 @@ function DocumentSigningPage() {
     const useLastSignature = () => {
         const cached = signatureCache.load();
         if (cached) {
-            addPlacement(cached.dataUrl, cached.width, cached.height);
+            const placed = addPlacement(cached.dataUrl, cached.width, cached.height);
+            if (!placed) {
+                setModalOpen(true);
+            }
         } else {
             setModalOpen(true);
         }
@@ -375,56 +372,29 @@ function DocumentSigningPage() {
                 </header>
 
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    {/* Toolbar */}
-                    <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-700">Page {pageNumber} of {numPages || '--'}</span>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setPageNumber(p => Math.max(1, p - 1))}
-                                disabled={pageNumber <= 1}
-                            >
-                                Previous
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setPageNumber(p => Math.min(numPages || p, p + 1))}
-                                disabled={!numPages || pageNumber >= numPages}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* PDF Viewer Area */}
                     <div
                         className="relative bg-gray-100 min-h-[500px] flex justify-center p-4 overflow-hidden select-none"
                         ref={viewerRef}
                     >
                         {selectedPdfUrl ? (
                             <div className="relative shadow-lg ring-1 ring-gray-900/5">
-                                <Document
-                                    file={selectedPdfUrl}
-                                    onLoadSuccess={handleLoadSuccess}
-                                    loading={<div className="p-10 text-gray-500">Loading PDF...</div>}
-                                    error={<div className="p-10 text-red-500">Failed to load PDF</div>}
-                                >
-                                    <Page
-                                        pageNumber={pageNumber}
-                                        width={containerWidth || undefined}
-                                        onLoadSuccess={handlePageLoad}
-                                        renderTextLayer={false}
-                                        renderAnnotationLayer={false}
-                                        className="bg-white"
-                                    />
-                                </Document>
+                                    <Document
+                                        file={selectedPdfUrl}
+                                        loading={<div className="p-10 text-gray-500">Loading PDF...</div>}
+                                        error={<div className="p-10 text-red-500">Failed to load PDF</div>}
+                                    >
+                                        <Page
+                                            pageNumber={1}
+                                            width={containerWidth || undefined}
+                                            onLoadSuccess={handlePageLoad}
+                                            renderTextLayer={false}
+                                            renderAnnotationLayer={false}
+                                            className="bg-white"
+                                        />
+                                    </Document>
 
                                 {/* Overlay Layer */}
-                                {placements.filter(p => p.pageIndex === pageNumber - 1).map(p => (
+                                {placements.map(p => (
                                     <div
                                         key={p.id}
                                         style={getPlacementStyle(p)}
