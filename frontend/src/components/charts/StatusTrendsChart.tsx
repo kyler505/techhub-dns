@@ -1,0 +1,94 @@
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { TimeTrendDataPoint } from "../../api/analytics";
+
+interface StatusTrendsChartProps {
+  data: TimeTrendDataPoint[];
+  loading?: boolean;
+}
+
+// Color mapping for order statuses (matching StatusBadge colors)
+const STATUS_COLORS: { [key: string]: string } = {
+  "picked": "#3b82f6",      // blue
+  "qa": "#8b5cf6",          // purple
+  "pre-delivery": "#f59e0b", // amber
+  "in-delivery": "#10b981",  // green
+  "shipping": "#06b6d4",     // cyan
+  "delivered": "#22c55e",    // emerald
+  "issue": "#ef4444",        // red
+};
+
+export default function StatusTrendsChart({ data, loading }: StatusTrendsChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center bg-muted/20 rounded animate-pulse">
+        <p className="text-muted-foreground">Loading chart...</p>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center bg-muted/20 rounded">
+        <p className="text-muted-foreground">No data available</p>
+      </div>
+    );
+  }
+
+  // Transform data to have status breakdown as separate keys
+  const transformedData = data.map(point => ({
+    date: point.date,
+    ...point.status_breakdown
+  }));
+
+  // Get unique statuses from all data points
+  const statuses = Array.from(
+    new Set(
+      data.flatMap(point => 
+        point.status_breakdown ? Object.keys(point.status_breakdown) : []
+      )
+    )
+  );
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={transformedData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <XAxis 
+          dataKey="date" 
+          className="text-xs"
+          tickFormatter={(value) => {
+            const date = new Date(value);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }}
+        />
+        <YAxis className="text-xs" />
+        <Tooltip 
+          contentStyle={{ 
+            backgroundColor: 'hsl(var(--card))',
+            border: '1px solid hsl(var(--border))',
+            borderRadius: '6px'
+          }}
+          labelFormatter={(value) => {
+            const date = new Date(value);
+            return date.toLocaleDateString('en-US', { 
+              weekday: 'short',
+              month: 'short', 
+              day: 'numeric'
+            });
+          }}
+        />
+        <Legend />
+        {statuses.map(status => (
+          <Bar 
+            key={status}
+            dataKey={status}
+            stackId="status"
+            fill={STATUS_COLORS[status.toLowerCase()] || "#6b7280"}
+            radius={[4, 4, 0, 0]}
+            name={status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}

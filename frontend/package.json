@@ -28,6 +28,7 @@
     "react-dom": "^18.2.0",
     "react-pdf": "10.2.0",
     "react-router-dom": "^6.20.1",
+    "recharts": "^3.7.0",
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.2.1"
   },

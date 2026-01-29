@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import DeliveryDashboard from "./pages/DeliveryDashboard";
@@ -60,6 +61,10 @@ function AppContent() {
                         {/* Top nav */}
                         <nav className="flex gap-4 items-center">
                             <Link to="/" className="text-white font-medium hover:text-gray-200">
+                                Dashboard
+                            </Link>
+
+                            <Link to="/orders" className="text-white font-medium hover:text-gray-200">
                                 Orders
                             </Link>
 
@@ -90,7 +95,8 @@ function AppContent() {
                     <Route path="/login" element={<Login />} />
 
                     {/* Protected routes */}
-                    <Route path="/" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+                    <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                    <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
                     <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
                     <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
                     <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
