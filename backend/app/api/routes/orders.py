@@ -58,11 +58,14 @@ def _broadcast_orders_sync(db_session: Session = None):
             })
 
         # Emit via SocketIO to all connected clients
+        # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
-            socketio.emit('orders_update', {"type": "orders_update", "data": payload})
-        except Exception:
-            pass  # SocketIO broadcasting is best-effort
+            socketio.emit('orders_update', {"type": "orders_update", "data": payload}, room='orders')
+            # Keeping broadcast to all for backward compatibility if needed, but 'room' is preferred
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to broadcast orders: {e}")
     finally:
         if db_session is not None:
             db_session.close()

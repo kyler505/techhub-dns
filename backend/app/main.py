@@ -36,6 +36,10 @@ CORS(app, origins="*", supports_credentials=True)
 # Configure Flask-SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Register Socket.IO events
+from app.api.socket_events import register_socket_events
+register_socket_events(socketio)
+
 # Register error handlers
 register_error_handlers(app)
 

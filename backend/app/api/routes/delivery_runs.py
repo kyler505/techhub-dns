@@ -34,11 +34,14 @@ def _broadcast_active_runs_sync(db_session: Session = None):
             })
 
         # Emit via SocketIO to all connected clients
+        # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
-            socketio.emit('active_runs', {"type": "active_runs", "data": payload})
-        except Exception:
-            pass  # SocketIO broadcasting is best-effort
+            # Dashboard listens to 'active_runs' and joins 'orders' room
+            socketio.emit('active_runs', {"type": "active_runs", "data": payload}, room='orders')
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to broadcast active runs: {e}")
     finally:
         if db_session is not None:
             db_session.close()
