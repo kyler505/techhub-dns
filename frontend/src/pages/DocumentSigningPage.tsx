@@ -134,7 +134,17 @@ function DocumentSigningPage() {
     // --- Placement Logic ---
 
     const addPlacement = (dataUrl: string, imgW: number, imgH: number) => {
-        if (!pageViewport) return;
+        if (!pageViewport) {
+            setError("PDF is still loading. Try again in a moment.");
+            return;
+        }
+
+        if (!Number.isFinite(imgW) || !Number.isFinite(imgH) || imgW <= 0 || imgH <= 0) {
+            signatureCache.clear();
+            setError("Saved signature data was invalid. Please add a new signature.");
+            setModalOpen(true);
+            return;
+        }
 
         // Default size logic: e.g. 150pt width, preserve aspect ratio
         const targetWidthPt = 150;
@@ -159,7 +169,8 @@ function DocumentSigningPage() {
             dataUrl
         };
 
-        setPlacements(prev => [...prev.filter(p => p.id !== 'temp'), newPlacement]); // Remove any temp entries if we had them
+        setError(null);
+        setPlacements(prev => [...prev.filter(p => p.id !== 'temp'), newPlacement]);
         setSelectedPlacementId(newPlacement.id);
     };
 
