@@ -6,6 +6,7 @@ import { analyticsApi, StatusCountsResponse, DeliveryPerformanceResponse, Activi
 import OrdersLineChart from "../components/charts/OrdersLineChart";
 import PeakHoursBarChart from "../components/charts/PeakHoursBarChart";
 import StatusTrendsChart from "../components/charts/StatusTrendsChart";
+import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 
 export default function Dashboard() {
   // State for analytics data
@@ -216,6 +217,16 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Live Status - full width */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Live Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <LiveDeliveryDashboard />
+        </CardContent>
+      </Card>
 
       {/* Charts Section - 2 column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
