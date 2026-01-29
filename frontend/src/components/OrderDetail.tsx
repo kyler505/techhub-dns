@@ -26,7 +26,6 @@ export default function OrderDetail({
 }: OrderDetailProps) {
     const latestNotification = notifications[0];
     const [tagDialogOpen, setTagDialogOpen] = useState(false);
-    const [tagIdsInput, setTagIdsInput] = useState("");
     const [serialsConfirmed, setSerialsConfirmed] = useState(false);
 
     const assetTagSerials = useMemo(() => order.asset_tag_serials || [], [order.asset_tag_serials]);
@@ -36,7 +35,6 @@ export default function OrderDetail({
     };
 
     const resetTagDialog = () => {
-        setTagIdsInput("");
         setSerialsConfirmed(false);
     };
 
@@ -48,11 +46,7 @@ export default function OrderDetail({
     };
 
     const handleTagSubmit = () => {
-        const tagIds = tagIdsInput
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean);
-        onTagOrder(tagIds);
+        onTagOrder([]);
         handleTagDialogOpenChange(false);
     };
 
@@ -344,17 +338,6 @@ export default function OrderDetail({
                             />
                             Serials match the devices in this order.
                         </label>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                                Asset Tag IDs (comma-separated)
-                            </label>
-                            <input
-                                value={tagIdsInput}
-                                onChange={(event) => setTagIdsInput(event.target.value)}
-                                placeholder="e.g. TH-001, TH-002"
-                                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#800000] focus:outline-none focus:ring-1 focus:ring-[#800000]"
-                            />
-                        </div>
                     </div>
                     <DialogFooter className="gap-2 sm:gap-0">
                         <Button variant="outline" onClick={() => handleTagDialogOpenChange(false)}>
