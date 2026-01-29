@@ -22,7 +22,8 @@ def get_order_status_counts():
     with get_db() as db:
         service = AnalyticsService(db)
         result = service.get_order_status_counts()
-        return jsonify(StatusCountsResponse(counts=result).model_dump())
+        # Return flat object (frontend expects { picked: 5, qa: 3, ... })
+        return jsonify(result)
 
 
 @bp.route('/delivery-performance', methods=['GET'])
