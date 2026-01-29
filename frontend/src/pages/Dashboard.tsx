@@ -176,57 +176,54 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Order Status Counts - 4 column grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Object.entries(statusCounts).map(([status, count]) => (
-          <Card key={status}>
+      {/* Overview row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <Card className="lg:col-span-2 h-full">
+          <CardHeader>
+            <CardTitle>Live Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LiveDeliveryDashboard />
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
+          <Card className="h-full">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">{formatStatus(status)}</CardTitle>
+              <CardTitle className="text-sm font-medium">Picked</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{statusLoading ? "..." : count}</div>
+              <div className="text-2xl font-bold">
+                {statusLoading ? "..." : (statusCounts.picked ?? 0)}
+              </div>
             </CardContent>
           </Card>
-        ))}
+          <Card className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Active Runs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.active_runs}</div>
+            </CardContent>
+          </Card>
+          <Card className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.completed_today}</div>
+            </CardContent>
+          </Card>
+          <Card className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Ready for Delivery</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.ready_for_delivery}</div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* Delivery Performance - 3 column grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Active Runs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.active_runs}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.completed_today}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Ready for Delivery</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.ready_for_delivery}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Live Status - full width */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Live Status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <LiveDeliveryDashboard />
-        </CardContent>
-      </Card>
 
       {/* Charts Section - 2 column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
