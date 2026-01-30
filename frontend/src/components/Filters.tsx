@@ -58,6 +58,7 @@ export default function Filters({
                     placeholder="Search orders"
                     value={search}
                     onChange={(e) => onSearchChange(e.target.value)}
+                    aria-label="Search"
                     className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
             </div>
