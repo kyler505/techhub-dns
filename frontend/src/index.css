@@ -60,5 +60,16 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
   }
+
+  #root {
+    min-height: 100%;
+  }
+}
+
+.ios-scroll {
+  -webkit-overflow-scrolling: touch;
 }

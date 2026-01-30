@@ -110,14 +110,14 @@ export default function OrderQAChecklist() {
                 {loadingOrders ? (
                     <div className="p-4">Loading...</div>
                 ) : (
-                    <div className="mt-4 overflow-x-auto">
-                        <table className="min-w-full border-collapse border border-gray-200">
+                    <div className="mt-4 overflow-x-auto ios-scroll">
+                        <table className="min-w-[720px] border-collapse border border-gray-200">
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="border border-gray-200 px-4 py-2 text-left">Order</th>
-                                    <th className="border border-gray-200 px-4 py-2 text-left">Recipient</th>
-                                    <th className="border border-gray-200 px-4 py-2 text-left">Location</th>
-                                    <th className="border border-gray-200 px-4 py-2 text-left">QA</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left">Order</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left">Recipient</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left hidden lg:table-cell">Location</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left">QA</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -131,39 +131,39 @@ export default function OrderQAChecklist() {
                                         const qaButtonLabel = submittedAt ? "Edit QA" : "Perform QA"; // clearer label
 
                                         return (
-                                            <tr key={o.id} className="hover:bg-gray-50">
-                                                <td className="border border-gray-200 px-4 py-2">
-                                                    <button
-                                                        onClick={() => navigate(`/orders/${o.id}`)}
-                                                        className="text-blue-600 hover:underline"
-                                                    >
-                                                        {o.inflow_order_id}
-                                                    </button>
-                                                </td>
-                                                <td className="border border-gray-200 px-4 py-2">{o.recipient_name || "N/A"}</td>
-                                                <td className="border border-gray-200 px-4 py-2">{o.delivery_location || "N/A"}</td>
-                                                <td className="border border-gray-200 px-4 py-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => navigate(`/orders/${o.id}/qa`)}
-                                                        className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2"
-                                                    >
-                                                        {qaButtonLabel}
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                                                        </svg>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
+                                        <tr key={o.id} className="hover:bg-gray-50">
+                                            <td className="border border-gray-200 px-3 py-2">
+                                                <button
+                                                    onClick={() => navigate(`/orders/${o.id}`)}
+                                                    className="text-blue-600 hover:underline"
+                                                >
+                                                    {o.inflow_order_id}
+                                                </button>
+                                            </td>
+                                            <td className="border border-gray-200 px-3 py-2">{o.recipient_name || "N/A"}</td>
+                                            <td className="border border-gray-200 px-3 py-2 hidden lg:table-cell">{o.delivery_location || "N/A"}</td>
+                                            <td className="border border-gray-200 px-3 py-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(`/orders/${o.id}/qa`)}
+                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2"
+                                                >
+                                                    {qaButtonLabel}
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
 
                                 {orders
                                     .filter((o) => showCompleted || !completedMap.has(o.id))
                                     .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
                                     .length === 0 && (
                                         <tr>
-                                            <td className="border border-gray-200 px-4 py-6 text-center text-gray-600" colSpan={4}>
+                                            <td className="border border-gray-200 px-3 py-6 text-center text-gray-600" colSpan={4}>
                                                 {orders.length === 0
                                                     ? showCompleted
                                                         ? "No orders found."

@@ -155,7 +155,7 @@ export default function PreDeliveryQueue() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-lg font-semibold">Pre-Delivery Queue</h2>
                 <Button
                     onClick={handleBulkStartDelivery}
@@ -170,11 +170,11 @@ export default function PreDeliveryQueue() {
                     No orders in pre-delivery queue
                 </div>
             ) : (
-                <div className="rounded-md border">
-                    <table className="w-full">
+                <div className="rounded-md border overflow-x-auto ios-scroll">
+                    <table className="min-w-[900px] w-full">
                         <thead>
                             <tr className="border-b">
-                                <th className="h-12 px-4 text-left align-middle">
+                                <th className="h-12 px-3 text-left align-middle">
                                     <input
                                         type="checkbox"
                                         checked={selectedOrders.size === orders.length && orders.length > 0}
@@ -188,24 +188,24 @@ export default function PreDeliveryQueue() {
                                     />
 
                                 </th>
-                                <th className="h-12 px-4 text-left align-middle font-medium">Order ID</th>
-                                <th className="h-12 px-4 text-left align-middle font-medium">Recipient</th>
-                                <th className="h-12 px-4 text-left align-middle font-medium">Location</th>
-                                <th className="h-12 px-4 text-left align-middle font-medium">Deliverer</th>
-                                <th className="h-12 px-4 text-left align-middle font-medium">Actions</th>
+                                <th className="h-12 px-3 text-left align-middle font-medium">Order ID</th>
+                                <th className="h-12 px-3 text-left align-middle font-medium">Recipient</th>
+                                <th className="h-12 px-3 text-left align-middle font-medium hidden lg:table-cell">Location</th>
+                                <th className="h-12 px-3 text-left align-middle font-medium hidden lg:table-cell">Deliverer</th>
+                                <th className="h-12 px-3 text-left align-middle font-medium">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {orders.map((order) => (
                                 <tr key={order.id} className="border-b hover:bg-muted/50">
-                                    <td className="p-4 align-middle">
+                                    <td className="p-3 align-middle">
                                         <input
                                             type="checkbox"
                                             checked={selectedOrders.has(order.id)}
                                             onChange={() => handleSelectOrder(order.id)}
                                         />
                                     </td>
-                                    <td className="p-4 align-middle">
+                                    <td className="p-3 align-middle">
                                         <div className="flex items-center gap-2">
                                             <Button
                                                 variant="link"
@@ -225,10 +225,10 @@ export default function PreDeliveryQueue() {
                                             )}
                                         </div>
                                     </td>
-                                    <td className="p-4 align-middle">{order.recipient_name || "N/A"}</td>
-                                    <td className="p-4 align-middle">{formatDeliveryLocation(order)}</td>
-                                    <td className="p-4 align-middle">{order.assigned_deliverer || "Unassigned"}</td>
-                                    <td className="p-4 align-middle">
+                                    <td className="p-3 align-middle">{order.recipient_name || "N/A"}</td>
+                                    <td className="p-3 align-middle hidden lg:table-cell">{formatDeliveryLocation(order)}</td>
+                                    <td className="p-3 align-middle hidden lg:table-cell">{order.assigned_deliverer || "Unassigned"}</td>
+                                    <td className="p-3 align-middle">
                                         <Button
                                             variant="destructive"
                                             size="sm"
