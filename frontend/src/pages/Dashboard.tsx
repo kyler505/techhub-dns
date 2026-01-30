@@ -191,10 +191,10 @@ export default function Dashboard() {
           </Card>
           <Card className="h-full">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Active Runs</CardTitle>
+              <CardTitle className="text-sm font-medium">Orders Ready for QA</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{perfLoading ? "..." : deliveryPerf.active_runs}</div>
+              <div className="text-2xl font-bold">{statusLoading ? "..." : (statusCounts.qa ?? 0)}</div>
             </CardContent>
           </Card>
           <Card className="h-full">
