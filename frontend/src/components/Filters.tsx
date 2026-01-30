@@ -37,7 +37,7 @@ export default function Filters({
 
     return (
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
-            <div className="flex gap-1 border-b overflow-x-auto whitespace-nowrap ios-scroll -mx-2 px-2">
+            <div className="flex gap-1 border-b overflow-x-auto whitespace-nowrap ios-scroll no-scrollbar -mx-2 px-2">
                 {statusTabs.map((tab) => (
                     <button
                         key={tab.label}
