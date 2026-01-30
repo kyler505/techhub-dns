@@ -23,28 +23,20 @@ export default function OrderQAChecklist() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loadingOrders, setLoadingOrders] = useState(true);
     const [search, setSearch] = useState("");
-    const [showCompleted, setShowCompleted] = useState(false);
 
     useEffect(() => {
         loadOrders();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, showCompleted]);
+    }, [search]);
 
     const loadOrders = async () => {
         setLoadingOrders(true);
         try {
-            if (showCompleted) {
-                const data = await ordersApi.getOrders({
-                    search: search.trim() ? search.trim() : undefined,
-                });
-                setOrders(data);
-            } else {
-                const data = await ordersApi.getOrders({
-                    status: OrderStatus.QA,
-                    search: search.trim() ? search.trim() : undefined,
-                });
-                setOrders(data);
-            }
+            const data = await ordersApi.getOrders({
+                status: OrderStatus.QA,
+                search: search.trim() ? search.trim() : undefined,
+            });
+            setOrders(data);
         } catch (error) {
             console.error("Failed to load orders:", error);
             alert("Failed to load orders");
@@ -80,7 +72,7 @@ export default function OrderQAChecklist() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-gray-900">
-                            {showCompleted ? "All Orders" : "Orders Needing QA"}
+                            Orders Needing QA
                         </h2>
                     </div>
 
@@ -93,16 +85,6 @@ export default function OrderQAChecklist() {
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Order ID / recipient / location..."
                             />
-                        </label>
-
-                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                            <input
-                                type="checkbox"
-                                checked={showCompleted}
-                                onChange={(e) => setShowCompleted(e.target.checked)}
-                                className="h-4 w-4 rounded border-gray-300 text-[#800000] focus:ring-[#800000]"
-                            />
-                            Show all orders
                         </label>
                     </div>
                 </div>
@@ -122,7 +104,7 @@ export default function OrderQAChecklist() {
                             </thead>
                             <tbody>
                                 {orders
-                                    .filter((o) => showCompleted || !completedMap.has(o.id))
+                                    .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => {
                                         return ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status);
                                     })
@@ -159,18 +141,14 @@ export default function OrderQAChecklist() {
                                 })}
 
                                 {orders
-                                    .filter((o) => showCompleted || !completedMap.has(o.id))
+                                    .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
                                     .length === 0 && (
                                         <tr>
                                             <td className="border border-gray-200 px-3 py-6 text-center text-gray-600" colSpan={4}>
                                                 {orders.length === 0
-                                                    ? showCompleted
-                                                        ? "No orders found."
-                                                        : "No orders need QA at this time."
-                                                    : showCompleted
-                                                        ? "No eligible orders found."
-                                                        : "All eligible orders have completed QA."}
+                                                    ? "No orders need QA at this time."
+                                                    : "All eligible orders have completed QA."}
                                             </td>
                                         </tr>
                                     )}
