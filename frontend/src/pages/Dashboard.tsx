@@ -39,7 +39,7 @@ export default function Dashboard() {
       setPerfLoading(true);
       setTrendsLoading(true);
       setCompletedLoading(true);
-      
+
       // Fetch all data in parallel
       const [counts, perf, trends, deliveredOrders] = await Promise.all([
         analyticsApi.getOrderStatusCounts().catch(() => ({})),
@@ -89,7 +89,7 @@ export default function Dashboard() {
 
     // Build Socket.IO URL
     const baseUrl = `${window.location.protocol}//${window.location.host}`;
-    
+
     let socket: Socket;
     try {
       socket = io(baseUrl, {
@@ -158,7 +158,7 @@ export default function Dashboard() {
       {error && (
         <div className="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4">
           <p className="font-medium">{error}</p>
-          <button 
+          <button
             onClick={fetchAnalytics}
             className="mt-2 text-sm underline hover:no-underline"
           >
@@ -191,7 +191,7 @@ export default function Dashboard() {
           </Card>
           <Card className="h-full">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Orders Ready for QA</CardTitle>
+              <CardTitle className="text-sm font-medium">Ready for QA</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{statusLoading ? "..." : (statusCounts.qa ?? 0)}</div>
