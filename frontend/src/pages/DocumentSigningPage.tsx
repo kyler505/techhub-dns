@@ -537,7 +537,7 @@ function DocumentSigningPage() {
     }
 
     return (
-        <div className="px-4 pb-8 min-h-screen bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-white">
+        <div className="px-4 pb-8 min-h-[100dvh] bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-white">
             <SignatureModal
                 open={modalOpen}
                 onOpenChange={setModalOpen}
@@ -545,7 +545,7 @@ function DocumentSigningPage() {
             />
 
             <div className="max-w-6xl mx-auto pt-6">
-                <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Sign Delivery Document</h1>
                         <p className="text-gray-600">

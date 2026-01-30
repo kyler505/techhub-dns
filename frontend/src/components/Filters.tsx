@@ -37,12 +37,12 @@ export default function Filters({
 
     return (
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
-            <div className="flex gap-1 border-b">
+            <div className="flex gap-1 border-b overflow-x-auto whitespace-nowrap ios-scroll -mx-2 px-2">
                 {statusTabs.map((tab) => (
                     <button
                         key={tab.label}
                         onClick={() => onStatusChange(tab.value)}
-                        className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${isActiveTab(tab.value)
+                        className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors flex-shrink-0 ${isActiveTab(tab.value)
                             ? "border-primary text-primary font-medium"
                             : "border-transparent text-muted-foreground hover:text-foreground"
                             }`}

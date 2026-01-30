@@ -75,14 +75,14 @@ export default function Shipping() {
                 {loadingOrders ? (
                     <div className="p-4">Loading...</div>
                 ) : (
-                    <div className="mt-4 overflow-x-auto">
-                        <table className="min-w-full border-collapse border border-gray-200">
+                    <div className="mt-4 overflow-x-auto ios-scroll">
+                        <table className="min-w-[720px] border-collapse border border-gray-200">
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="border border-gray-200 px-4 py-2 text-left">Order</th>
-                                    <th className="border border-gray-200 px-4 py-2 text-left">Location / City</th>
-                                    <th className="border border-gray-200 px-4 py-2 text-left">Dock Status</th>
-                                    <th className="border border-gray-200 px-4 py-2 text-left">FedEx</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left">Order</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left hidden lg:table-cell">Location / City</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left">Dock Status</th>
+                                    <th className="border border-gray-200 px-3 py-2 text-left">FedEx</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -92,15 +92,15 @@ export default function Shipping() {
 
                                     return (
                                         <tr key={o.id} className="hover:bg-gray-50">
-                                            <td className="border border-gray-200 px-4 py-2 font-medium text-gray-900">
+                                            <td className="border border-gray-200 px-3 py-2 font-medium text-gray-900">
                                                 {o.inflow_order_id || o.id}
                                             </td>
 
-                                            <td className="border border-gray-200 px-4 py-2 text-gray-800">
+                                            <td className="border border-gray-200 px-3 py-2 text-gray-800 hidden lg:table-cell">
                                                 {formatDeliveryLocation(o)}
                                             </td>
 
-                                            <td className="border border-gray-200 px-4 py-2">
+                                            <td className="border border-gray-200 px-3 py-2">
                                                 <div className="flex items-center gap-2">
                                                     <span
                                                         className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${currentStatus === ShippingWorkflowStatus.DOCK ? "bg-blue-100 text-blue-700" :
@@ -124,7 +124,7 @@ export default function Shipping() {
                                                 </div>
                                             </td>
 
-                                            <td className="border border-gray-200 px-4 py-2">
+                                            <td className="border border-gray-200 px-3 py-2">
                                                 <div className="flex flex-col gap-2">
                                                     {currentStatus === ShippingWorkflowStatus.DOCK && (
                                                         <button

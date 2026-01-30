@@ -168,7 +168,7 @@ export default function Dashboard() {
       )}
 
       {/* Overview row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
         <Card className="lg:col-span-2 h-full">
           <CardHeader>
             <CardTitle>Live Status</CardTitle>
@@ -216,7 +216,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Completed Today</CardTitle>

@@ -12,7 +12,7 @@ export default function DeliveryDashboard() {
             <div>
                 <h2 className="text-lg font-semibold tracking-tight">Operations</h2>
                 <Tabs defaultValue="pre-delivery" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-2 gap-2 lg:grid-cols-4">
                         <TabsTrigger value="pre-delivery">Pre-Delivery</TabsTrigger>
                         <TabsTrigger value="in-delivery">In Delivery</TabsTrigger>
                         <TabsTrigger value="shipping">Shipping</TabsTrigger>

@@ -31,13 +31,13 @@ export default function OrderTable({
     }
 
     return (
-        <Table>
+        <Table className="min-w-[720px]">
             <TableHeader>
                 <TableRow>
                     <TableHead>Order ID</TableHead>
                     <TableHead>Recipient</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Order Date</TableHead>
+                    <TableHead className="hidden lg:table-cell">Location</TableHead>
+                    <TableHead className="hidden lg:table-cell">Order Date</TableHead>
                     <TableHead>Status</TableHead>
                 </TableRow>
             </TableHeader>
@@ -54,8 +54,8 @@ export default function OrderTable({
                             </Button>
                         </TableCell>
                         <TableCell>{order.recipient_name || "N/A"}</TableCell>
-                        <TableCell>{formatDeliveryLocation(order)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
                             {formatToCentralTime(order.created_at, "MMM d, yyyy")}
                         </TableCell>
                         <TableCell>
