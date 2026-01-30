@@ -55,7 +55,7 @@ export default function Filters({
             <div className="w-full sm:w-auto sm:min-w-[300px]">
                 <input
                     type="text"
-                    placeholder="Search orders..."
+                    placeholder="Search orders"
                     value={search}
                     onChange={(e) => onSearchChange(e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"

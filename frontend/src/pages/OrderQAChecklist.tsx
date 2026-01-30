@@ -83,7 +83,7 @@ export default function OrderQAChecklist() {
                                 className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#800000]"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Order ID / recipient / location..."
+                                placeholder="Search orders"
                             />
                         </label>
                     </div>
