@@ -77,15 +77,15 @@ export default function OrderQAChecklist() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                            Search
+                        <div className="flex items-center gap-2">
                             <input
                                 className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#800000]"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Search orders"
+                                aria-label="Search"
                             />
-                        </label>
+                        </div>
                     </div>
                 </div>
 
