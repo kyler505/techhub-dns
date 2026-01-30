@@ -19,6 +19,7 @@ frontend/.env
 .sisyphus/
 .cursor/
 .agent/
+agent.md
 .idea/
 *.swp
 *.swo
