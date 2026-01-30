@@ -12,10 +12,10 @@ export default function DeliveryDashboard() {
             <div>
                 <h2 className="text-lg font-semibold tracking-tight">Operations</h2>
                 <Tabs defaultValue="pre-delivery" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 gap-2 lg:grid-cols-3">
-                        <TabsTrigger value="pre-delivery">Pre-Delivery</TabsTrigger>
-                        <TabsTrigger value="in-delivery">In Delivery</TabsTrigger>
-                        <TabsTrigger value="history">History</TabsTrigger>
+                    <TabsList className="flex w-full items-center gap-2 overflow-x-auto ios-scroll justify-start">
+                        <TabsTrigger value="pre-delivery" className="flex-shrink-0">Pre-Delivery</TabsTrigger>
+                        <TabsTrigger value="in-delivery" className="flex-shrink-0">In Delivery</TabsTrigger>
+                        <TabsTrigger value="history" className="flex-shrink-0">History</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="pre-delivery" className="mt-4">
