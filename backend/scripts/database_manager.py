@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Universal Database and Order Management Tool
 # Force git update for JCAIN fix
 
@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.database import SessionLocal
 from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
+from app.models.teams_notification import TeamsNotification
 
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.utils.building_mapper import extract_building_code_from_location, get_building_code_from_address
@@ -531,6 +532,7 @@ def get_database_stats() -> Dict[str, Any]:
         # Other entity counts
         stats['delivery_runs'] = db.query(DeliveryRun).count()
         stats['audit_logs'] = db.query(AuditLog).count()
+        stats['teams_notifications'] = db.query(TeamsNotification).count()
 
         # Recent activity
         recent_orders = db.query(Order).order_by(Order.created_at.desc()).limit(5).all()
