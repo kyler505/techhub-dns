@@ -635,7 +635,7 @@ function DocumentSigningPage() {
 
                                         {(selectedPlacementId === p.id) && (
                                             <div
-                                                className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full border border-gray-300 bg-white shadow-sm flex items-center justify-center"
+                                                className="absolute top-1/2 -left-3 -translate-y-1/2 h-6 w-6 rounded-full border border-gray-300 bg-white shadow-sm flex items-center justify-center"
                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
                                                 onPointerUp={handlePointerUp}
                                                 onPointerCancel={handlePointerUp}
@@ -643,7 +643,13 @@ function DocumentSigningPage() {
                                                 onTouchEnd={handleWindowTouchEnd}
                                                 style={{ touchAction: 'none' }}
                                             >
-                                                <div className="h-3 w-3 border-b border-l border-gray-400" />
+                                                <svg className="w-3 h-3 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M17 12H7" />
+                                                    <path d="M7 12l5-5" />
+                                                    <path d="M7 12l5 5" />
+                                                    <path d="M17 12l-5-5" />
+                                                    <path d="M17 12l-5 5" />
+                                                </svg>
                                             </div>
                                         )}
                                     </div>
