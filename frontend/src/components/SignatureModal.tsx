@@ -227,6 +227,12 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                             variant="ghost"
                             size="sm"
                             onClick={clearCanvas}
+                            onPointerDown={(e) => {
+                                if (e.pointerType === 'pen') {
+                                    e.preventDefault();
+                                    clearCanvas();
+                                }
+                            }}
                             disabled={!hasSignature}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
@@ -238,16 +244,42 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                             variant="ghost"
                             size="sm"
                             onClick={() => setRequirePenInput(!requirePenInput)}
+                            onPointerDown={(e) => {
+                                if (e.pointerType === 'pen') {
+                                    e.preventDefault();
+                                    setRequirePenInput(!requirePenInput);
+                                }
+                            }}
                             className="text-gray-400 hover:text-gray-600"
                         >
                             {requirePenInput ? "Allow Touch" : "Require Pen"}
                         </Button>
                     </div>
 
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button 
+                        variant="outline" 
+                        onClick={() => onOpenChange(false)}
+                        onPointerDown={(e) => {
+                            if (e.pointerType === 'pen') {
+                                e.preventDefault();
+                                onOpenChange(false);
+                            }
+                        }}
+                    >
                         Cancel
                     </Button>
-                    <Button onClick={handleSave} disabled={!hasSignature}>
+                    <Button 
+                        onClick={handleSave} 
+                        onPointerDown={(e) => {
+                            if (e.pointerType === 'pen') {
+                                e.preventDefault();
+                                if (hasSignature) {
+                                    handleSave();
+                                }
+                            }
+                        }}
+                        disabled={!hasSignature}
+                    >
                         <Check className="h-4 w-4 mr-2" />
                         Done
                     </Button>
