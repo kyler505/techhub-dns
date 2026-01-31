@@ -8,8 +8,9 @@ import threading
 
 from app.database import get_db
 from app.services.order_service import OrderService
-
 from app.services.inflow_service import InflowService
+from app.services.tag_request_service import TagRequestService
+
 from app.schemas.order import (
     OrderResponse,
     OrderDetailResponse,
@@ -212,6 +213,59 @@ def get_order_audit(order_id):
             abort(404, description="Order not found")
 
         return jsonify([AuditLogResponse.model_validate(log).model_dump() for log in order.audit_logs])
+
+
+@bp.route("/<uuid:order_id>/tag/request", methods=["POST"])
+def request_order_tags(order_id):
+    """Request asset tags for an order via WebDAV and Teams notification"""
+    with get_db() as db:
+        service = OrderService(db)
+        order = service.get_order_detail(order_id)
+        if not order:
+            abort(404, description="Order not found")
+
+        if not order.inflow_data:
+            abort(400, description="Order missing inflow_data; cannot request tags")
+
+        if not order.inflow_order_id:
+            abort(400, description="Order missing inflow_order_id; cannot request tags")
+
+        # Get asset tag serials
+        inflow_service = InflowService()
+        serials_payload = inflow_service.get_asset_tag_serials(order.inflow_data)
+        if not serials_payload:
+            abort(400, description="No asset-taggable items found in this order")
+
+        # Get technician from auth context
+        current_user = get_current_user_email()
+        technician = current_user if current_user != "system" else "Technician"
+
+        # Call tag request service (async orchestration)
+        import asyncio
+        tag_service = TagRequestService()
+        try:
+            result = asyncio.run(tag_service.process_tag_request(
+                order_number=order.inflow_order_id,
+                technician=technician,
+                serials_payload=serials_payload
+            ))
+        except Exception as error:
+            abort(500, description=f"Failed to process tag request: {error}")
+
+        if result["status"] == "success":
+            # Update order tag_data with request metadata
+            tag_data = dict(order.tag_data or {})
+            tag_data.update({
+                "tag_request_sent_at": result["sent_at"],
+                "tag_request_filename": result["filename"],
+                "tag_request_status": "sent"
+            })
+            order.tag_data = tag_data
+            db.commit()
+            db.refresh(order)
+            return jsonify(OrderResponse.model_validate(order).model_dump())
+        else:
+            abort(500, description=result.get("message", "Failed to process tag request"))
 
 
 @bp.route("/<uuid:order_id>/tag", methods=["POST"])

@@ -12,7 +12,8 @@ interface OrderDetailProps {
     notifications: TeamsNotification[];
     onStatusChange: (newStatus: OrderStatus, reason?: string) => void;
     onRetryNotification: () => void;
-    onTagOrder: (tagIds: string[]) => void;
+    onTagOrder: (tagIds: string[]) => Promise<void>;
+    onStartTagRequest: () => Promise<void>;
     onGeneratePicklist: () => void;
 }
 
@@ -22,16 +23,24 @@ export default function OrderDetail({
     notifications,
     onRetryNotification,
     onTagOrder,
+    onStartTagRequest,
     onGeneratePicklist,
 }: OrderDetailProps) {
     const latestNotification = notifications[0];
-    const [tagDialogOpen, setTagDialogOpen] = useState(false);
+    const [tagRequestDialogOpen, setTagRequestDialogOpen] = useState(false);
+    const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
     const [serialsConfirmed, setSerialsConfirmed] = useState(false);
+    const [tagRequesting, setTagRequesting] = useState(false);
+    const [tagConfirming, setTagConfirming] = useState(false);
 
     const assetTagSerials = useMemo(() => order.asset_tag_serials || [], [order.asset_tag_serials]);
 
+    const tagRequestSentAt = order.tag_data?.tag_request_sent_at;
+    const tagRequestStatus = order.tag_data?.tag_request_status;
+    const tagRequestSent = Boolean(tagRequestSentAt || tagRequestStatus === "sent");
+
     const handleTagging = () => {
-        setTagDialogOpen(true);
+        setTagRequestDialogOpen(true);
     };
 
     const resetTagDialog = () => {
@@ -39,15 +48,37 @@ export default function OrderDetail({
     };
 
     const handleTagDialogOpenChange = (open: boolean) => {
-        setTagDialogOpen(open);
+        setTagRequestDialogOpen(open);
         if (!open) {
             resetTagDialog();
         }
     };
 
-    const handleTagSubmit = () => {
-        onTagOrder([]);
-        handleTagDialogOpenChange(false);
+    const handleTagRequestSubmit = async () => {
+        setTagRequesting(true);
+        try {
+            await onStartTagRequest();
+            handleTagDialogOpenChange(false);
+            setTagPrintedDialogOpen(true);
+        } catch (error) {
+            console.error("Failed to send tag request:", error);
+            alert("Failed to send tag request");
+        } finally {
+            setTagRequesting(false);
+        }
+    };
+
+    const handleTagPrintedConfirm = async () => {
+        setTagConfirming(true);
+        try {
+            await onTagOrder([]);
+            setTagPrintedDialogOpen(false);
+        } catch (error) {
+            console.error("Failed to confirm tagging:", error);
+            alert("Failed to confirm tags printed");
+        } finally {
+            setTagConfirming(false);
+        }
     };
 
     return (
@@ -120,16 +151,31 @@ export default function OrderDetail({
                             <p className="text-sm text-gray-600">
                                 {order.tagged_at
                                     ? `Completed ${formatToCentralTime(order.tagged_at)}`
-                                    : "Pending"}
+                                    : tagRequestSentAt
+                                        ? `Requested ${formatToCentralTime(tagRequestSentAt)}`
+                                        : "Pending"}
                             </p>
+                            {tagRequestSent && !order.tagged_at && (
+                                <p className="text-xs text-green-700">Tag request sent. Waiting on printed tags.</p>
+                            )}
                         </div>
-                        <button
-                            onClick={handleTagging}
-                            disabled={Boolean(order.tagged_at)}
-                            className="px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
-                        >
-                            {order.tagged_at ? "Tagged" : "Mark Tagged"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleTagging}
+                                disabled={Boolean(order.tagged_at) || tagRequestSent}
+                                className="px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+                            >
+                                {order.tagged_at ? "Tagged" : tagRequestSent ? "Request Sent" : "Request Tags"}
+                            </button>
+                            {!order.tagged_at && tagRequestSent && (
+                                <button
+                                    onClick={() => setTagPrintedDialogOpen(true)}
+                                    className="px-3 py-2 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                >
+                                    Confirm Tags Printed
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex items-center justify-between gap-4">
@@ -298,12 +344,12 @@ export default function OrderDetail({
                     </div>
                 </details>
             )}
-            <Dialog open={tagDialogOpen} onOpenChange={handleTagDialogOpenChange}>
+            <Dialog open={tagRequestDialogOpen} onOpenChange={handleTagDialogOpenChange}>
                 <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>Asset Tag Verification</DialogTitle>
+                        <DialogTitle>Send Tag Request</DialogTitle>
                         <DialogDescription>
-                            Confirm the serials match the devices in this order before tagging.
+                            Confirm the serials match the devices in this order before requesting tags.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
@@ -347,8 +393,26 @@ export default function OrderDetail({
                         <Button variant="outline" onClick={() => handleTagDialogOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleTagSubmit} disabled={!serialsConfirmed}>
-                            Mark Tagged
+                        <Button onClick={handleTagRequestSubmit} disabled={!serialsConfirmed || tagRequesting}>
+                            {tagRequesting ? "Sending..." : "Send Tag Request"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <Dialog open={tagPrintedDialogOpen} onOpenChange={setTagPrintedDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Tag Request Sent</DialogTitle>
+                        <DialogDescription>
+                            Have the tags been printed and applied to the devices?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setTagPrintedDialogOpen(false)}>
+                            Not yet
+                        </Button>
+                        <Button onClick={handleTagPrintedConfirm} disabled={tagConfirming}>
+                            {tagConfirming ? "Confirming..." : "Yes, mark tagged"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
