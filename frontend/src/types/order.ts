@@ -58,7 +58,7 @@ export interface Order {
   issue_reason?: string;
   tagged_at?: string;
   tagged_by?: string;
-  tag_data?: Record<string, any>;
+  tag_data?: TagData;
   picklist_generated_at?: string;
   picklist_generated_by?: string;
   picklist_path?: string;
@@ -82,6 +82,14 @@ export interface Order {
   asset_tag_serials?: AssetTagSerial[];
   created_at: string;
   updated_at: string;
+}
+
+export interface TagData {
+  tag_ids?: string[];
+  tag_request_sent_at?: string;
+  tag_request_filename?: string;
+  tag_request_status?: string;
+  [key: string]: any;
 }
 
 export interface OrderDetail extends Order {

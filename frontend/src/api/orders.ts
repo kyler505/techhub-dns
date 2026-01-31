@@ -43,6 +43,11 @@ export const ordersApi = {
     return response.data;
   },
 
+  startTagRequest: async (orderId: string) => {
+    const response = await apiClient.post<Order>(`/orders/${orderId}/tag/request`);
+    return response.data;
+  },
+
   generatePicklist: async (orderId: string, payload?: { generated_by?: string }) => {
     const response = await apiClient.post<Order>(`/orders/${orderId}/picklist`, payload || {});
     return response.data;

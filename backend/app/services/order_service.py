@@ -66,9 +66,12 @@ class OrderService:
         if not order:
             raise NotFoundError("Order", str(order_id))
 
+        tag_data = dict(order.tag_data or {})
+        tag_data["tag_ids"] = tag_ids
+
         order.tagged_at = datetime.utcnow()
         order.tagged_by = technician
-        order.tag_data = {"tag_ids": tag_ids}
+        order.tag_data = tag_data
         order.updated_at = datetime.utcnow()
 
         self.db.commit()

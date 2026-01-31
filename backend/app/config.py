@@ -90,6 +90,14 @@ class Settings(BaseSettings):
     deploy_webhook_enabled: bool = False
     deploy_webhook_secret: Optional[str] = None
 
+    # Tag Request System
+    tag_request_webdav_base_url: Optional[str] = None
+    tag_request_webdav_target_path: str = "/tag-requests"
+    tag_request_webdav_username: Optional[str] = None
+    tag_request_webdav_password_secret_name: str = "tag-request-webdav-password"
+    tag_request_teams_workflow_url: Optional[str] = None
+    tag_request_teams_shared_secret: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
