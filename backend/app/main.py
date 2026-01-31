@@ -30,11 +30,17 @@ app.url_map.strict_slashes = False  # Prevent 308 redirects that break CORS
 # Fix for running behind proxy (PythonAnywhere) - ensures correct URL generation
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Configure CORS - allow all origins (configure specific origins for production)
-CORS(app, origins="*", supports_credentials=True)
+# Define allowed origins for security
+ALLOWED_ORIGINS = [
+    "https://techhub.pythonanywhere.com",  # Production
+    "http://localhost:5173",               # Local development
+]
 
-# Configure Flask-SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*")
+# Configure CORS with specific origins
+CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
+
+# Configure Flask-SocketIO with specific origins
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
 
 # Register Socket.IO events
 from app.api.socket_events import register_socket_events
