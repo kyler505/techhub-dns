@@ -196,8 +196,9 @@ function DocumentSigningPage() {
         startY: number;
         initW: number;
         initH: number;
-        topRightX: number;
-        topRightY: number;
+        rightEdgeX: number;
+        aspectRatio: number;
+        hasMoved: boolean;
     } | null>(null);
     const interactionTypeRef = useRef<'pointer' | 'touch' | null>(null);
     const interactionModeRef = useRef<'drag' | 'resize' | null>(null);
@@ -261,47 +262,44 @@ function DocumentSigningPage() {
         const {
             id,
             startX,
-            startY,
             initW,
-            initH,
-            topRightX,
-            topRightY
+            aspectRatio,
+            rightEdgeX
         } = resizeStartRef.current;
 
+        // Check if user has moved enough to start resizing (4px dead zone)
         const dxPx = clientX - startX;
-        const dyPx = clientY - startY;
+        if (!resizeStartRef.current.hasMoved && Math.abs(dxPx) < 4) {
+            return;
+        }
+        resizeStartRef.current.hasMoved = true;
+
+        // Convert pixel delta to PDF points
         const dxPt = dxPx / scale;
-        const dyPt = -dyPx / scale;
 
-        const proposedWidth = initW - dxPt;
-        const proposedHeight = initH - dyPt;
-        const scaleFromWidth = proposedWidth / initW;
-        const scaleFromHeight = proposedHeight / initH;
-        const rawScale = Math.max(scaleFromWidth, scaleFromHeight);
-
+        // New width: dragging left (negative dx) increases width, right decreases
         const minWidth = 40;
-        const minHeight = 20;
-        const maxWidth = Math.max(1, topRightX);
-        const maxHeight = Math.max(1, topRightY);
-        const minScale = Math.max(minWidth / initW, minHeight / initH);
-        const maxScale = Math.min(maxWidth / initW, maxHeight / initH);
-        const clampedScale = Math.min(maxScale, Math.max(minScale, rawScale));
+        const maxWidth = Math.max(minWidth * 3, rightEdgeX);
+        let newWidth = initW - dxPt;
+        newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
 
-        const newWidth = initW * clampedScale;
-        const newHeight = initH * clampedScale;
-        const nextX = topRightX - newWidth;
-        const nextY = topRightY - newHeight;
+        // Maintain aspect ratio
+        const newHeight = newWidth / aspectRatio;
 
-        setPlacements(prev => prev.map(p => {
-            if (p.id !== id) return p;
-            return {
-                ...p,
-                x: nextX,
-                y: nextY,
-                width: newWidth,
-                height: newHeight
-            };
-        }));
+        // Keep right edge fixed, left edge moves
+        const nextX = rightEdgeX - newWidth;
+
+        requestAnimationFrame(() => {
+            setPlacements(prev => prev.map(p => {
+                if (p.id !== id) return p;
+                return {
+                    ...p,
+                    x: nextX,
+                    width: newWidth,
+                    height: newHeight
+                };
+            }));
+        });
     };
 
     const handlePointerDown = (e: React.PointerEvent, id: string) => {
@@ -419,8 +417,9 @@ function DocumentSigningPage() {
             startY: e.clientY,
             initW: placement.width,
             initH: placement.height,
-            topRightX: placement.x + placement.width,
-            topRightY: placement.y + placement.height
+            rightEdgeX: placement.x + placement.width,
+            aspectRatio: placement.width / placement.height,
+            hasMoved: false
         };
     };
 
@@ -442,8 +441,9 @@ function DocumentSigningPage() {
             startY: touch.clientY,
             initW: placement.width,
             initH: placement.height,
-            topRightX: placement.x + placement.width,
-            topRightY: placement.y + placement.height
+            rightEdgeX: placement.x + placement.width,
+            aspectRatio: placement.width / placement.height,
+            hasMoved: false
         };
     };
 
