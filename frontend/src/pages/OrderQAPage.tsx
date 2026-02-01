@@ -190,8 +190,8 @@ export default function OrderQAPage() {
                         </label>
                         <input
                             value={form.orderNumber}
-                            onChange={(e) => setForm((p) => ({ ...p, orderNumber: e.target.value }))}
-                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-[#800000] focus:outline-none focus:ring-1 focus:ring-[#800000]"
+                            readOnly
+                            className="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 shadow-sm focus:outline-none"
                         />
                     </div>
 
@@ -309,7 +309,7 @@ export default function OrderQAPage() {
                 <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                     <button
                         type="button"
-                        onClick={() => navigate("/order-qa")}
+                        onClick={() => navigate(-1)}
                         className="text-sm font-medium text-gray-600 hover:text-gray-900 px-4 py-2"
                     >
                         Cancel

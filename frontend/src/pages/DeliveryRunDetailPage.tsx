@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 export default function DeliveryRunDetailPage() {
     const { runId } = useParams<{ runId: string }>();
+    const navigate = useNavigate();
     const { run, loading, error } = useDeliveryRun(runId);
     const [finishing, setFinishing] = useState(false);
     const [errorDialogOpen, setErrorDialogOpen] = useState(false);
@@ -40,12 +41,10 @@ export default function DeliveryRunDetailPage() {
         return (
             <div className="text-center py-12">
                 <div className="text-red-600 mb-4">{error || "Delivery run not found"}</div>
-                <Link to="/delivery">
-                    <Button variant="outline">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Delivery Dashboard
-                    </Button>
-                </Link>
+                <Button variant="outline" onClick={() => navigate(-1)}>
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back
+                </Button>
             </div>
         );
     }
@@ -88,12 +87,10 @@ export default function DeliveryRunDetailPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Link to="/delivery">
-                        <Button variant="outline" size="sm">
-                            <ArrowLeft className="w-4 h-4 mr-2" />
-                            Back to Delivery
-                        </Button>
-                    </Link>
+                    <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Back
+                    </Button>
                     <div>
                         <h1 className="text-2xl font-bold">{run.name}</h1>
                         <p className="text-muted-foreground">Run ID: {run.id}</p>
