@@ -192,10 +192,12 @@ function DocumentSigningPage() {
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
     const resizeStartRef = useRef<{
         id: string;
-        rightEdgeX: number;
+        anchorX: number;      // Top-right corner X (fixed point)
+        anchorY: number;      // Top-right corner Y (fixed point, in PDF coords from bottom)
         aspectRatio: number;
         handleOffsetX: number;
-        minWidth: number;
+        handleOffsetY: number;
+        minSize: number;
     } | null>(null);
     const interactionTypeRef = useRef<'pointer' | 'touch' | null>(null);
     const interactionModeRef = useRef<'drag' | 'resize' | null>(null);
@@ -253,34 +255,51 @@ function DocumentSigningPage() {
         }));
     };
 
-    const updateResize = (clientX: number) => {
+    const updateResize = (clientX: number, clientY: number) => {
         if (!resizeStartRef.current || !pageViewport || !viewerRef.current) return;
 
         const {
             id,
-            rightEdgeX,
+            anchorX,
+            anchorY,
             aspectRatio,
             handleOffsetX,
-            minWidth
+            handleOffsetY,
+            minSize
         } = resizeStartRef.current;
 
         // Get viewer position for coordinate conversion
         const viewerRect = viewerRef.current.getBoundingClientRect();
-        const handleScreenX = clientX - handleOffsetX;
-        const handlePdfX = (handleScreenX - viewerRect.left) / scale;
-
-        // New width is distance from right edge to handle position
-        let newWidth = rightEdgeX - handlePdfX;
         
-        // Clamp to reasonable bounds
-        const maxWidth = Math.max(minWidth * 4, rightEdgeX);
-        newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+        // Calculate handle position in screen coordinates, accounting for offset
+        const handleScreenX = clientX - handleOffsetX;
+        const handleScreenY = clientY - handleOffsetY;
+        
+        // Convert to PDF coordinates
+        const handlePdfX = (handleScreenX - viewerRect.left) / scale;
+        const handlePdfY = (viewerRect.bottom - handleScreenY) / scale; // Convert to PDF coords (from bottom)
 
-        // Maintain aspect ratio
-        const newHeight = newWidth / aspectRatio;
+        // Calculate new dimensions based on distance from anchor (top-right) to handle (bottom-left)
+        let newWidth = anchorX - handlePdfX;
+        let newHeight = anchorY - handlePdfY;
+        
+        // Maintain aspect ratio by using the larger dimension
+        const currentAspect = newWidth / newHeight;
+        if (currentAspect > aspectRatio) {
+            // Too wide, adjust width based on height
+            newWidth = newHeight * aspectRatio;
+        } else {
+            // Too tall, adjust height based on width
+            newHeight = newWidth / aspectRatio;
+        }
+        
+        // Clamp to minimum size
+        newWidth = Math.max(minSize, newWidth);
+        newHeight = Math.max(minSize, newHeight);
 
-        // Keep right edge fixed, left edge moves
-        const nextX = rightEdgeX - newWidth;
+        // Calculate new position (bottom-left corner)
+        const nextX = anchorX - newWidth;
+        const nextY = anchorY - newHeight;
 
         requestAnimationFrame(() => {
             setPlacements(prev => prev.map(p => {
@@ -288,6 +307,7 @@ function DocumentSigningPage() {
                 return {
                     ...p,
                     x: nextX,
+                    y: nextY,
                     width: newWidth,
                     height: newHeight
                 };
@@ -324,7 +344,7 @@ function DocumentSigningPage() {
             e.preventDefault();
         }
         if (interactionModeRef.current === 'resize') {
-            updateResize(e.clientX);
+            updateResize(e.clientX, e.clientY);
         } else {
             updateDrag(e.clientX, e.clientY);
         }
@@ -360,7 +380,7 @@ function DocumentSigningPage() {
             e.preventDefault();
         }
         if (interactionModeRef.current === 'resize') {
-            updateResize(touch.clientX);
+            updateResize(touch.clientX, touch.clientY);
         } else {
             updateDrag(touch.clientX, touch.clientY);
         }
@@ -407,13 +427,20 @@ function DocumentSigningPage() {
         // Calculate offset from pointer to handle center for accurate positioning
         const handleRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const handleOffsetX = e.clientX - (handleRect.left + handleRect.width / 2);
+        const handleOffsetY = e.clientY - (handleRect.top + handleRect.height / 2);
+        
+        // Anchor at top-right corner (kept fixed during resize)
+        const anchorX = placement.x + placement.width;
+        const anchorY = placement.y + placement.height;
         
         resizeStartRef.current = {
             id,
-            rightEdgeX: placement.x + placement.width,
+            anchorX,
+            anchorY,
             aspectRatio: placement.width / placement.height,
             handleOffsetX,
-            minWidth: 40
+            handleOffsetY,
+            minSize: 40
         };
     };
 
@@ -427,15 +454,27 @@ function DocumentSigningPage() {
         e.preventDefault();
         interactionTypeRef.current = 'touch';
         interactionModeRef.current = 'resize';
+        setSelectedPlacementId(id);
         attachTouchListeners();
 
-        // For touch, we can't get handle offset precisely, so use direct positioning
+        // Anchor at top-right corner (kept fixed during resize)
+        const anchorX = placement.x + placement.width;
+        const anchorY = placement.y + placement.height;
+        
+        // For touch, calculate offset from touch point to where handle center would be
+        const handleEl = e.currentTarget as HTMLElement;
+        const handleRect = handleEl.getBoundingClientRect();
+        const handleOffsetX = touch.clientX - (handleRect.left + handleRect.width / 2);
+        const handleOffsetY = touch.clientY - (handleRect.top + handleRect.height / 2);
+        
         resizeStartRef.current = {
             id,
-            rightEdgeX: placement.x + placement.width,
+            anchorX,
+            anchorY,
             aspectRatio: placement.width / placement.height,
-            handleOffsetX: 0,
-            minWidth: 40
+            handleOffsetX,
+            handleOffsetY,
+            minSize: 40
         };
     };
 
@@ -571,7 +610,7 @@ function DocumentSigningPage() {
                             <span>1 page</span>
                         </div>
                         <div className="text-xs text-gray-500">
-                            Drag to place • Resize from corner • Tap Save when finished
+                            Drag to place • Resize from bottom-left • Tap Save when finished
                         </div>
                     </div>
                     <div
@@ -627,7 +666,7 @@ function DocumentSigningPage() {
 
                                         {(selectedPlacementId === p.id) && (
                                             <div
-                                                className="absolute top-1/2 -left-3 -translate-y-1/2 h-6 w-6 rounded-full border border-gray-300 bg-white shadow-sm flex items-center justify-center"
+                                                className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full border-2 border-blue-500 bg-white shadow-md flex items-center justify-center cursor-nw-resize hover:scale-110 transition-transform"
                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
                                                 onPointerUp={handlePointerUp}
                                                 onPointerCancel={handlePointerUp}
@@ -635,12 +674,9 @@ function DocumentSigningPage() {
                                                 onTouchEnd={handleWindowTouchEnd}
                                                 style={{ touchAction: 'none' }}
                                             >
-                                                <svg className="w-3 h-3 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M17 12H7" />
-                                                    <path d="M7 12l5-5" />
-                                                    <path d="M7 12l5 5" />
-                                                    <path d="M17 12l-5-5" />
-                                                    <path d="M17 12l-5 5" />
+                                                <svg className="w-3 h-3 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M18 6L6 18" />
+                                                    <path d="M12 6h6v6" />
                                                 </svg>
                                             </div>
                                         )}
