@@ -16,6 +16,8 @@ from reportlab.lib.utils import ImageReader
 import barcode
 from barcode.writer import ImageWriter
 
+from app.utils.pdf_helpers import wrap_text
+
 logger = logging.getLogger(__name__)
 
 # Get templates directory
@@ -431,7 +433,7 @@ class PDFService:
             pdf.setFont("Helvetica", 8)
 
             # Wrap remarks text
-            remark_lines = self._wrap_text(pdf, order_remarks, width - 2 * x_margin, "Helvetica", 8)
+            remark_lines = wrap_text(order_remarks, width - 2 * x_margin, "Helvetica", 8, pdf)
             for line in remark_lines:
                 if y_pos < 80:
                     pdf.showPage()

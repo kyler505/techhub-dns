@@ -77,12 +77,11 @@ def test_picklist_service_import():
 
 def test_filter_picklines_no_shipped():
     """Test filter_picklines when nothing is shipped"""
-    from app.services.picklist_service import PicklistService
+    from app.utils.pdf_helpers import filter_picklines
 
-    service = PicklistService()
     pick_lines = SAMPLE_INFLOW_DATA["pickLines"]
 
-    filtered = service.filter_picklines(SAMPLE_INFLOW_DATA, pick_lines)
+    filtered = filter_picklines(SAMPLE_INFLOW_DATA, pick_lines)
 
     # Should return all items since nothing shipped
     assert len(filtered) == 2
@@ -91,12 +90,11 @@ def test_filter_picklines_no_shipped():
 
 def test_filter_picklines_partial_shipped():
     """Test filter_picklines when some items are shipped"""
-    from app.services.picklist_service import PicklistService
+    from app.utils.pdf_helpers import filter_picklines
 
-    service = PicklistService()
     pick_lines = SAMPLE_INFLOW_DATA_PARTIAL_SHIPPED["pickLines"]
 
-    filtered = service.filter_picklines(SAMPLE_INFLOW_DATA_PARTIAL_SHIPPED, pick_lines)
+    filtered = filter_picklines(SAMPLE_INFLOW_DATA_PARTIAL_SHIPPED, pick_lines)
 
     # Should have 2 items: 1 laptop (reduced qty) and 3 keyboards
     assert len(filtered) == 2
@@ -112,25 +110,23 @@ def test_filter_picklines_partial_shipped():
 
 
 def test_wrap_text_empty():
-    """Test _wrap_text with empty input"""
-    from app.services.picklist_service import PicklistService
+    """Test wrap_text with empty input"""
+    from app.utils.pdf_helpers import wrap_text
 
-    service = PicklistService()
-    result = service._wrap_text("", 500, "Helvetica", 11)
+    result = wrap_text("", 500, "Helvetica", 11)
 
     assert result == []
-    print("[PASS] _wrap_text (empty) test passed")
+    print("[PASS] wrap_text (empty) test passed")
 
 
 def test_wrap_text_with_newlines():
-    """Test _wrap_text preserves explicit newlines"""
-    from app.services.picklist_service import PicklistService
+    """Test wrap_text preserves explicit newlines"""
+    from app.utils.pdf_helpers import wrap_text
 
-    service = PicklistService()
-    result = service._wrap_text("Line 1\nLine 2\nLine 3", 500, "Helvetica", 11)
+    result = wrap_text("Line 1\nLine 2\nLine 3", 500, "Helvetica", 11)
 
     assert len(result) >= 3  # At least 3 lines
-    print("[PASS] _wrap_text (with newlines) test passed")
+    print("[PASS] wrap_text (with newlines) test passed")
 
 
 def test_generate_picklist_pdf():
