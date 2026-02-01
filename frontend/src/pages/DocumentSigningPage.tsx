@@ -192,13 +192,10 @@ function DocumentSigningPage() {
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
     const resizeStartRef = useRef<{
         id: string;
-        startX: number;
-        startY: number;
-        initW: number;
-        initH: number;
         rightEdgeX: number;
         aspectRatio: number;
-        hasMoved: boolean;
+        handleOffsetX: number;
+        minWidth: number;
     } | null>(null);
     const interactionTypeRef = useRef<'pointer' | 'touch' | null>(null);
     const interactionModeRef = useRef<'drag' | 'resize' | null>(null);
@@ -257,30 +254,26 @@ function DocumentSigningPage() {
     };
 
     const updateResize = (clientX: number, clientY: number) => {
-        if (!resizeStartRef.current || !pageViewport) return;
+        if (!resizeStartRef.current || !pageViewport || !viewerRef.current) return;
 
         const {
             id,
-            startX,
-            initW,
+            rightEdgeX,
             aspectRatio,
-            rightEdgeX
+            handleOffsetX,
+            minWidth
         } = resizeStartRef.current;
 
-        // Check if user has moved enough to start resizing (4px dead zone)
-        const dxPx = clientX - startX;
-        if (!resizeStartRef.current.hasMoved && Math.abs(dxPx) < 4) {
-            return;
-        }
-        resizeStartRef.current.hasMoved = true;
+        // Get viewer position for coordinate conversion
+        const viewerRect = viewerRef.current.getBoundingClientRect();
+        const handleScreenX = clientX - handleOffsetX;
+        const handlePdfX = (handleScreenX - viewerRect.left) / scale;
 
-        // Convert pixel delta to PDF points
-        const dxPt = dxPx / scale;
-
-        // New width: dragging left (negative dx) increases width, right decreases
-        const minWidth = 40;
-        const maxWidth = Math.max(minWidth * 3, rightEdgeX);
-        let newWidth = initW - dxPt;
+        // New width is distance from right edge to handle position
+        let newWidth = rightEdgeX - handlePdfX;
+        
+        // Clamp to reasonable bounds
+        const maxWidth = Math.max(minWidth * 4, rightEdgeX);
         newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
 
         // Maintain aspect ratio
@@ -411,15 +404,16 @@ function DocumentSigningPage() {
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         attachPointerListeners();
 
+        // Calculate offset from pointer to handle center for accurate positioning
+        const handleRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const handleOffsetX = e.clientX - (handleRect.left + handleRect.width / 2);
+        
         resizeStartRef.current = {
             id,
-            startX: e.clientX,
-            startY: e.clientY,
-            initW: placement.width,
-            initH: placement.height,
             rightEdgeX: placement.x + placement.width,
             aspectRatio: placement.width / placement.height,
-            hasMoved: false
+            handleOffsetX,
+            minWidth: 40
         };
     };
 
@@ -435,15 +429,13 @@ function DocumentSigningPage() {
         interactionModeRef.current = 'resize';
         attachTouchListeners();
 
+        // For touch, we can't get handle offset precisely, so use direct positioning
         resizeStartRef.current = {
             id,
-            startX: touch.clientX,
-            startY: touch.clientY,
-            initW: placement.width,
-            initH: placement.height,
             rightEdgeX: placement.x + placement.width,
             aspectRatio: placement.width / placement.height,
-            hasMoved: false
+            handleOffsetX: 0,
+            minWidth: 40
         };
     };
 
