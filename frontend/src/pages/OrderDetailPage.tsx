@@ -151,10 +151,10 @@ export default function OrderDetailPage() {
     return (
         <div className="p-4">
             <button
-                onClick={() => navigate("/")}
+                onClick={() => navigate(-1)}
                 className="mb-4 px-4 py-2 border rounded hover:bg-gray-100"
             >
-                ← Back to Orders
+                ← Back
             </button>
             <OrderDetailComponent
                 order={order}
