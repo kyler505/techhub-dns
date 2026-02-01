@@ -546,6 +546,265 @@ class OrderService:
 
         return None
 
+
+    def _extract_order_basic_data(self, inflow_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract basic order data including order number, remarks, and shipping address."""
+        order_number = inflow_data.get("orderNumber")
+        if not order_number:
+            raise ValidationError("Order number is required", field="orderNumber")
+
+        order_remarks = inflow_data.get("orderRemarks", "")
+        shipping_addr_obj = inflow_data.get("shippingAddress", {})
+        address1 = shipping_addr_obj.get("address1", "")
+        address2 = shipping_addr_obj.get("address2", "")
+
+        shipping_address_parts = [part for part in [address1, address2] if part]
+        shipping_address = " ".join(shipping_address_parts) if shipping_address_parts else address1
+
+        return {
+            "order_number": order_number,
+            "order_remarks": order_remarks,
+            "shipping_addr_obj": shipping_addr_obj,
+            "address1": address1,
+            "address2": address2,
+            "shipping_address": shipping_address
+        }
+
+    def _determine_city_and_delivery_type(self, order_number: str, shipping_addr_obj: Dict[str, Any], shipping_address: str) -> Dict[str, Any]:
+        """Determine if this is a local delivery based on city detection."""
+        city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+
+        # If city is missing, try to detect it from the full address string for common non-local locations
+        if not city and shipping_address:
+            if "HOUSTON" in shipping_address.upper():
+                city = "Houston"
+                logger.info(f"City not specified but 'Houston' found in address for order {order_number}. inferred_city='Houston'")
+
+        is_local_delivery = False
+
+        if city:
+            city_upper = city.upper()
+            is_local_delivery = city_upper in ("BRYAN", "COLLEGE STATION")
+            if not is_local_delivery:
+                logger.info(f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order.")
+        else:
+            # If no city specified and couldn't be inferred, assume it's local delivery
+            is_local_delivery = True
+            logger.debug(f"No city specified for order {order_number}, assuming local delivery")
+
+        return {
+            "city": city,
+            "is_local_delivery": is_local_delivery
+        }
+
+    def _extract_building_code_for_local(self, order_number: str, order_remarks: str, shipping_address: str, address1: str, address2: str) -> str:
+        """Extract building code for local deliveries using 3 priority levels."""
+        building_code = None
+
+        # PRIORITY 1: Check order remarks FIRST for building codes
+        if order_remarks:
+            logger.info(f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'")
+            building_code = extract_building_code_from_location(order_remarks)
+            if building_code:
+                logger.info(f"Found building code '{building_code}' directly in order remarks for order {order_number}")
+
+        # PRIORITY 2: If no building code in remarks, check alternative location from remarks
+        if not building_code:
+            logger.debug(f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}")
+            alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
+            if alternative_location:
+                logger.debug(f"Found alternative location in remarks: '{alternative_location}'")
+                building_code = extract_building_code_from_location(alternative_location)
+                if building_code:
+                    logger.info(f"Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}")
+
+        # PRIORITY 3: If still no building code, check shipping addresses
+        if not building_code:
+            logger.info(f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'")
+
+            # Try extracting building code from address2
+            if address2:
+                logger.info(f"Attempting to extract building code from address2: '{address2}'")
+                building_code = extract_building_code_from_location(address2)
+                if building_code:
+                    logger.info(f"Found building code '{building_code}' from address2 using location patterns: '{address2}'")
+
+            # Try location extraction on combined address
+            if not building_code and shipping_address:
+                logger.info(f"Attempting to extract building code from combined shipping address: '{shipping_address}'")
+                building_code = extract_building_code_from_location(shipping_address)
+                if building_code:
+                    logger.info(f"Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'")
+
+            # Try ArcGIS matching
+            if not building_code:
+                building_code = get_building_abbreviation(None, shipping_address)
+                if building_code:
+                    logger.info(f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'")
+
+            if not building_code and address2:
+                building_code = get_building_abbreviation(None, address2)
+                if building_code:
+                    logger.info(f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'")
+
+        # Final fallback logic
+        if building_code:
+            logger.info(f"Using building code as delivery_location for order {order_number}: '{building_code}'")
+            return building_code
+
+        # Try fallback extraction
+        logger.debug(f"No building code found yet, attempting final extraction from fallback strings for order {order_number}")
+        alternative_location = self._extract_delivery_location_from_remarks(order_remarks) if order_remarks else None
+
+        if alternative_location:
+            logger.debug(f"Attempting final extraction from alternative_location: '{alternative_location}'")
+            building_code = extract_building_code_from_location(alternative_location)
+            if building_code:
+                logger.info(f"Extracted building code '{building_code}' from alternative_location fallback for order {order_number}")
+                return building_code
+
+            building_code = extract_building_code_from_location(shipping_address)
+            if building_code:
+                logger.info(f"Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+                return building_code
+
+            delivery_location = alternative_location or shipping_address
+            logger.info(f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'")
+            return delivery_location
+
+        # No alternative location
+        building_code = extract_building_code_from_location(shipping_address)
+        if building_code:
+            logger.info(f"Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+            return building_code
+
+        logger.info(f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{shipping_address}'")
+        return shipping_address
+
+
+    def _determine_delivery_location(self, order_number: str, is_local_delivery: bool, shipping_address: str, order_remarks: str, address1: str, address2: str, custom_fields: Dict[str, Any]) -> str:
+        """Determine the final delivery location based on order type and available data."""
+        if is_local_delivery:
+            return self._extract_building_code_for_local(order_number, order_remarks, shipping_address, address1, address2)
+
+        # For non-local deliveries
+        alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
+
+        # Map to building abbreviation if possible
+        if alternative_location:
+            mapped_abbreviation = get_building_abbreviation(None, alternative_location)
+            if mapped_abbreviation:
+                logger.info(f"Mapped alternative location '{alternative_location}' to building code '{mapped_abbreviation}' via ArcGIS for non-local order {order_number}")
+                return mapped_abbreviation
+            logger.info(f"Using raw alternative_location for non-local order {order_number}: '{alternative_location}'. Note: This order is outside Bryan/College Station")
+            return alternative_location
+
+        # Fall back to shipping address for non-local
+        mapped_abbreviation = get_building_abbreviation(None, shipping_address)
+        if mapped_abbreviation:
+            logger.info(f"Mapped shipping address '{shipping_address}' to building code '{mapped_abbreviation}' via ArcGIS for non-local order {order_number}")
+            return mapped_abbreviation
+
+        logger.info(f"Using raw shipping_address for non-local order {order_number}: '{shipping_address}'. Note: This order is outside Bryan/College Station")
+        return shipping_address
+
+
+    def _update_existing_order(self, existing_order: Order, inflow_data: Dict[str, Any], delivery_location: str, user_id: Optional[str] = None) -> Order:
+        """Update an existing order with new inflow data."""
+        order_remarks = inflow_data.get("orderRemarks", "")
+        shipping_address_obj = inflow_data.get("shippingAddress", {})
+        email = inflow_data.get("email", "")
+        
+        existing_order.inflow_data = inflow_data
+        existing_order.delivery_location = delivery_location
+        existing_order.order_remarks = order_remarks
+        existing_order.shipping_address = shipping_address_obj.get("address1", "")
+        existing_order.shipping_address2 = shipping_address_obj.get("address2", "")
+        existing_order.shipping_city = shipping_address_obj.get("city", "")
+        existing_order.shipping_state = shipping_address_obj.get("stateProvince", "")
+        existing_order.shipping_zip = shipping_address_obj.get("postalCode", "")
+        existing_order.contact_name = inflow_data.get("contactName", "")
+        existing_order.contact_email = email
+        existing_order.customer_id = inflow_data.get("customerId", "")
+        existing_order.customer_name = inflow_data.get("customerName", "")
+        existing_order.updated_at = datetime.utcnow()
+
+        self.db.commit()
+        self.db.refresh(existing_order)
+
+        # Audit logging
+        audit_service = AuditService(self.db)
+        audit_service.log_action(
+            entity_type="order",
+            entity_id=str(existing_order.id),
+            action="updated_from_inflow",
+            user_id=user_id,
+            description=f"Order updated from Inflow webhook: {existing_order.order_number}",
+            audit_metadata={
+                "order_number": existing_order.order_number,
+                "delivery_location": delivery_location,
+                "inflow_order_id": inflow_data.get("salesOrderId")
+            }
+        )
+
+        logger.info(f"Updated existing order {existing_order.order_number} from Inflow webhook")
+        return existing_order
+
+
+    def _create_new_order(self, inflow_data: Dict[str, Any], delivery_location: str, order_number: str, user_id: Optional[str] = None) -> Order:
+        """Create a new order from inflow data."""
+        order_remarks = inflow_data.get("orderRemarks", "")
+        shipping_address_obj = inflow_data.get("shippingAddress", {})
+        email = inflow_data.get("email", "")
+        
+        # Check if customer is flagged as a "problem customer" from notes
+        customer_notes = inflow_data.get("customerNotes", "")
+        is_problem_customer = self._check_problem_customer(customer_notes)
+
+        new_order = Order(
+            order_number=order_number,
+            inflow_data=inflow_data,
+            delivery_location=delivery_location,
+            order_remarks=order_remarks,
+            shipping_address=shipping_address_obj.get("address1", ""),
+            shipping_address2=shipping_address_obj.get("address2", ""),
+            shipping_city=shipping_address_obj.get("city", ""),
+            shipping_state=shipping_address_obj.get("stateProvince", ""),
+            shipping_zip=shipping_address_obj.get("postalCode", ""),
+            contact_name=inflow_data.get("contactName", ""),
+            contact_email=email,
+            customer_id=inflow_data.get("customerId", ""),
+            customer_name=inflow_data.get("customerName", ""),
+            status=OrderStatus.NEW,
+            is_problem_customer=is_problem_customer
+        )
+
+        self.db.add(new_order)
+        self.db.commit()
+        self.db.refresh(new_order)
+
+        # Audit logging
+        audit_service = AuditService(self.db)
+        audit_service.log_action(
+            entity_type="order",
+            entity_id=str(new_order.id),
+            action="created_from_inflow",
+            user_id=user_id,
+            description=f"Order created from Inflow webhook: {order_number}",
+            audit_metadata={
+                "order_number": order_number,
+                "delivery_location": delivery_location,
+                "is_problem_customer": is_problem_customer,
+                "inflow_order_id": inflow_data.get("salesOrderId")
+            }
+        )
+
+        logger.info(f"Created new order {order_number} from Inflow webhook (problem_customer={is_problem_customer})")
+        return new_order
+
+
+
+
     def create_order_from_inflow(self, inflow_data: Dict[str, Any]) -> Order:
         """Create or update order from Inflow data"""
         order_number = inflow_data.get("orderNumber")
