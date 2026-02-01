@@ -195,8 +195,12 @@ function DocumentSigningPage() {
         anchorX: number;      // Top-right corner X (fixed point)
         anchorY: number;      // Top-right corner Y (fixed point, in PDF coords from bottom)
         aspectRatio: number;
-        handleOffsetX: number;
-        handleOffsetY: number;
+        startPointerX: number;
+        startPointerY: number;
+        startHandleX: number;
+        startHandleY: number;
+        startWidth: number;
+        startHeight: number;
         minSize: number;
     } | null>(null);
     const interactionTypeRef = useRef<'pointer' | 'touch' | null>(null);
@@ -256,48 +260,56 @@ function DocumentSigningPage() {
     };
 
     const updateResize = (clientX: number, clientY: number) => {
-        if (!resizeStartRef.current || !pageViewport || !viewerRef.current) return;
+        if (!resizeStartRef.current || !pageViewport) return;
 
         const {
             id,
             anchorX,
             anchorY,
             aspectRatio,
-            handleOffsetX,
-            handleOffsetY,
+            startPointerX,
+            startPointerY,
+            startHandleX,
+            startHandleY,
+            startWidth,
+            startHeight,
             minSize
         } = resizeStartRef.current;
 
-        // Get viewer position for coordinate conversion
-        const viewerRect = viewerRef.current.getBoundingClientRect();
-        
-        // Calculate handle position in screen coordinates, accounting for offset
-        const handleScreenX = clientX - handleOffsetX;
-        const handleScreenY = clientY - handleOffsetY;
-        
-        // Convert to PDF coordinates
-        const handlePdfX = (handleScreenX - viewerRect.left) / scale;
-        const handlePdfY = (viewerRect.bottom - handleScreenY) / scale; // Convert to PDF coords (from bottom)
+        const dxPx = clientX - startPointerX;
+        const dyPx = clientY - startPointerY;
+        const dxPt = dxPx / scale;
+        const dyPt = -dyPx / scale;
 
-        // Calculate new dimensions based on distance from anchor (top-right) to handle (bottom-left)
-        let newWidth = anchorX - handlePdfX;
-        let newHeight = anchorY - handlePdfY;
-        
-        // Maintain aspect ratio by using the larger dimension
-        const currentAspect = newWidth / newHeight;
-        if (currentAspect > aspectRatio) {
-            // Too wide, adjust width based on height
-            newWidth = newHeight * aspectRatio;
+        const handlePdfX = startHandleX + dxPt;
+        const handlePdfY = startHandleY + dyPt;
+
+        const widthFromX = anchorX - handlePdfX;
+        const heightFromY = anchorY - handlePdfY;
+
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+
+        if (Math.abs(dxPt) >= Math.abs(dyPt)) {
+            newWidth = widthFromX;
+            newHeight = newWidth / aspectRatio;
         } else {
-            // Too tall, adjust height based on width
+            newHeight = heightFromY;
+            newWidth = newHeight * aspectRatio;
+        }
+
+        const minWidth = minSize;
+        const minHeight = minSize;
+
+        if (newWidth < minWidth) {
+            newWidth = minWidth;
             newHeight = newWidth / aspectRatio;
         }
-        
-        // Clamp to minimum size
-        newWidth = Math.max(minSize, newWidth);
-        newHeight = Math.max(minSize, newHeight);
+        if (newHeight < minHeight) {
+            newHeight = minHeight;
+            newWidth = newHeight * aspectRatio;
+        }
 
-        // Calculate new position (bottom-left corner)
         const nextX = anchorX - newWidth;
         const nextY = anchorY - newHeight;
 
@@ -316,6 +328,8 @@ function DocumentSigningPage() {
     };
 
     const handlePointerDown = (e: React.PointerEvent, id: string) => {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('[data-resize-handle], [data-delete-button]')) return;
         e.stopPropagation(); // Prevent PDF scrolling if possible? Or maybe just capture
         const placement = placements.find(p => p.id === id);
         if (!placement) return;
@@ -351,6 +365,8 @@ function DocumentSigningPage() {
     };
 
     const handleTouchStart = (e: React.TouchEvent, id: string) => {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('[data-resize-handle], [data-delete-button]')) return;
         if (interactionTypeRef.current === 'pointer') return;
         const placement = placements.find(p => p.id === id);
         const touch = e.touches[0];
@@ -424,23 +440,23 @@ function DocumentSigningPage() {
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         attachPointerListeners();
 
-        // Calculate offset from pointer to handle center for accurate positioning
-        const handleRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const handleOffsetX = e.clientX - (handleRect.left + handleRect.width / 2);
-        const handleOffsetY = e.clientY - (handleRect.top + handleRect.height / 2);
-        
         // Anchor at top-right corner (kept fixed during resize)
         const anchorX = placement.x + placement.width;
         const anchorY = placement.y + placement.height;
-        
+        const minSize = Math.max(32, Math.min(placement.width, placement.height) * 0.4);
+
         resizeStartRef.current = {
             id,
             anchorX,
             anchorY,
             aspectRatio: placement.width / placement.height,
-            handleOffsetX,
-            handleOffsetY,
-            minSize: 40
+            startPointerX: e.clientX,
+            startPointerY: e.clientY,
+            startHandleX: placement.x,
+            startHandleY: placement.y,
+            startWidth: placement.width,
+            startHeight: placement.height,
+            minSize
         };
     };
 
@@ -460,21 +476,20 @@ function DocumentSigningPage() {
         // Anchor at top-right corner (kept fixed during resize)
         const anchorX = placement.x + placement.width;
         const anchorY = placement.y + placement.height;
-        
-        // For touch, calculate offset from touch point to where handle center would be
-        const handleEl = e.currentTarget as HTMLElement;
-        const handleRect = handleEl.getBoundingClientRect();
-        const handleOffsetX = touch.clientX - (handleRect.left + handleRect.width / 2);
-        const handleOffsetY = touch.clientY - (handleRect.top + handleRect.height / 2);
-        
+        const minSize = Math.max(32, Math.min(placement.width, placement.height) * 0.4);
+
         resizeStartRef.current = {
             id,
             anchorX,
             anchorY,
             aspectRatio: placement.width / placement.height,
-            handleOffsetX,
-            handleOffsetY,
-            minSize: 40
+            startPointerX: touch.clientX,
+            startPointerY: touch.clientY,
+            startHandleX: placement.x,
+            startHandleY: placement.y,
+            startWidth: placement.width,
+            startHeight: placement.height,
+            minSize
         };
     };
 
@@ -657,7 +672,9 @@ function DocumentSigningPage() {
                                         {/* Delete Button (visible on hover/select) */}
                                         {(selectedPlacementId === p.id) && (
                                             <button
-                                                className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600"
+                                                data-delete-button
+                                                className="absolute -top-3 -right-3 z-20 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600 pointer-events-auto"
+                                                onPointerDown={(e) => { e.stopPropagation(); }}
                                                 onClick={(e) => { e.stopPropagation(); removePlacement(p.id); }}
                                             >
                                                 <X className="w-3 h-3" />
@@ -666,7 +683,8 @@ function DocumentSigningPage() {
 
                                         {(selectedPlacementId === p.id) && (
                                             <div
-                                                className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full border-2 border-blue-500 bg-white shadow-md flex items-center justify-center cursor-nw-resize hover:scale-110 transition-transform"
+                                                data-resize-handle
+                                                className="absolute -bottom-3 -left-3 z-20 h-6 w-6 rounded-full border-2 border-blue-500 bg-white shadow-md flex items-center justify-center cursor-nw-resize hover:scale-110 transition-transform pointer-events-auto"
                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
                                                 onPointerUp={handlePointerUp}
                                                 onPointerCancel={handlePointerUp}
