@@ -1,0 +1,29 @@
+from app.database import get_db_session
+from app.models.order import Order
+from app.services.order_service import OrderService
+
+
+def main() -> None:
+    session = get_db_session()
+    try:
+        order = session.query(Order).filter(Order.inflow_order_id == "TH3976").first()
+        if not order:
+            print("Order not found")
+            return
+        updated = OrderService(session).generate_picklist(
+            order_id=order.id,
+            generated_by="kcao@tamu.edu",
+        )
+        print(
+            "Regenerated picklist: {} {} {}".format(
+                updated.inflow_order_id,
+                updated.picklist_path,
+                updated.picklist_generated_at,
+            )
+        )
+    finally:
+        session.close()
+
+
+if __name__ == "__main__":
+    main()
