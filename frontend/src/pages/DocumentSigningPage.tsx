@@ -253,7 +253,7 @@ function DocumentSigningPage() {
         }));
     };
 
-    const updateResize = (clientX: number, clientY: number) => {
+    const updateResize = (clientX: number) => {
         if (!resizeStartRef.current || !pageViewport || !viewerRef.current) return;
 
         const {
@@ -324,7 +324,7 @@ function DocumentSigningPage() {
             e.preventDefault();
         }
         if (interactionModeRef.current === 'resize') {
-            updateResize(e.clientX, e.clientY);
+            updateResize(e.clientX);
         } else {
             updateDrag(e.clientX, e.clientY);
         }
@@ -360,7 +360,7 @@ function DocumentSigningPage() {
             e.preventDefault();
         }
         if (interactionModeRef.current === 'resize') {
-            updateResize(touch.clientX, touch.clientY);
+            updateResize(touch.clientX);
         } else {
             updateDrag(touch.clientX, touch.clientY);
         }
