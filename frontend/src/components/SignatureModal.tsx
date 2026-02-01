@@ -86,7 +86,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
 
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineWidth = e.pressure ? e.pressure * 4 : 2;
+        ctx.lineWidth = e.pressure ? e.pressure * 4 : 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.strokeStyle = 'black';
@@ -104,7 +104,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
         const ctx = canvasRef.current?.getContext('2d');
         if (!ctx) return;
 
-        ctx.lineWidth = e.pressure ? Math.max(1, e.pressure * 4) : 2;
+        ctx.lineWidth = e.pressure ? Math.max(1, e.pressure * 4) : 3;
         ctx.lineTo(x, y);
         ctx.stroke();
 
