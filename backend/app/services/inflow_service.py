@@ -385,36 +385,36 @@ class InflowService:
                         "message": msg
                     }
 
-            # Proceed with fulfillment (either fully picked, or only_picked_items=True)
-            url = f"{self.base_url}/{self.company_id}/sales-orders"
-            async with httpx.AsyncClient() as client:
-                response = await client.put(url, json=order, headers=self.headers)
-                response.raise_for_status()
-                result = response.json()
+        # Proceed with fulfillment (either fully picked, or only_picked_items=True)
+        url = f"{self.base_url}/{self.company_id}/sales-orders"
+        async with httpx.AsyncClient() as client:
+            response = await client.put(url, json=order, headers=self.headers)
+            response.raise_for_status()
+            result = response.json()
 
-            # Audit logging for inFlow fulfillment
-            if db:
-                audit_service = AuditService(db)
-                description = "Order fulfilled in inFlow system"
-                if only_picked_items:
-                    description = "Order fulfilled in inFlow system (only picked items, partial fulfillment)"
+        # Audit logging for inFlow fulfillment
+        if db:
+            audit_service = AuditService(db)
+            description = "Order fulfilled in inFlow system"
+            if only_picked_items:
+                description = "Order fulfilled in inFlow system (only picked items, partial fulfillment)"
 
-                audit_service.log_action(
-                    entity_type="inflow_order",
-                    entity_id=sales_order_id,
-                    action="fulfilled",
-                    user_id=user_id,
-                    description=description,
-                    audit_metadata={
-                        "inflow_order_number": order.get("orderNumber"),
-                        "pick_lines_count": len(order.get("pickLines", [])),
-                        "pack_lines_count": len(order.get("packLines", [])),
-                        "ship_lines_count": len(order.get("shipLines", [])),
-                        "only_picked_items": only_picked_items
-                    }
-                )
+            audit_service.log_action(
+                entity_type="inflow_order",
+                entity_id=sales_order_id,
+                action="fulfilled",
+                user_id=user_id,
+                description=description,
+                audit_metadata={
+                    "inflow_order_number": order.get("orderNumber"),
+                    "pick_lines_count": len(order.get("pickLines", [])),
+                    "pack_lines_count": len(order.get("packLines", [])),
+                    "ship_lines_count": len(order.get("shipLines", [])),
+                    "only_picked_items": only_picked_items
+                }
+            )
 
-            return result
+        return result
 
     async def register_webhook(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
         """
