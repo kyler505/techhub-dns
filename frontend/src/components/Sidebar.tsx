@@ -9,12 +9,12 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Building2,
   Send,
   MapPinned,
   Users,
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import boxTAM from "../../assets/boxTAM.svg";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -53,22 +53,26 @@ export function Sidebar({ className }: { className?: string }) {
       )}
     >
       <div className="flex items-center justify-between h-16 px-4 border-b border-slate-100">
-        <AnimatePresence mode="wait">
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-              className="flex items-center gap-3"
-            >
-              <div className="w-8 h-8 rounded-lg bg-maroon-700 flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-semibold text-slate-800 tracking-tight">TechHub</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="flex items-center gap-3">
+          <img
+            src={boxTAM}
+            alt="Texas A&M University"
+            className="h-8 w-auto"
+          />
+          <AnimatePresence mode="wait">
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.2 }}
+                className="font-semibold text-slate-800 tracking-tight"
+              >
+                TechHub
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
         <button onClick={() => setCollapsed(!collapsed)} className="p-1.5 rounded-md hover:bg-slate-100 transition-colors">
           {collapsed ? <ChevronRight className="w-5 h-5 text-slate-500" /> : <ChevronLeft className="w-5 h-5 text-slate-500" />}
         </button>
