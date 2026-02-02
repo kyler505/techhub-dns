@@ -75,37 +75,37 @@ export default function Shipping() {
                 {loadingOrders ? (
                     <div className="p-4">Loading...</div>
                 ) : (
-                    <div className="mt-4 overflow-x-auto ios-scroll">
-                        <table className="min-w-[720px] border-collapse border border-gray-200">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="border border-gray-200 px-3 py-2 text-left">Order</th>
-                                    <th className="border border-gray-200 px-3 py-2 text-left hidden lg:table-cell">Location / City</th>
-                                    <th className="border border-gray-200 px-3 py-2 text-left">Dock Status</th>
-                                    <th className="border border-gray-200 px-3 py-2 text-left">FedEx</th>
+                    <div className="mt-4 overflow-x-auto ios-scroll rounded-lg border border-slate-200 bg-white shadow-premium">
+                        <table className="min-w-[720px] w-full">
+                            <thead className="bg-slate-50/80">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Order</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Location / City</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Dock Status</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Carrier</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100">
                                 {orders.map((o) => {
                                     const currentStatus = o.shipping_workflow_status || ShippingWorkflowStatus.WORK_AREA;
                                     const isUpdating = updatingOrderId === o.id;
 
                                     return (
-                                        <tr key={o.id} className="hover:bg-gray-50">
-                                            <td className="border border-gray-200 px-3 py-2 font-medium text-gray-900">
+                                        <tr key={o.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-3 py-2 text-sm font-medium text-slate-900">
                                                 {o.inflow_order_id || o.id}
                                             </td>
 
-                                            <td className="border border-gray-200 px-3 py-2 text-gray-800 hidden lg:table-cell">
+                                            <td className="px-3 py-2 text-sm text-slate-700 hidden lg:table-cell">
                                                 {formatDeliveryLocation(o)}
                                             </td>
 
-                                            <td className="border border-gray-200 px-3 py-2">
+                                            <td className="px-3 py-2 text-sm">
                                                 <div className="flex items-center gap-2">
                                                     <span
                                                         className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${currentStatus === ShippingWorkflowStatus.DOCK ? "bg-blue-100 text-blue-700" :
                                                             currentStatus === ShippingWorkflowStatus.SHIPPED ? "bg-green-100 text-green-700" :
-                                                                "bg-gray-100 text-gray-700"
+                                                                "bg-slate-100 text-slate-700"
                                                             }`}
                                                     >
                                                         {ShippingWorkflowStatusDisplayNames[currentStatus]}
@@ -124,7 +124,7 @@ export default function Shipping() {
                                                 </div>
                                             </td>
 
-                                            <td className="border border-gray-200 px-3 py-2">
+                                            <td className="px-3 py-2 text-sm">
                                                 <div className="flex flex-col gap-2">
                                                     {currentStatus === ShippingWorkflowStatus.DOCK && (
                                                         <button
@@ -136,7 +136,7 @@ export default function Shipping() {
                                                                 }
                                                             }}
                                                             disabled={isUpdating}
-                                                            className="w-fit rounded-md bg-[#800000] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#660000] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="w-fit rounded-md bg-[#800000] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#660000] disabled:opacity-50 disabled:cursor-not-allowed btn-lift"
                                                         >
                                                             {isUpdating ? "Shipping..." : "Mark as Shipped"}
                                                         </button>
@@ -159,7 +159,7 @@ export default function Shipping() {
 
                                 {!orders.length && (
                                     <tr>
-                                        <td className="border border-gray-200 px-4 py-6 text-center text-gray-600" colSpan={4}>
+                                        <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={4}>
                                             No orders found.
                                         </td>
                                     </tr>
