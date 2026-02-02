@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Layers } from "lucide-react";
 import { TimeTrendDataPoint } from "../../api/analytics";
 
 interface StatusTrendsChartProps {
@@ -28,7 +29,8 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
 
   if (!data || data.length === 0) {
     return (
-      <div className="w-full h-[300px] flex items-center justify-center bg-muted/20 rounded">
+      <div className="w-full h-[300px] flex flex-col items-center justify-center bg-muted/20 rounded">
+        <Layers className="h-6 w-6 text-slate-300 mb-2" />
         <p className="text-muted-foreground">No data available</p>
       </div>
     );
@@ -51,8 +53,14 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={transformedData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+      <BarChart data={transformedData} margin={{ top: 10, right: 24, left: 0, bottom: 5 }}>
+        <defs>
+          <linearGradient id="statusGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#500000" stopOpacity={0.9} />
+            <stop offset="100%" stopColor="#a61b1b" stopOpacity={0.85} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="4 6" className="stroke-muted/40" />
         <XAxis 
           dataKey="date" 
           className="text-xs"
@@ -64,9 +72,10 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
         <YAxis className="text-xs" />
         <Tooltip 
           contentStyle={{ 
-            backgroundColor: 'hsl(var(--card))',
-            border: '1px solid hsl(var(--border))',
-            borderRadius: '6px'
+            backgroundColor: "hsl(var(--card))",
+            border: "1px solid hsl(var(--border))",
+            borderRadius: "8px",
+            boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
           }}
           labelFormatter={(value) => {
             const date = new Date(value);
@@ -84,7 +93,7 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
             dataKey={status}
             stackId="status"
             fill={STATUS_COLORS[status.toLowerCase()] || "#6b7280"}
-            radius={[4, 4, 0, 0]}
+            radius={[6, 6, 0, 0]}
             name={status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           />
         ))}
