@@ -1,36 +1,32 @@
-# UI Premium Overhaul
+# Frontend Build Refactor (PythonAnywhere)
 
 - [x] Restate goal + acceptance criteria
 - [x] Locate existing implementation / patterns
 - [x] Design: minimal approach + key decisions
-- [x] Implement foundation (theme, fonts, animations, skeletons)
-- [x] Implement navigation (sidebar, breadcrumbs, command palette, toasts)
-- [x] Polish components (cards, buttons, tables, empty states)
-- [x] Upgrade charts and dashboard visuals
-- [x] Add page transitions and micro-interactions
-- [ ] Run verification (lint/build/manual)
+- [x] Implement smallest safe slice
+- [x] Add/adjust tests (if needed)
+- [ ] Run verification (deploy script run)
 - [x] Summarize changes + verification story
-- [x] Record lessons (if any)
+- [ ] Record lessons (if any)
 
 ## Acceptance Criteria
-- Light-mode only UI with premium, polished visual language
-- Sidebar navigation with icons and collapse behavior
-- Command palette available (Cmd+K)
-- Dashboard shows animated stat cards and refined layout
-- Tables and cards feel premium with hover/animation polish
-- Charts use refined styling and gradients
-- No regression in routing or core workflows
+- GitHub Actions workflow for frontend build is removed.
+- `scripts/deploy.sh` builds the frontend on PythonAnywhere before reload.
+- Deployment docs reflect PythonAnywhere build flow (no local build requirement).
 
 ## Working Notes
-- Keep TAMU maroon as accent, slate as primary
-- Use Geist + Inter font stack
-- Light mode only
+- Node and npm are already in PATH on PythonAnywhere.
+- Build runs in `frontend` using `npm ci` then `npm run build`.
+
+## Checkpoint Notes
+- Removed GitHub Actions workflow for frontend deploy.
+- Added frontend build to `scripts/deploy.sh`.
+- Updated PythonAnywhere deployment docs to reflect server-side build.
 
 ## Results
-- Added premium navigation experience: sidebar, breadcrumbs, Cmd+K palette, and page transitions.
-- Polished cards, tables, and empty states with hover/animation refinement.
-- Upgraded charts with gradients and improved tooltips.
+- `scripts/deploy.sh` builds frontend on PythonAnywhere before reload.
+- `.github/workflows/deploy_frontend_pythonanywhere.yml` removed.
+- Deployment docs updated to reflect new flow.
 
 ## Verification
-- `npm run lint` (failed: ESLint config missing in `frontend`).
-- `npm run build` (passed).
+- Pending (run deploy script on PythonAnywhere).

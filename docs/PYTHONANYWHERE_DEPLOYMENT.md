@@ -9,34 +9,23 @@ Complete guide for deploying the TechHub Delivery application to PythonAnywhere 
 - PythonAnywhere account (**Web Dev tier** or higher for SSH access)
 - MySQL database configured on PythonAnywhere
 - Git access to the repository
-- Node.js installed locally (for building frontend)
+- Node.js available on PythonAnywhere (for building frontend during deploy)
 - Azure AD configuration complete (see [AUTHENTICATION_SETUP.md](AUTHENTICATION_SETUP.md))
 
 ---
 
 ## Part 1: Local Preparation
 
-### 1.1 Build the Frontend
+### 1.1 Frontend Build Flow
 
-PythonAnywhere doesn't have Node.js, so build the frontend locally:
+The frontend is built on PythonAnywhere during deployment, so a local build is not required.
+If you want to validate locally, you can still run:
 
 ```powershell
 cd frontend
 npm install
 npm run build
 ```
-
-### 1.2 Commit the Build
-
-The `frontend/dist/` folder must be in git for PythonAnywhere:
-
-```powershell
-git add frontend/dist -f
-git commit -m "Add frontend production build"
-git push
-```
-
-**Alternative**: Use GitHub Actions for automated builds (see `.github/workflows/deploy_frontend_pythonanywhere.yml`).
 
 ---
 
@@ -192,11 +181,8 @@ cat /var/log/username.pythonanywhere.com.server.log
 
 ### Standard Update Process
 
-1. **On your local machine** (if frontend changed):
+1. **On your local machine**:
 ```powershell
-cd frontend
-npm run build
-cd ..
 git add .
 git commit -m "Update application"
 git push
@@ -205,16 +191,14 @@ git push
 2. **On PythonAnywhere**:
 ```bash
 cd ~/techhub-dns
-git pull
-cd backend
-source .venv/bin/activate
-pip install -r requirements.txt  # Only if dependencies changed
-pa website reload --domain username.pythonanywhere.com
+bash scripts/deploy.sh
 ```
+
+The deploy script runs `npm ci` and `npm run build` in `frontend/`, then reloads the app.
 
 ### Automated Deployment
 
-Use GitHub Actions + webhook for automatic deploys:
+Use a GitHub webhook to trigger the deploy script automatically:
 
 1. Configure webhook secret in `.env`:
 ```env
