@@ -92,17 +92,17 @@ export default function OrderQAChecklist() {
                 {loadingOrders ? (
                     <div className="p-4">Loading...</div>
                 ) : (
-                    <div className="mt-4 overflow-x-auto ios-scroll">
-                        <table className="min-w-[720px] border-collapse border border-gray-200">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="border border-gray-200 px-3 py-2 text-left">Order</th>
-                                    <th className="border border-gray-200 px-3 py-2 text-left">Recipient</th>
-                                    <th className="border border-gray-200 px-3 py-2 text-left hidden lg:table-cell">Location</th>
-                                    <th className="border border-gray-200 px-3 py-2 text-left">QA</th>
+                    <div className="mt-4 overflow-x-auto ios-scroll rounded-lg border border-slate-200 bg-white shadow-premium">
+                        <table className="min-w-[720px] w-full">
+                            <thead className="bg-slate-50/80">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Order</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Recipient</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Location</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">QA</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100">
                                 {orders
                                     .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => {
@@ -113,22 +113,22 @@ export default function OrderQAChecklist() {
                                         const qaButtonLabel = submittedAt ? "Edit QA" : "Perform QA"; // clearer label
 
                                         return (
-                                        <tr key={o.id} className="hover:bg-gray-50">
-                                            <td className="border border-gray-200 px-3 py-2">
+                                        <tr key={o.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-3 py-2 text-sm text-slate-700">
                                                 <button
                                                     onClick={() => navigate(`/orders/${o.id}`)}
-                                                    className="text-blue-600 hover:underline"
+                                                    className="text-slate-700 hover:text-slate-900 hover:underline"
                                                 >
                                                     {o.inflow_order_id}
                                                 </button>
                                             </td>
-                                            <td className="border border-gray-200 px-3 py-2">{o.recipient_name || "N/A"}</td>
-                                            <td className="border border-gray-200 px-3 py-2 hidden lg:table-cell">{o.delivery_location || "N/A"}</td>
-                                            <td className="border border-gray-200 px-3 py-2">
+                                            <td className="px-3 py-2 text-sm text-slate-700">{o.recipient_name || "N/A"}</td>
+                                            <td className="px-3 py-2 text-sm text-slate-700 hidden lg:table-cell">{o.delivery_location || "N/A"}</td>
+                                            <td className="px-3 py-2 text-sm">
                                                 <button
                                                     type="button"
                                                     onClick={() => navigate(`/orders/${o.id}/qa`)}
-                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2"
+                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2 btn-lift"
                                                 >
                                                     {qaButtonLabel}
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -145,7 +145,7 @@ export default function OrderQAChecklist() {
                                     .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
                                     .length === 0 && (
                                         <tr>
-                                            <td className="border border-gray-200 px-3 py-6 text-center text-gray-600" colSpan={4}>
+                                            <td className="px-3 py-6 text-center text-sm text-slate-500" colSpan={4}>
                                                 {orders.length === 0
                                                     ? "No orders need QA at this time."
                                                     : "All eligible orders have completed QA."}

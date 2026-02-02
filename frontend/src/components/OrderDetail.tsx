@@ -238,31 +238,31 @@ export default function OrderDetail({
             {order.inflow_data?.lines && order.inflow_data.lines.length > 0 && (
                 <div className="bg-white rounded-lg shadow p-6">
                     <h3 className="text-xl font-bold mb-4">Order Items</h3>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-premium">
+                        <table className="min-w-full">
+                            <thead className="bg-slate-50/80">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                                         #
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                                         Product
                                     </th>
-                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
                                         Quantity
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="divide-y divide-slate-100">
                                 {order.inflow_data.lines.map((line: any, index: number) => (
-                                    <tr key={line.productId || index}>
-                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                    <tr key={line.productId || index} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">
                                             {index + 1}
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
                                             {line.productName || line.product?.name || line.description || line.productId || 'Unknown Product'}
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900 text-right">
                                             {Math.floor(Number(line.quantity?.standardQuantity ?? line.quantity ?? 0))}
                                         </td>
                                     </tr>
