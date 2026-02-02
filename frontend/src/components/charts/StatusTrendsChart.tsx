@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Layers } from "lucide-react";
 import { TimeTrendDataPoint } from "../../api/analytics";
@@ -64,7 +65,7 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
         <XAxis 
           dataKey="date" 
           className="text-xs"
-          tickFormatter={(value) => {
+          tickFormatter={(value: string | number) => {
             const date = new Date(value);
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           }}
@@ -77,8 +78,14 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
             borderRadius: "8px",
             boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
           }}
-          labelFormatter={(value) => {
-            const date = new Date(value);
+          labelFormatter={(label: ReactNode) => {
+            if (typeof label !== "string" && typeof label !== "number") {
+              return "";
+            }
+            const date = new Date(label);
+            if (Number.isNaN(date.getTime())) {
+              return String(label);
+            }
             return date.toLocaleDateString('en-US', { 
               weekday: 'short',
               month: 'short', 
