@@ -66,7 +66,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
       className="group"
     >
       <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-premium-hover hover:-translate-y-0.5 h-full border-slate-200">
-        <div className={`absolute top-0 right-0 p-3 rounded-bl-2xl ${accentClasses[accent]} opacity-90 transition-transform duration-300 group-hover:scale-110`}>
+        <div className={`absolute bottom-0 right-0 p-3 rounded-tl-2xl ${accentClasses[accent]} opacity-90 transition-transform duration-300 group-hover:scale-110`}>
           <Icon className="w-5 h-5" />
         </div>
         <CardHeader className="pb-2 pt-4">

@@ -1,7 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import PreDeliveryQueue from "./PreDeliveryQueue";
 import InDelivery from "./InDelivery";
-import Shipping from "./Shipping";
 import PastDeliveryRuns from "./PastDeliveryRuns";
 
 export default function DeliveryDashboard() {
@@ -32,12 +31,6 @@ export default function DeliveryDashboard() {
                 </Tabs>
             </div>
 
-            <div>
-                <h2 className="text-lg font-semibold tracking-tight">Shipping</h2>
-                <div className="mt-4">
-                    <Shipping />
-                </div>
-            </div>
         </div>
     );
 }

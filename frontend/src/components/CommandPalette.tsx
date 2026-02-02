@@ -17,7 +17,6 @@ import {
   ClipboardCheck,
   Truck,
   Send,
-  FileSignature,
   Settings,
   Users,
 } from "lucide-react";
@@ -116,14 +115,6 @@ export function CommandPaletteProvider({ children }: CommandPaletteProviderProps
         section: "Navigation",
         perform: () => navigate("/delivery"),
         icon: <Truck className="h-4 w-4" />,
-      },
-      {
-        id: "signatures",
-        name: "Signatures",
-        shortcut: ["g", "s"],
-        section: "Navigation",
-        perform: () => navigate("/document-signing"),
-        icon: <FileSignature className="h-4 w-4" />,
       },
       {
         id: "admin",
