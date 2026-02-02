@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Activity } from "lucide-react";
 import { TimeTrendDataPoint } from "../../api/analytics";
@@ -38,7 +39,7 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
         <XAxis 
           dataKey="date" 
           className="text-xs"
-          tickFormatter={(value) => {
+          tickFormatter={(value: string | number) => {
             const date = new Date(value);
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           }}
@@ -51,8 +52,14 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
             borderRadius: "8px",
             boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
           }}
-          labelFormatter={(value) => {
-            const date = new Date(value);
+          labelFormatter={(label: ReactNode) => {
+            if (typeof label !== "string" && typeof label !== "number") {
+              return "";
+            }
+            const date = new Date(label);
+            if (Number.isNaN(date.getTime())) {
+              return String(label);
+            }
             return date.toLocaleDateString('en-US', { 
               weekday: 'short',
               month: 'short', 
