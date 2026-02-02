@@ -36,6 +36,20 @@ git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 log "Git pull complete"
 
+# Build frontend on PythonAnywhere
+if [ -d "$PROJECT_ROOT/frontend" ]; then
+    log "Building frontend..."
+    cd "$PROJECT_ROOT/frontend"
+    log "Installing frontend dependencies..."
+    npm ci
+    log "Running frontend build..."
+    npm run build
+    log "Frontend build complete"
+    cd "$PROJECT_ROOT"
+else
+    log "WARNING: Frontend directory not found at $PROJECT_ROOT/frontend"
+fi
+
 # Show what changed
 log "Recent commits:"
 git log --oneline -3

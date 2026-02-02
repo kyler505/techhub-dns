@@ -7,13 +7,13 @@ This guide explains how to set up automatic deployments when you push code to Gi
 ## Overview
 
 ```
-Push to GitHub → GitHub Webhook → /api/system/deploy → git pull + reload
+Push to GitHub → GitHub Webhook → /api/system/deploy → git pull + frontend build + reload
 ```
 
 1. You push code to GitHub
 2. GitHub sends a webhook to the deploy endpoint
 3. The server verifies the request signature
-4. It runs `git pull` and reloads the app
+4. It runs `git pull`, builds the frontend, and reloads the app
 
 ---
 
@@ -76,8 +76,9 @@ When triggered, the deploy script (`scripts/deploy.sh`) performs:
 
 1. `git fetch origin main`
 2. `git reset --hard origin/main`
-3. Logs recent commits
-4. Touches WSGI file to trigger reload
+3. `npm ci` + `npm run build` in `frontend/`
+4. Logs recent commits
+5. Touches WSGI file to trigger reload
 
 ---
 
@@ -99,8 +100,7 @@ If needed, you can still deploy manually via SSH:
 
 ```bash
 cd ~/techhub-dns
-git pull origin main
-pa website reload --domain username.pythonanywhere.com
+bash scripts/deploy.sh
 ```
 
 ---
