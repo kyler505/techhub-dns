@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Building2,
   Send,
-  FileSignature,
   MapPinned,
   Users,
 } from "lucide-react";
@@ -24,8 +23,6 @@ const navItems = [
   { path: "/pre-delivery", label: "Pre-Delivery", icon: Send },
   { path: "/in-delivery", label: "In-Delivery", icon: MapPinned },
   { path: "/delivery", label: "Delivery", icon: Truck },
-  { path: "/shipping", label: "Shipping", icon: Truck },
-  { path: "/document-signing", label: "Signatures", icon: FileSignature },
 ];
 
 const adminItems = [

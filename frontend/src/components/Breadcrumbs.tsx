@@ -8,8 +8,6 @@ const LABELS: Record<string, string> = {
   delivery: "Delivery",
   "pre-delivery": "Pre-Delivery",
   "in-delivery": "In-Delivery",
-  shipping: "Shipping",
-  "document-signing": "Signatures",
   admin: "Admin",
   sessions: "Sessions",
   runs: "Runs",
