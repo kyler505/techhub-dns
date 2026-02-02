@@ -6,6 +6,8 @@ import OrderTable from "../components/OrderTable";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 import { Card, CardContent } from "../components/ui/card";
+import { SkeletonTable } from "../components/Skeleton";
+import { PackageSearch } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 
 export default function Orders() {
@@ -101,15 +103,32 @@ export default function Orders() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center w-full h-full flex-1">
-                <div className="text-lg">Loading...</div>
+            <div className="container mx-auto py-6 space-y-4">
+                <div className="space-y-2">
+                    <div className="text-2xl font-semibold text-slate-900">Orders</div>
+                    <div className="text-sm text-slate-500">Loading current workflow queues.</div>
+                </div>
+                <Card>
+                    <div className="p-6 pb-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="h-9 w-52 bg-slate-100 rounded-md animate-pulse" />
+                            <div className="h-9 w-36 bg-slate-100 rounded-md animate-pulse" />
+                        </div>
+                    </div>
+                    <CardContent>
+                        <SkeletonTable rows={6} columns={5} />
+                    </CardContent>
+                </Card>
             </div>
         );
     }
 
     return (
-        <div className="container mx-auto py-4 space-y-4">
-            <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+        <div className="container mx-auto py-6 space-y-4">
+            <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Orders</h1>
+                <p className="text-sm text-slate-500">Manage operational orders across all workflow stages.</p>
+            </div>
 
             <Card>
                 <div className="p-6 pb-4">
@@ -128,6 +147,13 @@ export default function Orders() {
                     />
                 </CardContent>
             </Card>
+            {!loading && orders.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center">
+                    <PackageSearch className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                    <p className="text-sm font-medium text-slate-700">No orders to display</p>
+                    <p className="text-xs text-slate-500">Adjust your filters or clear search to see orders.</p>
+                </div>
+            )}
             {transitioningOrder && (
                 <StatusTransition
                     currentStatus={
