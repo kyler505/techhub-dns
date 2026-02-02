@@ -144,6 +144,7 @@ export default function Orders() {
                         orders={orders}
                         onStatusChange={handleStatusChange}
                         onViewDetail={handleViewDetail}
+                        showEmptyState={false}
                     />
                 </CardContent>
             </Card>

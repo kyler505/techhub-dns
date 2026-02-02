@@ -18,11 +18,13 @@ interface OrderTableProps {
     orders: Order[];
     onStatusChange?: (orderId: string, newStatus: OrderStatus, reason?: string) => void;
     onViewDetail: (orderId: string) => void;
+    showEmptyState?: boolean;
 }
 
 export default function OrderTable({
     orders,
     onViewDetail,
+    showEmptyState = true,
 }: OrderTableProps) {
     const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -58,6 +60,9 @@ export default function OrderTable({
     };
 
     if (orders.length === 0) {
+        if (!showEmptyState) {
+            return null;
+        }
         return (
             <div className="py-12 text-center text-slate-500">
                 <PackageSearch className="mx-auto mb-3 h-8 w-8 text-slate-300" />
