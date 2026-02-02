@@ -15,6 +15,9 @@ PROJECT_ROOT="/home/techhub/techhub-dns"
 WSGI_FILE="/var/www/techhub_pythonanywhere_com_wsgi.py"
 LOG_FILE="${PROJECT_ROOT}/deploy.log"
 BRANCH="main"
+LOCKFILE="${PROJECT_ROOT}/frontend/package-lock.json"
+LOCKFILE_HASH_FILE="${PROJECT_ROOT}/.deploy-lockfile.sha256"
+NODE_MODULES_DIR="${PROJECT_ROOT}/frontend/node_modules"
 
 # Log function
 log() {
@@ -40,8 +43,28 @@ log "Git pull complete"
 if [ -d "$PROJECT_ROOT/frontend" ]; then
     log "Building frontend..."
     cd "$PROJECT_ROOT/frontend"
-    log "Installing frontend dependencies..."
-    npm ci
+    if [ -f "$LOCKFILE" ]; then
+        CURRENT_HASH=$(sha256sum "$LOCKFILE" | awk '{print $1}')
+        PREVIOUS_HASH=""
+        if [ -f "$LOCKFILE_HASH_FILE" ]; then
+            PREVIOUS_HASH=$(cat "$LOCKFILE_HASH_FILE")
+        fi
+
+        if [ ! -d "$NODE_MODULES_DIR" ]; then
+            log "node_modules missing; installing frontend dependencies..."
+            npm ci
+            echo "$CURRENT_HASH" > "$LOCKFILE_HASH_FILE"
+        elif [ "$CURRENT_HASH" != "$PREVIOUS_HASH" ]; then
+            log "package-lock.json changed; reinstalling frontend dependencies..."
+            npm ci
+            echo "$CURRENT_HASH" > "$LOCKFILE_HASH_FILE"
+        else
+            log "package-lock.json unchanged; skipping npm ci"
+        fi
+    else
+        log "WARNING: package-lock.json not found; running npm install"
+        npm install
+    fi
     log "Running frontend build..."
     npm run build
     log "Frontend build complete"
