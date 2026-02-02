@@ -328,7 +328,7 @@ export default function Dashboard() {
                 <Skeleton className="h-4 w-48" />
               </div>
             ) : completedTodayOrders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+              <div className="flex flex-col items-center justify-center min-h-[320px] text-slate-500">
                 <CheckCircle2 className="h-7 w-7 text-slate-300 mb-3" />
                 <p className="text-sm">No completed orders today</p>
               </div>
