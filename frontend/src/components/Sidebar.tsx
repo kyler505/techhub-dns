@@ -54,11 +54,19 @@ export function Sidebar({ className }: { className?: string }) {
     >
       <div className="flex items-center justify-between h-16 px-4 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <img
-            src={boxTAM}
-            alt="Texas A&M University"
-            className="h-8 w-auto"
-          />
+          <AnimatePresence mode="wait">
+            {!collapsed && (
+              <motion.img
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.2 }}
+                src={boxTAM}
+                alt="Texas A&M University"
+                className="h-8 w-auto"
+              />
+            )}
+          </AnimatePresence>
           <AnimatePresence mode="wait">
             {!collapsed && (
               <motion.span
