@@ -13,6 +13,7 @@ import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
     const [transitioningOrder, setTransitioningOrder] = useState<{
@@ -70,6 +71,7 @@ export default function Orders() {
             console.error("Failed to load orders:", error);
         } finally {
             setLoading(false);
+            setIsInitialLoad(false);
         }
     };
 
@@ -101,7 +103,7 @@ export default function Orders() {
         navigate(`/orders/${orderId}`);
     };
 
-    if (loading) {
+    if (loading && isInitialLoad) {
         return (
             <div className="container mx-auto py-6 space-y-4">
                 <div className="space-y-2">
