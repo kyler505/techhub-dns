@@ -8,6 +8,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/Skeleton";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { CommandPaletteProvider, CommandPaletteTrigger } from "./components/CommandPalette";
+import boxTAM from "../assets/boxTAM.svg";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -64,7 +65,14 @@ function AppContent() {
                     <div className="sticky top-0 z-30 bg-slate-50/80 backdrop-blur-sm border-b border-slate-100">
                         <div className="flex items-center justify-between px-6 lg:px-8 py-3">
                             <Breadcrumbs />
-                            <CommandPaletteTrigger />
+                            <div className="flex items-center gap-3">
+                                <CommandPaletteTrigger />
+                                <img
+                                    src={boxTAM}
+                                    alt="Texas A&M University"
+                                    className="h-7 w-auto"
+                                />
+                            </div>
                         </div>
                     </div>
 
