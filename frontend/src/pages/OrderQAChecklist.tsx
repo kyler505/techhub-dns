@@ -26,7 +26,6 @@ export default function OrderQAChecklist() {
 
     useEffect(() => {
         loadOrders();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search]);
 
     const loadOrders = async () => {
