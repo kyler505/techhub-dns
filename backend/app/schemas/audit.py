@@ -17,10 +17,9 @@ class AuditLogResponse(BaseModel):
     model_config = {"from_attributes": True}
 
     @field_serializer("timestamp", when_used="json")
-    def _serialize_timestamp(self, timestamp: datetime) -> str:
-        dt = timestamp
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+    def _serialize_timestamp(self, value: datetime) -> str:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            value = value.replace(tzinfo=timezone.utc)
 
-        dt_utc = dt.astimezone(timezone.utc)
-        return dt_utc.isoformat().replace("+00:00", "Z")
+        value_utc = value.astimezone(timezone.utc)
+        return value_utc.isoformat().replace("+00:00", "Z")

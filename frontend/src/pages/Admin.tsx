@@ -24,7 +24,7 @@ import {
     TableRow,
 } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { AlertTriangle, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
+import { AlertTriangle, Loader2, Plus, RefreshCw, Trash2, Zap } from "lucide-react";
 
 interface FeatureStatus {
     name: string;
@@ -42,12 +42,47 @@ interface SystemStatus {
     inflow_sync: FeatureStatus;
 }
 
+interface CanopyUploadResponse {
+    filename: string;
+    uploaded_url: string;
+    count: number;
+    teams_notified: boolean;
+}
+
 // Default values when settings haven't been loaded yet
 const DEFAULT_SETTING = { value: "true", description: "Loading...", updated_at: null, updated_by: null };
 
 // Helper to safely get a setting value
 const getSetting = (settings: SystemSettings | null, key: keyof SystemSettings) => {
     return settings?.[key] ?? DEFAULT_SETTING;
+};
+
+const normalizeCanopyOrder = (raw: string) => {
+    const trimmed = raw.trim().toUpperCase();
+    if (!trimmed) return null;
+    const value = trimmed.startsWith("TH") ? trimmed.slice(2) : trimmed;
+    if (!/^\d{4}$/.test(value)) return null;
+    return `TH${value}`;
+};
+
+const parseCanopyOrders = (raw: string) => {
+    const tokens = raw.split(/[\s,]+/).filter(Boolean);
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    const seen = new Set<string>();
+
+    tokens.forEach((token) => {
+        const normalized = normalizeCanopyOrder(token);
+        if (!normalized) {
+            invalid.push(token);
+            return;
+        }
+        if (seen.has(normalized)) return;
+        seen.add(normalized);
+        valid.push(normalized);
+    });
+
+    return { valid, invalid };
 };
 
 export default function Admin() {
@@ -72,8 +107,16 @@ export default function Admin() {
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
     const [manualSyncing, setManualSyncing] = useState(false);
 
+    const [canopyInput, setCanopyInput] = useState("");
+    const [canopyOrders, setCanopyOrders] = useState<string[]>([]);
+    const [canopyUploading, setCanopyUploading] = useState(false);
+    const [canopyDialogOpen, setCanopyDialogOpen] = useState(false);
+    const [canopyError, setCanopyError] = useState<string | null>(null);
+    const [canopyResult, setCanopyResult] = useState<CanopyUploadResponse | null>(null);
+
     const deleteCancelButtonRef = useRef<HTMLButtonElement | null>(null);
     const syncCancelButtonRef = useRef<HTMLButtonElement | null>(null);
+    const canopyCancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
     useEffect(() => {
         loadSystemStatus();
@@ -311,6 +354,69 @@ export default function Admin() {
         }
     };
 
+    const handleAddCanopyOrders = () => {
+        const { valid, invalid } = parseCanopyOrders(canopyInput);
+        if (valid.length === 0) {
+            toast.error("Enter a 4-digit order number to add");
+            return;
+        }
+
+        setCanopyOrders((prev) => {
+            const next = [...prev];
+            valid.forEach((order) => {
+                if (!next.includes(order)) {
+                    next.push(order);
+                }
+            });
+            return next;
+        });
+
+        if (invalid.length > 0) {
+            toast.error("Ignored invalid entries", { description: invalid.join(", ") });
+        }
+
+        setCanopyInput("");
+        setCanopyError(null);
+        setCanopyResult(null);
+    };
+
+    const handleRemoveCanopyOrder = (order: string) => {
+        setCanopyOrders((prev) => prev.filter((item) => item !== order));
+    };
+
+    const handleClearCanopyOrders = () => {
+        setCanopyOrders([]);
+        setCanopyResult(null);
+        setCanopyError(null);
+    };
+
+    const handleUploadCanopyOrders = async () => {
+        if (canopyOrders.length === 0) {
+            toast.error("Add at least one order before uploading");
+            return;
+        }
+
+        setCanopyUploading(true);
+        setCanopyError(null);
+
+        try {
+            const response = await apiClient.post("/system/canopyorders/upload", {
+                orders: canopyOrders,
+            });
+            setCanopyResult(response.data);
+            toast.success("Canopy orders uploaded", {
+                description: response.data?.uploaded_url || undefined,
+            });
+            setCanopyOrders([]);
+        } catch (error: any) {
+            const message = error?.response?.data?.error || "Upload failed. Please try again.";
+            setCanopyError(message);
+            toast.error("Canopy upload failed", { description: message });
+        } finally {
+            setCanopyUploading(false);
+        }
+    };
+
     const webhookEmptyState = (
         <div className="rounded-lg border border-dashed border-slate-200 bg-white p-6 text-center">
             <p className="text-sm font-medium text-slate-700">No webhooks registered</p>
@@ -539,6 +645,105 @@ export default function Admin() {
                     <Card className="border-slate-200">
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
+                                <CardTitle className="text-base">Canopy Orders Upload</CardTitle>
+                                <CardDescription>Upload Canopy order numbers to legacy WebDAV and notify Teams.</CardDescription>
+                            </div>
+                            <Button
+                                onClick={() => setCanopyDialogOpen(true)}
+                                disabled={canopyUploading || canopyOrders.length === 0}
+                                className="btn-lift"
+                            >
+                                {canopyUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Upload orders
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-slate-700">Order numbers</label>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <input
+                                        type="text"
+                                        placeholder="1234, TH5678"
+                                        value={canopyInput}
+                                        onChange={(e) => setCanopyInput(e.target.value)}
+                                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                    <Button type="button" variant="secondary" onClick={handleAddCanopyOrders} className="btn-lift">
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Add
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-slate-500">Enter 4-digit order numbers; TH prefix is optional.</p>
+                            </div>
+
+                            {canopyOrders.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-center text-sm text-slate-500">
+                                    No orders added yet.
+                                </div>
+                            ) : (
+                                <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
+                                    {canopyOrders.map((order) => (
+                                        <div key={order} className="flex items-center justify-between px-4 py-2 text-sm">
+                                            <span className="font-medium text-slate-900">{order}</span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleRemoveCanopyOrder(order)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm text-slate-600">{canopyOrders.length} order(s) ready</p>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleClearCanopyOrders}
+                                    disabled={canopyOrders.length === 0 && !canopyResult && !canopyError}
+                                >
+                                    Clear list
+                                </Button>
+                            </div>
+
+                            {canopyError ? (
+                                <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4" />
+                                    <span>{canopyError}</span>
+                                </div>
+                            ) : null}
+
+                            {canopyResult ? (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                                    <div className="font-medium">Upload complete</div>
+                                    <div className="text-xs text-emerald-700 mt-1">
+                                        File {canopyResult.filename} ({canopyResult.count} orders)
+                                    </div>
+                                    <div className="text-xs text-emerald-700 mt-1">
+                                        Teams notified: {canopyResult.teams_notified ? "Yes" : "No"}
+                                    </div>
+                                    {canopyResult.uploaded_url ? (
+                                        <a
+                                            href={canopyResult.uploaded_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-xs text-emerald-800 underline mt-1 inline-block"
+                                        >
+                                            {canopyResult.uploaded_url}
+                                        </a>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-slate-200">
+                        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
                                 <CardTitle className="text-base">Inflow Webhooks</CardTitle>
                                 <CardDescription>Manage active webhook registrations.</CardDescription>
                             </div>
@@ -617,6 +822,50 @@ export default function Admin() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            <Dialog open={canopyDialogOpen} onOpenChange={setCanopyDialogOpen}>
+                <DialogContent
+                    onOpenAutoFocus={(e) => {
+                        e.preventDefault();
+                        canopyCancelButtonRef.current?.focus();
+                    }}
+                >
+                    <DialogHeader>
+                        <DialogTitle>Upload Canopy orders?</DialogTitle>
+                        <DialogDescription>
+                            This will upload the current list and notify Teams once complete.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                        <div className="font-medium text-slate-900">{canopyOrders.length} order(s)</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                            {canopyOrders.join(", ") || "No orders added"}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            ref={canopyCancelButtonRef}
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCanopyDialogOpen(false)}
+                            disabled={canopyUploading}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                setCanopyDialogOpen(false);
+                                void handleUploadCanopyOrders();
+                            }}
+                            disabled={canopyUploading || canopyOrders.length === 0}
+                        >
+                            {canopyUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Upload
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={webhookToDelete !== null}

@@ -6,19 +6,22 @@
 import { formatInTimeZone, zonedTimeToUtc } from "date-fns-tz";
 
 const CENTRAL_TIMEZONE = "America/Chicago";
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATETIME_NO_TZ_RE =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?$/;
+const TIMEZONE_SUFFIX_RE = /([zZ]|[+-]\d{2}:\d{2}|[+-]\d{4})$/;
 
 function parseUtcishDateString(input: string): Date | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
-  // YYYY-MM-DD => interpret as midnight in America/Chicago
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+  if (DATE_ONLY_RE.test(trimmed)) {
+    // Interpret YYYY-MM-DD as midnight in Central Time (not UTC midnight).
     return zonedTimeToUtc(`${trimmed}T00:00:00`, CENTRAL_TIMEZONE);
   }
 
-  // ISO datetime without timezone suffix/offset => assume UTC
-  const looksLikeIsoDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(trimmed);
-  const hasTimezoneSuffix = /([zZ]|[+-]\d{2}:\d{2}|[+-]\d{4})$/.test(trimmed);
+  const looksLikeIsoDateTime = ISO_DATETIME_NO_TZ_RE.test(trimmed);
+  const hasTimezoneSuffix = TIMEZONE_SUFFIX_RE.test(trimmed);
   const normalized = looksLikeIsoDateTime && !hasTimezoneSuffix ? `${trimmed}Z` : trimmed;
 
   const parsed = new Date(normalized);
