@@ -1037,7 +1037,7 @@ class OrderService:
                 from_status=None,  # No previous status - order was just created
                 to_status=OrderStatus.PICKED.value,
                 reason="Order ingested from inFlow",
-                timestamp=created_time  # Match order creation time
+                timestamp=datetime.utcnow()  # Use ingestion time (not orderDate) for audit trail
             )
             self.db.add(audit_log)
             self.db.commit()
