@@ -214,14 +214,22 @@ See `.env.example` for all configuration options. Key sections:
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [DOCUMENTATION.md](DOCUMENTATION.md) | Complete technical documentation |
-| [docs/AUTHENTICATION_SETUP.md](docs/AUTHENTICATION_SETUP.md) | Azure AD/SAML configuration guide |
-| [docs/PYTHONANYWHERE_DEPLOYMENT.md](docs/PYTHONANYWHERE_DEPLOYMENT.md) | PythonAnywhere deployment guide |
-| [docs/Teams_PowerAutomate_Setup.md](docs/Teams_PowerAutomate_Setup.md) | Power Automate flow setup |
+Start here: [docs/guide/index.md](docs/guide/index.md)
+
+| Section | Purpose |
+|---------|---------|
+| [docs/guide/workflows.md](docs/guide/workflows.md) | Order lifecycle workflows |
+| [docs/guide/operations.md](docs/guide/operations.md) | Day-to-day operations |
+| [docs/reference/architecture.md](docs/reference/architecture.md) | System architecture |
+| [docs/reference/api.md](docs/reference/api.md) | API reference |
+| [docs/reference/database.md](docs/reference/database.md) | Database schema |
+| [docs/reference/configuration.md](docs/reference/configuration.md) | Configuration reference |
+| [docs/reference/troubleshooting.md](docs/reference/troubleshooting.md) | Troubleshooting |
+| [docs/setup/deployment.md](docs/setup/deployment.md) | Deployment and auto-deploy setup |
+| [docs/setup/authentication.md](docs/setup/authentication.md) | Azure AD and SAML configuration |
+| [docs/setup/teams-notifications.md](docs/setup/teams-notifications.md) | Power Automate Teams notifications |
 | [docs/app-flow.md](docs/app-flow.md) | Product requirements document |
-| [docs/DEPLOY_SETUP.md](docs/DEPLOY_SETUP.md) | GitHub webhook auto-deploy setup |
+| [docs/plans/tag-request-integration.md](docs/plans/tag-request-integration.md) | Integration plan |
 
 ---
 
