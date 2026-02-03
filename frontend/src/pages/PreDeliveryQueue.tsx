@@ -155,8 +155,7 @@ export default function PreDeliveryQueue() {
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-lg font-semibold">Pre-Delivery Queue</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
                 <Button
                     onClick={handleBulkStartDelivery}
                     disabled={selectedOrders.size === 0}

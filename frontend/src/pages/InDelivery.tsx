@@ -37,7 +37,6 @@ export default function InDelivery() {
 
     return (
         <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Active Deliveries</h2>
             <OrderTable
                 orders={orders}
                 onViewDetail={handleViewDetail}
