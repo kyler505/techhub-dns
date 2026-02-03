@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth, Session } from '../contexts/AuthContext';
-import { apiClient } from '../api/client';
+import axios from 'axios';
 
 export default function Sessions() {
     const { user, logout } = useAuth();
@@ -16,13 +16,21 @@ export default function Sessions() {
 
     const fetchSessions = async () => {
         try {
-            const response = await apiClient.get('/auth/sessions', {
+            const response = await axios.get('/auth/sessions', {
+                withCredentials: true,
                 headers: {
-                    'Cache-Control': 'no-cache',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
                     'Pragma': 'no-cache'
-                }
+                },
+                params: { _t: Date.now() }
             });
-            setSessions(response.data.sessions || []);
+
+            const data = response.data as unknown;
+            if (!data || typeof data !== 'object' || !Array.isArray((data as any).sessions)) {
+                throw new Error('Invalid sessions response');
+            }
+
+            setSessions((data as any).sessions);
             setError(null);
         } catch (err) {
             setError('Failed to load sessions');
@@ -39,7 +47,7 @@ export default function Sessions() {
 
     const revokeSession = async (sessionId: string) => {
         try {
-            await apiClient.post('/auth/sessions/revoke', { session_id: sessionId });
+            await axios.post('/auth/sessions/revoke', { session_id: sessionId }, { withCredentials: true });
             await fetchSessions();
         } catch (err) {
             setError('Failed to revoke session');
@@ -49,7 +57,7 @@ export default function Sessions() {
 
     const revokeAllOtherSessions = async () => {
         try {
-            await apiClient.post('/auth/sessions/revoke_all');
+            await axios.post('/auth/sessions/revoke_all', {}, { withCredentials: true });
             await fetchSessions();
         } catch (err) {
             setError('Failed to revoke sessions');
