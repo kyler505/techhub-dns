@@ -5,6 +5,7 @@ Provides endpoints for SAML login/logout and session management.
 """
 
 import logging
+from datetime import datetime
 from flask import Blueprint, request, redirect, make_response, jsonify, g
 
 from app.config import settings
@@ -208,9 +209,10 @@ def list_sessions():
         sessions = saml_auth_service.get_user_sessions(db, user_id)
         result = []
         for s in sessions:
-            session_dict = s.to_dict()
-            session_dict["is_current"] = (s.id == current_session_id)
-            result.append(session_dict)
+            if s.is_valid():
+                session_dict = s.to_dict()
+                session_dict["is_current"] = (s.id == current_session_id)
+                result.append(session_dict)
 
     return jsonify({"sessions": result})
 
