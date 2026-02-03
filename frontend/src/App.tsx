@@ -43,7 +43,7 @@ function AppContent() {
 
     if (!isAuthenticated) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <Suspense fallback={<Skeleton className="w-96 h-96 rounded-lg" />}>
                     <Routes>
                         <Route path="/login" element={<Login />} />
