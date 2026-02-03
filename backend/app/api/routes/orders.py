@@ -5,6 +5,8 @@ from typing import Optional, List
 from uuid import UUID
 from pathlib import Path
 import threading
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from app.database import get_db
 from app.services.order_service import OrderService
@@ -26,6 +28,7 @@ from app.schemas.order import (
     PickStatus
 )
 from app.models.order import OrderStatus
+from app.models.audit_log import SystemAuditLog
 from app.schemas.audit import AuditLogResponse
 from app.utils.exceptions import DNSApiError, NotFoundError, ValidationError
 from app.api.auth_middleware import get_current_user_email
@@ -212,7 +215,62 @@ def get_order_audit(order_id):
         if not order:
             abort(404, description="Order not found")
 
-        return jsonify([AuditLogResponse.model_validate(log).model_dump() for log in order.audit_logs])
+        imported_from_inflow_timestamp: Optional[datetime] = None
+        response_payload = []
+        for log in order.audit_logs:
+            response = AuditLogResponse.model_validate(log)
+            is_initial_ingestion = (
+                response.from_status is None
+                and response.to_status == OrderStatus.PICKED.value
+                and response.reason == "Order ingested from inFlow"
+            )
+
+            if is_initial_ingestion:
+                if imported_from_inflow_timestamp is None:
+                    row = (
+                        db.query(SystemAuditLog.timestamp)
+                        .filter(
+                            SystemAuditLog.entity_type == "order",
+                            SystemAuditLog.entity_id == str(order_id),
+                            SystemAuditLog.action == "imported_from_inflow",
+                        )
+                        .order_by(SystemAuditLog.timestamp.desc())
+                        .first()
+                    )
+                    if row is not None:
+                        imported_from_inflow_timestamp = row[0]
+
+                override_timestamp: Optional[datetime] = None
+                if imported_from_inflow_timestamp is not None:
+                    override_timestamp = imported_from_inflow_timestamp
+                    if override_timestamp.tzinfo is None:
+                        override_timestamp = override_timestamp.replace(tzinfo=timezone.utc)
+                else:
+                    stored_timestamp = response.timestamp
+                    is_midnight = (
+                        stored_timestamp.hour == 0
+                        and stored_timestamp.minute == 0
+                        and stored_timestamp.second == 0
+                        and stored_timestamp.microsecond == 0
+                    )
+                    if is_midnight:
+                        local_midnight = datetime(
+                            stored_timestamp.year,
+                            stored_timestamp.month,
+                            stored_timestamp.day,
+                            0,
+                            0,
+                            0,
+                            tzinfo=ZoneInfo("America/Chicago"),
+                        )
+                        override_timestamp = local_midnight.astimezone(timezone.utc)
+
+                if override_timestamp is not None:
+                    response.timestamp = override_timestamp
+
+            response_payload.append(response.model_dump(mode="json"))
+
+        return jsonify(response_payload)
 
 
 @bp.route("/<uuid:order_id>/tag/request", methods=["POST"])
