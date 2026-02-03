@@ -19,6 +19,18 @@ LOCKFILE="${PROJECT_ROOT}/frontend/package-lock.json"
 LOCKFILE_HASH_FILE="${PROJECT_ROOT}/.deploy-lockfile.sha256"
 NODE_MODULES_DIR="${PROJECT_ROOT}/frontend/node_modules"
 
+# Ensure npm is available in non-interactive shells
+if ! command -v npm >/dev/null 2>&1; then
+    [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+    [ -f "$HOME/.profile" ] && . "$HOME/.profile"
+    export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:$PATH"
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+    log "ERROR: npm not found in PATH; cannot build frontend"
+    exit 1
+fi
+
 # Log function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
