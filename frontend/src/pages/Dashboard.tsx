@@ -113,7 +113,7 @@ export default function Dashboard() {
 
   // Error states
   const [error, setError] = useState<string | null>(null);
-  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   const socketRef = useRef<Socket | null>(null);
 
@@ -193,7 +193,7 @@ export default function Dashboard() {
 
     socket.on("connect", () => {
       console.debug("Dashboard Socket.IO connected");
-      setIsSocketConnected(true);
+      setSocketStatus("connected");
       socket.emit("join", { room: "orders" });
     });
 
@@ -210,12 +210,12 @@ export default function Dashboard() {
 
     socket.on("disconnect", () => {
       console.debug("Dashboard Socket.IO disconnected");
-      setIsSocketConnected(false);
+      setSocketStatus("disconnected");
     });
 
     socket.on("connect_error", (err) => {
       console.debug("Dashboard Socket.IO error (expected if backend not running)", err);
-      setIsSocketConnected(false);
+      setSocketStatus("disconnected");
     });
 
     // Refresh every 60 seconds as backup
@@ -252,7 +252,7 @@ export default function Dashboard() {
           <p className="text-sm text-slate-500">Live operational snapshot and delivery performance.</p>
         </div>
         <div className="flex items-center gap-2">
-          {(error || !isSocketConnected) && (
+          {(error || socketStatus === "disconnected") && (
             <Button variant="outline" size="sm" onClick={fetchAnalytics} className="btn-lift">
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
