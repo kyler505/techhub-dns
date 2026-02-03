@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
 import { settingsApi, SystemSettings } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
+import { CheckCircle2, XCircle, X } from "lucide-react";
 
 interface FeatureStatus {
     name: string;
@@ -226,15 +228,48 @@ export default function Admin() {
                 )}
             </div>
 
-            {message && (
-                <div
-                    className={`p-3 rounded flex items-center justify-between ${message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            <AnimatePresence>
+                {message && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                        className={`rounded-lg border shadow-premium overflow-hidden ${
+                            message.type === "success"
+                                ? "bg-white border-l-4 border-l-emerald-500 border-slate-200"
+                                : "bg-white border-l-4 border-l-red-500 border-slate-200"
                         }`}
-                >
-                    <span>{message.text}</span>
-                    <button onClick={() => setMessage(null)} className="font-bold">×</button>
-                </div>
-            )}
+                    >
+                        <div className="flex items-start gap-3 p-4">
+                            <div className={`flex-shrink-0 rounded-full p-1 ${
+                                message.type === "success" ? "bg-emerald-100" : "bg-red-100"
+                            }`}>
+                                {message.type === "success" ? (
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                                ) : (
+                                    <XCircle className="w-5 h-5 text-red-600" />
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-medium ${
+                                    message.type === "success" ? "text-emerald-900" : "text-red-900"
+                                }`}>
+                                    {message.type === "success" ? "Success" : "Error"}
+                                </p>
+                                <p className="text-sm text-slate-600 mt-0.5">{message.text}</p>
+                            </div>
+                            <button
+                                onClick={() => setMessage(null)}
+                                className="flex-shrink-0 p-1 rounded-md hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                                aria-label="Dismiss notification"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Feature Status Grid */}
             <div className="bg-white rounded-lg shadow p-6">
