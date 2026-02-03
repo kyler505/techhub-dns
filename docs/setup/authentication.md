@@ -1,0 +1,172 @@
+# TAMU Entra ID Authentication Setup Guide
+
+This guide details how to configure the two Azure Applications required for the TechHub Delivery app:
+
+1. **SAML Application**: User authentication via TAMU SSO
+2. **Service Principal**: Backend operations via Microsoft Graph API
+
+## Prerequisites
+
+- Azure Portal access with your TAMU credentials
+- Permission to create Enterprise Applications (or request from IT)
+- Admin consent for API permissions (or request from TAMU IT Security)
+
+## 1. SAML Application (User Authentication)
+
+This application handles user login via TAMU's Single Sign-On.
+
+### 1.1 Create Enterprise Application
+
+1. Log in to the [Azure Portal](https://portal.azure.com) with your TAMU credentials
+2. Navigate to Microsoft Entra ID -> Enterprise applications -> New application
+3. Choose Create your own application
+4. Name: `TechHub Delivery - User Auth` (or similar)
+5. Select Integrate any other application you do not find in the gallery (Non-gallery)
+6. Click Create
+
+### 1.2 Configure Single Sign-On (SAML)
+
+1. In the app overview, go to Single sign-on -> SAML
+2. Configure Basic SAML Configuration:
+
+| Field | Value |
+|-------|-------|
+| Identifier (Entity ID) | `https://techhub.pythonanywhere.com` |
+| Reply URL (ACS URL) | `https://techhub.pythonanywhere.com/auth/saml/callback` |
+| Sign on URL | `https://techhub.pythonanywhere.com/auth/saml/login` |
+| Logout URL | `https://techhub.pythonanywhere.com/auth/logout` |
+
+3. Configure Attributes and Claims:
+
+| Claim Name | Source Attribute |
+|------------|------------------|
+| `display_name` | `user.displayname` |
+| `email` | `user.userprincipalname` |
+| `oid` | `user.objectid` |
+| `department` | `user.department` (optional) |
+| `employee_id` | `user.employeeid` (optional) |
+
+### 1.3 Download Certificate and URLs
+
+1. In the SAML Certificates section, download Certificate (Base64)
+   - Save as `saml_idp_cert.crt` in `backend/certs/` (create folder if needed)
+   - Note: This file is gitignored. Upload manually to production.
+
+2. In the Set up [App Name] section, copy:
+   - Login URL -> Set as `SAML_IDP_SSO_URL` in `.env`
+   - Microsoft Entra Identifier -> Set as `SAML_IDP_ENTITY_ID` in `.env`
+
+## 2. Service Principal (Backend Graph API)
+
+This daemon application allows the backend to perform actions without a signed-in user.
+
+### 2.1 Create App Registration
+
+1. Navigate to Microsoft Entra ID -> App registrations -> New registration
+2. Name: `TechHub Delivery - Backend Service`
+3. Supported account types: Accounts in this organizational directory only (Single tenant)
+4. Redirect URI: Leave blank (not needed for Service Principal)
+5. Click Register
+
+### 2.2 Get Credentials
+
+1. **Client ID**: Copy Application (client) ID from Overview -> Set as `AZURE_CLIENT_ID`
+2. **Tenant ID**: Copy Directory (tenant) ID -> Set as `AZURE_TENANT_ID`
+3. **Client Secret**:
+   - Go to Certificates and secrets -> New client secret
+   - Description: "Backend API Access"
+   - Expires: 24 months (recommended)
+   - Copy the Value immediately (you will not see it again) -> Set as `AZURE_CLIENT_SECRET`
+
+### 2.3 API Permissions
+
+Go to API permissions -> Add a permission -> Microsoft Graph -> Application permissions.
+
+Add the following permissions:
+
+| Permission | Purpose |
+|------------|---------|
+| `Mail.Send` | Send emails as any user |
+| `Sites.ReadWrite.All` | Upload files to SharePoint |
+| `User.Read.All` | Look up user IDs (optional) |
+
+**Admin Consent**:
+- Click Grant admin consent for Texas A&M University
+- If not an admin, request from TAMU IT Security (`cloudsecurity@tamu.edu`)
+- Provide the App ID and business justification
+
+## 3. Environment Configuration
+
+Update your `.env` file with the gathered values:
+
+```env
+# ==============================================
+# TAMU Entra ID Authentication
+# ==============================================
+
+# SAML Configuration (User Login)
+SAML_ENABLED=true
+SAML_IDP_ENTITY_ID=<Microsoft Entra Identifier>
+SAML_IDP_SSO_URL=<Login URL>
+SAML_IDP_CERT_PATH=certs/saml_idp_cert.crt
+SAML_SP_ENTITY_ID=https://techhub.pythonanywhere.com
+SAML_ACS_URL=https://techhub.pythonanywhere.com/auth/saml/callback
+
+# Service Principal Configuration (Backend)
+AZURE_TENANT_ID=<Directory (tenant) ID>
+AZURE_CLIENT_ID=<Application (client) ID>
+AZURE_CLIENT_SECRET=<Client Secret Value>
+```
+
+## 4. Certificate Management
+
+### Upload to Production
+
+The SAML certificate must be manually uploaded to production:
+
+1. In PythonAnywhere Files tab, navigate to `~/techhub-dns/backend`
+2. Create folder `certs` if it does not exist
+3. Upload `saml_idp_cert.crt`
+4. Verify path in `.env`: `SAML_IDP_CERT_PATH=certs/saml_idp_cert.crt`
+
+### Certificate Renewal
+
+SAML certificates expire periodically. To renew:
+
+1. Download new certificate from Azure Portal
+2. Replace `saml_idp_cert.crt` on production server
+3. No code changes required
+
+## 5. Verification
+
+### Test SAML Login
+
+1. Start the application
+2. Navigate to `/login`
+3. Click "Sign In"
+4. Should redirect to TAMU SSO
+5. After authentication, should redirect back to app
+
+### Test Graph API
+
+1. Go to Admin panel (`/admin`)
+2. Check Service Principal status in System Status
+3. Use test buttons for SharePoint, Email, or Teams
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| SAML redirect loop | Check ACS URL matches exactly |
+| Certificate error | Verify certificate path and file exists |
+| Graph API 401 | Check client secret not expired |
+| Graph API 403 | Admin consent not granted for permissions |
+| "App not found in tenant" | Verify AZURE_TENANT_ID is correct |
+
+## Security Notes
+
+- Store client secrets securely (never commit to git)
+- Use environment variables for all credentials
+- Rotate client secrets before expiration
+- Limit API permissions to minimum required
+- Use service accounts for production flows
