@@ -3,7 +3,28 @@
  * Converts UTC timestamps to Central Time (CST/CDT)
  */
 
-import { formatInTimeZone } from "date-fns-tz";
+import { formatInTimeZone, zonedTimeToUtc } from "date-fns-tz";
+
+const CENTRAL_TIMEZONE = "America/Chicago";
+
+function parseUtcishDateString(input: string): Date | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // YYYY-MM-DD => interpret as midnight in America/Chicago
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return zonedTimeToUtc(`${trimmed}T00:00:00`, CENTRAL_TIMEZONE);
+  }
+
+  // ISO datetime without timezone suffix/offset => assume UTC
+  const looksLikeIsoDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(trimmed);
+  const hasTimezoneSuffix = /([zZ]|[+-]\d{2}:\d{2}|[+-]\d{4})$/.test(trimmed);
+  const normalized = looksLikeIsoDateTime && !hasTimezoneSuffix ? `${trimmed}Z` : trimmed;
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
 
 /**
  * Convert a UTC date string to Central Time
@@ -17,17 +38,12 @@ export function formatToCentralTime(
 ): string {
   if (!utcDateString) return "N/A";
 
-  try {
-    // Parse the UTC date string
-    const utcDate = new Date(utcDateString);
+  const utcDate = parseUtcishDateString(utcDateString);
+  if (!utcDate) return utcDateString;
 
-    // Convert to Central Time using date-fns-tz
-    // America/Chicago automatically handles CST (UTC-6) and CDT (UTC-5)
-    return formatInTimeZone(utcDate, "America/Chicago", formatString);
-  } catch (error) {
-    console.error("Error formatting date to Central Time:", error);
-    return utcDateString; // Return original if parsing fails
-  }
+  // Convert to Central Time using date-fns-tz
+  // America/Chicago automatically handles CST (UTC-6) and CDT (UTC-5)
+  return formatInTimeZone(utcDate, CENTRAL_TIMEZONE, formatString);
 }
 
 /**
@@ -40,10 +56,5 @@ export function formatToCentralTime(
 export function getCentralTimeDate(utcDateString: string): Date {
   if (!utcDateString) return new Date();
 
-  try {
-    return new Date(utcDateString);
-  } catch (error) {
-    console.error("Error parsing date:", error);
-    return new Date();
-  }
+  return parseUtcishDateString(utcDateString) ?? new Date();
 }
