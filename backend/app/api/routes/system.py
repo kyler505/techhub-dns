@@ -11,6 +11,7 @@ from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
 from app.services.graph_service import graph_service
 from app.services.inflow_service import InflowService
+from app.services.canopy_orders_uploader_service import CanopyOrdersUploaderService
 from app.database import get_db_session
 from app.models.system_setting import SystemSetting
 import logging
@@ -196,6 +197,48 @@ def test_sharepoint_connection():
     except Exception as e:
         logger.error(f"SharePoint connection test failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/canopyorders/upload", methods=["POST"])
+def upload_canopy_orders():
+    data = request.get_json() or {}
+    raw_orders = data.get("orders")
+    if not isinstance(raw_orders, list):
+        return jsonify({"error": "Missing 'orders' list in request body"}), 400
+
+    normalized_orders = _normalize_canopy_orders(raw_orders)
+    if not normalized_orders:
+        return jsonify({"error": "No valid orders provided. Use 4-digit order numbers."}), 400
+
+    service = CanopyOrdersUploaderService()
+    try:
+        upload_result = service.upload_orders(normalized_orders)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except Exception as error:
+        logger.error(f"Canopy Orders upload failed: {error}")
+        return jsonify({"error": str(error)}), 500
+
+    if not upload_result.get("success"):
+        status_code = upload_result.get("status_code") or 502
+        return jsonify({
+            "error": upload_result.get("error") or "Canopy Orders upload failed",
+            "uploaded_url": upload_result.get("uploaded_url"),
+            "filename": upload_result.get("filename"),
+        }), status_code
+
+    teams_notified = service.send_teams_notification(
+        normalized_orders,
+        upload_result["uploaded_url"],
+    )
+
+    return jsonify({
+        "success": True,
+        "filename": upload_result["filename"],
+        "uploaded_url": upload_result["uploaded_url"],
+        "count": len(normalized_orders),
+        "teams_notified": teams_notified,
+    })
 
 
 @bp.route("/status", methods=["GET"])
@@ -634,3 +677,29 @@ def _get_inflow_sync_status():
         "status": "active",
         "details": f"Polling every {interval} minutes",
     }
+
+
+def _normalize_canopy_orders(raw_orders: Any) -> list[str]:
+    if not isinstance(raw_orders, list):
+        return []
+
+    normalized: list[str] = []
+    seen = set()
+
+    for item in raw_orders:
+        if not isinstance(item, str):
+            continue
+        value = item.strip().upper()
+        if not value:
+            continue
+        if value.startswith("TH"):
+            value = value[2:]
+        if len(value) != 4 or not value.isdigit():
+            continue
+        formatted = f"TH{value}"
+        if formatted in seen:
+            continue
+        seen.add(formatted)
+        normalized.append(formatted)
+
+    return normalized
