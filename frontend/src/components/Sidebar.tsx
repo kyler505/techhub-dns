@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
-  MapPinned,
   Users,
 } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -20,9 +19,8 @@ const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/orders", label: "Orders", icon: Package },
   { path: "/order-qa", label: "QA Checklist", icon: ClipboardCheck },
-  { path: "/pre-delivery", label: "Pre-Delivery", icon: Send },
-  { path: "/in-delivery", label: "In-Delivery", icon: MapPinned },
   { path: "/delivery", label: "Delivery", icon: Truck },
+  { path: "/shipping", label: "Shipping", icon: Send },
 ];
 
 const adminItems = [

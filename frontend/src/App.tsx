@@ -13,8 +13,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
 const OrderDetailPage = lazy(() => import("./pages/OrderDetailPage"));
 const DeliveryDashboard = lazy(() => import("./pages/DeliveryDashboard"));
-const PreDeliveryQueue = lazy(() => import("./pages/PreDeliveryQueue"));
-const InDelivery = lazy(() => import("./pages/InDelivery"));
+const Shipping = lazy(() => import("./pages/Shipping"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DocumentSigningPage = lazy(() => import("./pages/DocumentSigningPage"));
 const OrderQAChecklist = lazy(() => import("./pages/OrderQAChecklist"));
@@ -91,8 +90,7 @@ function AppContent() {
                                         <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
                                         <Route path="/delivery" element={<ProtectedRoute><DeliveryDashboard /></ProtectedRoute>} />
                                         <Route path="/delivery/runs/:runId" element={<ProtectedRoute><DeliveryRunDetailPage /></ProtectedRoute>} />
-                                        <Route path="/pre-delivery" element={<ProtectedRoute><PreDeliveryQueue /></ProtectedRoute>} />
-                                        <Route path="/in-delivery" element={<ProtectedRoute><InDelivery /></ProtectedRoute>} />
+                                        <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
                                         <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
                                         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
                                         <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />

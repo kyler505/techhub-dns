@@ -9,7 +9,6 @@ export default function DeliveryDashboard() {
             <h1 className="text-2xl font-bold tracking-tight">Delivery Dashboard</h1>
 
             <div>
-                <h2 className="text-lg font-semibold tracking-tight">Operations</h2>
                 <Tabs defaultValue="pre-delivery" className="w-full">
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="pre-delivery" className="w-full text-center">Pre-Delivery</TabsTrigger>
