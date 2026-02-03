@@ -252,10 +252,6 @@ export default function Dashboard() {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button size="sm" className="btn-lift">
-            <Activity className="mr-2 h-4 w-4" />
-            Live View
-          </Button>
         </div>
       </motion.div>
 
