@@ -24,14 +24,14 @@ export default function Login() {
 
     if (isLoading) {
         return (
-            <div className="w-full h-full flex items-center justify-center bg-white">
+            <div className="w-full min-h-[100dvh] flex items-center justify-center bg-background">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-maroon-700"></div>
             </div>
         );
     }
 
     return (
-        <div className="w-full h-full flex-1 flex items-center justify-center bg-white">
+        <div className="w-full min-h-[100dvh] flex items-center justify-center bg-background">
             <div className="text-center">
                 {/* A&M Logo */}
                 <img
