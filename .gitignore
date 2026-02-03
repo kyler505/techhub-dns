@@ -34,3 +34,6 @@ Thumbs.db
 # Debug/verification files
 backend/verify_*.txt
 docs/tmp_*
+
+# Task tracking
+tasks/todo.md
