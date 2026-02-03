@@ -7,7 +7,6 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/Skeleton";
 import { Breadcrumbs } from "./components/Breadcrumbs";
-import { CommandPaletteProvider, CommandPaletteTrigger } from "./components/CommandPalette";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -55,17 +54,15 @@ function AppContent() {
     }
 
     return (
-        <CommandPaletteProvider>
-            <div className="min-h-screen bg-slate-50">
-                <Sidebar />
+        <div className="min-h-screen bg-slate-50">
+            <Sidebar />
 
-                <main className="ml-[var(--sidebar-width)] min-h-screen transition-[margin] duration-300">
-                    <div className="sticky top-0 z-30 bg-slate-50/80 backdrop-blur-sm border-b border-slate-100">
-                        <div className="flex items-center justify-between px-6 lg:px-8 py-3">
-                            <Breadcrumbs />
-                            <CommandPaletteTrigger />
-                        </div>
+            <main className="ml-[var(--sidebar-width)] min-h-screen transition-[margin] duration-300">
+                <div className="sticky top-0 z-30 bg-slate-50/80 backdrop-blur-sm border-b border-slate-100">
+                    <div className="flex items-center justify-between px-6 lg:px-8 py-3">
+                        <Breadcrumbs />
                     </div>
+                </div>
 
                     <div className="p-6 lg:p-8">
                         <Suspense fallback={
@@ -113,7 +110,6 @@ function AppContent() {
                     }}
                 />
             </div>
-        </CommandPaletteProvider>
     );
 }
 
