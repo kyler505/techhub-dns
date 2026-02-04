@@ -258,124 +258,21 @@ def sync_orders():
 @bp.route("/deploy", methods=["POST"])
 def deploy_webhook():
     """
-    GitHub webhook endpoint for auto-deployment.
+    Deprecated.
 
-    Receives push events from GitHub, pulls latest code, and reloads the app.
-    Verifies GitHub's HMAC signature for security.
+    This endpoint previously handled GitHub webhook-based auto-deploy.
+    Auto-deploy now runs via GitHub Actions (SSH) and this route is intentionally disabled.
     """
-    import hmac
-    import hashlib
-    import errno
-    import subprocess
-    import os
-    from flask import request
-
-    logger = logging.getLogger(__name__)
-
-    # Log entry (careful not to log secrets)
-    logger.info(f"Deploy webhook hit from {request.remote_addr}")
-
-    # Check if deploy webhook is enabled
-    if not settings.deploy_webhook_enabled:
-        logger.warning("Deploy access denied: Webhook disabled in config")
-        return jsonify({"error": "Deploy webhook is disabled"}), 403
-
-    # Verify the secret is configured
-    if not settings.deploy_webhook_secret:
-        logger.error("Deploy access denied: Secret not configured")
-        return jsonify({"error": "Webhook not configured"}), 500
-
-    # Get the signature from GitHub
-    signature_header = request.headers.get("X-Hub-Signature-256")
-    if not signature_header:
-        logger.warning("Deploy access denied: Missing X-Hub-Signature-256 header")
-        return jsonify({"error": "Missing signature"}), 403
-
-    # Verify HMAC signature
-    payload = request.get_data()
-    expected_signature = "sha256=" + hmac.new(
-        settings.deploy_webhook_secret.encode("utf-8"),
-        payload,
-        hashlib.sha256
-    ).hexdigest()
-
-    if not hmac.compare_digest(signature_header, expected_signature):
-        logger.warning("Deploy access denied: Invalid signature")
-        return jsonify({"error": "Invalid signature"}), 403
-
-    # Signature verified - execute deploy script
-    logger.info("Signature verified - starting deployment")
-
-    # Determine project root (works on PythonAnywhere)
-    project_root = "/home/techhub/techhub-dns"
-    deploy_script = os.path.join(project_root, "scripts", "deploy.sh")
-
-    # Check if deploy script exists
-    if not os.path.exists(deploy_script):
-        logger.error(f"Deploy script not found: {deploy_script}")
-        return jsonify({
-            "success": False,
-            "error": "Deploy script not found"
-        }), 500
-
-    def _is_pid_alive(pid: int) -> bool:
-        if pid <= 0:
-            return False
-
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            # Process exists but we don't have permission to signal it
-            return True
-        except OSError as e:
-            if getattr(e, "errno", None) == errno.ESRCH:
-                return False
-            if getattr(e, "errno", None) == errno.EPERM:
-                return True
-            return False
-        else:
-            return True
-
-    running_file = os.path.join(project_root, ".deploy.running")
-    if os.path.exists(running_file):
-        pid = None
-        try:
-            with open(running_file, "r", encoding="utf-8") as f:
-                pid_str = f.read().strip()
-            pid = int(pid_str)
-        except Exception:
-            pid = None
-
-        if pid is not None and _is_pid_alive(pid):
-            logger.info(f"Deploy already running (pid={pid})")
-            return jsonify({"success": True, "status": "already_running", "pid": pid}), 202
-
-        try:
-            os.remove(running_file)
-        except FileNotFoundError:
-            pass
-        except Exception as e:
-            logger.warning(f"Failed to remove stale deploy marker {running_file}: {e}")
-
-    try:
-        process = subprocess.Popen(
-            ["bash", deploy_script],
-            cwd=project_root,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=(os.name != "nt"),
-        )
-    except Exception as e:
-        logger.error(f"Deployment error: {e}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-    logger.info(f"Deploy started (pid={process.pid})")
-    return jsonify({"success": True, "status": "started"}), 202
+    logger.warning("Deprecated deploy endpoint hit from %s", request.remote_addr)
+    return (
+        jsonify(
+            {
+                "error": "Deploy webhook removed",
+                "message": "Automated deploy now runs via GitHub Actions. See docs/setup/deployment.md.",
+            }
+        ),
+        410,
+    )
 
 
 def _get_saml_status():

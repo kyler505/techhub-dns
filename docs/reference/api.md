@@ -59,4 +59,3 @@
 | POST | `/api/system/test-sharepoint` | Test SharePoint |
 | POST | `/api/system/test-email` | Test email |
 | POST | `/api/system/test-teams` | Test Teams notification |
-| POST | `/api/system/deploy` | GitHub webhook deploy |
