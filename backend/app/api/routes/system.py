@@ -9,6 +9,7 @@ from typing import Dict, Any
 
 from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
+from app.services.canopy_orders_uploader_service import CanopyOrdersUploaderService
 from app.services.graph_service import graph_service
 from app.services.inflow_service import InflowService
 from app.database import get_db_session
@@ -253,6 +254,69 @@ def sync_orders():
         })
     finally:
         db.close()
+
+
+@bp.route("/canopyorders/upload", methods=["POST"])
+def upload_canopy_orders():
+    data = request.get_json(silent=True) or {}
+    orders_payload = data.get("orders")
+
+    if not isinstance(orders_payload, list):
+        return jsonify({"error": "Missing 'orders' list in request body"}), 400
+
+    normalized_orders: list[str] = []
+    seen_orders: set[str] = set()
+
+    for raw_order in orders_payload:
+        if not isinstance(raw_order, str):
+            return jsonify({"error": "Each order must be a string"}), 400
+
+        compact = "".join(raw_order.strip().upper().split())
+        if not compact:
+            return jsonify({"error": "Order number cannot be empty"}), 400
+
+        digits = compact[2:] if compact.startswith("TH") else compact
+        if len(digits) != 4 or not digits.isdigit():
+            return jsonify({"error": "Order number must be 4 digits (e.g., 1234 or TH1234)"}), 400
+
+        normalized = f"TH{digits}"
+        if normalized in seen_orders:
+            continue
+
+        seen_orders.add(normalized)
+        normalized_orders.append(normalized)
+
+    if not normalized_orders:
+        return jsonify({"error": "No orders provided"}), 400
+
+    uploader = CanopyOrdersUploaderService()
+    result = uploader.upload_orders(normalized_orders)
+
+    if not result.get("success"):
+        response_body = {
+            "success": False,
+            "filename": result.get("filename"),
+            "uploaded_url": result.get("uploaded_url"),
+            "count": len(normalized_orders),
+            "teams_notified": False,
+            "error": result.get("error"),
+            "error_type": result.get("error_type"),
+            "status_code": result.get("status_code"),
+        }
+        return jsonify(response_body), 502
+
+    uploaded_url = result.get("uploaded_url")
+    teams_notified = False
+    if uploaded_url:
+        teams_notified = uploader.send_teams_notification(normalized_orders, uploaded_url)
+
+    return jsonify({
+        "success": True,
+        "filename": result.get("filename"),
+        "uploaded_url": uploaded_url,
+        "count": len(normalized_orders),
+        "teams_notified": teams_notified,
+    })
 
 
 @bp.route("/deploy", methods=["POST"])

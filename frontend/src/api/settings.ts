@@ -23,6 +23,17 @@ export interface TestResult {
     error?: string;
 }
 
+export interface CanopyOrdersUploadResult {
+    success: boolean;
+    filename?: string | null;
+    uploaded_url?: string | null;
+    count?: number;
+    teams_notified?: boolean;
+    error?: string;
+    error_type?: string;
+    status_code?: number;
+}
+
 export const settingsApi = {
     /**
      * Get all system settings.
@@ -75,6 +86,14 @@ export const settingsApi = {
      */
     async testSharePoint(): Promise<TestResult> {
         const response = await apiClient.post("/system/test/sharepoint");
+        return response.data;
+    },
+
+    /**
+     * Upload Canopy orders (legacy uploader).
+     */
+    async uploadCanopyOrders(orders: string[]): Promise<CanopyOrdersUploadResult> {
+        const response = await apiClient.post("/system/canopyorders/upload", { orders });
         return response.data;
     },
 };
