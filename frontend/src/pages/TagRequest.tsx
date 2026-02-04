@@ -6,7 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 
-const normalizeOrderInput = (value: string): { normalized?: string; error?: string } => {
+type NormalizeOrderResult =
+    | { normalized: string; error?: never }
+    | { normalized?: never; error: string };
+
+const normalizeOrderInput = (value: string): NormalizeOrderResult => {
     const compact = value.trim().toUpperCase().replace(/\s+/g, "");
     if (!compact) {
         return { error: "Enter a 4-digit order number." };
@@ -48,18 +52,20 @@ export default function TagRequest() {
     }, [status]);
 
     const handleAddOrder = () => {
-        const result = normalizeOrderInput(orderInput);
-        if (!result.normalized) {
-            setError(result.error || "Invalid order number.");
-            return;
-        }
+    const result = normalizeOrderInput(orderInput);
+    if ("error" in result) {
+        setError(result.error);
+        return;
+    }
 
-        if (orders.includes(result.normalized)) {
-            setError(`Order ${result.normalized} is already in the list.`);
-            return;
-        }
+    const normalizedOrder = result.normalized;
 
-        setOrders((prev) => [...prev, result.normalized]);
+    if (orders.includes(normalizedOrder)) {
+        setError(`Order ${normalizedOrder} is already in the list.`);
+        return;
+    }
+
+    setOrders((prev) => [...prev, normalizedOrder]);
         setOrderInput("");
         setError(null);
     };
