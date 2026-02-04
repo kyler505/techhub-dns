@@ -15,9 +15,37 @@ PROJECT_ROOT="/home/techhub/techhub-dns"
 WSGI_FILE="/var/www/techhub_pythonanywhere_com_wsgi.py"
 LOG_FILE="${PROJECT_ROOT}/deploy.log"
 BRANCH="main"
+RUNNING_FILE="${PROJECT_ROOT}/.deploy.running"
 LOCKFILE="${PROJECT_ROOT}/frontend/package-lock.json"
 LOCKFILE_HASH_FILE="${PROJECT_ROOT}/.deploy-lockfile.sha256"
 NODE_MODULES_DIR="${PROJECT_ROOT}/frontend/node_modules"
+
+# Log function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Deploy lock (prevents concurrent deploys)
+if [ -f "$RUNNING_FILE" ]; then
+    existing_pid="$(cat "$RUNNING_FILE" 2>/dev/null || true)"
+
+    if [[ "$existing_pid" =~ ^[0-9]+$ ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+        log "ERROR: Deploy already running (pid=$existing_pid); exiting"
+        exit 1
+    fi
+
+    # Stale/invalid marker
+    rm -f "$RUNNING_FILE"
+fi
+
+# Create marker atomically (avoid race between two webhook deliveries)
+if ! ( set -o noclobber; echo "$$" > "$RUNNING_FILE" ) 2>/dev/null; then
+    existing_pid="$(cat "$RUNNING_FILE" 2>/dev/null || true)"
+    log "ERROR: Deploy already running (pid=${existing_pid:-unknown}); exiting"
+    exit 1
+fi
+
+trap 'rm -f "$RUNNING_FILE"' EXIT
 
 # Ensure npm is available in non-interactive shells
 if ! command -v npm >/dev/null 2>&1; then
@@ -30,11 +58,6 @@ if ! command -v npm >/dev/null 2>&1; then
     log "ERROR: npm not found in PATH; cannot build frontend"
     exit 1
 fi
-
-# Log function
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
-}
 
 # Start deployment
 log "=========================================="

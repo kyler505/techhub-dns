@@ -265,6 +265,7 @@ def deploy_webhook():
     """
     import hmac
     import hashlib
+    import errno
     import subprocess
     import os
     from flask import request
@@ -317,43 +318,64 @@ def deploy_webhook():
             "error": "Deploy script not found"
         }), 500
 
-    try:
-        # Run the deploy script
-        result = subprocess.run(
-            ["bash", deploy_script],
-            capture_output=True,
-            text=True,
-            timeout=120,  # 2 minute timeout
-            cwd=project_root
-        )
+    def _is_pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
 
-        if result.returncode == 0:
-            logger.info(f"Deployment successful: {result.stdout}")
-            return jsonify({
-                "success": True,
-                "message": "Deployment successful",
-                "output": result.stdout[-500:] if len(result.stdout) > 500 else result.stdout
-            })
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # Process exists but we don't have permission to signal it
+            return True
+        except OSError as e:
+            if getattr(e, "errno", None) == errno.ESRCH:
+                return False
+            if getattr(e, "errno", None) == errno.EPERM:
+                return True
+            return False
         else:
-            logger.error(f"Deployment failed: {result.stderr}")
-            return jsonify({
-                "success": False,
-                "error": "Deployment failed",
-                "output": result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
-            }), 500
+            return True
 
-    except subprocess.TimeoutExpired:
-        logger.error("Deployment timed out")
-        return jsonify({
-            "success": False,
-            "error": "Deployment timed out"
-        }), 500
+    running_file = os.path.join(project_root, ".deploy.running")
+    if os.path.exists(running_file):
+        pid = None
+        try:
+            with open(running_file, "r", encoding="utf-8") as f:
+                pid_str = f.read().strip()
+            pid = int(pid_str)
+        except Exception:
+            pid = None
+
+        if pid is not None and _is_pid_alive(pid):
+            logger.info(f"Deploy already running (pid={pid})")
+            return jsonify({"success": True, "status": "already_running", "pid": pid}), 202
+
+        try:
+            os.remove(running_file)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.warning(f"Failed to remove stale deploy marker {running_file}: {e}")
+
+    try:
+        process = subprocess.Popen(
+            ["bash", deploy_script],
+            cwd=project_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=(os.name != "nt"),
+        )
     except Exception as e:
         logger.error(f"Deployment error: {e}")
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
+
+    logger.info(f"Deploy started (pid={process.pid})")
+    return jsonify({"success": True, "status": "started"}), 202
 
 
 def _get_saml_status():
