@@ -191,7 +191,8 @@ Push to GitHub -> GitHub Webhook -> /api/system/deploy -> git pull + frontend bu
 1. You push code to GitHub
 2. GitHub sends a webhook to the deploy endpoint
 3. The server verifies the request signature
-4. It runs `git pull`, builds the frontend, and reloads the app
+4. The endpoint returns `202 Accepted` quickly and the deploy runs asynchronously in the background
+5. The deploy script pulls code, builds the frontend, and reloads the app
 
 ### Setup Steps
 
@@ -242,7 +243,13 @@ pa website reload --domain username.pythonanywhere.com
 
 1. Make a small commit and push to GitHub
 2. Check GitHub -> Settings -> Webhooks -> Recent Deliveries
-3. You should see a green checkmark with a 200 response
+3. You should see a green checkmark with a `202` response
+4. Tail the deploy log to confirm progress:
+
+```bash
+cd ~/techhub-dns
+tail -n 200 deploy.log
+```
 
 ### Deployment Process
 
@@ -262,7 +269,8 @@ When triggered, the deploy script (`scripts/deploy.sh`) performs:
 | 403 - "Missing signature" | Ensure GitHub webhook has secret configured |
 | 403 - "Invalid signature" | Verify secrets match in GitHub and `.env` |
 | 500 - "Deploy script not found" | Ensure `scripts/deploy.sh` exists on server |
-| Webhook shows "pending" | Check server logs for errors |
+| GitHub delivery shows "timed out" | The web app did not respond in time. Check `/var/log/username.pythonanywhere.com.server.log` for errors and verify `/api/system/deploy` is reachable. Deploy output is in `~/techhub-dns/deploy.log`. |
+| Webhook shows "pending" | The deploy runs asynchronously; check `~/techhub-dns/deploy.log` and server logs for errors |
 
 ### Manual Deploy
 
