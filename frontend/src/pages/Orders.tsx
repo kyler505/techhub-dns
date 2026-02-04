@@ -9,6 +9,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { SkeletonTable } from "../components/Skeleton";
 import { PackageSearch } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
+import { toast } from "sonner";
 
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -95,7 +96,7 @@ export default function Orders() {
             loadOrders();
         } catch (error) {
             console.error("Failed to update status:", error);
-            alert("Failed to update order status");
+            toast.error("Failed to update order status");
         }
     };
 
@@ -107,8 +108,8 @@ export default function Orders() {
         return (
             <div className="container mx-auto py-6 space-y-4">
                 <div className="space-y-2">
-                    <div className="text-2xl font-semibold text-slate-900">Orders</div>
-                    <div className="text-sm text-slate-500">Loading current workflow queues.</div>
+                    <div className="text-2xl font-semibold text-foreground">Orders</div>
+                    <div className="text-sm text-muted-foreground">Loading current workflow queues.</div>
                 </div>
                 <Card>
                     <div className="p-6 pb-4">
@@ -128,8 +129,8 @@ export default function Orders() {
     return (
         <div className="container mx-auto py-6 space-y-4">
             <div className="space-y-1">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Orders</h1>
-                <p className="text-sm text-slate-500">Manage operational orders across all workflow stages.</p>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
+                <p className="text-sm text-muted-foreground">Manage operational orders across all workflow stages.</p>
             </div>
 
             <Card>
@@ -151,10 +152,10 @@ export default function Orders() {
                 </CardContent>
             </Card>
             {!loading && orders.length === 0 && (
-                <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center">
-                    <PackageSearch className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-                    <p className="text-sm font-medium text-slate-700">No orders to display</p>
-                    <p className="text-xs text-slate-500">Adjust your filters or clear search to see orders.</p>
+                <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+                    <PackageSearch className="mx-auto mb-3 h-8 w-8 text-muted-foreground/60" />
+                    <p className="text-sm font-medium text-foreground">No orders to display</p>
+                    <p className="text-xs text-muted-foreground">Adjust your filters or clear search to see orders.</p>
                 </div>
             )}
             {transitioningOrder && (
