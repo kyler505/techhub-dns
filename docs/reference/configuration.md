@@ -53,5 +53,3 @@
 |----------|-------------|
 | `FLASK_ENV` | Environment (development/production) |
 | `FRONTEND_URL` | Frontend URL for CORS |
-| `DEPLOY_WEBHOOK_ENABLED` | Enable GitHub deploy webhook |
-| `DEPLOY_WEBHOOK_SECRET` | Webhook signature secret |

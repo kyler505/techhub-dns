@@ -19,7 +19,6 @@ PUBLIC_ROUTES = [
     "/auth/",  # All auth routes
     "/health",
     "/api/inflow/webhook",  # Inflow webhook callbacks
-    "/api/system/deploy",  # GitHub deploy webhook (has its own signature verification)
 ]
 
 

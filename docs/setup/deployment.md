@@ -1,6 +1,6 @@
 # Deployment Setup
 
-Complete guide for deploying the TechHub Delivery application to PythonAnywhere with Flask-SocketIO WebSocket support and GitHub webhook automation.
+Complete guide for deploying the TechHub Delivery application to PythonAnywhere with Flask-SocketIO WebSocket support and GitHub Actions automation.
 
 ## Prerequisites
 
@@ -180,76 +180,51 @@ bash scripts/deploy.sh
 
 The deploy script runs `npm ci` and `npm run build` in `frontend/`, then reloads the app.
 
-## Automated Deployment (GitHub Webhook)
+## Automated Deployment (GitHub Actions)
 
 ### Overview
 
-```
-Push to GitHub -> GitHub Webhook -> /api/system/deploy -> git pull + frontend build + reload
+On every push to `main`, GitHub Actions SSHes into PythonAnywhere and runs:
+
+```bash
+bash ~/techhub-dns/scripts/deploy.sh
 ```
 
-1. You push code to GitHub
-2. GitHub sends a webhook to the deploy endpoint
-3. The server verifies the request signature
-4. The endpoint returns `202 Accepted` quickly and the deploy runs asynchronously in the background
-5. The deploy script pulls code, builds the frontend, and reloads the app
+Logs stream in the Actions job output. If the deploy fails, the workflow tails `~/techhub-dns/deploy.log` and uploads it as an artifact.
 
 ### Setup Steps
 
-#### 1. Generate a Webhook Secret
+#### 1. Add GitHub repository secrets
 
-Create a secure random secret:
+In your GitHub repo: Settings -> Secrets and variables -> Actions -> New repository secret
 
-```bash
-# On Linux/Mac:
-openssl rand -hex 32
+| Secret name | Value |
+|------------|-------|
+| `PA_USERNAME` | Your PythonAnywhere username |
+| `PA_SSH_PRIVATE_KEY` | Private SSH key that can SSH to PythonAnywhere |
 
-# Or use Python:
-python -c "import secrets; print(secrets.token_hex(32))"
-```
+Notes:
+- Use an SSH key that is authorized for your PythonAnywhere account.
+- Keep the private key unencrypted (no passphrase) for Actions, or configure an agent-compatible key flow.
 
-#### 2. Configure PythonAnywhere
+#### 2. Ensure PythonAnywhere can accept SSH
 
-Add to your `.env` file on PythonAnywhere:
+1. In PythonAnywhere, add the SSH public key for the GitHub Actions keypair (Account -> SSH keys).
+2. Confirm you can SSH from your local machine using that key.
 
-```env
-DEPLOY_WEBHOOK_ENABLED=true
-DEPLOY_WEBHOOK_SECRET=your-generated-secret-here
-```
+#### 3. Verify the workflow
 
-Then reload the web app:
+The workflow file is in this repo at:
 
-```bash
-pa website reload --domain username.pythonanywhere.com
-```
+`/.github/workflows/deploy-pythonanywhere.yml`
 
-#### 3. Configure GitHub Webhook
+It triggers on pushes to `main` and via manual `workflow_dispatch`.
 
-1. Go to your GitHub repository -> Settings -> Webhooks
-2. Click Add webhook
-3. Configure:
+#### 4. Remove the old webhook (if configured)
 
-| Field | Value |
-|-------|-------|
-| Payload URL | `https://username.pythonanywhere.com/api/system/deploy` |
-| Content type | `application/json` |
-| Secret | (same secret from step 1) |
-| Which events? | Just the push event |
-| Active | Yes |
+If you previously configured a GitHub webhook pointing at `/api/system/deploy`, delete or disable it:
 
-4. Click Add webhook
-
-#### 4. Test the Webhook
-
-1. Make a small commit and push to GitHub
-2. Check GitHub -> Settings -> Webhooks -> Recent Deliveries
-3. You should see a green checkmark with a `202` response
-4. Tail the deploy log to confirm progress:
-
-```bash
-cd ~/techhub-dns
-tail -n 200 deploy.log
-```
+GitHub repo -> Settings -> Webhooks
 
 ### Deployment Process
 
@@ -265,12 +240,10 @@ When triggered, the deploy script (`scripts/deploy.sh`) performs:
 
 | Issue | Solution |
 |-------|----------|
-| 403 - "Deploy webhook is disabled" | Set `DEPLOY_WEBHOOK_ENABLED=true` in `.env` |
-| 403 - "Missing signature" | Ensure GitHub webhook has secret configured |
-| 403 - "Invalid signature" | Verify secrets match in GitHub and `.env` |
-| 500 - "Deploy script not found" | Ensure `scripts/deploy.sh` exists on server |
-| GitHub delivery shows "timed out" | The web app did not respond in time. Check `/var/log/username.pythonanywhere.com.server.log` for errors and verify `/api/system/deploy` is reachable. Deploy output is in `~/techhub-dns/deploy.log`. |
-| Webhook shows "pending" | The deploy runs asynchronously; check `~/techhub-dns/deploy.log` and server logs for errors |
+| Actions job fails with "Permission denied" | Verify `PA_SSH_PRIVATE_KEY` matches a public key in PythonAnywhere (Account -> SSH keys) and `PA_USERNAME` is correct |
+| Actions job fails with "Could not resolve hostname" | Confirm PythonAnywhere SSH host is `ssh.pythonanywhere.com` |
+| Actions job fails during frontend build | Check the job output and `~/techhub-dns/deploy.log` artifact (uploaded on failure) |
+| Deploy script missing | Ensure `~/techhub-dns/scripts/deploy.sh` exists on the server |
 
 ### Manual Deploy
 
@@ -281,12 +254,7 @@ cd ~/techhub-dns
 bash scripts/deploy.sh
 ```
 
-### Security Notes
 
-- The webhook endpoint verifies the GitHub signature
-- Only authenticated requests trigger deployment
-- Never commit the webhook secret to git
-- Monitor webhook deliveries for suspicious activity
 
 ## Architecture Notes
 
@@ -364,4 +332,3 @@ Look for `enabled: True` in the output.
 | `SHAREPOINT_ENABLED` | Enable SharePoint integration |
 | `SMTP_ENABLED` | Enable email notifications |
 | `TEAMS_RECIPIENT_NOTIFICATIONS_ENABLED` | Enable Teams notifications |
-| `DEPLOY_WEBHOOK_ENABLED` | Enable GitHub auto-deploy |

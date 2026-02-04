@@ -86,10 +86,6 @@ class Settings(BaseSettings):
     # Flask environment
     flask_env: str = "development"
 
-    # GitHub Deploy Webhook (auto-pull on push)
-    deploy_webhook_enabled: bool = False
-    deploy_webhook_secret: Optional[str] = None
-
     # Tag Request System
     tag_request_webdav_base_url: Optional[str] = None
     tag_request_webdav_target_path: str = "/tag-requests"
