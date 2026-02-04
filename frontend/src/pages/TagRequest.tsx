@@ -52,20 +52,20 @@ export default function TagRequest() {
     }, [status]);
 
     const handleAddOrder = () => {
-    const result = normalizeOrderInput(orderInput);
-    if ("error" in result) {
-        setError(result.error);
-        return;
-    }
+        const result = normalizeOrderInput(orderInput);
+        if ("error" in result) {
+            setError(result.error ?? "Enter a 4-digit order number.");
+            return;
+        }
 
-    const normalizedOrder = result.normalized;
+        const normalizedOrder = result.normalized;
 
-    if (orders.includes(normalizedOrder)) {
-        setError(`Order ${normalizedOrder} is already in the list.`);
-        return;
-    }
+        if (orders.includes(normalizedOrder)) {
+            setError(`Order ${normalizedOrder} is already in the list.`);
+            return;
+        }
 
-    setOrders((prev) => [...prev, normalizedOrder]);
+        setOrders((prev) => [...prev, normalizedOrder]);
         setOrderInput("");
         setError(null);
     };
