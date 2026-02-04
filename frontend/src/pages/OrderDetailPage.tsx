@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { OrderDetail, OrderStatus, AuditLog, TeamsNotification } from "../types/order";
 import { ordersApi } from "../api/orders";
@@ -83,7 +84,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to update status:", error);
-            alert("Failed to update order status");
+            toast.error("Failed to update order status");
         }
     };
 
@@ -94,7 +95,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to retry notification:", error);
-            alert("Failed to retry notification");
+            toast.error("Failed to retry notification");
         }
     };
 
@@ -110,7 +111,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to tag order:", error);
-            alert("Failed to tag order");
+            toast.error("Failed to tag order");
         }
     };
 
@@ -121,7 +122,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to send tag request:", error);
-            alert("Failed to send tag request");
+            toast.error("Failed to send tag request");
         }
     };
 
@@ -135,7 +136,7 @@ export default function OrderDetailPage() {
         } catch (error: any) {
             console.error("Failed to generate picklist:", error);
             const message = error.response?.data?.error || "Failed to generate picklist";
-            alert(message);
+            toast.error(message);
         }
     };
 

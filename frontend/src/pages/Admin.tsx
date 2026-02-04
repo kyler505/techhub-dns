@@ -7,6 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import {
     Dialog,
     DialogContent,
@@ -275,12 +276,12 @@ export default function Admin() {
         return (
             <div className="container mx-auto py-6 space-y-4">
                 <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Admin</h1>
-                    <p className="text-sm text-slate-500">Loading system configuration and diagnostics.</p>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
+                    <p className="text-sm text-muted-foreground">Loading system configuration and diagnostics.</p>
                 </div>
                 <Card>
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" />
                             Loading...
                         </div>
@@ -312,9 +313,9 @@ export default function Admin() {
     };
 
     const webhookEmptyState = (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-white p-6 text-center">
-            <p className="text-sm font-medium text-slate-700">No webhooks registered</p>
-            <p className="text-xs text-slate-500 mt-1">Register a webhook to receive real-time Inflow events.</p>
+        <div className="rounded-lg border border-dashed bg-card p-6 text-center">
+            <p className="text-sm font-medium text-foreground">No webhooks registered</p>
+            <p className="text-xs text-muted-foreground mt-1">Register a webhook to receive real-time Inflow events.</p>
         </div>
     );
 
@@ -322,11 +323,11 @@ export default function Admin() {
         <div className="container mx-auto py-6 space-y-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Admin</h1>
-                    <p className="text-sm text-slate-500">System status, notification switches, and operational tools.</p>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
+                    <p className="text-sm text-muted-foreground">System status, notification switches, and operational tools.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    {user?.email && <span className="text-xs text-slate-500">Signed in as {user.email}</span>}
+                    {user?.email && <span className="text-xs text-muted-foreground">Signed in as {user.email}</span>}
                     <Button
                         variant="outline"
                         size="sm"
@@ -352,7 +353,7 @@ export default function Admin() {
                 </TabsList>
 
                 <TabsContent value="overview" className="mt-4 space-y-6">
-                    <Card className="border-slate-200">
+                    <Card>
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <CardTitle className="text-base">System Status</CardTitle>
@@ -367,7 +368,7 @@ export default function Admin() {
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {systemStatusList.map((feature) => (
-                                    <Card key={feature.name} className="border-slate-200 shadow-none">
+                                    <Card key={feature.name} className="shadow-none">
                                         <CardHeader className="p-4 pb-3">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div>
@@ -395,7 +396,7 @@ export default function Admin() {
                 </TabsContent>
 
                 <TabsContent value="notifications" className="mt-4 space-y-6">
-                    <Card className="border-slate-200">
+                    <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Notification Settings</CardTitle>
                             <CardDescription>Enable or disable services. Core configuration is managed via environment variables.</CardDescription>
@@ -418,16 +419,16 @@ export default function Admin() {
                                 return (
                                     <div
                                         key={key}
-                                        className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                                        className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
                                     >
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <p className="text-sm font-medium text-slate-900">{title}</p>
+                                                <p className="text-sm font-medium text-foreground">{title}</p>
                                                 <Badge variant={settingsLoading ? "outline" : enabled ? "success" : "secondary"}>
                                                     {settingsLoading ? "Loading" : enabled ? "Enabled" : "Disabled"}
                                                 </Badge>
                                             </div>
-                                            <p className="text-sm text-slate-500 mt-1">{current.description}</p>
+                                            <p className="text-sm text-muted-foreground mt-1">{current.description}</p>
                                         </div>
                                         <Button
                                             type="button"
@@ -449,20 +450,19 @@ export default function Admin() {
 
                 <TabsContent value="operations" className="mt-4 space-y-6">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                        <Card className="border-slate-200">
+                        <Card>
                             <CardHeader>
                                 <CardTitle className="text-base">Service Testing</CardTitle>
                                 <CardDescription>Trigger test sends and verify connectivity.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-medium text-slate-700">Recipient email</label>
-                                    <input
+                                    <label className="text-xs font-medium text-muted-foreground">Recipient email</label>
+                                    <Input
                                         type="email"
                                         placeholder="recipient@tamu.edu"
                                         value={testEmailAddress}
                                         onChange={(e) => setTestEmailAddress(e.target.value)}
-                                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                     />
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         <Button
@@ -486,9 +486,9 @@ export default function Admin() {
                                     </div>
                                 </div>
 
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                    <p className="text-sm font-medium text-slate-900">System Connections</p>
-                                    <p className="text-xs text-slate-500 mt-1">Smoke-test backend connectivity.</p>
+                                <div className="rounded-lg border bg-muted/30 p-4">
+                                    <p className="text-sm font-medium text-foreground">System Connections</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Smoke-test backend connectivity.</p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
                                         <Button
                                             onClick={handleTestInflow}
@@ -513,7 +513,7 @@ export default function Admin() {
                             </CardContent>
                         </Card>
 
-                        <Card className="border-slate-200">
+                        <Card>
                             <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <CardTitle className="text-base">Manual Order Sync</CardTitle>
@@ -529,14 +529,14 @@ export default function Admin() {
                                 </Button>
                             </CardHeader>
                             <CardContent>
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
                                     This triggers a backend sync and may take a moment depending on queue size.
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    <Card className="border-slate-200">
+                    <Card>
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <CardTitle className="text-base">Inflow Webhooks</CardTitle>
@@ -555,7 +555,7 @@ export default function Admin() {
                             {inflowWebhooks.length === 0 ? (
                                 webhookEmptyState
                             ) : (
-                                <div className="rounded-lg border border-slate-200 bg-white">
+                                <div className="rounded-lg border bg-card">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
@@ -583,18 +583,18 @@ export default function Admin() {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="max-w-[18rem] sm:max-w-[28rem]">
-                                                        <div className="truncate text-sm text-slate-900" title={wh.url}>
+                                                        <div className="truncate text-sm text-foreground" title={wh.url}>
                                                             {wh.url}
                                                         </div>
-                                                        <div className="text-xs text-slate-500">ID {wh.webhook_id}</div>
+                                                        <div className="text-xs text-muted-foreground">ID {wh.webhook_id}</div>
                                                     </TableCell>
                                                     <TableCell className="hidden md:table-cell">
-                                                        <span className="text-sm text-slate-700">
+                                                        <span className="text-sm text-muted-foreground">
                                                             {Array.isArray(wh.events) ? wh.events.length : 0}
                                                         </span>
                                                     </TableCell>
                                                     <TableCell className="hidden md:table-cell">
-                                                        <span className="text-sm text-slate-700">{wh.failure_count ?? 0}</span>
+                                                        <span className="text-sm text-muted-foreground">{wh.failure_count ?? 0}</span>
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <Button
@@ -637,9 +637,9 @@ export default function Admin() {
                         </DialogDescription>
                     </DialogHeader>
                     {webhookToDelete ? (
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                            <div className="font-medium text-slate-900">{webhookToDelete.url}</div>
-                            <div className="text-xs text-slate-500 mt-1">ID {webhookToDelete.webhook_id}</div>
+                        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                            <div className="font-medium text-foreground">{webhookToDelete.url}</div>
+                            <div className="text-xs text-muted-foreground mt-1">ID {webhookToDelete.webhook_id}</div>
                         </div>
                     ) : null}
                     <DialogFooter>

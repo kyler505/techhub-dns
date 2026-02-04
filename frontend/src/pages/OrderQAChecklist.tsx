@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 
@@ -38,7 +39,7 @@ export default function OrderQAChecklist() {
             setOrders(data);
         } catch (error) {
             console.error("Failed to load orders:", error);
-            alert("Failed to load orders");
+            toast.error("Failed to load orders");
         } finally {
             setLoadingOrders(false);
         }
