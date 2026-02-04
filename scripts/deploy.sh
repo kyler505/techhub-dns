@@ -2,7 +2,8 @@
 # =============================================================================
 # TechHub Delivery - Auto-Deploy Script
 # =============================================================================
-# This script is called by the GitHub webhook to pull latest code and reload.
+# This script is called by GitHub Actions (SSH) or manually to pull latest code
+# and reload.
 # Location: /home/techhub/techhub-dns/scripts/deploy.sh
 #
 # Usage: bash deploy.sh
@@ -17,11 +18,6 @@ LOG_FILE="${PROJECT_ROOT}/deploy.log"
 BRANCH="main"
 RUNNING_FILE="${PROJECT_ROOT}/.deploy.running"
 LOCKFILE="${PROJECT_ROOT}/frontend/package-lock.json"
-LOCKFILE_HASH_FILE="${PROJECT_ROOT}/.deploy-lockfile.sha256"
-NODE_MODULES_DIR="${PROJECT_ROOT}/frontend/node_modules"
-FRONTEND_BIN_DIR="${NODE_MODULES_DIR}/.bin"
-TSC_BIN="${FRONTEND_BIN_DIR}/tsc"
-VITE_BIN="${FRONTEND_BIN_DIR}/vite"
 
 # Log function
 log() {
@@ -82,34 +78,10 @@ if [ -d "$PROJECT_ROOT/frontend" ]; then
     log "Building frontend..."
     cd "$PROJECT_ROOT/frontend"
 
-    missing_build_tools=""
-    if [ -d "$NODE_MODULES_DIR" ]; then
-        [ -e "$TSC_BIN" ] || missing_build_tools="${missing_build_tools} tsc"
-        [ -e "$VITE_BIN" ] || missing_build_tools="${missing_build_tools} vite"
-    fi
-
+    # Reliability > speed: always reinstall deps before building.
     if [ -f "$LOCKFILE" ]; then
-        CURRENT_HASH=$(sha256sum "$LOCKFILE" | awk '{print $1}')
-        PREVIOUS_HASH=""
-        if [ -f "$LOCKFILE_HASH_FILE" ]; then
-            PREVIOUS_HASH=$(cat "$LOCKFILE_HASH_FILE")
-        fi
-
-        if [ ! -d "$NODE_MODULES_DIR" ]; then
-            log "node_modules missing; installing frontend dependencies..."
-            npm ci --include=dev
-            echo "$CURRENT_HASH" > "$LOCKFILE_HASH_FILE"
-        elif [ "$CURRENT_HASH" != "$PREVIOUS_HASH" ]; then
-            log "package-lock.json changed; reinstalling frontend dependencies..."
-            npm ci --include=dev
-            echo "$CURRENT_HASH" > "$LOCKFILE_HASH_FILE"
-        elif [ -n "${missing_build_tools# }" ]; then
-            log "Build tools missing (${missing_build_tools# }); reinstalling frontend dependencies..."
-            npm ci --include=dev
-            echo "$CURRENT_HASH" > "$LOCKFILE_HASH_FILE"
-        else
-            log "package-lock.json unchanged; skipping npm ci"
-        fi
+        log "Installing frontend dependencies (npm ci)..."
+        npm ci --include=dev
     else
         log "WARNING: package-lock.json not found; running npm install"
         npm install --include=dev
