@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { toast } from "sonner";
 
 interface CreateDeliveryDialogProps {
   isOpen: boolean;
@@ -30,12 +32,12 @@ export default function CreateDeliveryDialog({
     e.preventDefault();
 
     if (!runner.trim()) {
-      alert("Please enter a deliverer name");
+      toast.error("Please enter a deliverer name");
       return;
     }
 
     if (!vehicle) {
-      alert("Please select a vehicle");
+      toast.error("Please select a vehicle");
       return;
     }
 
@@ -47,7 +49,7 @@ export default function CreateDeliveryDialog({
       onClose();
     } catch (error) {
       console.error("Failed to create delivery:", error);
-      alert("Failed to start delivery");
+      toast.error("Failed to start delivery");
     } finally {
       setIsLoading(false);
     }
@@ -75,13 +77,13 @@ export default function CreateDeliveryDialog({
               <label htmlFor="runner" className="text-right">
                 Deliverer
               </label>
-              <input
+              <Input
                 id="runner"
                 type="text"
                 placeholder="Enter deliverer name"
                 value={runner}
                 onChange={(e) => setRunner(e.target.value)}
-                className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="col-span-3"
                 disabled={isLoading}
               />
             </div>
