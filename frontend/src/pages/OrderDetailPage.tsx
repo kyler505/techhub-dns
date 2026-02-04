@@ -115,17 +115,6 @@ export default function OrderDetailPage() {
         }
     };
 
-    const handleStartTagRequest = async () => {
-        if (!order) return;
-        try {
-            await ordersApi.startTagRequest(order.id);
-            loadOrder();
-        } catch (error) {
-            console.error("Failed to send tag request:", error);
-            toast.error("Failed to send tag request");
-        }
-    };
-
     const handleGeneratePicklist = async () => {
         if (!order) return;
         try {
@@ -164,7 +153,6 @@ export default function OrderDetailPage() {
                 onStatusChange={handleStatusChange}
                 onRetryNotification={handleRetryNotification}
                 onTagOrder={handleTagOrder}
-                onStartTagRequest={handleStartTagRequest}
                 onGeneratePicklist={handleGeneratePicklist}
             />
             {transitioningStatus && (
