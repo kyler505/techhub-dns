@@ -50,7 +50,7 @@ export function Sidebar({ className }: { className?: string }) {
         className
       )}
     >
-      <div className="flex items-center justify-between h-12 sm:h-14 lg:h-16 px-4 border-b border-slate-100">
+      <div className="flex items-center justify-between h-11 sm:h-12 px-4 border-b border-slate-100">
         <div className="flex items-center gap-3">
           <AnimatePresence mode="wait">
             {!collapsed && (
