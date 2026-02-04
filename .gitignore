@@ -37,3 +37,6 @@ docs/tmp_*
 
 # Task tracking
 tasks/todo.md
+
+# Legacy Scripts
+legacy/

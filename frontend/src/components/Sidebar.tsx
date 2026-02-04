@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   Package,
+  Tag,
   ClipboardCheck,
   Truck,
   Settings,
@@ -18,6 +19,7 @@ import boxTAM from "../../assets/boxTAM.svg";
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/orders", label: "Orders", icon: Package },
+  { path: "/tag-request", label: "Tag Request", icon: Tag },
   { path: "/order-qa", label: "QA Checklist", icon: ClipboardCheck },
   { path: "/delivery", label: "Delivery", icon: Truck },
   { path: "/shipping", label: "Shipping", icon: Send },
