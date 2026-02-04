@@ -98,18 +98,6 @@ class Settings(BaseSettings):
     tag_request_teams_workflow_url: Optional[str] = None
     tag_request_teams_shared_secret: Optional[str] = None
 
-    # Canopy Orders Uploader (legacy WebDAV)
-    canopyorders_store_base: Optional[str] = None
-    canopyorders_dav_root_path: str = "/dav"
-    canopyorders_base_dir: str = "/content/canopyorders"
-    canopyorders_username: Optional[str] = None
-    canopyorders_password_secret_name: str = "ehanson-webdav"
-    canopyorders_user_agent: str = (
-        "Cyberduck/9.0.0 (Windows 10/10.0) (x86_64) (WebDAV)"
-    )
-    canopyorders_teams_workflow_url: Optional[str] = None
-    canopyorders_teams_shared_secret: Optional[str] = None
-
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

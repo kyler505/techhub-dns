@@ -1057,9 +1057,6 @@ class OrderService:
                 }
             )
 
-            # Persist SystemAuditLog entry created by AuditService
-            self.db.commit()
-
             return order
 
 
