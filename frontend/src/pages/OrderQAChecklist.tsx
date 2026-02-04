@@ -2,6 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
+import { toast } from "sonner";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+} from "../components/ui/card";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "../components/ui/table";
 
 type SavedQAChecklist = {
     orderId: string; // internal id
@@ -38,7 +55,7 @@ export default function OrderQAChecklist() {
             setOrders(data);
         } catch (error) {
             console.error("Failed to load orders:", error);
-            alert("Failed to load orders");
+            toast.error("Failed to load orders");
         } finally {
             setLoadingOrders(false);
         }
@@ -63,99 +80,134 @@ export default function OrderQAChecklist() {
         return map;
     }, [orders]);
 
+    const pendingOrders = orders
+        .filter((o) => !completedMap.has(o.id))
+        .filter(
+            (o) =>
+                ![
+                    OrderStatus.DELIVERED,
+                    OrderStatus.IN_DELIVERY,
+                    OrderStatus.SHIPPING,
+                ].includes(o.status)
+        );
+
     return (
-        <div className="p-4">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">QA Checklist Dashboard</h1>
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                    QA Checklist Dashboard
+                </h1>
+            </div>
 
-            <section className="bg-white shadow rounded-lg p-4 border border-gray-100 mb-6">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <Card>
+                <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">
-                            Orders Needing QA
-                        </h2>
+                        <CardTitle className="text-lg">Orders Needing QA</CardTitle>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                        <div className="flex items-center gap-2">
-                            <input
-                                className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#800000]"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search orders"
-                                aria-label="Search"
-                            />
+                    <div className="w-full sm:w-72">
+                        <Input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search orders"
+                            aria-label="Search"
+                        />
+                    </div>
+                </CardHeader>
+
+                <CardContent className="pt-6">
+                    {loadingOrders ? (
+                        <div className="py-10 text-sm text-muted-foreground">
+                            Loading...
                         </div>
-                    </div>
-                </div>
+                    ) : (
+                        <div className="rounded-lg border border-border overflow-hidden">
+                            <Table className="min-w-[720px]">
+                                <TableHeader className="bg-muted/30">
+                                    <TableRow>
+                                        <TableHead>Order</TableHead>
+                                        <TableHead>Recipient</TableHead>
+                                        <TableHead className="hidden lg:table-cell">
+                                            Location
+                                        </TableHead>
+                                        <TableHead>QA</TableHead>
+                                    </TableRow>
+                                </TableHeader>
 
-                {loadingOrders ? (
-                    <div className="p-4">Loading...</div>
-                ) : (
-                    <div className="mt-4 overflow-x-auto ios-scroll rounded-lg border border-slate-200 bg-white shadow-premium">
-                        <table className="min-w-[720px] w-full">
-                            <thead className="bg-slate-50/80">
-                                <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Order</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Recipient</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Location</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">QA</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {orders
-                                    .filter((o) => !completedMap.has(o.id))
-                                    .filter((o) => {
-                                        return ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status);
-                                    })
-                                    .map((o) => {
+                                <TableBody>
+                                    {pendingOrders.map((o) => {
                                         const submittedAt = completedMap.get(o.id) || null;
-                                        const qaButtonLabel = submittedAt ? "Edit QA" : "Perform QA"; // clearer label
+                                        const qaButtonLabel = submittedAt
+                                            ? "Edit QA"
+                                            : "Perform QA";
 
                                         return (
-                                        <tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-3 py-2 text-sm text-slate-700">
-                                                <button
-                                                    onClick={() => navigate(`/orders/${o.id}`)}
-                                                    className="text-slate-700 hover:text-slate-900 hover:underline"
-                                                >
-                                                    {o.inflow_order_id}
-                                                </button>
-                                            </td>
-                                            <td className="px-3 py-2 text-sm text-slate-700">{o.recipient_name || "N/A"}</td>
-                                            <td className="px-3 py-2 text-sm text-slate-700 hidden lg:table-cell">{o.delivery_location || "N/A"}</td>
-                                            <td className="px-3 py-2 text-sm">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => navigate(`/orders/${o.id}/qa`)}
-                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2 btn-lift"
-                                                >
-                                                    {qaButtonLabel}
-                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                                                    </svg>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                            <TableRow key={o.id}>
+                                                <TableCell className="font-medium">
+                                                    <Button
+                                                        variant="link"
+                                                        className="h-auto p-0 text-foreground hover:text-accent"
+                                                        onClick={() =>
+                                                            navigate(`/orders/${o.id}`)
+                                                        }
+                                                    >
+                                                        {o.inflow_order_id}
+                                                    </Button>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {o.recipient_name || "N/A"}
+                                                </TableCell>
+                                                <TableCell className="hidden lg:table-cell">
+                                                    {o.delivery_location || "N/A"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            navigate(`/orders/${o.id}/qa`)
+                                                        }
+                                                        className="bg-accent text-accent-foreground hover:bg-accent/90 btn-lift inline-flex items-center gap-2"
+                                                    >
+                                                        {qaButtonLabel}
+                                                        <svg
+                                                            xmlns="http://www.w3.org/2000/svg"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            strokeWidth={1.5}
+                                                            stroke="currentColor"
+                                                            className="h-4 w-4"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                                                            />
+                                                        </svg>
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
 
-                                {orders
-                                    .filter((o) => !completedMap.has(o.id))
-                                    .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
-                                    .length === 0 && (
-                                        <tr>
-                                            <td className="px-3 py-6 text-center text-sm text-slate-500" colSpan={4}>
+                                    {pendingOrders.length === 0 && (
+                                        <TableRow>
+                                            <TableCell
+                                                className="py-10 text-center text-sm text-muted-foreground"
+                                                colSpan={4}
+                                            >
                                                 {orders.length === 0
                                                     ? "No orders need QA at this time."
                                                     : "All eligible orders have completed QA."}
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </section>
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }
