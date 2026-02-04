@@ -7,7 +7,6 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/Skeleton";
 import { Breadcrumbs } from "./components/Breadcrumbs";
-import { CommandPaletteProvider, CommandPaletteTrigger } from "./components/CommandPalette";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -54,18 +53,16 @@ function AppContent() {
         );
     }
 
-    return (
-        <CommandPaletteProvider>
-            <div className="min-h-screen bg-background">
-                <Sidebar />
+	return (
+		<div className="min-h-screen bg-background">
+				<Sidebar />
 
-                <main className="ml-[var(--sidebar-width)] min-h-screen transition-[margin] duration-300">
-                    <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border">
-                        <div className="flex items-center justify-between px-6 lg:px-8 py-3">
-                            <Breadcrumbs />
-                            <CommandPaletteTrigger />
-                        </div>
-                    </div>
+				<main className="ml-[var(--sidebar-width)] min-h-screen transition-[margin] duration-300">
+					<div className="sticky top-0 z-30 h-16 bg-background/80 backdrop-blur-sm border-b border-border">
+						<div className="h-full flex items-center px-6 lg:px-8">
+							<Breadcrumbs />
+						</div>
+					</div>
 
                     <div className="p-6 lg:p-8">
                         <Suspense fallback={
@@ -102,16 +99,19 @@ function AppContent() {
                     </div>
                 </main>
 
-                <Toaster
-                    position="top-right"
-                    toastOptions={{
-                        className:
-                            "bg-card text-card-foreground border border-border shadow-premium",
-                    }}
-                />
-            </div>
-        </CommandPaletteProvider>
-    );
+					<Toaster
+						position="top-right"
+						toastOptions={{
+							style: {
+								background: "hsl(var(--popover))",
+								color: "hsl(var(--popover-foreground))",
+								border: "1px solid hsl(var(--border))",
+								borderRadius: "var(--radius)",
+							},
+						}}
+					/>
+				</div>
+	);
 }
 
 function App() {
