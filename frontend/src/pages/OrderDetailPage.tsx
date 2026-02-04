@@ -6,8 +6,6 @@ import { ordersApi } from "../api/orders";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
-import { toast } from "sonner";
-import { Button } from "../components/ui/button";
 
 export default function OrderDetailPage() {
     const { orderId } = useParams<{ orderId: string }>();
@@ -85,7 +83,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to update status:", error);
-            toast.error("Failed to update order status");
+            alert("Failed to update order status");
         }
     };
 
@@ -96,7 +94,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to retry notification:", error);
-            toast.error("Failed to retry notification");
+            alert("Failed to retry notification");
         }
     };
 
@@ -112,7 +110,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to tag order:", error);
-            toast.error("Failed to tag order");
+            alert("Failed to tag order");
         }
     };
 
@@ -123,7 +121,7 @@ export default function OrderDetailPage() {
             loadOrder();
         } catch (error) {
             console.error("Failed to send tag request:", error);
-            toast.error("Failed to send tag request");
+            alert("Failed to send tag request");
         }
     };
 
@@ -137,32 +135,27 @@ export default function OrderDetailPage() {
         } catch (error: any) {
             console.error("Failed to generate picklist:", error);
             const message = error.response?.data?.error || "Failed to generate picklist";
-            toast.error(message);
+            alert(message);
         }
     };
 
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center py-16">
-                <div className="text-sm text-muted-foreground">Loading...</div>
-            </div>
-        );
+        return <div className="p-4">Loading...</div>;
     }
 
     if (!order) {
-        return (
-            <div className="py-16 text-center text-sm text-muted-foreground">
-                Order not found
-            </div>
-        );
+        return <div className="p-4">Order not found</div>;
     }
 
     return (
-        <div className="space-y-4">
-            <Button variant="outline" onClick={() => navigate(-1)}>
-                {"<- Back"}
-            </Button>
+        <div className="p-4">
+            <button
+                onClick={() => navigate(-1)}
+                className="mb-4 px-4 py-2 border rounded hover:bg-gray-100"
+            >
+                ← Back
+            </button>
             <OrderDetailComponent
                 order={order}
                 auditLogs={auditLogs}
