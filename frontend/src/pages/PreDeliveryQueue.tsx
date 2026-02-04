@@ -4,6 +4,10 @@ import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 import { deliveryRunsApi } from "../api/deliveryRuns";
 import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Card, CardContent } from "../components/ui/card";
+import { Checkbox } from "../components/ui/checkbox";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { formatDeliveryLocation } from "../utils/location";
 import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -159,88 +163,91 @@ export default function PreDeliveryQueue() {
                 <Button
                     onClick={handleBulkStartDelivery}
                     disabled={selectedOrders.size === 0}
-                    className="bg-orange-500 hover:bg-orange-600"
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                     Start Delivery ({selectedOrders.size} selected)
                 </Button>
             </div>
             {orders.length === 0 ? (
-                <div className="py-8 text-center text-slate-500">
+                <div className="py-8 text-center text-muted-foreground">
                     No orders in pre-delivery queue
                 </div>
             ) : (
-                <div className="rounded-lg border border-slate-200 bg-white shadow-premium overflow-x-auto ios-scroll">
-                    <table className="min-w-[900px] w-full">
-                        <thead className="bg-slate-50/80">
-                            <tr>
-                                <th className="h-12 px-3 text-left align-middle">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedOrders.size === orders.length && orders.length > 0}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                setSelectedOrders(new Set(orders.map((o) => o.id)));
-                                            } else {
-                                                setSelectedOrders(new Set());
-                                            }
-                                        }}
-                                    />
-
-                                </th>
-                                <th className="h-12 px-3 text-left align-middle text-xs font-semibold text-slate-600 uppercase tracking-wider">Order ID</th>
-                                <th className="h-12 px-3 text-left align-middle text-xs font-semibold text-slate-600 uppercase tracking-wider">Recipient</th>
-                                <th className="h-12 px-3 text-left align-middle text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Location</th>
-                                <th className="h-12 px-3 text-left align-middle text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Deliverer</th>
-                                <th className="h-12 px-3 text-left align-middle text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {orders.map((order) => (
-                                <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="p-3 align-middle">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedOrders.has(order.id)}
-                                            onChange={() => handleSelectOrder(order.id)}
+                <Card className="overflow-hidden">
+                    <CardContent className="p-0">
+                        <Table className="min-w-[900px]">
+                            <TableHeader>
+                                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                                    <TableHead className="w-10">
+                                        <Checkbox
+                                            checked={selectedOrders.size === orders.length && orders.length > 0}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedOrders(new Set(orders.map((o) => o.id)));
+                                                } else {
+                                                    setSelectedOrders(new Set());
+                                                }
+                                            }}
+                                            aria-label="Select all orders"
                                         />
-                                    </td>
-                                    <td className="p-3 align-middle text-sm text-slate-700">
-                                        <div className="flex items-center gap-2">
-                                            <Button
-                                                variant="link"
-                                                onClick={() => handleViewDetail(order.id)}
-                                                className="p-0 h-auto font-normal text-slate-700 hover:text-slate-900"
-                                            >
-                                                {order.inflow_order_id}
-                                            </Button>
-                                            {order.pick_status && !order.pick_status.is_fully_picked && (
-                                                <span
-                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
-                                                    title={`Partial pick: ${order.pick_status.total_picked}/${order.pick_status.total_ordered} items picked`}
+                                    </TableHead>
+                                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Order ID</TableHead>
+                                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Recipient</TableHead>
+                                    <TableHead className="hidden text-xs font-semibold uppercase tracking-wider lg:table-cell">Location</TableHead>
+                                    <TableHead className="hidden text-xs font-semibold uppercase tracking-wider lg:table-cell">Deliverer</TableHead>
+                                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {orders.map((order) => (
+                                    <TableRow key={order.id}>
+                                        <TableCell>
+                                            <Checkbox
+                                                checked={selectedOrders.has(order.id)}
+                                                onChange={() => handleSelectOrder(order.id)}
+                                                aria-label={`Select order ${order.inflow_order_id ?? order.id}`}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="link"
+                                                    size="sm"
+                                                    onClick={() => handleViewDetail(order.id)}
+                                                    className="h-auto p-0 font-normal text-foreground"
                                                 >
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Partial
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="p-3 align-middle text-sm text-slate-700">{order.recipient_name || "N/A"}</td>
-                                    <td className="p-3 align-middle text-sm text-slate-700 hidden lg:table-cell">{formatDeliveryLocation(order)}</td>
-                                    <td className="p-3 align-middle text-sm text-slate-700 hidden lg:table-cell">{order.assigned_deliverer || "Unassigned"}</td>
-                                    <td className="p-3 align-middle">
-                                        <Button
-                                            variant="destructive"
-                                            size="sm"
-                                            onClick={() => openIssueDialog(order.id)}
-                                        >
-                                            Flag Issue
-                                        </Button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                                                    {order.inflow_order_id}
+                                                </Button>
+                                                {order.pick_status && !order.pick_status.is_fully_picked && (
+                                                    <Badge
+                                                        variant="warning"
+                                                        className="gap-1"
+                                                        title={`Partial pick: ${order.pick_status.total_picked}/${order.pick_status.total_ordered} items picked`}
+                                                    >
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        Partial
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-sm">{order.recipient_name || "N/A"}</TableCell>
+                                        <TableCell className="hidden text-sm lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
+                                        <TableCell className="hidden text-sm lg:table-cell">{order.assigned_deliverer || "Unassigned"}</TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => openIssueDialog(order.id)}
+                                            >
+                                                Flag Issue
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
             )}
 
             {/* StatusTransition will be handled by parent DeliveryDashboard */}

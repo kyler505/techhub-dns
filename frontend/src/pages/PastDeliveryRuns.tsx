@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { deliveryRunsApi, DeliveryRunResponse } from "../api/deliveryRuns";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Card } from "../components/ui/card";
 import { Clock, Truck, User } from "lucide-react";
 
 export default function PastDeliveryRuns() {
@@ -32,14 +33,14 @@ export default function PastDeliveryRuns() {
         return new Date(dateString).toLocaleString();
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusVariant = (status: string) => {
         switch (status.toLowerCase()) {
             case "completed":
-                return "bg-green-100 text-green-800";
+                return "success" as const;
             case "cancelled":
-                return "bg-red-100 text-red-800";
+                return "destructive" as const;
             default:
-                return "bg-gray-100 text-gray-800";
+                return "secondary" as const;
         }
     };
 
@@ -65,7 +66,10 @@ export default function PastDeliveryRuns() {
     return (
         <div className="space-y-4">
             {runs.map((run) => (
-                <div key={run.id} className="flex items-center justify-between p-4 border rounded-lg bg-white hover:bg-gray-50">
+                <Card
+                    key={run.id}
+                    className="p-4 hover:bg-muted/30 hover:shadow-premium-hover"
+                >
                     <div className="flex items-center gap-6">
                         <div>
                             <div className="font-medium text-lg">{run.name || `Run ${run.id.slice(0, 8)}`}</div>
@@ -75,7 +79,7 @@ export default function PastDeliveryRuns() {
                             </div>
                         </div>
 
-                        <div className="flex gap-4 text-sm text-gray-600">
+                        <div className="flex gap-4 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">
                                 <User className="w-4 h-4" />
                                 {run.runner}
@@ -88,7 +92,7 @@ export default function PastDeliveryRuns() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <Badge className={getStatusColor(run.status)}>
+                        <Badge variant={getStatusVariant(run.status)}>
                             {run.status}
                         </Badge>
                         {/* We can re-use the detail page */}
@@ -98,7 +102,7 @@ export default function PastDeliveryRuns() {
                             </Button>
                         </Link>
                     </div>
-                </div>
+                </Card>
             ))}
         </div>
     );

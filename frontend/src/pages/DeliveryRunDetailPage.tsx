@@ -40,7 +40,7 @@ export default function DeliveryRunDetailPage() {
     if (error || !run) {
         return (
             <div className="text-center py-12">
-                <div className="text-red-600 mb-4">{error || "Delivery run not found"}</div>
+                <div className="text-destructive mb-4">{error || "Delivery run not found"}</div>
                 <Button variant="outline" onClick={() => navigate(-1)}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back
@@ -54,31 +54,31 @@ export default function DeliveryRunDetailPage() {
         return new Date(dateString).toLocaleString();
     };
 
-    const getStatusColor = (status: string) => {
+    const getRunStatusVariant = (status: string) => {
         switch (status.toLowerCase()) {
             case "active":
-                return "bg-green-100 text-green-800";
+                return "success" as const;
             case "completed":
-                return "bg-blue-100 text-blue-800";
+                return "secondary" as const;
             case "cancelled":
-                return "bg-red-100 text-red-800";
+                return "destructive" as const;
             default:
-                return "bg-gray-100 text-gray-800";
+                return "outline" as const;
         }
     };
 
-    const getOrderStatusColor = (status: string) => {
+    const getOrderStatusVariant = (status: string) => {
         switch (status.toLowerCase()) {
             case "pre_delivery":
-                return "bg-yellow-100 text-yellow-800";
+                return "warning" as const;
             case "in_delivery":
-                return "bg-blue-100 text-blue-800";
+                return "secondary" as const;
             case "delivered":
-                return "bg-green-100 text-green-800";
+                return "success" as const;
             case "issue":
-                return "bg-red-100 text-red-800";
+                return "destructive" as const;
             default:
-                return "bg-gray-100 text-gray-800";
+                return "outline" as const;
         }
     };
 
@@ -118,7 +118,7 @@ export default function DeliveryRunDetailPage() {
                             }
                         }}
                         disabled={!allOrdersDelivered || finishing}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                        className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-muted disabled:text-muted-foreground"
                     >
                         <CheckCircle className="w-4 h-4 mr-2" />
                         {finishing ? 'Completing...' : 'Complete Delivery'}
@@ -158,7 +158,7 @@ export default function DeliveryRunDetailPage() {
                             </div>
                             <div>
                                 <div className="text-sm text-muted-foreground">Status</div>
-                                <Badge className={getStatusColor(run.status)}>
+                                <Badge variant={getRunStatusVariant(run.status)}>
                                     {run.status.toLowerCase()}
                                 </Badge>
                             </div>
@@ -211,8 +211,7 @@ export default function DeliveryRunDetailPage() {
                             {run.orders.map((order) => (
                                 <div
                                     key={order.id}
-                                    className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${order.status.toLowerCase() !== 'delivered' ? 'border-orange-200 bg-orange-50' : ''
-                                        }`}
+                                    className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${order.status.toLowerCase() !== 'delivered' ? 'border-accent/20 bg-accent/5' : ''}`}
                                 >
                                     <div className="flex items-center gap-4">
                                         <div>
@@ -225,7 +224,7 @@ export default function DeliveryRunDetailPage() {
                                                 </div>
                                             )}
                                             {order.delivery_location && (
-                                                <div className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                                                <div className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
                                                     <span className="font-medium">Location:</span> {order.delivery_location}
                                                 </div>
                                             )}
@@ -233,12 +232,12 @@ export default function DeliveryRunDetailPage() {
                                     </div>
 
                                     <div className="flex items-center gap-3">
-                                        <Badge className={getOrderStatusColor(order.status)}>
+                                        <Badge variant={getOrderStatusVariant(order.status)}>
                                             {order.status.toLowerCase().replace('_', ' ')}
                                         </Badge>
 
                                         {order.status.toLowerCase() !== 'delivered' && (
-                                            <span className="text-xs text-orange-600 font-medium">
+                                            <span className="text-xs text-accent font-medium">
                                                 Must be signed first
                                             </span>
                                         )}
@@ -251,7 +250,7 @@ export default function DeliveryRunDetailPage() {
 
                                         {order.status === OrderStatus.IN_DELIVERY && (
                                             <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
-                                                <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
+                                                <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
                                                     Sign Document
                                                 </Button>
                                             </Link>
@@ -268,7 +267,7 @@ export default function DeliveryRunDetailPage() {
             <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-red-600">
+                        <DialogTitle className="flex items-center gap-2 text-destructive">
                             <AlertCircle className="w-5 h-5" />
                             Cannot Complete Delivery
                         </DialogTitle>
