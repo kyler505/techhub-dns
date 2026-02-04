@@ -50,7 +50,7 @@ export function Sidebar({ className }: { className?: string }) {
         className
       )}
     >
-      <div className="flex items-center justify-between h-16 px-4 border-b border-slate-100">
+      <div className="flex items-center justify-between h-12 sm:h-14 lg:h-16 px-4 border-b border-slate-100">
         <div className="flex items-center gap-3">
           <AnimatePresence mode="wait">
             {!collapsed && (
@@ -79,8 +79,15 @@ export function Sidebar({ className }: { className?: string }) {
             )}
           </AnimatePresence>
         </div>
-        <button onClick={() => setCollapsed(!collapsed)} className="p-1.5 rounded-md hover:bg-slate-100 transition-colors">
-          {collapsed ? <ChevronRight className="w-5 h-5 text-slate-500" /> : <ChevronLeft className="w-5 h-5 text-slate-500" />}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-1.5 rounded-md hover:bg-slate-100 transition-colors"
+        >
+          {collapsed ? (
+            <ChevronRight className="w-5 h-5 text-slate-500" />
+          ) : (
+            <ChevronLeft className="w-5 h-5 text-slate-500" />
+          )}
         </button>
       </div>
 
