@@ -12,6 +12,11 @@ export const ordersApi = {
     return response.data;
   },
 
+  getTagRequestCandidates: async (params?: { limit?: number; search?: string }): Promise<Order[]> => {
+    const response = await apiClient.get<Order[]>("/orders/tag-request/candidates", { params });
+    return response.data;
+  },
+
   updateOrderStatus: async (orderId: string, update: OrderStatusUpdate, changedBy?: string): Promise<Order> => {
     const response = await apiClient.patch<Order>(
       `/orders/${orderId}/status`,

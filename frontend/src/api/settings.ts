@@ -29,6 +29,8 @@ export interface CanopyOrdersUploadResult {
     uploaded_url?: string | null;
     count?: number;
     teams_notified?: boolean;
+    updated_orders?: number;
+    missing_orders?: string[];
     error?: string;
     error_type?: string;
     status_code?: number;

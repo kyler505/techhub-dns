@@ -89,6 +89,10 @@ export interface TagData {
   tag_request_sent_at?: string;
   tag_request_filename?: string;
   tag_request_status?: string;
+  canopyorders_request_sent_at?: string;
+  canopyorders_request_filename?: string;
+  canopyorders_request_uploaded_url?: string;
+  canopyorders_request_sent_by?: string;
   [key: string]: any;
 }
 

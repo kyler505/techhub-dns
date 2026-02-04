@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, abort, send_file
 from flask_socketio import emit
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
@@ -26,6 +27,7 @@ from app.schemas.order import (
     PickStatus
 )
 from app.models.order import OrderStatus
+from app.models.order import Order
 from app.schemas.audit import AuditLogResponse
 from app.utils.exceptions import DNSApiError, NotFoundError, ValidationError
 from app.api.auth_middleware import get_current_user_email
@@ -110,6 +112,48 @@ def get_orders():
             result.append(order_dict)
 
         return jsonify(result)
+
+
+@bp.route("/tag-request/candidates", methods=["GET"])
+def get_tag_request_candidates():
+    """Get picked orders that still need a tag request batch."""
+    limit = request.args.get("limit", default=200, type=int)
+    limit = max(1, min(limit, 1000))
+
+    search = (request.args.get("search") or "").strip()
+
+    with get_db() as db:
+        query = (
+            db.query(Order)
+            .filter(Order.status == OrderStatus.PICKED.value)
+            .filter(Order.tagged_at.is_(None))
+        )
+
+        if search:
+            like = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Order.inflow_order_id.ilike(like),
+                    Order.recipient_name.ilike(like),
+                )
+            )
+
+        # JSON tag_data filtering is handled in Python for cross-DB compatibility.
+        candidates: list[Order] = (
+            query.order_by(Order.updated_at.desc()).limit(1000).all()
+        )
+
+        needing_request: list[dict] = []
+        for order in candidates:
+            tag_data = order.tag_data or {}
+            sent_at = tag_data.get("canopyorders_request_sent_at") or tag_data.get("tag_request_sent_at")
+            if sent_at or tag_data.get("tag_request_status") == "sent":
+                continue
+            needing_request.append(OrderResponse.model_validate(order).model_dump())
+            if len(needing_request) >= limit:
+                break
+
+        return jsonify(needing_request)
 
 
 @bp.route("/<uuid:order_id>", methods=["GET"])

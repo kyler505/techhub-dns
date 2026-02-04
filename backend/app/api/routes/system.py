@@ -5,7 +5,8 @@ Provides endpoints for checking backend feature statuses.
 """
 
 from flask import Blueprint, jsonify, request
-from typing import Dict, Any
+from typing import Dict, Any, cast
+from datetime import datetime
 
 from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
@@ -14,6 +15,8 @@ from app.services.graph_service import graph_service
 from app.services.inflow_service import InflowService
 from app.database import get_db_session
 from app.models.system_setting import SystemSetting
+from app.models.order import Order
+from app.api.auth_middleware import get_current_user_email
 import logging
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
@@ -55,7 +58,7 @@ def update_system_setting(key: str):
     return jsonify({
         "key": setting.key,
         "value": setting.value,
-        "updated_at": setting.updated_at.isoformat() if setting.updated_at else None,
+        "updated_at": setting.updated_at.isoformat() if setting.updated_at is not None else None,
         "updated_by": setting.updated_by,
     })
 
@@ -310,12 +313,52 @@ def upload_canopy_orders():
     if uploaded_url:
         teams_notified = uploader.send_teams_notification(normalized_orders, uploaded_url)
 
+    updated_orders = 0
+    missing_orders: list[str] = []
+    db = get_db_session()
+    try:
+        sent_by = get_current_user_email() or "system"
+        sent_at = datetime.utcnow().isoformat()
+        request_metadata = {
+            "canopyorders_request_sent_at": sent_at,
+            "canopyorders_request_filename": result.get("filename"),
+            "canopyorders_request_uploaded_url": uploaded_url,
+            "canopyorders_request_sent_by": sent_by,
+        }
+
+        for th in normalized_orders:
+            order = db.query(Order).filter(Order.inflow_order_id == th).first()
+            if not order:
+                missing_orders.append(th)
+                continue
+
+            tag_data = dict(cast(dict[str, Any], getattr(order, "tag_data", None) or {}))
+            changed = False
+            for key, value in request_metadata.items():
+                if key in tag_data:
+                    continue
+                tag_data[key] = value
+                changed = True
+
+            if not changed:
+                continue
+
+            setattr(order, "tag_data", tag_data)
+            updated_orders += 1
+
+        if updated_orders:
+            db.commit()
+    finally:
+        db.close()
+
     return jsonify({
         "success": True,
         "filename": result.get("filename"),
         "uploaded_url": uploaded_url,
         "count": len(normalized_orders),
         "teams_notified": teams_notified,
+        "updated_orders": updated_orders,
+        "missing_orders": missing_orders,
     })
 
 

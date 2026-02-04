@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useId, useMemo, useState } from "react";
+import { useState } from "react";
 import {
   AuditLog,
   OrderDetail as OrderDetailType,
@@ -11,7 +11,6 @@ import { formatToCentralTime } from "../utils/timezone";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Checkbox } from "./ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import {
   Dialog,
@@ -38,7 +37,6 @@ interface OrderDetailProps {
   onStatusChange: (newStatus: OrderStatus, reason?: string) => void;
   onRetryNotification: () => void;
   onTagOrder: (tagIds: string[]) => Promise<void>;
-  onStartTagRequest: () => Promise<void>;
   onGeneratePicklist: () => void;
 }
 
@@ -48,54 +46,16 @@ export default function OrderDetail({
   notifications,
   onRetryNotification,
   onTagOrder,
-  onStartTagRequest,
   onGeneratePicklist,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
-  const [tagRequestDialogOpen, setTagRequestDialogOpen] = useState(false);
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
-  const [serialsConfirmed, setSerialsConfirmed] = useState(false);
-  const [tagRequesting, setTagRequesting] = useState(false);
   const [tagConfirming, setTagConfirming] = useState(false);
 
-  const assetTagSerials = useMemo(
-    () => order.asset_tag_serials || [],
-    [order.asset_tag_serials]
-  );
-  const serialsConfirmedId = useId();
-
-  const tagRequestSentAt = order.tag_data?.tag_request_sent_at;
-  const tagRequestStatus = order.tag_data?.tag_request_status;
-  const tagRequestSent = Boolean(tagRequestSentAt || tagRequestStatus === "sent");
-
-  const handleTagging = () => {
-    setTagRequestDialogOpen(true);
-  };
-
-  const resetTagDialog = () => {
-    setSerialsConfirmed(false);
-  };
-
-  const handleTagDialogOpenChange = (open: boolean) => {
-    setTagRequestDialogOpen(open);
-    if (!open) {
-      resetTagDialog();
-    }
-  };
-
-  const handleTagRequestSubmit = async () => {
-    setTagRequesting(true);
-    try {
-      await onStartTagRequest();
-      handleTagDialogOpenChange(false);
-      setTagPrintedDialogOpen(true);
-    } catch (error) {
-      console.error("Failed to send tag request:", error);
-      toast.error("Failed to send tag request");
-    } finally {
-      setTagRequesting(false);
-    }
-  };
+  const requestSentAt =
+    order.tag_data?.canopyorders_request_sent_at || order.tag_data?.tag_request_sent_at;
+  const requestSentBy = order.tag_data?.canopyorders_request_sent_by;
+  const requestSent = Boolean(requestSentAt || order.tag_data?.tag_request_status === "sent");
 
   const handleTagPrintedConfirm = async () => {
     setTagConfirming(true);
@@ -194,35 +154,32 @@ export default function OrderDetail({
                 <p className="text-sm text-muted-foreground">
                   {order.tagged_at
                     ? `Completed ${formatToCentralTime(order.tagged_at)}`
-                    : tagRequestSentAt
-                      ? `Requested ${formatToCentralTime(tagRequestSentAt)}`
+                    : requestSentAt
+                      ? `Requested ${formatToCentralTime(requestSentAt)}`
                       : "Pending"}
                 </p>
-                {tagRequestSent && !order.tagged_at && (
+                {requestSent && !order.tagged_at && requestSentBy && (
                   <p className="text-xs text-muted-foreground">
-                    Tag request sent. Waiting on printed tags.
+                    Requested by {requestSentBy}
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={handleTagging}
-                  disabled={Boolean(order.tagged_at) || tagRequestSent}
+                  asChild
                   size="sm"
                 >
-                  {order.tagged_at
-                    ? "Tagged"
-                    : tagRequestSent
-                      ? "Request Sent"
-                      : "Request Tags"}
+                  <Link to="/tag-request">
+                    {requestSent ? "Open Tag Request" : "Request Tags"}
+                  </Link>
                 </Button>
-                {!order.tagged_at && tagRequestSent && (
+                {!order.tagged_at && requestSent && (
                   <Button
                     onClick={() => setTagPrintedDialogOpen(true)}
                     variant="secondary"
                     size="sm"
                   >
-                    Confirm Tags Printed
+                    Mark Tagged
                   </Button>
                 )}
               </div>
@@ -414,78 +371,15 @@ export default function OrderDetail({
         </Card>
       )}
 
-      <Dialog open={tagRequestDialogOpen} onOpenChange={handleTagDialogOpenChange}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Send Tag Request</DialogTitle>
-            <DialogDescription>
-              Confirm the serials match the devices in this order before requesting tags.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-card">
-              <div className="border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground">
-                Device Serials
-              </div>
-              <div className="max-h-56 space-y-3 overflow-y-auto px-4 py-3 text-sm">
-                {assetTagSerials.length === 0 ? (
-                  <p className="text-muted-foreground">
-                    No laptop/desktop/AIO serials were found from inflow. Verify devices manually.
-                  </p>
-                ) : (
-                  assetTagSerials.map((item) => (
-                    <div key={item.product_id || item.product_name}>
-                      <p className="font-medium text-foreground">
-                        {item.product_name}
-                        {item.category_name ? ` (${item.category_name})` : ""}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {(item.serials || []).length > 0
-                          ? (item.serials || []).join(", ")
-                          : "No serials found"}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id={serialsConfirmedId}
-                checked={serialsConfirmed}
-                onChange={(event) => setSerialsConfirmed(event.target.checked)}
-                className="mt-1"
-              />
-              <label
-                htmlFor={serialsConfirmedId}
-                className="select-none text-sm text-foreground leading-snug"
-              >
-                Serials match the devices in this order.
-              </label>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => handleTagDialogOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleTagRequestSubmit} disabled={!serialsConfirmed || tagRequesting}>
-              {tagRequesting ? "Sending..." : "Send Tag Request"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={tagPrintedDialogOpen} onOpenChange={setTagPrintedDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Tag Request Sent</DialogTitle>
-            <DialogDescription>
-              Have the tags been printed and applied to the devices?
-            </DialogDescription>
+            <DialogTitle>Mark Tagged</DialogTitle>
+            <DialogDescription>Confirm the devices have been tagged for this order.</DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setTagPrintedDialogOpen(false)}>
-              Not yet
+              Cancel
             </Button>
             <Button onClick={handleTagPrintedConfirm} disabled={tagConfirming}>
               {tagConfirming ? "Confirming..." : "Yes, mark tagged"}
