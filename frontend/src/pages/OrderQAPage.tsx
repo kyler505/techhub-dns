@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { Order } from "../types/order";
 import { ordersApi } from "../api/orders";
@@ -84,7 +85,7 @@ export default function OrderQAPage() {
             initializeForm(data);
         } catch (error) {
             console.error("Failed to load order:", error);
-            alert("Failed to load order details.");
+            toast.error("Failed to load order details.");
             navigate("/order-qa");
         } finally {
             setLoading(false);
@@ -122,7 +123,7 @@ export default function OrderQAPage() {
         if (!order) return;
 
         if (!isFormComplete(form)) {
-            alert("Please complete all required QA fields before submitting.");
+            toast.error("Please complete all required QA fields before submitting.");
             return;
         }
 
@@ -147,11 +148,11 @@ export default function OrderQAPage() {
             };
             localStorage.setItem(storageKey(order.id), JSON.stringify(payload));
 
-            alert("QA checklist submitted successfully!");
+            toast.success("QA checklist submitted successfully!");
             navigate("/order-qa"); // Go back to dashboard
         } catch (error) {
             console.error("Failed to submit QA:", error);
-            alert("Failed to submit QA checklist. Please try again.");
+            toast.error("Failed to submit QA checklist. Please try again.");
         }
     };
 
