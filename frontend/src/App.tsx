@@ -58,7 +58,7 @@ function AppContent() {
 				<Sidebar />
 
 				<main className="ml-[var(--sidebar-width)] min-h-screen transition-[margin] duration-300">
-					<div className="sticky top-0 z-30 h-12 sm:h-14 lg:h-16 bg-background/80 backdrop-blur-sm border-b border-border">
+					<div className="sticky top-0 z-30 h-11 sm:h-12 bg-background/80 backdrop-blur-sm border-b border-border">
 						<div className="h-full flex items-center px-6 lg:px-8">
 							<Breadcrumbs />
 						</div>

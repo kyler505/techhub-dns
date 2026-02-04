@@ -12,6 +12,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Checkbox } from "./ui/checkbox";
+import { ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -397,10 +398,11 @@ export default function OrderDetail({
 
       {order.inflow_data && (
         <Card>
-          <details>
-            <summary className="cursor-pointer select-none">
-              <CardHeader>
+          <details className="group">
+            <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+              <CardHeader className="relative pr-10">
                 <CardTitle className="text-xl">Inflow Data</CardTitle>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-transform group-open:rotate-180" />
               </CardHeader>
             </summary>
             <CardContent>
