@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { formatToCentralTime } from "../utils/timezone";
 
 type TagRequestCandidate = {
     id: string;
@@ -302,7 +301,6 @@ export default function TagRequest() {
                                                 <TableHead className="w-10" />
                                                 <TableHead>Order</TableHead>
                                                 <TableHead>Recipient</TableHead>
-                                                <TableHead className="text-right">Picklist</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -310,9 +308,25 @@ export default function TagRequest() {
                                                 const inflowOrderId = candidate.inflow_order_id;
                                                 const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
                                                 const disabled = !inflowOrderId;
+                                                const selectable = Boolean(inflowOrderId);
 
                                                 return (
-                                                    <TableRow key={candidate.id} data-state={checked ? "selected" : undefined}>
+                                                    <TableRow
+                                                        key={candidate.id}
+                                                        data-state={checked ? "selected" : undefined}
+                                                        className={selectable ? "cursor-pointer hover:bg-muted/30" : undefined}
+                                                        tabIndex={selectable ? 0 : undefined}
+                                                        onClick={() => {
+                                                            if (!inflowOrderId) return;
+                                                            toggleCandidateSelected(inflowOrderId, !checked);
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                            if (!inflowOrderId) return;
+                                                            if (event.key !== "Enter" && event.key !== " ") return;
+                                                            event.preventDefault();
+                                                            toggleCandidateSelected(inflowOrderId, !checked);
+                                                        }}
+                                                    >
                                                         <TableCell className="w-10">
                                                             <Checkbox
                                                                 checked={checked}
@@ -322,6 +336,7 @@ export default function TagRequest() {
                                                                         ? `Select ${inflowOrderId}`
                                                                         : "Select candidate"
                                                                 }
+                                                                onClick={(event) => event.stopPropagation()}
                                                                 onChange={(event) => {
                                                                     if (!inflowOrderId) return;
                                                                     toggleCandidateSelected(inflowOrderId, event.target.checked);
@@ -351,11 +366,6 @@ export default function TagRequest() {
                                                                     </p>
                                                                 ) : null}
                                                             </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-right text-xs text-muted-foreground">
-                                                            {candidate.picklist_generated_at
-                                                                ? formatToCentralTime(candidate.picklist_generated_at)
-                                                                : "Pending"}
                                                         </TableCell>
                                                     </TableRow>
                                                 );
