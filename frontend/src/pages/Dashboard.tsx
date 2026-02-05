@@ -249,7 +249,6 @@ export default function Dashboard() {
       >
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-sm text-slate-500">Live operational snapshot and delivery performance.</p>
         </div>
         <div className="flex items-center gap-2">
           {(error || socketStatus === "disconnected") && (
