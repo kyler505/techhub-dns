@@ -37,6 +37,7 @@ interface OrderDetailProps {
   onStatusChange: (newStatus: OrderStatus, reason?: string) => void;
   onRetryNotification: () => void;
   onTagOrder: (tagIds: string[]) => Promise<void>;
+  onRequestTags: () => Promise<void>;
   onGeneratePicklist: () => void;
 }
 
@@ -46,16 +47,35 @@ export default function OrderDetail({
   notifications,
   onRetryNotification,
   onTagOrder,
+  onRequestTags,
   onGeneratePicklist,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
   const [tagConfirming, setTagConfirming] = useState(false);
+  const [requestingTags, setRequestingTags] = useState(false);
 
   const requestSentAt =
     order.tag_data?.canopyorders_request_sent_at || order.tag_data?.tag_request_sent_at;
   const requestSentBy = order.tag_data?.canopyorders_request_sent_by;
   const requestSent = Boolean(requestSentAt || order.tag_data?.tag_request_status === "sent");
+
+  const canRequestTags =
+    order.status === OrderStatus.PICKED &&
+    !order.tagged_at &&
+    !requestSent &&
+    Boolean(order.inflow_order_id);
+
+  const handleRequestTags = async () => {
+    if (!canRequestTags) return;
+
+    setRequestingTags(true);
+    try {
+      await onRequestTags();
+    } finally {
+      setRequestingTags(false);
+    }
+  };
 
   const handleTagPrintedConfirm = async () => {
     setTagConfirming(true);
@@ -63,7 +83,6 @@ export default function OrderDetail({
       await onTagOrder([]);
       setTagPrintedDialogOpen(false);
     } catch (error) {
-      console.error("Failed to confirm tagging:", error);
       toast.error("Failed to confirm tags printed");
     } finally {
       setTagConfirming(false);
@@ -165,14 +184,19 @@ export default function OrderDetail({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  asChild
-                  size="sm"
-                >
-                  <Link to="/tag-request">
-                    {requestSent ? "Open Tag Request" : "Request Tags"}
-                  </Link>
-                </Button>
+                {requestSent ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/tag-request">Open Tag Request</Link>
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => void handleRequestTags()}
+                    disabled={!canRequestTags || requestingTags}
+                    size="sm"
+                  >
+                    {requestingTags ? "Requesting..." : "Request Tags"}
+                  </Button>
+                )}
                 {!order.tagged_at && requestSent && (
                   <Button
                     onClick={() => setTagPrintedDialogOpen(true)}

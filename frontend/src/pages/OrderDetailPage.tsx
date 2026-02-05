@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { OrderDetail, OrderStatus, AuditLog, TeamsNotification } from "../types/order";
 import { ordersApi } from "../api/orders";
+import { settingsApi } from "../api/settings";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
@@ -129,6 +130,27 @@ export default function OrderDetailPage() {
         }
     };
 
+    const handleRequestTags = async () => {
+        if (!order) return;
+        const inflowOrderId = order.inflow_order_id;
+        if (!inflowOrderId) {
+            toast.error("Order is missing an inflow order id");
+            return;
+        }
+
+        try {
+            const result = await settingsApi.uploadCanopyOrders([inflowOrderId]);
+            if (!result.success) {
+                toast.error(result.error || "Failed to request tags");
+                return;
+            }
+            await loadOrder();
+        } catch (error: any) {
+            const message = error?.response?.data?.error || "Failed to request tags";
+            toast.error(message);
+        }
+    };
+
 
     if (loading) {
         return <div className="p-4">Loading...</div>;
@@ -153,6 +175,7 @@ export default function OrderDetailPage() {
                 onStatusChange={handleStatusChange}
                 onRetryNotification={handleRetryNotification}
                 onTagOrder={handleTagOrder}
+                onRequestTags={handleRequestTags}
                 onGeneratePicklist={handleGeneratePicklist}
             />
             {transitioningStatus && (
