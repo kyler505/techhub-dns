@@ -5,8 +5,8 @@ import { settingsApi } from "../api/settings";
 import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { formatToCentralTime } from "../utils/timezone";
@@ -54,6 +54,29 @@ const normalizeOrderInput = (value: string): NormalizeOrderResult => {
     return { normalized: `TH${digits}` };
 };
 
+const parseStringArray = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) return undefined;
+    const next = value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    return next.length > 0 ? next : [];
+};
+
+const parseIneligibleOrders = (value: unknown): Array<{ order: string; reason: string }> | undefined => {
+    if (!Array.isArray(value)) return undefined;
+    const next: Array<{ order: string; reason: string }> = [];
+    for (const item of value) {
+        if (!item || typeof item !== "object") continue;
+        const record = item as Record<string, unknown>;
+        const order = typeof record.order === "string" ? record.order.trim() : "";
+        const reason = typeof record.reason === "string" ? record.reason.trim() : "";
+        if (!order || !reason) continue;
+        next.push({ order, reason });
+    }
+    return next.length > 0 ? next : [];
+};
+
 type StatusState = {
     type: "success" | "error";
     message: string;
@@ -63,6 +86,8 @@ type StatusState = {
     teamsNotified?: boolean;
     updatedOrders?: number;
     missingOrders?: string[];
+    eligibleOrders?: string[];
+    ineligibleOrders?: Array<{ order: string; reason: string }>;
 };
 
 export default function TagRequest() {
@@ -277,6 +302,8 @@ export default function TagRequest() {
                     teamsNotified: response.teams_notified,
                     updatedOrders: response.updated_orders,
                     missingOrders: response.missing_orders,
+                    eligibleOrders: response.eligible_orders,
+                    ineligibleOrders: response.ineligible_orders,
                 });
                 void loadCandidates();
             } else {
@@ -286,9 +313,19 @@ export default function TagRequest() {
                 });
             }
         } catch (err: any) {
+            const responseData = err?.response?.data as unknown;
+            const record = responseData && typeof responseData === "object" ? (responseData as Record<string, unknown>) : null;
+
+            const missingOrders = parseStringArray(record?.missing_orders);
+            const ineligibleOrders = parseIneligibleOrders(record?.ineligible_orders);
+            const backendError = typeof record?.error === "string" && record.error.trim() ? record.error.trim() : null;
+
             setStatus({
                 type: "error",
-                message: err?.response?.data?.error || "Upload failed.",
+                message: backendError || "Upload failed.",
+                missingOrders,
+                ineligibleOrders,
+                eligibleOrders: parseStringArray(record?.eligible_orders),
             });
         } finally {
             setSubmitting(false);
@@ -299,7 +336,6 @@ export default function TagRequest() {
         <div className="container mx-auto py-6 space-y-6">
             <div className="space-y-1">
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tag Request</h1>
-                <p className="text-sm text-muted-foreground">Legacy Canopy orders uploader for tag request batches.</p>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr_0.8fr]">
@@ -308,9 +344,6 @@ export default function TagRequest() {
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <CardTitle className="text-base">Candidates</CardTitle>
-                                <CardDescription>
-                                    Picked + untagged orders that have not been sent in a Canopy batch.
-                                </CardDescription>
                             </div>
                             <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
                                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -474,7 +507,6 @@ export default function TagRequest() {
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <CardTitle className="text-base">Batch builder</CardTitle>
-                                <CardDescription>Enter 4-digit order numbers (TH prefix optional).</CardDescription>
                             </div>
                             <Button
                                 type="button"
@@ -585,14 +617,10 @@ export default function TagRequest() {
                 <Card className="self-start lg:sticky lg:top-6">
                     <CardHeader>
                         <CardTitle className="text-base">Upload summary</CardTitle>
-                        <CardDescription>Review and submit the orders list.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
                             <p className="text-foreground font-medium">{orderCount} orders ready</p>
-                            <p className="mt-1">
-                                Creates legacy JSON file: <span className="font-mono">canopyorders_YYYY-MM-DD_HH-MM-SS.json</span>
-                            </p>
                         </div>
 
                         {status ? (
@@ -619,6 +647,23 @@ export default function TagRequest() {
                                 ) : null}
                                 {typeof status.updatedOrders === "number" ? (
                                     <p className="mt-1 text-xs">Updated local orders: {status.updatedOrders}</p>
+                                ) : null}
+                                {status.ineligibleOrders && status.ineligibleOrders.length > 0 ? (
+                                    <div className="mt-2 space-y-1">
+                                        <p className="text-xs font-medium">Ineligible</p>
+                                        <ul className="flex flex-wrap gap-1">
+                                            {status.ineligibleOrders.map(({ order, reason }) => (
+                                                <li key={`${order}:${reason}`}>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="whitespace-nowrap border-destructive/40 text-destructive"
+                                                    >
+                                                        {order} ({reason})
+                                                    </Badge>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                 ) : null}
                                 {status.missingOrders && status.missingOrders.length > 0 ? (
                                     <div className="mt-2 space-y-1">
@@ -669,9 +714,6 @@ export default function TagRequest() {
                 >
                     <DialogHeader>
                         <DialogTitle>Upload orders to Canopy?</DialogTitle>
-                        <DialogDescription>
-                            This will upload {orderCount} order(s) to the legacy WebDAV endpoint and notify Teams.
-                        </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button
