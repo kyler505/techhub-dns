@@ -130,11 +130,6 @@ export default function TagRequest() {
         setStatus(null);
     };
 
-    const truncateForErrorMessage = (value: string, maxLen = 120) => {
-        if (value.length <= maxLen) return value;
-        return `${value.slice(0, maxLen)}...`;
-    };
-
     const loadCandidates = async () => {
         setCandidatesLoading(true);
         setCandidatesError(null);
@@ -142,24 +137,8 @@ export default function TagRequest() {
             const result = (await ordersApi.getTagRequestCandidates({ limit: 1000 })) as unknown;
 
             if (!Array.isArray(result)) {
-                const resultType = result === null ? "null" : typeof result;
-                let extraDetail = "";
-
-                if (typeof result === "string") {
-                    const preview = truncateForErrorMessage(result, 120);
-                    const trimmedStart = result.trimStart().slice(0, 20).toLowerCase();
-                    const looksLikeHtml = trimmedStart.startsWith("<!doctype") || trimmedStart.startsWith("<html");
-                    extraDetail = ` Response preview: ${JSON.stringify(preview)}.${looksLikeHtml ? " Hint: Looks like HTML." : ""}`;
-                } else if (result && typeof result === "object") {
-                    const keys = Object.keys(result as Record<string, unknown>);
-                    const shownKeys = keys.slice(0, 12);
-                    extraDetail = ` Keys: ${shownKeys.join(", ")}${keys.length > shownKeys.length ? ", ..." : ""}.`;
-                }
-
                 setCandidates([]);
-                setCandidatesError(
-                    `Unexpected candidates response: expected an array, got ${resultType}.${extraDetail} Please refresh or contact support.`
-                );
+                setCandidatesError("Failed to load picked orders. Please refresh.");
                 return;
             }
 
@@ -168,19 +147,12 @@ export default function TagRequest() {
                 .filter((candidate): candidate is TagRequestCandidate => candidate !== null);
             setCandidates(parsed);
         } catch (err: any) {
-            const responseData = err?.response?.data;
-            if (typeof responseData === "string") {
-                const status = err?.response?.status;
-                const preview = truncateForErrorMessage(responseData, 120);
-                setCandidatesError(
-                    `Failed to load picked orders (HTTP ${typeof status === "number" ? status : "unknown"}). Response preview: ${JSON.stringify(
-                        preview
-                    )}.`
-                );
-                return;
-            }
-
-            setCandidatesError(err?.response?.data?.error || "Failed to load picked orders.");
+            const maybeError = err?.response?.data?.error;
+            setCandidatesError(
+                typeof maybeError === "string" && maybeError.trim()
+                    ? maybeError
+                    : "Failed to load picked orders. Please refresh."
+            );
         } finally {
             setCandidatesLoading(false);
         }
