@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardList, Plus, RefreshCw, Trash2, UploadCloud } from "lucide-react";
+import { RefreshCw, UploadCloud } from "lucide-react";
 import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import { Badge } from "../components/ui/badge";
@@ -19,17 +19,13 @@ type TagRequestCandidate = {
     picklist_generated_at?: string;
 };
 
-type NormalizeOrderResult =
-    | { normalized: string; error?: never }
-    | { normalized?: never; error: string };
-
 const parseTagRequestCandidate = (value: unknown): TagRequestCandidate | null => {
     if (!value || typeof value !== "object") return null;
     const record = value as Record<string, unknown>;
 
     const id = typeof record.id === "string" ? record.id.trim() : "";
     const inflowOrderId = typeof record.inflow_order_id === "string" ? record.inflow_order_id.trim() : "";
-    if (!id || !inflowOrderId) return null;
+    if (!id) return null;
 
     return {
         id,
@@ -38,20 +34,6 @@ const parseTagRequestCandidate = (value: unknown): TagRequestCandidate | null =>
         delivery_location: typeof record.delivery_location === "string" ? record.delivery_location : undefined,
         picklist_generated_at: typeof record.picklist_generated_at === "string" ? record.picklist_generated_at : undefined,
     };
-};
-
-const normalizeOrderInput = (value: string): NormalizeOrderResult => {
-    const compact = value.trim().toUpperCase().replace(/\s+/g, "");
-    if (!compact) {
-        return { error: "Enter a 4-digit order number." };
-    }
-
-    const digits = compact.startsWith("TH") ? compact.slice(2) : compact;
-    if (!/^\d{4}$/.test(digits)) {
-        return { error: "Order number must be 4 digits (e.g., 1234 or TH1234)." };
-    }
-
-    return { normalized: `TH${digits}` };
 };
 
 const parseStringArray = (value: unknown): string[] | undefined => {
@@ -91,9 +73,6 @@ type StatusState = {
 };
 
 export default function TagRequest() {
-    const [orderInput, setOrderInput] = useState("");
-    const [orders, setOrders] = useState<string[]>([]);
-    const [error, setError] = useState<string | null>(null);
     const [status, setStatus] = useState<StatusState | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -105,14 +84,9 @@ export default function TagRequest() {
     const [candidatesSearch, setCandidatesSearch] = useState("");
     const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
-    const [bulkPasteValue, setBulkPasteValue] = useState("");
-    const [bulkPasteResult, setBulkPasteResult] = useState<string | null>(null);
-
-    const orderCount = orders.length;
+    const selectedCount = selectedCandidates.length;
 
     const safeCandidates = candidates;
-
-    const ordersSet = useMemo(() => new Set(orders), [orders]);
 
     const selectedCandidateSet = useMemo(() => new Set(selectedCandidates), [selectedCandidates]);
 
@@ -127,19 +101,13 @@ export default function TagRequest() {
         });
     }, [safeCandidates, candidatesSearch]);
 
-    const isInBatch = useMemo(() => {
-        return (value: string) => {
-            const compact = value.trim().toUpperCase();
-            if (!compact) return false;
-            if (ordersSet.has(compact)) return true;
-            const normalized = normalizeOrderInput(compact);
-            return "error" in normalized ? false : ordersSet.has(normalized.normalized);
-        };
-    }, [ordersSet]);
-
-    useEffect(() => {
-        setSelectedCandidates((prev) => prev.filter((candidateId) => !isInBatch(candidateId)));
-    }, [isInBatch]);
+    const selectableVisibleCount = useMemo(() => {
+        let count = 0;
+        for (const candidate of filteredCandidates) {
+            if (candidate.inflow_order_id) count += 1;
+        }
+        return count;
+    }, [filteredCandidates]);
 
     const statusStyles = useMemo(() => {
         if (!status) return null;
@@ -148,34 +116,9 @@ export default function TagRequest() {
             : "border-destructive/20 bg-destructive/5 text-destructive";
     }, [status]);
 
-    const handleAddOrder = () => {
-        const result = normalizeOrderInput(orderInput);
-        if ("error" in result) {
-            setError(result.error ?? "Enter a 4-digit order number.");
-            return;
-        }
-
-        const normalizedOrder = result.normalized;
-
-        if (orders.includes(normalizedOrder)) {
-            setError(`Order ${normalizedOrder} is already in the list.`);
-            return;
-        }
-
-        setOrders((prev) => [...prev, normalizedOrder]);
-        setOrderInput("");
-        setError(null);
-        setBulkPasteResult(null);
-    };
-
-    const handleRemoveOrder = (orderNumber: string) => {
-        setOrders((prev) => prev.filter((order) => order !== orderNumber));
-    };
-
-    const handleClearOrders = () => {
-        setOrders([]);
+    const handleClearSelection = () => {
+        setSelectedCandidates([]);
         setStatus(null);
-        setBulkPasteResult(null);
     };
 
     const loadCandidates = async () => {
@@ -194,6 +137,11 @@ export default function TagRequest() {
                 .map(parseTagRequestCandidate)
                 .filter((candidate): candidate is TagRequestCandidate => candidate !== null);
             setCandidates(parsed);
+            setSelectedCandidates((prev) => {
+                if (prev.length === 0) return prev;
+                const present = new Set(parsed.map((candidate) => candidate.inflow_order_id).filter(Boolean));
+                return prev.filter((candidateId) => present.has(candidateId));
+            });
         } catch (err: any) {
             const maybeError = err?.response?.data?.error;
             setCandidatesError(
@@ -219,79 +167,14 @@ export default function TagRequest() {
         });
     };
 
-    const handleAddSelectedCandidates = () => {
-        if (selectedCandidates.length === 0) return;
-
-        const normalizedSelected: string[] = [];
-        for (const inflowOrderId of selectedCandidates) {
-            const normalized = normalizeOrderInput(inflowOrderId);
-            if ("error" in normalized) continue;
-            normalizedSelected.push(normalized.normalized);
-        }
-
-        if (normalizedSelected.length === 0) return;
-
-        setOrders((prev) => {
-            const existing = new Set(prev);
-            const next = [...prev];
-            for (const th of normalizedSelected) {
-                if (existing.has(th)) continue;
-                existing.add(th);
-                next.push(th);
-            }
-            return next;
-        });
-        setSelectedCandidates([]);
-        setError(null);
-        setBulkPasteResult(null);
-    };
-
-    const handleAddBulkPaste = () => {
-        const raw = bulkPasteValue;
-        const tokens = raw
-            .split(/[\s,]+/g)
-            .map((token) => token.trim())
-            .filter(Boolean);
-
-        if (tokens.length === 0) {
-            setBulkPasteValue("");
-            setBulkPasteResult("Added 0, 0 duplicates, 0 invalid");
-            return;
-        }
-
-        const toAdd: string[] = [];
-        const seen = new Set<string>(orders);
-        let duplicates = 0;
-        let invalid = 0;
-
-        for (const token of tokens) {
-            const normalized = normalizeOrderInput(token);
-            if ("error" in normalized) {
-                invalid += 1;
-                continue;
-            }
-            if (seen.has(normalized.normalized)) {
-                duplicates += 1;
-                continue;
-            }
-            seen.add(normalized.normalized);
-            toAdd.push(normalized.normalized);
-        }
-
-        if (toAdd.length > 0) {
-            setOrders((prev) => [...prev, ...toAdd]);
-        }
-
-        setBulkPasteValue("");
-        setBulkPasteResult(`Added ${toAdd.length}, ${duplicates} duplicates, ${invalid} invalid`);
-        setError(null);
-    };
-
     const handleUpload = async () => {
+        const ordersToUpload = Array.from(new Set(selectedCandidates)).filter(Boolean);
+        if (ordersToUpload.length === 0) return;
+
         setSubmitting(true);
         setStatus(null);
         try {
-            const response = await settingsApi.uploadCanopyOrders(orders);
+            const response = await settingsApi.uploadCanopyOrders(ordersToUpload);
             if (response.success) {
                 setStatus({
                     type: "success",
@@ -305,6 +188,7 @@ export default function TagRequest() {
                     eligibleOrders: response.eligible_orders,
                     ineligibleOrders: response.ineligible_orders,
                 });
+                setSelectedCandidates([]);
                 void loadCandidates();
             } else {
                 setStatus({
@@ -338,12 +222,12 @@ export default function TagRequest() {
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tag Request</h1>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr_0.8fr]">
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                 <Card>
                     <CardHeader>
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <CardTitle className="text-base">Candidates</CardTitle>
+                                <CardTitle className="text-base">Batch Builder</CardTitle>
                             </div>
                             <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
                                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -363,7 +247,7 @@ export default function TagRequest() {
                                     />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Selected {selectedCandidates.length}</span>
+                                    <span className="text-xs text-muted-foreground">Selected {selectedCount}</span>
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -374,13 +258,12 @@ export default function TagRequest() {
                                                 for (const candidate of filteredCandidates) {
                                                     const inflowOrderId = candidate.inflow_order_id;
                                                     if (!inflowOrderId) continue;
-                                                    if (isInBatch(inflowOrderId)) continue;
                                                     next.add(inflowOrderId);
                                                 }
                                                 return Array.from(next);
                                             });
                                         }}
-                                        disabled={filteredCandidates.length === 0}
+                                        disabled={selectableVisibleCount === 0}
                                     >
                                         Select all visible
                                     </Button>
@@ -389,28 +272,13 @@ export default function TagRequest() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => setSelectedCandidates([])}
-                                        disabled={selectedCandidates.length === 0}
+                                        disabled={selectedCount === 0}
                                     >
                                         Clear selection
                                     </Button>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={handleAddSelectedCandidates}
-                                        disabled={selectedCandidates.length === 0}
-                                        className="btn-lift"
-                                    >
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Add selected
-                                    </Button>
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span>
-                                    Showing {filteredCandidates.length} of {safeCandidates.length}
-                                </span>
-                                {candidatesLoading ? <span>Loading...</span> : null}
-                            </div>
+                            {candidatesLoading ? <div className="text-xs text-muted-foreground">Loading...</div> : null}
                         </div>
 
                         {candidatesLoading && safeCandidates.length === 0 ? (
@@ -440,9 +308,8 @@ export default function TagRequest() {
                                         <TableBody>
                                             {filteredCandidates.map((candidate) => {
                                                 const inflowOrderId = candidate.inflow_order_id;
-                                                const inBatch = inflowOrderId ? isInBatch(inflowOrderId) : false;
                                                 const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
-                                                const disabled = !inflowOrderId || inBatch;
+                                                const disabled = !inflowOrderId;
 
                                                 return (
                                                     <TableRow key={candidate.id} data-state={checked ? "selected" : undefined}>
@@ -457,7 +324,6 @@ export default function TagRequest() {
                                                                 }
                                                                 onChange={(event) => {
                                                                     if (!inflowOrderId) return;
-                                                                    if (inBatch) return;
                                                                     toggleCandidateSelected(inflowOrderId, event.target.checked);
                                                                 }}
                                                             />
@@ -465,11 +331,11 @@ export default function TagRequest() {
                                                         <TableCell>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-medium text-foreground">
-                                                                    {candidate.inflow_order_id}
+                                                                    {candidate.inflow_order_id || "-"}
                                                                 </span>
-                                                                {inBatch ? (
+                                                                {checked ? (
                                                                     <Badge variant="secondary" className="whitespace-nowrap">
-                                                                        In batch
+                                                                        Selected
                                                                     </Badge>
                                                                 ) : null}
                                                             </div>
@@ -502,125 +368,13 @@ export default function TagRequest() {
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <CardTitle className="text-base">Batch builder</CardTitle>
-                            </div>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleClearOrders}
-                                disabled={orders.length === 0}
-                            >
-                                Clear batch
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-3">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <div className="flex-1">
-                                    <Input
-                                        placeholder="1234 or TH1234"
-                                        value={orderInput}
-                                        onChange={(event) => {
-                                            setOrderInput(event.target.value);
-                                            if (error) setError(null);
-                                        }}
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter") {
-                                                event.preventDefault();
-                                                handleAddOrder();
-                                            }
-                                        }}
-                                        aria-label="Add a single order"
-                                    />
-                                </div>
-                                <Button type="button" onClick={handleAddOrder} className="btn-lift">
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add
-                                </Button>
-                            </div>
-                            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-                            <div className="space-y-2">
-                                <textarea
-                                    value={bulkPasteValue}
-                                    onChange={(event) => setBulkPasteValue(event.target.value)}
-                                    placeholder="Paste orders: 1234, TH2345, 3456 (comma / space / newline separated)"
-                                    className="min-h-[6.5rem] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                    aria-label="Paste multiple orders"
-                                />
-                                <div className="flex items-center justify-between gap-3">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleAddBulkPaste}
-                                        disabled={bulkPasteValue.trim().length === 0}
-                                    >
-                                        Add pasted
-                                    </Button>
-                                    <span className="text-xs text-muted-foreground">{orderCount} total</span>
-                                </div>
-                                {bulkPasteResult ? (
-                                    <p className="text-xs text-muted-foreground">{bulkPasteResult}</p>
-                                ) : null}
-                            </div>
-                        </div>
-
-                        {orders.length === 0 ? (
-                            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-                                No orders added yet.
-                            </div>
-                        ) : (
-                            <div className="rounded-lg border bg-card">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Order</TableHead>
-                                            <TableHead className="w-12" />
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {orders.map((order) => (
-                                            <TableRow key={order}>
-                                                <TableCell className="py-2">
-                                                    <div className="flex items-center gap-2 text-foreground">
-                                                        <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                                                        <span className="font-medium">{order}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="py-2 text-right">
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleRemoveOrder(order)}
-                                                        aria-label={`Remove ${order}`}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
                 <Card className="self-start lg:sticky lg:top-6">
                     <CardHeader>
                         <CardTitle className="text-base">Upload summary</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                            <p className="text-foreground font-medium">{orderCount} orders ready</p>
+                            <p className="text-foreground font-medium">{selectedCount} selected</p>
                         </div>
 
                         {status ? (
@@ -686,15 +440,15 @@ export default function TagRequest() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={handleClearOrders}
-                                disabled={orders.length === 0}
+                                onClick={handleClearSelection}
+                                disabled={selectedCount === 0}
                             >
-                                Clear batch
+                                Clear selection
                             </Button>
                             <Button
                                 type="button"
                                 onClick={() => setConfirmOpen(true)}
-                                disabled={orders.length === 0 || submitting}
+                                disabled={selectedCount === 0 || submitting}
                                 className="btn-lift"
                             >
                                 <UploadCloud className="mr-2 h-4 w-4" />
