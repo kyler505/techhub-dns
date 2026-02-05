@@ -233,6 +233,10 @@ def api_root():
 @app.route('/<path:path>')
 def serve_frontend(path):
     """Serve React frontend. Falls back to index.html for client-side routing."""
+    # Don't return SPA HTML for missing API endpoints.
+    if path == 'api' or path.startswith('api/'):
+        return jsonify({"error": "Not found"}), 404
+
     # Check if frontend dist exists (production mode)
     if os.path.exists(FRONTEND_DIST_PATH):
         # Serve static assets (js, css, images, etc.)
