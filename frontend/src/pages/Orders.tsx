@@ -130,7 +130,6 @@ export default function Orders() {
         <div className="container mx-auto py-6 space-y-4">
             <div className="space-y-1">
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
-                <p className="text-sm text-muted-foreground">Manage operational orders across all workflow stages.</p>
             </div>
 
             <Card>

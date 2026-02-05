@@ -5,7 +5,6 @@ export default function Shipping() {
         <div className="container mx-auto py-6 space-y-6">
             <div className="space-y-2">
                 <h1 className="text-2xl font-bold tracking-tight">Shipping</h1>
-                <p className="text-sm text-slate-500">Track outbound shipments and handoffs.</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
