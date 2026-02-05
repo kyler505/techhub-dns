@@ -83,7 +83,12 @@ export default function TagRequest() {
     const [candidatesSearch, setCandidatesSearch] = useState("");
     const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
-    const selectedCount = selectedCandidates.length;
+    const selectedOrders = useMemo(
+        () => Array.from(new Set(selectedCandidates)).filter(Boolean).sort(),
+        [selectedCandidates]
+    );
+
+    const selectedCount = selectedOrders.length;
 
     const safeCandidates = candidates;
 
@@ -167,13 +172,12 @@ export default function TagRequest() {
     };
 
     const handleUpload = async () => {
-        const ordersToUpload = Array.from(new Set(selectedCandidates)).filter(Boolean);
-        if (ordersToUpload.length === 0) return;
+        if (selectedOrders.length === 0) return;
 
         setSubmitting(true);
         setStatus(null);
         try {
-            const response = await settingsApi.uploadCanopyOrders(ordersToUpload);
+            const response = await settingsApi.uploadCanopyOrders(selectedOrders);
             if (response.success) {
                 setStatus({
                     type: "success",
@@ -385,6 +389,11 @@ export default function TagRequest() {
                     <CardContent className="space-y-4">
                         <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
                             <p className="text-foreground font-medium">{selectedCount} selected</p>
+                            {selectedCount > 0 ? (
+                                <p className="mt-1 text-xs text-muted-foreground break-words">
+                                    {selectedOrders.join(", ")}
+                                </p>
+                            ) : null}
                         </div>
 
                         {status ? (
