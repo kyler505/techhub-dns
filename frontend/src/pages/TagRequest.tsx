@@ -241,9 +241,9 @@ export default function TagRequest() {
                     <CardContent className="space-y-4">
                         <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <div className="flex-1">
+                                <div className="w-full sm:w-56">
                                     <Input
-                                        placeholder="Search TH#### or recipient"
+                                        placeholder="Search TH####"
                                         value={candidatesSearch}
                                         onChange={(event) => setCandidatesSearch(event.target.value)}
                                         aria-label="Search candidates"
