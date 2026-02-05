@@ -7,12 +7,36 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
-import { Order } from "../types/order";
 import { formatToCentralTime } from "../utils/timezone";
+
+type TagRequestCandidate = {
+    id: string;
+    inflow_order_id: string;
+    recipient_name?: string;
+    delivery_location?: string;
+    picklist_generated_at?: string;
+};
 
 type NormalizeOrderResult =
     | { normalized: string; error?: never }
     | { normalized?: never; error: string };
+
+const parseTagRequestCandidate = (value: unknown): TagRequestCandidate | null => {
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const inflowOrderId = typeof record.inflow_order_id === "string" ? record.inflow_order_id.trim() : "";
+    if (!id || !inflowOrderId) return null;
+
+    return {
+        id,
+        inflow_order_id: inflowOrderId,
+        recipient_name: typeof record.recipient_name === "string" ? record.recipient_name : undefined,
+        delivery_location: typeof record.delivery_location === "string" ? record.delivery_location : undefined,
+        picklist_generated_at: typeof record.picklist_generated_at === "string" ? record.picklist_generated_at : undefined,
+    };
+};
 
 const normalizeOrderInput = (value: string): NormalizeOrderResult => {
     const compact = value.trim().toUpperCase().replace(/\s+/g, "");
@@ -48,7 +72,7 @@ export default function TagRequest() {
     const [submitting, setSubmitting] = useState(false);
     const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
 
-    const [candidates, setCandidates] = useState<Order[]>([]);
+    const [candidates, setCandidates] = useState<TagRequestCandidate[]>([]);
     const [candidatesLoading, setCandidatesLoading] = useState(false);
     const [candidatesError, setCandidatesError] = useState<string | null>(null);
     const [candidatesSearch, setCandidatesSearch] = useState("");
@@ -56,18 +80,20 @@ export default function TagRequest() {
 
     const orderCount = orders.length;
 
+    const safeCandidates = candidates;
+
     const selectedCandidateSet = useMemo(() => new Set(selectedCandidates), [selectedCandidates]);
 
     const filteredCandidates = useMemo(() => {
         const query = candidatesSearch.trim().toLowerCase();
-        if (!query) return candidates;
+        if (!query) return safeCandidates;
 
-        return candidates.filter((candidate) => {
+        return safeCandidates.filter((candidate) => {
             const inflowOrderId = (candidate.inflow_order_id || "").toLowerCase();
             const recipientName = (candidate.recipient_name || "").toLowerCase();
             return inflowOrderId.includes(query) || recipientName.includes(query);
         });
-    }, [candidates, candidatesSearch]);
+    }, [safeCandidates, candidatesSearch]);
 
     const statusStyles = useMemo(() => {
         if (!status) return null;
@@ -108,8 +134,20 @@ export default function TagRequest() {
         setCandidatesLoading(true);
         setCandidatesError(null);
         try {
-            const result = await ordersApi.getTagRequestCandidates({ limit: 1000 });
-            setCandidates(result);
+            const result = (await ordersApi.getTagRequestCandidates({ limit: 1000 })) as unknown;
+
+            if (!Array.isArray(result)) {
+                setCandidates([]);
+                setCandidatesError(
+                    `Unexpected candidates response: expected an array, got ${typeof result}. Please refresh or contact support.`
+                );
+                return;
+            }
+
+            const parsed = result
+                .map(parseTagRequestCandidate)
+                .filter((candidate): candidate is TagRequestCandidate => candidate !== null);
+            setCandidates(parsed);
         } catch (err: any) {
             setCandidatesError(err?.response?.data?.error || "Failed to load picked orders.");
         } finally {
@@ -245,8 +283,9 @@ export default function TagRequest() {
                                 </div>
                             ) : (
                                 <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-1">
-                                    {filteredCandidates.map((candidate) => {
-                                        const checked = selectedCandidateSet.has(candidate.inflow_order_id);
+                                     {filteredCandidates.map((candidate) => {
+                                        const inflowOrderId = candidate.inflow_order_id;
+                                        const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
                                         return (
                                             <div
                                                 key={candidate.id}
@@ -255,12 +294,11 @@ export default function TagRequest() {
                                                 <div className="flex items-start gap-3">
                                                     <Checkbox
                                                         checked={checked}
-                                                        onChange={(event) =>
-                                                            toggleCandidateSelected(
-                                                                candidate.inflow_order_id,
-                                                                event.target.checked
-                                                            )
-                                                        }
+                                                        disabled={!inflowOrderId}
+                                                        onChange={(event) => {
+                                                            if (!inflowOrderId) return;
+                                                            toggleCandidateSelected(inflowOrderId, event.target.checked);
+                                                        }}
                                                         className="mt-0.5"
                                                     />
                                                     <div className="space-y-0.5">
