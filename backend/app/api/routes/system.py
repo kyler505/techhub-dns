@@ -292,15 +292,71 @@ def upload_canopy_orders():
     if not normalized_orders:
         return jsonify({"error": "No orders provided"}), 400
 
+    db = get_db_session()
+    try:
+        db_orders = (
+            db.query(Order)
+            .filter(Order.inflow_order_id.in_(normalized_orders))
+            .all()
+        )
+        orders_by_inflow_id = {order.inflow_order_id: order for order in db_orders}
+
+        eligible_orders: list[str] = []
+        ineligible_orders: list[dict[str, str]] = []
+        missing_orders: list[str] = []
+
+        for th in normalized_orders:
+            order = orders_by_inflow_id.get(th)
+            if not order:
+                missing_orders.append(th)
+                continue
+
+            status_value = (getattr(order, "status", None) or "").strip()
+            if status_value != "picked":
+                ineligible_orders.append({"order": th, "reason": f"status={status_value or 'unknown'}"})
+                continue
+
+            if getattr(order, "tagged_at", None) is not None:
+                ineligible_orders.append({"order": th, "reason": "already tagged"})
+                continue
+
+            raw_tag_data = getattr(order, "tag_data", None) or {}
+            tag_data = raw_tag_data if isinstance(raw_tag_data, dict) else {}
+            already_requested = (
+                bool(tag_data.get("canopyorders_request_sent_at"))
+                or bool(tag_data.get("tag_request_sent_at"))
+                or tag_data.get("tag_request_status") == "sent"
+            )
+            if already_requested:
+                ineligible_orders.append({"order": th, "reason": "already requested"})
+                continue
+
+            eligible_orders.append(th)
+
+        if missing_orders or ineligible_orders:
+            return (
+                jsonify(
+                    {
+                        "error": "One or more orders are not eligible for upload.",
+                        "eligible_orders": eligible_orders,
+                        "ineligible_orders": ineligible_orders,
+                        "missing_orders": missing_orders,
+                    }
+                ),
+                400,
+            )
+    finally:
+        db.close()
+
     uploader = CanopyOrdersUploaderService()
-    result = uploader.upload_orders(normalized_orders)
+    result = uploader.upload_orders(eligible_orders)
 
     if not result.get("success"):
         response_body = {
             "success": False,
             "filename": result.get("filename"),
             "uploaded_url": result.get("uploaded_url"),
-            "count": len(normalized_orders),
+            "count": len(eligible_orders),
             "teams_notified": False,
             "error": result.get("error"),
             "error_type": result.get("error_type"),
@@ -311,10 +367,9 @@ def upload_canopy_orders():
     uploaded_url = result.get("uploaded_url")
     teams_notified = False
     if uploaded_url:
-        teams_notified = uploader.send_teams_notification(normalized_orders, uploaded_url)
+        teams_notified = uploader.send_teams_notification(eligible_orders, uploaded_url)
 
     updated_orders = 0
-    missing_orders: list[str] = []
     db = get_db_session()
     try:
         sent_by = get_current_user_email() or "system"
@@ -326,22 +381,16 @@ def upload_canopy_orders():
             "canopyorders_request_sent_by": sent_by,
         }
 
-        for th in normalized_orders:
+        missing_orders: list[str] = []
+        for th in eligible_orders:
             order = db.query(Order).filter(Order.inflow_order_id == th).first()
             if not order:
                 missing_orders.append(th)
                 continue
 
             tag_data = dict(cast(dict[str, Any], getattr(order, "tag_data", None) or {}))
-            changed = False
             for key, value in request_metadata.items():
-                if key in tag_data:
-                    continue
                 tag_data[key] = value
-                changed = True
-
-            if not changed:
-                continue
 
             setattr(order, "tag_data", tag_data)
             updated_orders += 1
@@ -355,10 +404,12 @@ def upload_canopy_orders():
         "success": True,
         "filename": result.get("filename"),
         "uploaded_url": uploaded_url,
-        "count": len(normalized_orders),
+        "count": len(eligible_orders),
         "teams_notified": teams_notified,
         "updated_orders": updated_orders,
         "missing_orders": missing_orders,
+        "eligible_orders": eligible_orders,
+        "ineligible_orders": [],
     })
 
 

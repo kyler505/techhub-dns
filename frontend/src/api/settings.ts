@@ -30,6 +30,8 @@ export interface CanopyOrdersUploadResult {
     count?: number;
     teams_notified?: boolean;
     updated_orders?: number;
+    eligible_orders?: string[];
+    ineligible_orders?: Array<{ order: string; reason: string }>;
     missing_orders?: string[];
     error?: string;
     error_type?: string;
