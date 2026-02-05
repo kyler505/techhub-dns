@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardList, Plus, RefreshCw, Trash2, UploadCloud } from "lucide-react";
 import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
+import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { formatToCentralTime } from "../utils/timezone";
 
 type TagRequestCandidate = {
@@ -78,9 +80,14 @@ export default function TagRequest() {
     const [candidatesSearch, setCandidatesSearch] = useState("");
     const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
+    const [bulkPasteValue, setBulkPasteValue] = useState("");
+    const [bulkPasteResult, setBulkPasteResult] = useState<string | null>(null);
+
     const orderCount = orders.length;
 
     const safeCandidates = candidates;
+
+    const ordersSet = useMemo(() => new Set(orders), [orders]);
 
     const selectedCandidateSet = useMemo(() => new Set(selectedCandidates), [selectedCandidates]);
 
@@ -94,6 +101,20 @@ export default function TagRequest() {
             return inflowOrderId.includes(query) || recipientName.includes(query);
         });
     }, [safeCandidates, candidatesSearch]);
+
+    const isInBatch = useMemo(() => {
+        return (value: string) => {
+            const compact = value.trim().toUpperCase();
+            if (!compact) return false;
+            if (ordersSet.has(compact)) return true;
+            const normalized = normalizeOrderInput(compact);
+            return "error" in normalized ? false : ordersSet.has(normalized.normalized);
+        };
+    }, [ordersSet]);
+
+    useEffect(() => {
+        setSelectedCandidates((prev) => prev.filter((candidateId) => !isInBatch(candidateId)));
+    }, [isInBatch]);
 
     const statusStyles = useMemo(() => {
         if (!status) return null;
@@ -119,6 +140,7 @@ export default function TagRequest() {
         setOrders((prev) => [...prev, normalizedOrder]);
         setOrderInput("");
         setError(null);
+        setBulkPasteResult(null);
     };
 
     const handleRemoveOrder = (orderNumber: string) => {
@@ -128,6 +150,7 @@ export default function TagRequest() {
     const handleClearOrders = () => {
         setOrders([]);
         setStatus(null);
+        setBulkPasteResult(null);
     };
 
     const loadCandidates = async () => {
@@ -195,6 +218,48 @@ export default function TagRequest() {
         });
         setSelectedCandidates([]);
         setError(null);
+        setBulkPasteResult(null);
+    };
+
+    const handleAddBulkPaste = () => {
+        const raw = bulkPasteValue;
+        const tokens = raw
+            .split(/[\s,]+/g)
+            .map((token) => token.trim())
+            .filter(Boolean);
+
+        if (tokens.length === 0) {
+            setBulkPasteValue("");
+            setBulkPasteResult("Added 0, 0 duplicates, 0 invalid");
+            return;
+        }
+
+        const toAdd: string[] = [];
+        const seen = new Set<string>(orders);
+        let duplicates = 0;
+        let invalid = 0;
+
+        for (const token of tokens) {
+            const normalized = normalizeOrderInput(token);
+            if ("error" in normalized) {
+                invalid += 1;
+                continue;
+            }
+            if (seen.has(normalized.normalized)) {
+                duplicates += 1;
+                continue;
+            }
+            seen.add(normalized.normalized);
+            toAdd.push(normalized.normalized);
+        }
+
+        if (toAdd.length > 0) {
+            setOrders((prev) => [...prev, ...toAdd]);
+        }
+
+        setBulkPasteValue("");
+        setBulkPasteResult(`Added ${toAdd.length}, ${duplicates} duplicates, ${invalid} invalid`);
+        setError(null);
     };
 
     const handleUpload = async () => {
@@ -237,102 +302,193 @@ export default function TagRequest() {
                 <p className="text-sm text-muted-foreground">Legacy Canopy orders uploader for tag request batches.</p>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <CardTitle className="text-base">Picked orders needing tag request</CardTitle>
-                                    <CardDescription>
-                                        Picked + untagged orders that have not been sent in a Canopy batch.
-                                    </CardDescription>
-                                </div>
-                                <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Refresh
-                                </Button>
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr_0.8fr]">
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <CardTitle className="text-base">Candidates</CardTitle>
+                                <CardDescription>
+                                    Picked + untagged orders that have not been sent in a Canopy batch.
+                                </CardDescription>
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
+                            <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Refresh
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <Input
-                                    placeholder="Search TH#### or recipient"
-                                    value={candidatesSearch}
-                                    onChange={(event) => setCandidatesSearch(event.target.value)}
-                                />
-                                <Button
-                                    type="button"
-                                    onClick={handleAddSelectedCandidates}
-                                    disabled={selectedCandidates.length === 0}
-                                    className="btn-lift"
-                                >
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add selected
-                                </Button>
+                                <div className="flex-1">
+                                    <Input
+                                        placeholder="Search TH#### or recipient"
+                                        value={candidatesSearch}
+                                        onChange={(event) => setCandidatesSearch(event.target.value)}
+                                        aria-label="Search candidates"
+                                    />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Selected {selectedCandidates.length}</span>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            setSelectedCandidates((prev) => {
+                                                const next = new Set(prev);
+                                                for (const candidate of filteredCandidates) {
+                                                    const inflowOrderId = candidate.inflow_order_id;
+                                                    if (!inflowOrderId) continue;
+                                                    if (isInBatch(inflowOrderId)) continue;
+                                                    next.add(inflowOrderId);
+                                                }
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        disabled={filteredCandidates.length === 0}
+                                    >
+                                        Select all visible
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setSelectedCandidates([])}
+                                        disabled={selectedCandidates.length === 0}
+                                    >
+                                        Clear selection
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={handleAddSelectedCandidates}
+                                        disabled={selectedCandidates.length === 0}
+                                        className="btn-lift"
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Add selected
+                                    </Button>
+                                </div>
                             </div>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span>
+                                    Showing {filteredCandidates.length} of {safeCandidates.length}
+                                </span>
+                                {candidatesLoading ? <span>Loading...</span> : null}
+                            </div>
+                        </div>
 
-                            {candidatesLoading ? (
-                                <div className="rounded-lg border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                                    Loading picked orders...
-                                </div>
-                            ) : candidatesError ? (
-                                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-                                    {candidatesError}
-                                </div>
-                            ) : filteredCandidates.length === 0 ? (
-                                <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                                    No candidates found.
-                                </div>
-                            ) : (
-                                <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-1">
-                                     {filteredCandidates.map((candidate) => {
-                                        const inflowOrderId = candidate.inflow_order_id;
-                                        const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
-                                        return (
-                                            <div
-                                                key={candidate.id}
-                                                className="flex items-start justify-between gap-3 rounded-lg border bg-card px-3 py-2 text-sm"
-                                            >
-                                                <div className="flex items-start gap-3">
-                                                    <Checkbox
-                                                        checked={checked}
-                                                        disabled={!inflowOrderId}
-                                                        onChange={(event) => {
-                                                            if (!inflowOrderId) return;
-                                                            toggleCandidateSelected(inflowOrderId, event.target.checked);
-                                                        }}
-                                                        className="mt-0.5"
-                                                    />
-                                                    <div className="space-y-0.5">
-                                                        <p className="font-medium text-foreground">{candidate.inflow_order_id}</p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {candidate.recipient_name || "Unknown recipient"}
-                                                            {candidate.delivery_location
-                                                                ? ` · ${candidate.delivery_location}`
-                                                                : ""}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right text-xs text-muted-foreground">
-                                                    {candidate.picklist_generated_at
-                                                        ? `Picklist ${formatToCentralTime(candidate.picklist_generated_at)}`
-                                                        : "Picklist pending"}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                        {candidatesLoading && safeCandidates.length === 0 ? (
+                            <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+                                Loading picked orders...
+                            </div>
+                        ) : candidatesError ? (
+                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+                                {candidatesError}
+                            </div>
+                        ) : filteredCandidates.length === 0 ? (
+                            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+                                No candidates found.
+                            </div>
+                        ) : (
+                            <div className="rounded-lg border bg-card">
+                                <div className="max-h-[26rem] overflow-y-auto">
+                                    <Table>
+                                        <TableHeader className="sticky top-0 bg-card z-10">
+                                            <TableRow>
+                                                <TableHead className="w-10" />
+                                                <TableHead>Order</TableHead>
+                                                <TableHead>Recipient</TableHead>
+                                                <TableHead className="text-right">Picklist</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {filteredCandidates.map((candidate) => {
+                                                const inflowOrderId = candidate.inflow_order_id;
+                                                const inBatch = inflowOrderId ? isInBatch(inflowOrderId) : false;
+                                                const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
+                                                const disabled = !inflowOrderId || inBatch;
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Order numbers</CardTitle>
-                            <CardDescription>Enter 4-digit order numbers (TH prefix optional).</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
+                                                return (
+                                                    <TableRow key={candidate.id} data-state={checked ? "selected" : undefined}>
+                                                        <TableCell className="w-10">
+                                                            <Checkbox
+                                                                checked={checked}
+                                                                disabled={disabled}
+                                                                aria-label={
+                                                                    inflowOrderId
+                                                                        ? `Select ${inflowOrderId}`
+                                                                        : "Select candidate"
+                                                                }
+                                                                onChange={(event) => {
+                                                                    if (!inflowOrderId) return;
+                                                                    if (inBatch) return;
+                                                                    toggleCandidateSelected(inflowOrderId, event.target.checked);
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-medium text-foreground">
+                                                                    {candidate.inflow_order_id}
+                                                                </span>
+                                                                {inBatch ? (
+                                                                    <Badge variant="secondary" className="whitespace-nowrap">
+                                                                        In batch
+                                                                    </Badge>
+                                                                ) : null}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-foreground">
+                                                                    {candidate.recipient_name || "Unknown recipient"}
+                                                                </p>
+                                                                {candidate.delivery_location ? (
+                                                                    <p className="truncate text-xs text-muted-foreground">
+                                                                        {candidate.delivery_location}
+                                                                    </p>
+                                                                ) : null}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs text-muted-foreground">
+                                                            {candidate.picklist_generated_at
+                                                                ? formatToCentralTime(candidate.picklist_generated_at)
+                                                                : "Pending"}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <CardTitle className="text-base">Batch builder</CardTitle>
+                                <CardDescription>Enter 4-digit order numbers (TH prefix optional).</CardDescription>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleClearOrders}
+                                disabled={orders.length === 0}
+                            >
+                                Clear batch
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-3">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <div className="flex-1">
                                     <Input
@@ -348,6 +504,7 @@ export default function TagRequest() {
                                                 handleAddOrder();
                                             }
                                         }}
+                                        aria-label="Add a single order"
                                     />
                                 </div>
                                 <Button type="button" onClick={handleAddOrder} className="btn-lift">
@@ -358,51 +515,84 @@ export default function TagRequest() {
                             {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
                             <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="font-medium text-foreground">Order list</span>
-                                    <span className="text-muted-foreground">{orderCount} total</span>
+                                <textarea
+                                    value={bulkPasteValue}
+                                    onChange={(event) => setBulkPasteValue(event.target.value)}
+                                    placeholder="Paste orders: 1234, TH2345, 3456 (comma / space / newline separated)"
+                                    className="min-h-[6.5rem] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    aria-label="Paste multiple orders"
+                                />
+                                <div className="flex items-center justify-between gap-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleAddBulkPaste}
+                                        disabled={bulkPasteValue.trim().length === 0}
+                                    >
+                                        Add pasted
+                                    </Button>
+                                    <span className="text-xs text-muted-foreground">{orderCount} total</span>
                                 </div>
-                                {orders.length === 0 ? (
-                                    <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                                        No orders added yet.
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {orders.map((order) => (
-                                            <div
-                                                key={order}
-                                                className="flex items-center justify-between rounded-lg border bg-card px-3 py-2 text-sm"
-                                            >
-                                                <div className="flex items-center gap-2 text-foreground">
-                                                    <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                                                    {order}
-                                                </div>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRemoveOrder(order)}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                {bulkPasteResult ? (
+                                    <p className="text-xs text-muted-foreground">{bulkPasteResult}</p>
+                                ) : null}
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                        </div>
 
-                <Card>
+                        {orders.length === 0 ? (
+                            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+                                No orders added yet.
+                            </div>
+                        ) : (
+                            <div className="rounded-lg border bg-card">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Order</TableHead>
+                                            <TableHead className="w-12" />
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {orders.map((order) => (
+                                            <TableRow key={order}>
+                                                <TableCell className="py-2">
+                                                    <div className="flex items-center gap-2 text-foreground">
+                                                        <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="font-medium">{order}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-2 text-right">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleRemoveOrder(order)}
+                                                        aria-label={`Remove ${order}`}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="self-start lg:sticky lg:top-6">
                     <CardHeader>
                         <CardTitle className="text-base">Upload summary</CardTitle>
                         <CardDescription>Review and submit the orders list.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                            <p className="text-foreground font-medium">Ready to upload {orderCount} order(s).</p>
-                            <p className="mt-1">The uploader creates a JSON file in the legacy Canopy WebDAV folder.</p>
+                            <p className="text-foreground font-medium">{orderCount} orders ready</p>
+                            <p className="mt-1">
+                                Creates legacy JSON file: <span className="font-mono">canopyorders_YYYY-MM-DD_HH-MM-SS.json</span>
+                            </p>
                         </div>
 
                         {status ? (
@@ -431,19 +621,30 @@ export default function TagRequest() {
                                     <p className="mt-1 text-xs">Updated local orders: {status.updatedOrders}</p>
                                 ) : null}
                                 {status.missingOrders && status.missingOrders.length > 0 ? (
-                                    <p className="mt-1 text-xs">Missing locally: {status.missingOrders.join(", ")}</p>
+                                    <div className="mt-2 space-y-1">
+                                        <p className="text-xs font-medium">Missing locally</p>
+                                        <ul className="flex flex-wrap gap-1">
+                                            {status.missingOrders.map((order) => (
+                                                <li key={order}>
+                                                    <Badge variant="outline" className="whitespace-nowrap">
+                                                        {order}
+                                                    </Badge>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                 ) : null}
                             </div>
                         ) : null}
 
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-col gap-2">
                             <Button
                                 type="button"
                                 variant="outline"
                                 onClick={handleClearOrders}
                                 disabled={orders.length === 0}
                             >
-                                Clear list
+                                Clear batch
                             </Button>
                             <Button
                                 type="button"
