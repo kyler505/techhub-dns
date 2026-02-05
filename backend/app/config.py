@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     canopyorders_dav_root_path: str = "/dav"
     canopyorders_base_dir: str = "/content/canopyorders"
     canopyorders_username: Optional[str] = None
+    canopyorders_password: Optional[str] = None
     canopyorders_password_secret_name: str = "ehanson-webdav"
     canopyorders_user_agent: str = "Cyberduck/9.0.0 (Windows 10/10.0) (x86_64) (WebDAV)"
     canopyorders_teams_workflow_url: Optional[str] = None

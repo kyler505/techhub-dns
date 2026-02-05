@@ -31,6 +31,12 @@ class CanopyOrdersUploaderService:
         return self._webdav_password
 
     def _get_webdav_password(self) -> str:
+        env_password = getattr(settings, "canopyorders_password", None)
+        if env_password is not None:
+            env_password_str = str(env_password)
+            if env_password_str.strip():
+                return env_password_str
+
         vault_url = settings.azure_key_vault_url
         if vault_url:
             tenant_id = settings.azure_tenant_id
@@ -63,9 +69,17 @@ class CanopyOrdersUploaderService:
                     raise ValueError("Key Vault returned empty Canopy Orders WebDAV password")
                 return secret.value
             except Exception as e:
-                raise ValueError(f"Failed to get Canopy Orders WebDAV password from Key Vault: {e}")
+                raise ValueError(
+                    "Failed to get Canopy Orders WebDAV password from Key Vault. "
+                    "Alternatively, set CANOPYORDERS_PASSWORD. "
+                    f"Details: {e}"
+                )
 
-        raise ValueError("AZURE_KEY_VAULT_URL must be set to retrieve Canopy Orders WebDAV password")
+        raise ValueError(
+            "Canopy Orders WebDAV password is not configured. "
+            "Set CANOPYORDERS_PASSWORD, or configure AZURE_KEY_VAULT_URL and "
+            "CANOPYORDERS_PASSWORD_SECRET_NAME."
+        )
 
     def upload_orders(self, orders: List[str]) -> Dict[str, Any]:
         if not self.store_base:
