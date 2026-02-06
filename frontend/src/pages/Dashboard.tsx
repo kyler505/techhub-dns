@@ -54,7 +54,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
 
   const accentClasses = {
     maroon: "bg-maroon-700 text-white",
-    slate: "bg-slate-800 text-white",
+    slate: "bg-foreground text-background",
     green: "bg-emerald-600 text-white",
   };
 
@@ -65,12 +65,12 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       className="group"
     >
-      <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-premium-hover hover:-translate-y-0.5 h-full border-slate-200">
+      <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-premium-hover hover:-translate-y-0.5 h-full">
         <div className={`absolute bottom-0 right-0 p-3 rounded-tl-2xl ${accentClasses[accent]} opacity-90 transition-transform duration-300 group-hover:scale-110`}>
           <Icon className="w-5 h-5" />
         </div>
         <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+          <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {title}
           </CardTitle>
         </CardHeader>
@@ -79,7 +79,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
             <Skeleton className="h-9 w-16" />
           ) : (
             <motion.div
-              className="text-3xl font-bold text-slate-900"
+              className="text-3xl font-bold text-foreground"
               key={value}
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -248,7 +248,7 @@ export default function Dashboard() {
         className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
         </div>
         <div className="flex items-center gap-2">
           {(error || socketStatus === "disconnected") && (
@@ -273,10 +273,10 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        <Card className="xl:col-span-2 h-full border-slate-200">
+        <Card className="xl:col-span-2 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
-            <span className="status-live text-xs text-slate-500">Connected</span>
+            <span className="status-live text-xs text-muted-foreground">Connected</span>
           </CardHeader>
           <CardContent>
             <LiveDeliveryDashboard />
@@ -316,10 +316,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="border-slate-200">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Completed Today</CardTitle>
-            <span className="text-xs text-slate-500">Last 24h</span>
+            <span className="text-xs text-muted-foreground">Last 24h</span>
           </CardHeader>
           <CardContent>
             {completedLoading ? (
@@ -329,18 +329,18 @@ export default function Dashboard() {
                 <Skeleton className="h-4 w-48" />
               </div>
             ) : completedTodayOrders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center min-h-[320px] text-slate-500">
-                <CheckCircle2 className="h-7 w-7 text-slate-300 mb-3" />
+              <div className="flex flex-col items-center justify-center min-h-[320px] text-muted-foreground">
+                <CheckCircle2 className="h-7 w-7 text-muted-foreground/40 mb-3" />
                 <p className="text-sm">No completed orders today</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
                 {completedTodayOrders.map((order) => (
                   <div key={order.id} className="flex items-center justify-between text-sm">
-                    <div className="font-medium text-slate-900">
+                    <div className="font-medium text-foreground">
                       {order.inflow_order_id || order.id.slice(0, 8)}
                     </div>
-                    <div className="text-slate-500">
+                    <div className="text-muted-foreground">
                       {formatSignatureTime(order.signature_captured_at)}
                     </div>
                   </div>
@@ -350,11 +350,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200">
+        <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-base">Orders Delivered</CardTitle>
-              <p className="text-xs text-slate-500">Last 7 days</p>
+              <p className="text-xs text-muted-foreground">Last 7 days</p>
             </div>
             <div className="flex gap-2">
               <Button
