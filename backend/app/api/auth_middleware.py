@@ -123,6 +123,43 @@ def require_auth(f):
     return decorated_function
 
 
+def is_current_user_admin() -> bool:
+    """Return True if current authenticated user is an admin.
+
+    Rules:
+    - If ADMIN_EMAILS is configured (non-empty), user email must be in allowlist.
+    - If ADMIN_EMAILS is empty, allow any authenticated user ONLY in development.
+    - If not authenticated, always False.
+    """
+    if not getattr(g, "user_id", None):
+        return False
+
+    allowlist = settings.admin_emails or []
+    if allowlist:
+        user = getattr(g, "user", None)
+        user_email = getattr(user, "email", None) if user is not None else None
+        email = (user_email or get_current_user_email() or "").strip().lower()
+        return bool(email) and email in allowlist
+
+    return settings.is_dev()
+
+
+def require_admin(f):
+    """Decorator to require admin access for a route."""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not getattr(g, "user_id", None):
+            return jsonify({"error": "Authentication required"}), 401
+
+        if not is_current_user_admin():
+            return jsonify({"error": "Admin access required"}), 403
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 def get_current_user_email() -> str:
     """
     Get current user's email for audit logging.

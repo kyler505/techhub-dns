@@ -19,6 +19,7 @@ from app.schemas.inflow import (
 )
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.config import settings
+from app.api.auth_middleware import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ bp.strict_slashes = False
 
 
 @bp.route("/sync", methods=["POST"])
+@require_admin
 def sync_orders():
     """Manually trigger Inflow sync"""
     try:
@@ -80,6 +82,7 @@ def sync_orders():
 
 
 @bp.route("/sync-status", methods=["GET"])
+@require_admin
 def get_sync_status():
     """Get Inflow sync status"""
     from app.models.order import Order
@@ -249,6 +252,7 @@ def inflow_webhook():
 
 
 @bp.route("/webhooks/register", methods=["POST"])
+@require_admin
 def register_webhook():
     """Register a new webhook with Inflow"""
     try:
@@ -316,6 +320,7 @@ def register_webhook():
 
 
 @bp.route("/webhooks", methods=["GET"])
+@require_admin
 def list_webhooks():
     """List all registered webhooks"""
     with get_db() as db:
@@ -341,6 +346,7 @@ def list_webhooks():
 
 
 @bp.route("/webhooks/defaults", methods=["GET"])
+@require_admin
 def get_webhook_defaults():
     """Get default webhook URL and events from settings"""
     return jsonify({
@@ -350,6 +356,7 @@ def get_webhook_defaults():
 
 
 @bp.route("/webhooks/<webhook_id>", methods=["DELETE"])
+@require_admin
 def delete_webhook(webhook_id):
     """Delete a webhook registration"""
     try:
@@ -376,6 +383,7 @@ def delete_webhook(webhook_id):
 
 
 @bp.route("/webhooks/test", methods=["POST"])
+@require_admin
 def test_webhook():
     """Test webhook endpoint (sends a test payload)"""
     try:

@@ -16,7 +16,7 @@ from app.services.inflow_service import InflowService
 from app.database import get_db_session
 from app.models.system_setting import SystemSetting
 from app.models.order import Order
-from app.api.auth_middleware import get_current_user_email
+from app.api.auth_middleware import get_current_user_email, require_admin
 import logging
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
@@ -33,6 +33,7 @@ from app.services.system_setting_service import (
 # ============ Settings Endpoints ============
 
 @bp.route("/settings", methods=["GET"])
+@require_admin
 def get_system_settings():
     """Get all system settings."""
     # SystemSettingService handles its own DB session if not provided
@@ -41,6 +42,7 @@ def get_system_settings():
 
 
 @bp.route("/settings/<key>", methods=["PUT"])
+@require_admin
 def update_system_setting(key: str):
     """Update a system setting."""
     if key not in DEFAULT_SETTINGS:
@@ -50,7 +52,7 @@ def update_system_setting(key: str):
     if not data or "value" not in data:
         return jsonify({"error": "Missing 'value' in request body"}), 400
 
-    updated_by = data.get("updated_by", "admin")
+    updated_by = get_current_user_email()
 
     # SystemSettingService handles its own DB session
     setting = SystemSettingService.set_setting(key, str(data["value"]), updated_by)
@@ -66,6 +68,7 @@ def update_system_setting(key: str):
 # ============ Testing Endpoints ============
 
 @bp.route("/test/email", methods=["POST"])
+@require_admin
 def test_email_notification():
     """Send a test email to verify email configuration."""
     from app.services.email_service import email_service
@@ -118,6 +121,7 @@ def test_email_notification():
 
 
 @bp.route("/test/teams-recipient", methods=["POST"])
+@require_admin
 def test_teams_recipient():
     """Queue a test Teams notification to a recipient via Graph API."""
     from app.services.teams_recipient_service import teams_recipient_service
@@ -160,6 +164,7 @@ def test_teams_recipient():
 
 
 @bp.route("/test/inflow", methods=["POST"])
+@require_admin
 def test_inflow_connection():
     """Test connection to Inflow API."""
     service = InflowService()
@@ -177,6 +182,7 @@ def test_inflow_connection():
 
 
 @bp.route("/test/sharepoint", methods=["POST"])
+@require_admin
 def test_sharepoint_connection():
     """Test connection to SharePoint."""
     from app.services.sharepoint_service import get_sharepoint_service
@@ -203,6 +209,7 @@ def test_sharepoint_connection():
 
 
 @bp.route("/status", methods=["GET"])
+@require_admin
 def get_system_status():
     """
     Get status of all backend features.
@@ -221,6 +228,7 @@ def get_system_status():
 
 
 @bp.route("/sync", methods=["POST"])
+@require_admin
 def sync_orders():
     """
     Manually trigger order sync from Inflow.
@@ -260,6 +268,7 @@ def sync_orders():
 
 
 @bp.route("/canopyorders/upload", methods=["POST"])
+@require_admin
 def upload_canopy_orders():
     data = request.get_json(silent=True) or {}
     orders_payload = data.get("orders")
@@ -432,6 +441,7 @@ def _is_exact_th_order(value: str) -> bool:
 
 
 @bp.route("/canopyorders/upload-bypass", methods=["POST"])
+@require_admin
 def upload_canopy_orders_bypass():
     data = request.get_json(silent=True) or {}
     orders_payload = data.get("orders")

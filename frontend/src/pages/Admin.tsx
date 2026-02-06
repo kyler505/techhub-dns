@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
@@ -43,6 +43,9 @@ interface SystemStatus {
     inflow_sync: FeatureStatus;
 }
 
+const FlowTab = lazy(() => import("../components/admin/FlowTab"));
+const DatabaseTab = lazy(() => import("../components/admin/DatabaseTab"));
+
 // Default values when settings haven't been loaded yet
 const DEFAULT_SETTING = { value: "true", description: "Loading...", updated_at: null, updated_by: null };
 
@@ -78,12 +81,12 @@ const parseCanopyOrdersBypassInput = (input: string) => {
 };
 
 export default function Admin() {
-    const { user } = useAuth();
+    const { user, isAdmin, isLoading: authLoading } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
     const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations" | "flow" | "database">("overview");
 
     // Inflow webhook state
     const [inflowWebhooks, setInflowWebhooks] = useState<WebhookResponse[]>([]);
@@ -110,10 +113,15 @@ export default function Admin() {
     const syncCancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
     useEffect(() => {
-        loadSystemStatus();
-        loadInflowWebhooks();
-        loadSystemSettings();
-    }, []);
+        if (!isAdmin) {
+            setLoading(false);
+            return;
+        }
+
+        void loadSystemStatus();
+        void loadInflowWebhooks();
+        void loadSystemSettings();
+    }, [isAdmin]);
 
     const loadSystemStatus = async () => {
         setLoading(true);
@@ -158,7 +166,7 @@ export default function Admin() {
         const newValue = currentValue === "true" ? "false" : "true";
         try {
             setTogglingSettingKey(key);
-            await settingsApi.updateSetting(key, newValue, user?.email || "admin");
+            await settingsApi.updateSetting(key, newValue, user?.email);
             await loadSystemSettings();
             toast.success("Setting updated", { description: `${key} = ${newValue}` });
         } catch (error: any) {
@@ -333,7 +341,7 @@ export default function Admin() {
         return Object.values(systemStatus);
     }, [systemStatus]);
 
-    if (loading) {
+    if (authLoading || loading) {
         return (
             <div className="container mx-auto py-6 space-y-4">
                 <div className="space-y-1">
@@ -346,6 +354,26 @@ export default function Admin() {
                             <Loader2 className="h-4 w-4 animate-spin" />
                             Loading...
                         </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    if (!isAdmin) {
+        return (
+            <div className="container mx-auto py-6 space-y-4">
+                <div className="space-y-1">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
+                    <p className="text-sm text-muted-foreground">Restricted tools and diagnostics.</p>
+                </div>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Access denied</CardTitle>
+                        <CardDescription>Admin access is required to view this page.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                        {user?.email ? `Signed in as ${user.email}.` : "You are not signed in."}
                     </CardContent>
                 </Card>
             </div>
@@ -406,12 +434,14 @@ export default function Admin() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-                <TabsList className="w-full justify-start">
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="notifications">Notifications</TabsTrigger>
-                    <TabsTrigger value="operations">Operations</TabsTrigger>
-                </TabsList>
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+                    <TabsList className="w-full justify-start">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="notifications">Notifications</TabsTrigger>
+                        <TabsTrigger value="operations">Operations</TabsTrigger>
+                        <TabsTrigger value="flow">Flow</TabsTrigger>
+                        <TabsTrigger value="database">Database</TabsTrigger>
+                    </TabsList>
 
                 <TabsContent value="overview" className="mt-4 space-y-6">
                     <Card>
@@ -747,6 +777,40 @@ export default function Admin() {
                             )}
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                <TabsContent value="flow" className="mt-4 space-y-6">
+                    <Suspense
+                        fallback={
+                            <Card>
+                                <CardContent className="p-6">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Loading flow...
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        }
+                    >
+                        <FlowTab />
+                    </Suspense>
+                </TabsContent>
+
+                <TabsContent value="database" className="mt-4 space-y-6">
+                    <Suspense
+                        fallback={
+                            <Card>
+                                <CardContent className="p-6">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Loading database...
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        }
+                    >
+                        <DatabaseTab />
+                    </Suspense>
                 </TabsContent>
             </Tabs>
 

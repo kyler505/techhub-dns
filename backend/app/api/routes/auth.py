@@ -11,6 +11,7 @@ from flask import Blueprint, request, redirect, make_response, jsonify, g
 from app.config import settings
 from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
+from app.api.auth_middleware import is_current_user_admin
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ def get_current_user():
 
     if not user_id:
         # Not authenticated - return null (not 401, let frontend handle redirect)
-        return jsonify({"user": None, "session": None})
+        return jsonify({"user": None, "session": None, "is_admin": False})
 
     # Query fresh from database using properly scoped session
     from app.models.user import User
@@ -172,6 +173,7 @@ def get_current_user():
     return jsonify({
         "user": user_dict,
         "session": session_dict,
+        "is_admin": is_current_user_admin(),
     })
 
 
