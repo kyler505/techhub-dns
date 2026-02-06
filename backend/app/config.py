@@ -48,7 +48,9 @@ class Settings(BaseSettings):
 
     # Admin authorization
     # Allowlist of admin emails. See ADMIN_EMAILS env var.
-    admin_emails: list[str] = []
+    # IMPORTANT: this is intentionally a raw string to avoid pydantic-settings
+    # "complex" env parsing (json.loads) which can crash on empty strings.
+    admin_emails: Optional[str] = None
 
     # TAMU SMTP Email Configuration
     smtp_enabled: bool = False  # Safety: disabled by default
@@ -94,6 +96,56 @@ class Settings(BaseSettings):
         """True when running in development mode."""
         return (self.flask_env or "").strip().lower() == "development"
 
+    def get_admin_emails(self) -> list[str]:
+        """Return normalized admin email allowlist.
+
+        Parsing rules:
+        - None/empty/whitespace -> []
+        - JSON list string (starts with '[') -> parsed list
+        - otherwise -> comma-separated list
+        """
+        return self._parse_admin_emails(self.admin_emails)
+
+    @staticmethod
+    def _parse_admin_emails(raw_value: Optional[str]) -> list[str]:
+        if raw_value is None:
+            return []
+
+        raw = str(raw_value).strip()
+        if not raw:
+            return []
+
+        items: list[Any]
+
+        if raw.startswith("["):
+            parsed: Any = None
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+
+            if isinstance(parsed, list):
+                items = parsed
+            else:
+                # Common misconfig: looks like JSON but isn't valid JSON.
+                # Fall back to comma-splitting the bracket contents.
+                stripped = raw
+                if stripped.endswith("]"):
+                    stripped = stripped[1:-1]
+                items = stripped.split(",")
+        else:
+            items = raw.split(",")
+
+        normalized: list[str] = []
+        for item in items:
+            if item is None:
+                continue
+            email = str(item).strip().lower()
+            if not email:
+                continue
+            normalized.append(email)
+        return normalized
+
     # Canopy Orders Uploader (asset tagging)
     canopyorders_store_base: Optional[str] = None
     canopyorders_dav_root_path: str = "/dav"
@@ -129,50 +181,5 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
-
-    @field_validator("admin_emails", mode="before")
-    @classmethod
-    def parse_admin_emails(cls, value: Any) -> list[str]:
-        """Parse ADMIN_EMAILS from env.
-
-        Accepts:
-        - unset/empty -> []
-        - comma-separated string -> [..]
-        - JSON list string -> [..]
-        """
-        if value is None:
-            return []
-
-        if isinstance(value, list):
-            items = value
-        elif isinstance(value, str):
-            raw = value.strip()
-            if not raw:
-                return []
-
-            parsed: Any = None
-            if raw.startswith("["):
-                try:
-                    parsed = json.loads(raw)
-                except json.JSONDecodeError:
-                    parsed = None
-
-            if isinstance(parsed, list):
-                items = parsed
-            else:
-                items = raw.split(",")
-        else:
-            return []
-
-        normalized: list[str] = []
-        for item in items:
-            if item is None:
-                continue
-            email = str(item).strip().lower()
-            if not email:
-                continue
-            normalized.append(email)
-        return normalized
-
 
 settings = Settings()

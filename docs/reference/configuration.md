@@ -28,7 +28,7 @@
 
 | Variable | Description |
 |----------|-------------|
-| `ADMIN_EMAILS` | Admin email allowlist (comma-separated or JSON list). If empty/unset: admin endpoints allow any authenticated user ONLY in `development`; in other environments access is denied (fail-closed). |
+| `ADMIN_EMAILS` | Admin email allowlist (recommended: comma-separated). Leave this unset to use the default behavior; do not set an explicit empty value (avoid `ADMIN_EMAILS=`). If empty/unset: admin endpoints allow any authenticated user ONLY in `development`; in other environments access is denied (fail-closed). |
 
 ### Admin-Only Observability Endpoints
 
