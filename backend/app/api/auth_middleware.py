@@ -134,7 +134,7 @@ def is_current_user_admin() -> bool:
     if not getattr(g, "user_id", None):
         return False
 
-    allowlist = settings.admin_emails or []
+    allowlist = settings.get_admin_emails()
     if allowlist:
         user = getattr(g, "user", None)
         user_email = getattr(user, "email", None) if user is not None else None
@@ -176,5 +176,8 @@ def get_current_user_email() -> str:
         with get_db() as db:
             user = db.query(User).filter(User.id == user_id).first()
             if user:
-                return user.email
+                email = getattr(user, "email", None)
+                if email is None:
+                    return "system"
+                return str(email)
     return "system"
