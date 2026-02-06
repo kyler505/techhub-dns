@@ -1,81 +1,43 @@
-# Tag Request Integration Plan
+# Canopy Orders Asset Tagging
 
-Status: Plan
+This repo supports asset tagging requests via the Canopy Orders uploader flow.
 
-## Goal
-Integrate the canopy tag-request flow into the DNS web app so that:
-- Clicking the asset tagging button triggers a blocking tag request (WebDAV upload + Teams notification).
-- Users confirm before starting the request and after request completion.
-- Post-confirmation (tags printed) is non-blocking so users can return later.
+## Flow Overview
+1) Candidate selection
+   - UI (or operator) lists orders eligible for tagging requests via:
+     - `GET /orders/tag-request/candidates`
+   - Eligibility (high level): picked, not yet tagged, and no prior request metadata.
 
-## Scope Overview
-- Backend: add tag-request endpoint + service to send requests; keep existing confirm-tag endpoint.
-- Frontend: add two modals, new API call, and request-sent UI state.
-- Config: add WebDAV + Teams settings and Key Vault secret name.
+2) Upload batch to Canopy Orders
+   - Operator submits a list of order numbers to:
+     - `POST /api/system/canopyorders/upload`
+   - Backend uploads a JSON payload (order numbers) to the Canopy Orders WebDAV endpoint and optionally notifies Teams.
 
-## Backend Tasks
-1) Add endpoint: `POST /orders/<id>/tag/request`
-   - Purpose: send tag request (blocking).
-   - Behavior:
-     - Build JSON payload from order data and `asset_tag_serials`.
-     - Upload JSON to WebDAV with timestamped filename.
-     - Post Teams/Power Automate Adaptive Card.
-     - Return response payload with status + filename.
-   - Do not set `tagged_at` yet.
+3) Persist request metadata
+   - Backend stores request metadata under `order.tag_data`:
+     - `canopyorders_request_sent_at`
+     - `canopyorders_request_filename`
+     - `canopyorders_request_uploaded_url`
+     - `canopyorders_request_sent_by`
 
-2) Create service module: `tag_request_service.py`
-   - Responsibilities:
-     - Fetch WebDAV password from Azure Key Vault (use existing service principal pattern in `inflow_service.py`).
-     - WebDAV upload (pycurl or requests, TLS verified).
-     - Teams webhook call (requests).
-   - Return structured status for UI (success/failure for WebDAV and Teams).
+## Backwards-Compatible Dedupe
+Some endpoints treat legacy `order.tag_data` keys as "already requested" for dedupe/display only:
+- `tag_request_sent_at`
+- `tag_request_status` ("sent")
 
-3) Keep existing confirm endpoint (`POST /orders/<id>/tag`)
-   - Use it to mark `tagged_at`, `tagged_by`, `tag_data` once tags are printed.
+No endpoint in this repo should generate new values for the legacy `tag_request_*` keys.
 
-4) Persist tag request metadata
-   - Store in `tag_data` or new fields:
-     - `tag_request_sent_at`, `tag_request_filename`, `tag_request_status`.
-   - Enables UI to show request-sent state after reload.
+## Configuration (env vars)
+Required:
+- `CANOPYORDERS_STORE_BASE`
+- `CANOPYORDERS_USERNAME`
+- WebDAV password via either:
+  - `CANOPYORDERS_PASSWORD`, or
+  - `AZURE_KEY_VAULT_URL` + `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET` + `CANOPYORDERS_PASSWORD_SECRET_NAME`
 
-## Frontend Tasks
-5) Pre-confirmation modal
-   - On Asset Tagging click:
-     - Show modal: "Start tag request?"
-     - Confirm -> call new `startTagRequest` API.
-     - Cancel -> no action.
-
-6) Blocking request + status
-   - During request:
-     - Show loading state (spinner, disable button).
-     - Handle errors with clear message.
-
-7) Post-confirmation modal
-   - After request success:
-     - Modal: "Tag request sent. Have tags been printed?"
-     - Yes -> call `tagOrder` (existing endpoint).
-     - Not yet -> close modal, no changes.
-
-8) Persistent request-sent UI state
-   - If request was sent but order not tagged:
-     - Show banner or CTA: "Tag request sent at ..." + "Mark tags printed".
-
-## Config Changes
-Add settings in backend config (env-driven):
-- `webdav_base_url`
-- `webdav_username`
-- `webdav_password_secret_name`
-- `webdav_target_path`
-- `teams_workflow_url`
-- `teams_workflow_shared_secret` (optional)
-
-## Suggested JSON Payload (example)
-- `order_id`, `order_number`, `customer`, `ship_to`
-- `asset_tag_serials` (from `inflow_service.get_asset_tag_serials`)
-- Optional: `requested_by`, `requested_at`
-
-## Testing / Validation
-- Start tag request -> verify WebDAV file created (timestamped JSON).
-- Verify Teams notification delivered.
-- Confirm tags printed sets `tagged_at` and allows picklist flow.
-- Not yet leaves order in request-sent but untagged state.
+Optional:
+- `CANOPYORDERS_DAV_ROOT_PATH` (default: `/dav`)
+- `CANOPYORDERS_BASE_DIR` (default: `/content/canopyorders`)
+- `CANOPYORDERS_USER_AGENT`
+- `CANOPYORDERS_TEAMS_WORKFLOW_URL`
+- `CANOPYORDERS_TEAMS_SHARED_SECRET`

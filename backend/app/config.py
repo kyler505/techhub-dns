@@ -86,15 +86,7 @@ class Settings(BaseSettings):
     # Flask environment
     flask_env: str = "development"
 
-    # Tag Request System
-    tag_request_webdav_base_url: Optional[str] = None
-    tag_request_webdav_target_path: str = "/tag-requests"
-    tag_request_webdav_username: Optional[str] = None
-    tag_request_webdav_password_secret_name: str = "tag-request-webdav-password"
-    tag_request_teams_workflow_url: Optional[str] = None
-    tag_request_teams_shared_secret: Optional[str] = None
-
-    # Canopy Orders Uploader (Legacy)
+    # Canopy Orders Uploader (asset tagging)
     canopyorders_store_base: Optional[str] = None
     canopyorders_dav_root_path: str = "/dav"
     canopyorders_base_dir: str = "/content/canopyorders"
