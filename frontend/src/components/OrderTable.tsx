@@ -64,24 +64,24 @@ export default function OrderTable({
             return null;
         }
         return (
-            <div className="py-12 text-center text-slate-500">
-                <PackageSearch className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+            <div className="py-12 text-center text-muted-foreground">
+                <PackageSearch className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
                 <p className="text-sm font-medium">No orders found</p>
-                <p className="text-xs text-slate-400">Try adjusting your filters or search.</p>
+                <p className="text-xs text-muted-foreground/80">Try adjusting your filters or search.</p>
             </div>
         );
     }
 
     return (
-        <div className="rounded-lg border border-slate-200 bg-white shadow-premium overflow-hidden">
+        <div className="rounded-lg border border-border bg-card shadow-premium overflow-hidden">
             <Table className="min-w-[720px]">
-                <TableHeader className="bg-slate-50/80">
+                <TableHeader className="bg-muted/40">
                     <TableRow>
                         <TableHead>
                             <button
                                 type="button"
                                 onClick={() => toggleSort("id")}
-                                className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                             >
                                 Order ID
                                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -91,7 +91,7 @@ export default function OrderTable({
                             <button
                                 type="button"
                                 onClick={() => toggleSort("recipient")}
-                                className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                             >
                                 Recipient
                                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -101,7 +101,7 @@ export default function OrderTable({
                             <button
                                 type="button"
                                 onClick={() => toggleSort("location")}
-                                className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                             >
                                 Location
                                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -111,7 +111,7 @@ export default function OrderTable({
                             <button
                                 type="button"
                                 onClick={() => toggleSort("date")}
-                                className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                             >
                                 Order Date
                                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -121,7 +121,7 @@ export default function OrderTable({
                             <button
                                 type="button"
                                 onClick={() => toggleSort("status")}
-                                className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                             >
                                 Status
                                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -131,12 +131,12 @@ export default function OrderTable({
                 </TableHeader>
             <TableBody>
                 {sortedOrders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-slate-50 transition-colors">
+                    <TableRow key={order.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell>
                             <Button
                                 variant="link"
                                 onClick={() => onViewDetail(order.id)}
-                                className="p-0 h-auto font-normal text-slate-700 hover:text-slate-900"
+                                className="p-0 h-auto font-normal text-foreground/90 hover:text-foreground"
                             >
                                 {order.inflow_order_id}
                             </Button>
