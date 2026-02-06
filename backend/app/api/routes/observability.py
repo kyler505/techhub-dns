@@ -355,6 +355,7 @@ def get_system_audit():
             if str(getattr(r, "entity_type", "") or "").strip().lower() == "order"
         }
         order_entity_ids = {oid for oid in order_entity_ids if oid}
+        order_entity_ids_lower = sorted({oid.lower() for oid in order_entity_ids})
 
         order_number_by_id: dict[str, str] = {}
         if order_entity_ids:
@@ -366,6 +367,17 @@ def get_system_audit():
             for oid, order_number in order_rows:
                 if oid and order_number:
                     order_number_by_id[str(oid).lower()] = str(order_number)
+
+            # If we missed rows due to case-sensitive UUID comparison, retry with lower().
+            if len(order_number_by_id) < len(order_entity_ids_lower):
+                order_rows_fallback = (
+                    db.query(Order.id, Order.inflow_order_id)
+                    .filter(func.lower(Order.id).in_(order_entity_ids_lower))
+                    .all()
+                )
+                for oid, order_number in order_rows_fallback:
+                    if oid and order_number:
+                        order_number_by_id.setdefault(str(oid).lower(), str(order_number))
 
         next_cursor: Optional[str] = None
         if len(rows) > limit:
