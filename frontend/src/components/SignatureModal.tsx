@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Eraser, PenTool, Check, AlertCircle } from "lucide-react";
-import { signatureCache } from "../lib/signatureCache"; // Create this next
+import { signatureCache } from "../lib/signatureCache";
 
 interface SignatureModalProps {
     open: boolean;
@@ -196,13 +196,13 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         {requirePenInput && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
                     </DialogDescription>
                 </DialogHeader>
-
-                <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-white/50 touch-none flex items-center justify-center min-h-[300px]">
+ 
+                <div className="relative flex min-h-[300px] touch-none items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/30">
                     <canvas
                         ref={canvasRef}
                         width={600}
                         height={300}
-                        className="w-full h-[300px] touch-none cursor-crosshair bg-white rounded-lg"
+                        className="h-[300px] w-full touch-none cursor-crosshair rounded-lg bg-background"
                         style={{ touchAction: 'none' }}
                         onPointerDown={startDrawing}
                         onPointerMove={draw}
@@ -211,15 +211,17 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         onPointerLeave={stopDrawing}
                     />
                     {!hasSignature && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-gray-400">
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground/60">
                             Sign here
                         </div>
                     )}
                 </div>
-
-                <div className="text-xs text-gray-500 h-4">
-                    {debugInfo}
-                </div>
+ 
+                {import.meta.env.DEV ? (
+                    <div className="h-4 text-xs text-muted-foreground" aria-live="polite">
+                        {debugInfo}
+                    </div>
+                ) : null}
 
                 <DialogFooter className="gap-2 sm:gap-0">
                     <div className="flex-1 flex justify-start">
@@ -234,7 +236,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                                 }
                             }}
                             disabled={!hasSignature}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         >
                             <Eraser className="h-4 w-4 mr-2" />
                             Clear
@@ -250,7 +252,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                                     setRequirePenInput(!requirePenInput);
                                 }
                             }}
-                            className="text-gray-400 hover:text-gray-600"
+                            className="text-muted-foreground hover:text-foreground"
                         >
                             {requirePenInput ? "Allow Touch" : "Require Pen"}
                         </Button>
