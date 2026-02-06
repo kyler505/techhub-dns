@@ -38,6 +38,19 @@ export interface CanopyOrdersUploadResult {
     status_code?: number;
 }
 
+export interface CanopyOrdersBypassUploadResult {
+    success: boolean;
+    filename?: string | null;
+    uploaded_url?: string | null;
+    count?: number;
+    teams_notified?: boolean;
+    updated_orders?: number;
+    missing_orders?: string[];
+    error?: string;
+    error_type?: string;
+    status_code?: number;
+}
+
 export const settingsApi = {
     /**
      * Get all system settings.
@@ -98,6 +111,14 @@ export const settingsApi = {
      */
     async uploadCanopyOrders(orders: string[]): Promise<CanopyOrdersUploadResult> {
         const response = await apiClient.post("/system/canopyorders/upload", { orders });
+        return response.data;
+    },
+
+    /**
+     * Upload Canopy orders (bypass eligibility checks).
+     */
+    async uploadCanopyOrdersBypass(orders: string[]): Promise<CanopyOrdersBypassUploadResult> {
+        const response = await apiClient.post("/system/canopyorders/upload-bypass", { orders });
         return response.data;
     },
 };
