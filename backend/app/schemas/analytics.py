@@ -23,9 +23,15 @@ class ActivityItem(BaseModel):
     """Individual activity log entry"""
     type: str
     order_id: str
+    # Human-friendly order number (inFlow order id), when available.
+    order_number: Optional[str] = None
     timestamp: datetime
     description: str
     changed_by: Optional[str] = None
+    # Optional status change details (present for status_change events).
+    from_status: Optional[str] = None
+    to_status: Optional[str] = None
+    reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

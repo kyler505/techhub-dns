@@ -88,9 +88,9 @@ class AnalyticsService:
             activity.append({
                 "type": "order_created",
                 "timestamp": order.created_at,
-                "description": f"Order {order.inflow_order_id} created",
+                "description": "Order created",
                 "order_id": order.id,
-                "inflow_order_id": order.inflow_order_id
+                "order_number": order.inflow_order_id,
             })
 
         # Get recent audit log entries (status changes)
@@ -98,12 +98,29 @@ class AnalyticsService:
             AuditLog.timestamp.desc()
         ).limit(limit * 2).all()
 
+        # Batch lookup order_id -> inflow_order_id to avoid N+1.
+        order_ids = [str(log.order_id) for log in recent_changes if getattr(log, "order_id", None)]
+        unique_order_ids = sorted(set(order_ids))
+        order_number_by_id: Dict[str, Optional[str]] = {}
+        if unique_order_ids:
+            rows = (
+                self.db.query(Order.id, Order.inflow_order_id)
+                .filter(Order.id.in_(unique_order_ids))
+                .all()
+            )
+            for oid, inflow_order_id in rows:
+                if oid is None:
+                    continue
+                order_number_by_id[str(oid)] = inflow_order_id
+
         for log in recent_changes:
+            order_id = str(log.order_id)
             activity.append({
                 "type": "status_change",
                 "timestamp": log.timestamp,
                 "description": f"Status changed to {log.to_status}",
-                "order_id": log.order_id,
+                "order_id": order_id,
+                "order_number": order_number_by_id.get(order_id),
                 "from_status": log.from_status,
                 "to_status": log.to_status,
                 "changed_by": log.changed_by,

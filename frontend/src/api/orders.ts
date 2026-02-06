@@ -38,6 +38,13 @@ export const ordersApi = {
     return response.data;
   },
 
+  resolveOrder: async (orderNumber: string): Promise<{ id: string; order_number: string }> => {
+    const response = await apiClient.get<{ id: string; order_number: string }>("/orders/resolve", {
+      params: { order_number: orderNumber },
+    });
+    return response.data;
+  },
+
   retryNotification: async (orderId: string) => {
     const response = await apiClient.post(`/orders/${orderId}/retry-notification`);
     return response.data;

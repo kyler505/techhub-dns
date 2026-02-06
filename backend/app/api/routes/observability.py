@@ -348,6 +348,25 @@ def get_system_audit():
 
         rows = query.all()
 
+        # Batch lookup order entity_id -> inflow_order_id for display purposes.
+        order_entity_ids = {
+            str(getattr(r, "entity_id", "") or "")
+            for r in rows
+            if str(getattr(r, "entity_type", "") or "").strip().lower() == "order"
+        }
+        order_entity_ids = {oid for oid in order_entity_ids if oid}
+
+        order_number_by_id: dict[str, str] = {}
+        if order_entity_ids:
+            order_rows = (
+                db.query(Order.id, Order.inflow_order_id)
+                .filter(Order.id.in_(sorted(order_entity_ids)))
+                .all()
+            )
+            for oid, order_number in order_rows:
+                if oid and order_number:
+                    order_number_by_id[str(oid).lower()] = str(order_number)
+
         next_cursor: Optional[str] = None
         if len(rows) > limit:
             last = rows[limit - 1]
@@ -375,6 +394,10 @@ def get_system_audit():
                 "ip": (getattr(row, "ip_address", None) or None),
                 "user_agent": _truncate_string(row_user_agent if isinstance(row_user_agent, str) else None, max_len=500),
             }
+
+            if str(item.get("entity_type") or "").strip().lower() == "order":
+                entity_id = str(item.get("entity_id") or "")
+                item["order_number"] = order_number_by_id.get(entity_id.lower())
 
             # Optionally include state change payloads (bounded).
             if include_values:

@@ -44,6 +44,27 @@ const toMillis = (dateLike: string) => {
     return Number.isFinite(ms) ? ms : 0;
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value: string) => UUID_RE.test(value.trim());
+
+const isInitialPickedFromInflow = (item: {
+    type?: string;
+    from_status?: string | null;
+    to_status?: string | null;
+    changed_by?: string | null;
+    reason?: string | null;
+}) => {
+    const eventType = (item.type || "").trim().toLowerCase();
+    if (eventType !== "status_change") return false;
+
+    const from = (item.from_status || "").trim();
+    const to = (item.to_status || "").trim().toLowerCase();
+    const changedBy = (item.changed_by || "").trim().toLowerCase();
+    const reason = (item.reason || "").trim().toLowerCase();
+
+    return !from && to === "picked" && changedBy === "system" && reason.includes("order ingested from inflow");
+};
+
 const getSinceMillis = (range: TimeRange) => {
     const now = Date.now();
     if (range === "1h") return now - 60 * 60 * 1000;
@@ -68,15 +89,20 @@ type TimelineRow =
           kind: "activity";
           timestamp: string;
           orderId: string;
+          orderNumber?: string | null;
           description: string;
           changedBy?: string;
           type?: string;
+          fromStatus?: string | null;
+          toStatus?: string | null;
+          reason?: string | null;
       }
     | {
           kind: "system";
           timestamp: string;
           entityType: string;
           entityId: string;
+          orderNumber?: string | null;
           action: string;
           description?: string | null;
           userId?: string | null;
@@ -180,6 +206,7 @@ export default function FlowTab() {
     const [error, setError] = useState<string | null>(null);
 
     const [inspectorOrderId, setInspectorOrderId] = useState("");
+    const [inspectorResolved, setInspectorResolved] = useState<{ id: string; orderNumber?: string | null } | null>(null);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
     const [auditLoading, setAuditLoading] = useState(false);
     const [auditError, setAuditError] = useState<string | null>(null);
@@ -212,16 +239,51 @@ export default function FlowTab() {
 
     const timeline = useMemo(() => {
         const rows: TimelineRow[] = [];
+
+        const importedFromInflowByOrderId = new Map<string, number[]>();
+        if (includeSystemAudit) {
+            for (const item of systemAudit) {
+                const entityType = (item.entity_type || "").trim().toLowerCase();
+                const action = (item.action || "").trim().toLowerCase();
+                if (entityType !== "order" || action !== "imported_from_inflow") continue;
+                if (!item.entity_id || !item.timestamp) continue;
+                const key = item.entity_id.toLowerCase();
+                const list = importedFromInflowByOrderId.get(key) || [];
+                list.push(toMillis(item.timestamp));
+                importedFromInflowByOrderId.set(key, list);
+            }
+        }
+
+        const hasImportedFromInflowNearby = (orderId: string, atIso: string) => {
+            const ms = toMillis(atIso);
+            if (!ms) return false;
+            const list = importedFromInflowByOrderId.get(orderId.toLowerCase());
+            if (!list || list.length === 0) return false;
+
+            const windowMs = 10 * 60 * 1000;
+            return list.some((t) => Math.abs(t - ms) <= windowMs);
+        };
+
         for (const item of recentActivity) {
             if (!item.timestamp) continue;
             if (toMillis(item.timestamp) < sinceMillis) continue;
+
+            const isInitialPicked = isInitialPickedFromInflow(item);
+            if (includeSystemAudit && isInitialPicked && hasImportedFromInflowNearby(item.order_id, item.timestamp)) {
+                continue;
+            }
+
             rows.push({
                 kind: "activity",
                 timestamp: item.timestamp,
                 orderId: item.order_id,
-                description: item.description,
+                orderNumber: item.order_number,
+                description: isInitialPicked ? "Imported from inFlow (Picked)" : item.description,
                 changedBy: item.changed_by,
                 type: item.type,
+                fromStatus: item.from_status,
+                toStatus: item.to_status,
+                reason: item.reason,
             });
         }
 
@@ -234,6 +296,7 @@ export default function FlowTab() {
                     timestamp: item.timestamp,
                     entityType: item.entity_type,
                     entityId: item.entity_id,
+                    orderNumber: item.order_number,
                     action: item.action,
                     description: item.description,
                     userId: item.user_id,
@@ -247,6 +310,7 @@ export default function FlowTab() {
                   if (r.kind === "activity") {
                       return (
                           r.orderId.toLowerCase().includes(q) ||
+                          (r.orderNumber || "").toLowerCase().includes(q) ||
                           (r.description || "").toLowerCase().includes(q) ||
                           (r.changedBy || "").toLowerCase().includes(q)
                       );
@@ -254,6 +318,7 @@ export default function FlowTab() {
                   return (
                       (r.entityType || "").toLowerCase().includes(q) ||
                       (r.entityId || "").toLowerCase().includes(q) ||
+                      (r.orderNumber || "").toLowerCase().includes(q) ||
                       (r.action || "").toLowerCase().includes(q) ||
                       (r.description || "").toLowerCase().includes(q) ||
                       (r.userId || "").toLowerCase().includes(q)
@@ -264,20 +329,44 @@ export default function FlowTab() {
         return filtered.sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp));
     }, [recentActivity, systemAudit, includeSystemAudit, sinceMillis, search]);
 
-    const loadOrderAudit = async (orderId: string) => {
-        const trimmed = orderId.trim();
+    const loadOrderAudit = async (orderIdentifier: string, hintOrderNumber?: string | null) => {
+        const trimmed = orderIdentifier.trim();
         if (!trimmed) {
-            toast.error("Enter an order id");
+            toast.error("Enter an order id or number");
             return;
         }
-        setInspectorOrderId(trimmed);
+
+        setInspectorOrderId(hintOrderNumber || trimmed);
         setAuditLoading(true);
         setAuditError(null);
+        setInspectorResolved(null);
+
         try {
-            const res = await ordersApi.getOrderAudit(trimmed);
+            let resolvedId = trimmed;
+            let resolvedOrderNumber: string | null | undefined = hintOrderNumber || null;
+
+            if (!isUuid(trimmed)) {
+                const resolved = await ordersApi.resolveOrder(trimmed);
+                resolvedId = resolved.id;
+                resolvedOrderNumber = resolved.order_number;
+            } else if (!resolvedOrderNumber) {
+                // Best-effort enrichment so the inspector shows order number.
+                const orderDetail = await ordersApi.getOrder(trimmed);
+                resolvedOrderNumber = orderDetail?.inflow_order_id || null;
+            }
+
+            setInspectorResolved({ id: resolvedId, orderNumber: resolvedOrderNumber });
+            setInspectorOrderId(resolvedOrderNumber || trimmed);
+
+            const res = await ordersApi.getOrderAudit(resolvedId);
             setAuditLogs(res || []);
+
+            toast.message("Loaded order audit", {
+                description: resolvedOrderNumber ? `Order ${resolvedOrderNumber}` : resolvedId,
+            });
         } catch (e: any) {
             setAuditLogs([]);
+            setInspectorResolved(null);
             setAuditError(e?.response?.data?.error || e?.message || "Failed to load order audit");
         } finally {
             setAuditLoading(false);
@@ -327,7 +416,7 @@ export default function FlowTab() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search order id or email..."
+                                    placeholder="Search order number, id, or text..."
                                     className="pl-9"
                                 />
                             </div>
@@ -371,9 +460,8 @@ export default function FlowTab() {
                             <div className="space-y-2 max-h-[520px] overflow-auto pr-2">
                                 {timeline.map((row) => {
                                     const ts = new Date(row.timestamp).toLocaleString();
-                                    const onPickOrder = (orderId: string) => {
-                                        void loadOrderAudit(orderId);
-                                        toast.message("Loaded order audit", { description: orderId });
+                                    const onPickOrder = (orderId: string, orderNumber?: string | null) => {
+                                        void loadOrderAudit(orderNumber || orderId, orderNumber);
                                     };
 
                                     if (row.kind === "activity") {
@@ -381,7 +469,7 @@ export default function FlowTab() {
                                             <button
                                                 key={`a:${row.timestamp}:${row.orderId}:${row.description}`}
                                                 type="button"
-                                                onClick={() => onPickOrder(row.orderId)}
+                                                onClick={() => onPickOrder(row.orderId, row.orderNumber)}
                                                 className="w-full text-left rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors"
                                             >
                                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -390,9 +478,16 @@ export default function FlowTab() {
                                                             <Badge variant="secondary">activity</Badge>
                                                             <span className="text-xs text-muted-foreground">{ts}</span>
                                                         </div>
-                                                        <div className="mt-1 text-sm text-foreground break-words">{row.description}</div>
+                                                        <div className="mt-1 text-sm font-medium text-foreground break-words">
+                                                            {row.orderNumber ? `Order ${row.orderNumber}` : `Order ${row.orderId}`}
+                                                        </div>
+                                                        <div className="mt-1 text-xs text-muted-foreground break-words">{row.description}</div>
                                                         <div className="mt-1 text-xs text-muted-foreground">
-                                                            Order <span className="font-mono">{row.orderId}</span>
+                                                            {row.orderNumber ? (
+                                                                <>
+                                                                    ID <span className="font-mono">{row.orderId}</span>
+                                                                </>
+                                                            ) : null}
                                                             {row.changedBy ? ` · by ${row.changedBy}` : ""}
                                                         </div>
                                                     </div>
@@ -409,7 +504,7 @@ export default function FlowTab() {
                                             type="button"
                                             onClick={() => {
                                                 if (!clickableOrder) return;
-                                                onPickOrder(row.entityId);
+                                                onPickOrder(row.entityId, row.orderNumber);
                                             }}
                                             className={`w-full text-left rounded-lg border bg-card p-3 transition-colors ${
                                                 clickableOrder ? "hover:bg-muted/30" : "opacity-90 cursor-default"
@@ -421,13 +516,34 @@ export default function FlowTab() {
                                                         <Badge variant="outline">system</Badge>
                                                         <span className="text-xs text-muted-foreground">{ts}</span>
                                                     </div>
-                                                    <div className="mt-1 text-sm text-foreground break-words">
-                                                        {row.description || `${row.entityType}:${row.action}`}
-                                                    </div>
-                                                    <div className="mt-1 text-xs text-muted-foreground">
-                                                        {row.entityType} <span className="font-mono">{row.entityId}</span>
-                                                        {row.userId ? ` · user ${row.userId}` : ""}
-                                                    </div>
+                                                    {clickableOrder ? (
+                                                        <>
+                                                            <div className="mt-1 text-sm font-medium text-foreground break-words">
+                                                                {row.orderNumber ? `Order ${row.orderNumber}` : `Order ${row.entityId}`}
+                                                            </div>
+                                                            <div className="mt-1 text-xs text-muted-foreground break-words">
+                                                                {row.description || `${row.entityType}:${row.action}`}
+                                                            </div>
+                                                            <div className="mt-1 text-xs text-muted-foreground">
+                                                                {row.orderNumber ? (
+                                                                    <>
+                                                                        ID <span className="font-mono">{row.entityId}</span>
+                                                                    </>
+                                                                ) : null}
+                                                                {row.userId ? ` · user ${row.userId}` : ""}
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="mt-1 text-sm text-foreground break-words">
+                                                                {row.description || `${row.entityType}:${row.action}`}
+                                                            </div>
+                                                            <div className="mt-1 text-xs text-muted-foreground">
+                                                                {row.entityType} <span className="font-mono">{row.entityId}</span>
+                                                                {row.userId ? ` · user ${row.userId}` : ""}
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                                 <div className="text-xs text-muted-foreground mt-2 sm:mt-0">{row.action}</div>
                                             </div>
@@ -442,14 +558,14 @@ export default function FlowTab() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-base">Order inspector</CardTitle>
-                        <CardDescription>Enter an order id (UUID) or click a timeline item.</CardDescription>
+                        <CardDescription>Enter an order number (e.g. TH3270) or UUID, or click a timeline item.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <div className="flex items-center gap-2">
                             <Input
                                 value={inspectorOrderId}
                                 onChange={(e) => setInspectorOrderId(e.target.value)}
-                                placeholder="Order id"
+                                placeholder="Order number or id"
                                 className="font-mono"
                             />
                             <Button
@@ -463,6 +579,17 @@ export default function FlowTab() {
                                 Load
                             </Button>
                         </div>
+
+                        {inspectorResolved ? (
+                            <div className="rounded-lg border bg-muted/20 p-3">
+                                <div className="text-sm font-medium text-foreground">
+                                    {inspectorResolved.orderNumber ? `Order ${inspectorResolved.orderNumber}` : "Order"}
+                                </div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    ID <span className="font-mono">{inspectorResolved.id}</span>
+                                </div>
+                            </div>
+                        ) : null}
 
                         {auditError ? (
                             <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">

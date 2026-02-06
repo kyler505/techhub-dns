@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, abort, send_file
 from flask_socketio import emit
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
@@ -111,6 +111,34 @@ def get_orders():
             result.append(order_dict)
 
         return jsonify(result)
+
+
+@bp.route("/resolve", methods=["GET"])
+def resolve_order_by_number():
+    """Resolve an inFlow order number to internal UUID.
+
+    Query param:
+        order_number: inFlow order id (e.g. "TH3270")
+
+    Returns:
+        {"id": "<uuid>", "order_number": "<inflow_order_id>"}
+    """
+    order_number = (request.args.get("order_number") or "").strip()
+    if not order_number:
+        return jsonify({"error": "order_number is required"}), 400
+
+    normalized = order_number.lower()
+
+    with get_db() as db:
+        order = (
+            db.query(Order)
+            .filter(func.lower(Order.inflow_order_id) == normalized)
+            .first()
+        )
+        if not order:
+            abort(404, description="Order not found")
+
+        return jsonify({"id": str(order.id), "order_number": str(order.inflow_order_id)})
 
 
 @bp.route("/tag-request/candidates", methods=["GET"])
