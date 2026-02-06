@@ -51,9 +51,13 @@ def get_recent_activity():
             activity_item = ActivityItem(
                 type=item['type'],
                 order_id=str(item['order_id']),
+                order_number=item.get('order_number'),
                 timestamp=item['timestamp'],
                 description=item['description'],
-                changed_by=item.get('changed_by')
+                changed_by=item.get('changed_by'),
+                from_status=item.get('from_status'),
+                to_status=item.get('to_status'),
+                reason=item.get('reason'),
             )
             items.append(activity_item)
         

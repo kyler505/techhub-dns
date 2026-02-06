@@ -14,9 +14,13 @@ export interface DeliveryPerformanceResponse {
 export interface ActivityItem {
   type: string;
   order_id: string;
+  order_number?: string | null;
   timestamp: string;
   description: string;
   changed_by?: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  reason?: string | null;
 }
 
 export interface RecentActivityResponse {

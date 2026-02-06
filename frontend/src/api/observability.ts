@@ -41,6 +41,7 @@ export interface SystemAuditItem {
     timestamp: string;
     entity_type: string;
     entity_id: string;
+    order_number?: string | null;
     action: string;
     description?: string | null;
     user_id?: string | null;
