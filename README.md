@@ -122,6 +122,7 @@ Picked → QA → Pre-Delivery → Shipping (Work Area → Dock → Shipped) →
 - Webhook management and testing
 - Manual sync triggers
 - Notification testing tools
+- Flow + Database observability (admin-only): recent activity timeline, order audit inspector, curated schema diagram, and table-level stats
 
 ### SharePoint Storage
 - Document storage for picklists, QA records, signed documents

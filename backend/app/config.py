@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # Auth (structure only)
     secret_key: str = "change-me-in-production"
 
+    # Admin authorization
+    # Allowlist of admin emails. See ADMIN_EMAILS env var.
+    admin_emails: list[str] = []
+
     # TAMU SMTP Email Configuration
     smtp_enabled: bool = False  # Safety: disabled by default
     smtp_host: str = "relay.tamu.edu"
@@ -86,6 +90,10 @@ class Settings(BaseSettings):
     # Flask environment
     flask_env: str = "development"
 
+    def is_dev(self) -> bool:
+        """True when running in development mode."""
+        return (self.flask_env or "").strip().lower() == "development"
+
     # Canopy Orders Uploader (asset tagging)
     canopyorders_store_base: Optional[str] = None
     canopyorders_dav_root_path: str = "/dav"
@@ -121,6 +129,50 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
+
+    @field_validator("admin_emails", mode="before")
+    @classmethod
+    def parse_admin_emails(cls, value: Any) -> list[str]:
+        """Parse ADMIN_EMAILS from env.
+
+        Accepts:
+        - unset/empty -> []
+        - comma-separated string -> [..]
+        - JSON list string -> [..]
+        """
+        if value is None:
+            return []
+
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+
+            parsed: Any = None
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = None
+
+            if isinstance(parsed, list):
+                items = parsed
+            else:
+                items = raw.split(",")
+        else:
+            return []
+
+        normalized: list[str] = []
+        for item in items:
+            if item is None:
+                continue
+            email = str(item).strip().lower()
+            if not email:
+                continue
+            normalized.append(email)
+        return normalized
 
 
 settings = Settings()

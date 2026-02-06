@@ -30,6 +30,7 @@ interface AuthContextType {
     user: User | null;
     session: Session | null;
     isAuthenticated: boolean;
+    isAdmin: boolean;
     isLoading: boolean;
     login: () => void;
     logout: () => Promise<void>;
@@ -41,6 +42,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
     const refreshAuth = async () => {
@@ -49,10 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const response = await axios.get('/auth/me', { withCredentials: true });
             setUser(response.data.user);
             setSession(response.data.session);
+            setIsAdmin(Boolean(response.data.is_admin));
         } catch (error) {
             // Not authenticated or error - clear state
             setUser(null);
             setSession(null);
+            setIsAdmin(false);
         } finally {
             setIsLoading(false);
         }
@@ -77,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } finally {
             setUser(null);
             setSession(null);
+            setIsAdmin(false);
             // Redirect to login page
             window.location.href = '/login';
         }
@@ -86,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         session,
         isAuthenticated: !!user,
+        isAdmin,
         isLoading,
         login,
         logout,

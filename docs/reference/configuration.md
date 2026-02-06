@@ -24,6 +24,22 @@
 | `AZURE_CLIENT_ID` | Service principal client ID |
 | `AZURE_CLIENT_SECRET` | Service principal secret |
 
+## Admin Authorization
+
+| Variable | Description |
+|----------|-------------|
+| `ADMIN_EMAILS` | Admin email allowlist (comma-separated or JSON list). If empty/unset: admin endpoints allow any authenticated user ONLY in `development`; in other environments access is denied (fail-closed). |
+
+### Admin-Only Observability Endpoints
+
+These endpoints are intended for the Admin UI (Flow + Database tabs) and are always protected by admin allowlisting.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/observability/schema-summary` | Curated, allowlisted schema model for ER-ish visualization. Column names are filtered to avoid secret/token fields. |
+| `GET /api/observability/table-stats` | Allowlisted table stats (row counts + freshness timestamps where available). |
+| `GET /api/observability/system-audit` | Paginated system audit feed (filters: entity_type/entity_id/action/since/cursor). Value payloads are excluded by default. |
+
 ## Features
 
 | Variable | Description |

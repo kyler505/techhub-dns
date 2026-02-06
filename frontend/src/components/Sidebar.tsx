@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import boxTAM from "../../assets/boxTAM.svg";
+import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -33,6 +34,9 @@ const adminItems = [
 export function Sidebar({ className }: { className?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { isAdmin } = useAuth();
+
+  const visibleAdminItems = isAdmin ? adminItems : adminItems.filter((item) => item.path !== "/admin");
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -120,7 +124,7 @@ export function Sidebar({ className }: { className?: string }) {
 
         <div className="my-4 border-t border-border" />
 
-        {adminItems.map((item) => {
+        {visibleAdminItems.map((item) => {
           const active = isActive(item.path);
           const Icon = item.icon;
           return (

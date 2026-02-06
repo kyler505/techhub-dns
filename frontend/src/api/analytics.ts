@@ -46,8 +46,8 @@ export const analyticsApi = {
     return response.data;
   },
 
-  getRecentActivity: async (): Promise<RecentActivityResponse> => {
-    const response = await apiClient.get<RecentActivityResponse>("/analytics/recent-activity");
+  getRecentActivity: async (params?: { limit?: number }): Promise<RecentActivityResponse> => {
+    const response = await apiClient.get<RecentActivityResponse>("/analytics/recent-activity", { params });
     return response.data;
   },
 
