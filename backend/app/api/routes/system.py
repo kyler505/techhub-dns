@@ -299,7 +299,7 @@ def upload_canopy_orders():
             .filter(Order.inflow_order_id.in_(normalized_orders))
             .all()
         )
-        orders_by_inflow_id = {order.inflow_order_id: order for order in db_orders}
+        orders_by_inflow_id: dict[str, Order] = {cast(str, order.inflow_order_id): order for order in db_orders}
 
         eligible_orders: list[str] = []
         ineligible_orders: list[dict[str, str]] = []
@@ -410,6 +410,124 @@ def upload_canopy_orders():
         "missing_orders": missing_orders,
         "eligible_orders": eligible_orders,
         "ineligible_orders": [],
+    })
+
+
+def _normalize_canopyorders_bypass_value(raw_value: str) -> str:
+    trimmed = raw_value.strip()
+    compact = "".join(trimmed.upper().split())
+    if len(compact) == 4 and compact.isdigit():
+        return f"TH{compact}"
+    if compact.startswith("TH") and len(compact) == 6 and compact[2:].isdigit():
+        return f"TH{compact[2:]}"
+    return trimmed
+
+
+def _is_exact_th_order(value: str) -> bool:
+    if len(value) != 6:
+        return False
+    if not value.startswith("TH"):
+        return False
+    return value[2:].isdigit()
+
+
+@bp.route("/canopyorders/upload-bypass", methods=["POST"])
+def upload_canopy_orders_bypass():
+    data = request.get_json(silent=True) or {}
+    orders_payload = data.get("orders")
+
+    if not isinstance(orders_payload, list):
+        return jsonify({"error": "Missing 'orders' list in request body"}), 400
+
+    normalized_orders: list[str] = []
+    seen_orders: set[str] = set()
+
+    for raw_order in orders_payload:
+        if not isinstance(raw_order, str):
+            return jsonify({"error": "Each order must be a string"}), 400
+
+        if not raw_order.strip():
+            return jsonify({"error": "Order number cannot be empty"}), 400
+
+        normalized = _normalize_canopyorders_bypass_value(raw_order)
+        if normalized in seen_orders:
+            continue
+
+        seen_orders.add(normalized)
+        normalized_orders.append(normalized)
+
+    if not normalized_orders:
+        return jsonify({"error": "No orders provided"}), 400
+
+    uploader = CanopyOrdersUploaderService()
+    result = uploader.upload_orders(normalized_orders)
+
+    if not result.get("success"):
+        response_body = {
+            "success": False,
+            "filename": result.get("filename"),
+            "uploaded_url": result.get("uploaded_url"),
+            "count": len(normalized_orders),
+            "teams_notified": False,
+            "updated_orders": 0,
+            "missing_orders": [],
+            "error": result.get("error"),
+            "error_type": result.get("error_type"),
+            "status_code": result.get("status_code"),
+        }
+        return jsonify(response_body), 502
+
+    uploaded_url = result.get("uploaded_url")
+    teams_notified = False
+    if uploaded_url:
+        teams_notified = uploader.send_teams_notification(normalized_orders, uploaded_url)
+
+    updated_orders = 0
+    missing_orders: list[str] = []
+    th_orders = [order for order in normalized_orders if _is_exact_th_order(order)]
+
+    if th_orders:
+        db = get_db_session()
+        try:
+            sent_by = get_current_user_email() or "system"
+            sent_at = datetime.utcnow().isoformat()
+            request_metadata = {
+                "canopyorders_request_sent_at": sent_at,
+                "canopyorders_request_filename": result.get("filename"),
+                "canopyorders_request_uploaded_url": uploaded_url,
+                "canopyorders_request_sent_by": sent_by,
+            }
+
+            for th in th_orders:
+                order = db.query(Order).filter(Order.inflow_order_id == th).first()
+                if not order:
+                    missing_orders.append(th)
+                    continue
+
+                tag_data = dict(cast(dict[str, Any], getattr(order, "tag_data", None) or {}))
+                for key, value in request_metadata.items():
+                    tag_data[key] = value
+                setattr(order, "tag_data", tag_data)
+                updated_orders += 1
+
+            if updated_orders:
+                try:
+                    db.commit()
+                except Exception:
+                    logger.exception("Failed to persist CanopyOrders bypass request metadata")
+                    db.rollback()
+                    updated_orders = 0
+        finally:
+            db.close()
+
+    return jsonify({
+        "success": True,
+        "filename": result.get("filename"),
+        "uploaded_url": uploaded_url,
+        "count": len(normalized_orders),
+        "teams_notified": teams_notified,
+        "updated_orders": updated_orders,
+        "missing_orders": missing_orders,
     })
 
 

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
-import { settingsApi, SystemSettings } from "../api/settings";
+import { CanopyOrdersBypassUploadResult, settingsApi, SystemSettings } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -51,6 +51,32 @@ const getSetting = (settings: SystemSettings | null, key: keyof SystemSettings) 
     return settings?.[key] ?? DEFAULT_SETTING;
 };
 
+const normalizeCanopyOrdersBypassValue = (rawValue: string) => {
+    const trimmed = rawValue.trim();
+    const compact = trimmed.toUpperCase().replace(/\s+/g, "");
+    if (/^\d{4}$/.test(compact)) return `TH${compact}`;
+    if (/^TH\d{4}$/.test(compact)) return `TH${compact.slice(2)}`;
+    return trimmed;
+};
+
+const parseCanopyOrdersBypassInput = (input: string) => {
+    const candidates = input
+        .split(/\r?\n/)
+        .flatMap((line) => line.split(","))
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const value of candidates) {
+        const normalizedValue = normalizeCanopyOrdersBypassValue(value);
+        if (seen.has(normalizedValue)) continue;
+        seen.add(normalizedValue);
+        normalized.push(normalizedValue);
+    }
+    return normalized;
+};
+
 export default function Admin() {
     const { user } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -68,6 +94,13 @@ export default function Admin() {
     // Testing state
     const [testEmailAddress, setTestEmailAddress] = useState("");
     const [testingService, setTestingService] = useState<string | null>(null);
+
+    const [canopyBypassInput, setCanopyBypassInput] = useState("");
+    const canopyBypassOrders = useMemo(() => parseCanopyOrdersBypassInput(canopyBypassInput), [canopyBypassInput]);
+    const [canopyBypassConfirmOpen, setCanopyBypassConfirmOpen] = useState(false);
+    const [canopyBypassUploading, setCanopyBypassUploading] = useState(false);
+    const [canopyBypassResult, setCanopyBypassResult] = useState<CanopyOrdersBypassUploadResult | null>(null);
+    const [canopyBypassError, setCanopyBypassError] = useState<string | null>(null);
 
     const [togglingSettingKey, setTogglingSettingKey] = useState<string | null>(null);
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
@@ -251,6 +284,34 @@ export default function Admin() {
             });
         } finally {
             setTestingService(null);
+        }
+    };
+
+    const runCanopyBypassUpload = async () => {
+        if (canopyBypassOrders.length === 0) {
+            toast.error("Enter at least one order value");
+            return;
+        }
+
+        setCanopyBypassUploading(true);
+        setCanopyBypassError(null);
+        setCanopyBypassResult(null);
+        try {
+            const result = await settingsApi.uploadCanopyOrdersBypass(canopyBypassOrders);
+            setCanopyBypassResult(result);
+            if (result.success) {
+                toast.success("Upload complete", { description: result.filename ?? undefined });
+            } else {
+                const message = result.error || "Upload failed";
+                setCanopyBypassError(message);
+                toast.error("Upload failed", { description: message });
+            }
+        } catch (error: any) {
+            const message = error?.response?.data?.error || error?.message || "Upload failed";
+            setCanopyBypassError(message);
+            toast.error("Upload failed", { description: message });
+        } finally {
+            setCanopyBypassUploading(false);
         }
     };
 
@@ -534,6 +595,77 @@ export default function Admin() {
                                 </div>
                             </CardContent>
                         </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Tag Request Upload (Bypass)</CardTitle>
+                                <CardDescription>Uploads order values, bypassing eligibility checks.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Orders</label>
+                                    <textarea
+                                        value={canopyBypassInput}
+                                        onChange={(e) => setCanopyBypassInput(e.target.value)}
+                                        className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        rows={6}
+                                        placeholder="TH1234\n1235\n..."
+                                    />
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            {canopyBypassOrders.length} value{canopyBypassOrders.length === 1 ? "" : "s"}
+                                        </p>
+                                        <Button
+                                            type="button"
+                                            className="btn-lift"
+                                            disabled={canopyBypassUploading || canopyBypassOrders.length === 0}
+                                            onClick={() => setCanopyBypassConfirmOpen(true)}
+                                        >
+                                            {canopyBypassUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Upload
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {canopyBypassOrders.length > 0 ? (
+                                    <details className="rounded-lg border bg-muted/30 p-3 text-xs">
+                                        <summary className="cursor-pointer text-muted-foreground">Preview</summary>
+                                        <div className="mt-2 font-mono text-foreground break-words">
+                                            {canopyBypassOrders.join(", ")}
+                                        </div>
+                                    </details>
+                                ) : null}
+
+                                {canopyBypassResult?.success ? (
+                                    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                                        <div className="text-xs text-muted-foreground">Upload</div>
+                                        <div className="mt-1">
+                                            {canopyBypassResult.uploaded_url ? (
+                                                <a
+                                                    href={canopyBypassResult.uploaded_url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-sm underline break-all"
+                                                >
+                                                    {canopyBypassResult.filename || canopyBypassResult.uploaded_url}
+                                                </a>
+                                            ) : (
+                                                <span className="text-sm text-foreground">{canopyBypassResult.filename || "(no file)"}</span>
+                                            )}
+                                        </div>
+                                        <div className="mt-2 text-xs text-muted-foreground">
+                                            Updated {canopyBypassResult.updated_orders ?? 0} · Missing {canopyBypassResult.missing_orders?.length ?? 0}
+                                        </div>
+                                    </div>
+                                ) : null}
+
+                                {canopyBypassError ? (
+                                    <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+                                        {canopyBypassError}
+                                    </div>
+                                ) : null}
+                            </CardContent>
+                        </Card>
                     </div>
 
                     <Card>
@@ -698,6 +830,35 @@ export default function Admin() {
                         >
                             {manualSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Start sync
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={canopyBypassConfirmOpen} onOpenChange={setCanopyBypassConfirmOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Upload tag request (bypass)?</DialogTitle>
+                        <DialogDescription>Bypasses eligibility checks.</DialogDescription>
+                    </DialogHeader>
+                    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                        <div className="text-xs text-muted-foreground">Count</div>
+                        <div className="mt-1 font-medium text-foreground">{canopyBypassOrders.length}</div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setCanopyBypassConfirmOpen(false)} disabled={canopyBypassUploading}>
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                setCanopyBypassConfirmOpen(false);
+                                void runCanopyBypassUpload();
+                            }}
+                            disabled={canopyBypassUploading || canopyBypassOrders.length === 0}
+                        >
+                            {canopyBypassUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Upload
                         </Button>
                     </DialogFooter>
                 </DialogContent>
