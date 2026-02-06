@@ -101,6 +101,8 @@ class AnalyticsService:
         # Batch lookup order_id -> inflow_order_id to avoid N+1.
         order_ids = [str(log.order_id) for log in recent_changes if getattr(log, "order_id", None)]
         unique_order_ids = sorted(set(order_ids))
+        unique_order_ids_lower = sorted({oid.lower() for oid in unique_order_ids})
+
         order_number_by_id: Dict[str, Optional[str]] = {}
         if unique_order_ids:
             rows = (
@@ -111,7 +113,20 @@ class AnalyticsService:
             for oid, inflow_order_id in rows:
                 if oid is None:
                     continue
-                order_number_by_id[str(oid)] = inflow_order_id
+                order_number_by_id[str(oid).lower()] = inflow_order_id
+
+            # Some environments use case-sensitive collations for UUID strings.
+            # If the direct lookup misses rows, retry with a lower() predicate.
+            if len(order_number_by_id) < len(unique_order_ids_lower):
+                rows_fallback = (
+                    self.db.query(Order.id, Order.inflow_order_id)
+                    .filter(func.lower(Order.id).in_(unique_order_ids_lower))
+                    .all()
+                )
+                for oid, inflow_order_id in rows_fallback:
+                    if oid is None:
+                        continue
+                    order_number_by_id.setdefault(str(oid).lower(), inflow_order_id)
 
         for log in recent_changes:
             order_id = str(log.order_id)
@@ -120,7 +135,7 @@ class AnalyticsService:
                 "timestamp": log.timestamp,
                 "description": f"Status changed to {log.to_status}",
                 "order_id": order_id,
-                "order_number": order_number_by_id.get(order_id),
+                "order_number": order_number_by_id.get(order_id.lower()),
                 "from_status": log.from_status,
                 "to_status": log.to_status,
                 "changed_by": log.changed_by,
