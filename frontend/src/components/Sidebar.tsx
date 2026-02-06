@@ -48,11 +48,11 @@ export function Sidebar({ className }: { className?: string }) {
       animate={{ width: collapsed ? 72 : 256 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen bg-white border-r border-slate-200 flex flex-col",
+        "fixed left-0 top-0 z-40 h-screen bg-card border-r border-border text-foreground flex flex-col",
         className
       )}
     >
-      <div className="flex items-center justify-between h-11 sm:h-12 px-4 border-b border-slate-100">
+      <div className="flex items-center justify-between h-11 sm:h-12 px-4 border-b border-border">
         <div className="flex items-center gap-3">
           <AnimatePresence mode="wait">
             {!collapsed && (
@@ -74,7 +74,7 @@ export function Sidebar({ className }: { className?: string }) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -16 }}
                 transition={{ duration: 0.2 }}
-                className="font-semibold text-slate-800 tracking-tight"
+                className="font-semibold text-foreground tracking-tight"
               >
                 TechHub
               </motion.span>
@@ -83,12 +83,12 @@ export function Sidebar({ className }: { className?: string }) {
         </div>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-md hover:bg-slate-100 transition-colors"
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
           {collapsed ? (
-            <ChevronRight className="w-5 h-5 text-slate-500" />
+            <ChevronRight className="w-5 h-5" />
           ) : (
-            <ChevronLeft className="w-5 h-5 text-slate-500" />
+            <ChevronLeft className="w-5 h-5" />
           )}
         </button>
       </div>
@@ -101,10 +101,12 @@ export function Sidebar({ className }: { className?: string }) {
             <NavLink key={item.path} to={item.path}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                active ? "bg-maroon-700 text-white shadow-lg shadow-maroon-700/25" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                active
+                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               )}
             >
-              <Icon className={cn("w-5 h-5 flex-shrink-0", active && "text-white")} />
+              <Icon className="w-5 h-5 flex-shrink-0" />
               <AnimatePresence mode="wait">
                 {!collapsed && (
                   <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }} className="whitespace-nowrap overflow-hidden">
@@ -116,7 +118,7 @@ export function Sidebar({ className }: { className?: string }) {
           );
         })}
 
-        <div className="my-4 border-t border-slate-100" />
+        <div className="my-4 border-t border-border" />
 
         {adminItems.map((item) => {
           const active = isActive(item.path);
@@ -125,10 +127,12 @@ export function Sidebar({ className }: { className?: string }) {
             <NavLink key={item.path} to={item.path}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                active ? "bg-maroon-700 text-white shadow-lg shadow-maroon-700/25" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                active
+                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               )}
             >
-              <Icon className={cn("w-5 h-5 flex-shrink-0", active && "text-white")} />
+              <Icon className="w-5 h-5 flex-shrink-0" />
               <AnimatePresence mode="wait">
                 {!collapsed && (
                   <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }} className="whitespace-nowrap overflow-hidden">
