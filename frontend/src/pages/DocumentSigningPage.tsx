@@ -11,6 +11,7 @@ import { OrderDetail } from "../types/order";
 import { SignatureModal } from "../components/SignatureModal";
 import { signatureCache } from "../lib/signatureCache";
 import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
 import { PenTool, X } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -575,15 +576,15 @@ function DocumentSigningPage() {
     // --- Render ---
 
     if (loadingOrder) {
-        return <div className="p-8 text-center text-gray-500">Loading document...</div>;
+        return <div className="p-8 text-center text-muted-foreground">Loading document...</div>;
     }
 
     if (orderError || !order) {
-        return <div className="p-8 text-center text-red-500">{orderError || "Order not found"}</div>;
+        return <div className="p-8 text-center text-destructive">{orderError || "Order not found"}</div>;
     }
 
     return (
-        <div className="px-4 pb-8 min-h-[100dvh] bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-white">
+        <div className="min-h-[100dvh] bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-background px-4 pb-8">
             <SignatureModal
                 open={modalOpen}
                 onOpenChange={setModalOpen}
@@ -593,8 +594,8 @@ function DocumentSigningPage() {
             <div className="max-w-6xl mx-auto pt-6">
                 <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Sign Delivery Document</h1>
-                        <p className="text-gray-600">
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground">Sign Delivery Document</h1>
+                        <p className="text-muted-foreground">
                             Order {order.inflow_order_id} • {order.recipient_name}
                         </p>
                     </div>
@@ -610,34 +611,33 @@ function DocumentSigningPage() {
                         <Button
                             onClick={saveSignedPdf}
                             disabled={placements.length === 0 || isSaving}
-                            className="bg-[#500000] hover:bg-[#300000]"
                         >
                             {isSaving ? "Saving..." : "Finish & Save"}
                         </Button>
                     </div>
                 </header>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div className="text-sm text-gray-600">
-                            <span className="font-medium text-gray-800">Picklist</span>
-                            <span className="mx-2 text-gray-300">•</span>
+                <Card className="overflow-hidden">
+                    <div className="flex flex-col gap-2 border-b border-border bg-gradient-to-r from-muted/40 to-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">Picklist</span>
+                            <span className="mx-2 text-muted-foreground/40">•</span>
                             <span>1 page</span>
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-muted-foreground">
                             Drag to place • Resize from bottom-left • Tap Save when finished
                         </div>
                     </div>
                     <div
-                        className="relative bg-gray-100 min-h-[500px] flex justify-center p-4 overflow-hidden select-none"
+                        className="relative flex min-h-[500px] justify-center overflow-hidden bg-muted/30 p-4 select-none"
                         ref={viewerRef}
                     >
                         {selectedPdfUrl ? (
-                            <div className="relative shadow-lg ring-1 ring-gray-900/5">
+                            <div className="relative shadow-premium ring-1 ring-border/50">
                                     <Document
                                         file={selectedPdfUrl}
-                                        loading={<div className="p-10 text-gray-500">Loading PDF...</div>}
-                                        error={<div className="p-10 text-red-500">Failed to load PDF</div>}
+                                        loading={<div className="p-10 text-muted-foreground">Loading PDF...</div>}
+                                        error={<div className="p-10 text-destructive">Failed to load PDF</div>}
                                     >
                                         <Page
                                             pageNumber={1}
@@ -645,7 +645,7 @@ function DocumentSigningPage() {
                                             onLoadSuccess={handlePageLoad}
                                             renderTextLayer={false}
                                             renderAnnotationLayer={false}
-                                            className="bg-white"
+                                            className="bg-background"
                                         />
                                     </Document>
 
@@ -653,7 +653,7 @@ function DocumentSigningPage() {
                                 {placements.map(p => (
                                     <div
                                         key={p.id}
-                                        className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                                        className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
                                         style={{ ...getPlacementStyle(p), touchAction: 'none' }}
                                         onPointerDown={(e) => handlePointerDown(e, p.id)}
                                         onPointerMove={handlePointerMove}
@@ -671,20 +671,23 @@ function DocumentSigningPage() {
 
                                         {/* Delete Button (visible on hover/select) */}
                                         {(selectedPlacementId === p.id) && (
-                                            <button
+                                            <Button
+                                                type="button"
                                                 data-delete-button
-                                                className="absolute -top-3 -right-3 z-20 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600 pointer-events-auto"
+                                                variant="destructive"
+                                                size="icon"
+                                                className="pointer-events-auto absolute -right-3 -top-3 z-20 h-7 w-7 rounded-full p-0 shadow-premium"
                                                 onPointerDown={(e) => { e.stopPropagation(); }}
                                                 onClick={(e) => { e.stopPropagation(); removePlacement(p.id); }}
                                             >
-                                                <X className="w-3 h-3" />
-                                            </button>
+                                                <X className="h-3 w-3" />
+                                            </Button>
                                         )}
 
                                         {(selectedPlacementId === p.id) && (
                                             <div
                                                 data-resize-handle
-                                                className="absolute -bottom-3 -left-3 z-20 h-6 w-6 rounded-full border-2 border-blue-500 bg-white shadow-md flex items-center justify-center cursor-nw-resize hover:scale-110 transition-transform pointer-events-auto"
+                                                className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
                                                 onPointerUp={handlePointerUp}
                                                 onPointerCancel={handlePointerUp}
@@ -692,7 +695,7 @@ function DocumentSigningPage() {
                                                 onTouchEnd={handleWindowTouchEnd}
                                                 style={{ touchAction: 'none' }}
                                             >
-                                                <svg className="w-3 h-3 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <path d="M18 6L6 18" />
                                                     <path d="M12 6h6v6" />
                                                 </svg>
@@ -704,21 +707,21 @@ function DocumentSigningPage() {
                                 {/* Empty State Hint */}
                                 {placements.length === 0 && (
                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                                        <div className="bg-black/75 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm">
+                                        <div className="rounded-full bg-foreground/85 px-4 py-2 text-sm text-background backdrop-blur-sm">
                                             Tap "Add Signature" to draw, then drag to place
                                         </div>
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <div className="text-gray-400 self-center">No PDF Loaded</div>
+                            <div className="self-center text-muted-foreground">No PDF Loaded</div>
                         )}
                     </div>
 
                     {/* Mobile Floating Action Button */}
                     <div className="sm:hidden fixed bottom-6 right-6">
                         <Button
-                            className="rounded-full shadow-lg h-14 w-14 p-0 bg-blue-600 hover:bg-blue-700"
+                            className="h-14 w-14 rounded-full p-0 shadow-premium"
                             onClick={useLastSignature}
                         >
                             <PenTool className="w-6 h-6 text-white" />
@@ -726,11 +729,11 @@ function DocumentSigningPage() {
                     </div>
 
                     {error && (
-                        <div className="p-4 bg-red-50 border-t border-red-100 text-red-600 text-sm text-center">
+                        <div className="border-t border-destructive/20 bg-destructive/10 p-4 text-center text-sm text-destructive">
                             {error}
                         </div>
                     )}
-                </div>
+                </Card>
             </div>
         </div>
     );
