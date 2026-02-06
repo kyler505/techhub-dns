@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
@@ -34,6 +34,32 @@ interface Placement {
 }
 
 
+type PdfPaneProps = {
+    fileUrl: string;
+    containerWidth: number | null;
+    onPageLoad: (page: PDFPageProxy) => void;
+};
+
+const PdfPane = memo(function PdfPane({ fileUrl, containerWidth, onPageLoad }: PdfPaneProps) {
+    return (
+        <Document
+            file={fileUrl}
+            loading={<div className="p-10 text-muted-foreground">Loading PDF...</div>}
+            error={<div className="p-10 text-destructive">Failed to load PDF</div>}
+        >
+            <Page
+                pageNumber={1}
+                width={containerWidth || undefined}
+                onLoadSuccess={onPageLoad}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                className="bg-background"
+            />
+        </Document>
+    );
+});
+
+
 
 function DocumentSigningPage() {
     const [searchParams] = useSearchParams();
@@ -50,6 +76,7 @@ function DocumentSigningPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [placements, setPlacements] = useState<Placement[]>([]);
     const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
+    const [activeInteraction, setActiveInteraction] = useState<{ id: string; mode: 'drag' | 'resize' } | null>(null);
     const viewerRef = useRef<HTMLDivElement | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -207,6 +234,9 @@ function DocumentSigningPage() {
     const interactionTypeRef = useRef<'pointer' | 'touch' | null>(null);
     const interactionModeRef = useRef<'drag' | 'resize' | null>(null);
 
+    const latestClientPosRef = useRef<{ x: number; y: number } | null>(null);
+    const pendingRafRef = useRef<number | null>(null);
+
     const windowPointerListenersRef = useRef(false);
     const windowTouchListenersRef = useRef(false);
     const touchListenerOptions = useRef<AddEventListenerOptions>({ passive: false });
@@ -215,6 +245,7 @@ function DocumentSigningPage() {
         if (windowPointerListenersRef.current) return;
         window.addEventListener('pointermove', handlePointerMove as unknown as EventListener);
         window.addEventListener('pointerup', handleWindowPointerUp);
+        window.addEventListener('pointercancel', handleWindowPointerUp);
         windowPointerListenersRef.current = true;
     };
 
@@ -222,6 +253,7 @@ function DocumentSigningPage() {
         if (!windowPointerListenersRef.current) return;
         window.removeEventListener('pointermove', handlePointerMove as unknown as EventListener);
         window.removeEventListener('pointerup', handleWindowPointerUp);
+        window.removeEventListener('pointercancel', handleWindowPointerUp);
         windowPointerListenersRef.current = false;
     };
 
@@ -314,17 +346,43 @@ function DocumentSigningPage() {
         const nextX = anchorX - newWidth;
         const nextY = anchorY - newHeight;
 
-        requestAnimationFrame(() => {
-            setPlacements(prev => prev.map(p => {
-                if (p.id !== id) return p;
-                return {
-                    ...p,
-                    x: nextX,
-                    y: nextY,
-                    width: newWidth,
-                    height: newHeight
-                };
-            }));
+        setPlacements(prev => prev.map(p => {
+            if (p.id !== id) return p;
+            return {
+                ...p,
+                x: nextX,
+                y: nextY,
+                width: newWidth,
+                height: newHeight
+            };
+        }));
+    };
+
+    const cancelPendingMove = () => {
+        latestClientPosRef.current = null;
+        if (pendingRafRef.current !== null) {
+            cancelAnimationFrame(pendingRafRef.current);
+            pendingRafRef.current = null;
+        }
+    };
+
+    const applyLatestMove = (clientX: number, clientY: number) => {
+        if (interactionModeRef.current === 'resize') {
+            updateResize(clientX, clientY);
+            return;
+        }
+        updateDrag(clientX, clientY);
+    };
+
+    const scheduleLatestMove = (clientX: number, clientY: number) => {
+        latestClientPosRef.current = { x: clientX, y: clientY };
+        if (pendingRafRef.current !== null) return;
+
+        pendingRafRef.current = requestAnimationFrame(() => {
+            pendingRafRef.current = null;
+            const pos = latestClientPosRef.current;
+            if (!pos) return;
+            applyLatestMove(pos.x, pos.y);
         });
     };
 
@@ -337,6 +395,7 @@ function DocumentSigningPage() {
 
         interactionTypeRef.current = 'pointer';
         interactionModeRef.current = 'drag';
+        setActiveInteraction({ id, mode: 'drag' });
         setSelectedPlacementId(id);
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         attachPointerListeners();
@@ -355,14 +414,12 @@ function DocumentSigningPage() {
 
     const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
         if (interactionTypeRef.current !== 'pointer') return;
+        if (!dragStartRef.current && !resizeStartRef.current) return;
         if ('preventDefault' in e) {
             e.preventDefault();
         }
-        if (interactionModeRef.current === 'resize') {
-            updateResize(e.clientX, e.clientY);
-        } else {
-            updateDrag(e.clientX, e.clientY);
-        }
+
+        scheduleLatestMove(e.clientX, e.clientY);
     };
 
     const handleTouchStart = (e: React.TouchEvent, id: string) => {
@@ -377,6 +434,7 @@ function DocumentSigningPage() {
         e.preventDefault();
         interactionTypeRef.current = 'touch';
         interactionModeRef.current = 'drag';
+        setActiveInteraction({ id, mode: 'drag' });
         setSelectedPlacementId(id);
         attachTouchListeners();
 
@@ -396,38 +454,33 @@ function DocumentSigningPage() {
         if ('preventDefault' in e) {
             e.preventDefault();
         }
-        if (interactionModeRef.current === 'resize') {
-            updateResize(touch.clientX, touch.clientY);
-        } else {
-            updateDrag(touch.clientX, touch.clientY);
-        }
+
+        scheduleLatestMove(touch.clientX, touch.clientY);
     };
 
-    const handleWindowPointerUp = () => {
+    const endInteraction = () => {
         dragStartRef.current = null;
         resizeStartRef.current = null;
         interactionTypeRef.current = null;
         interactionModeRef.current = null;
+        cancelPendingMove();
+        setActiveInteraction(null);
+    };
+
+    const handleWindowPointerUp = (e: PointerEvent) => {
+        const target = e.target as (Element | null);
+        const releasable = target as unknown as { hasPointerCapture?: (pointerId: number) => boolean; releasePointerCapture?: (pointerId: number) => void };
+        if (releasable?.hasPointerCapture?.(e.pointerId)) {
+            releasable.releasePointerCapture?.(e.pointerId);
+        }
+
+        endInteraction();
         detachPointerListeners();
     };
 
     const handleWindowTouchEnd = () => {
-        dragStartRef.current = null;
-        resizeStartRef.current = null;
-        interactionTypeRef.current = null;
-        interactionModeRef.current = null;
+        endInteraction();
         detachTouchListeners();
-    };
-
-    const handlePointerUp = (e: React.PointerEvent) => {
-        if (dragStartRef.current || resizeStartRef.current) {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            dragStartRef.current = null;
-            resizeStartRef.current = null;
-            interactionTypeRef.current = null;
-            interactionModeRef.current = null;
-            detachPointerListeners();
-        }
     };
 
     const handleResizePointerDown = (e: React.PointerEvent, id: string) => {
@@ -437,6 +490,7 @@ function DocumentSigningPage() {
 
         interactionTypeRef.current = 'pointer';
         interactionModeRef.current = 'resize';
+        setActiveInteraction({ id, mode: 'resize' });
         setSelectedPlacementId(id);
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         attachPointerListeners();
@@ -471,6 +525,7 @@ function DocumentSigningPage() {
         e.preventDefault();
         interactionTypeRef.current = 'touch';
         interactionModeRef.current = 'resize';
+        setActiveInteraction({ id, mode: 'resize' });
         setSelectedPlacementId(id);
         attachTouchListeners();
 
@@ -496,6 +551,7 @@ function DocumentSigningPage() {
 
     useEffect(() => {
         return () => {
+            cancelPendingMove();
             detachPointerListeners();
             detachTouchListeners();
         };
@@ -552,7 +608,7 @@ function DocumentSigningPage() {
     };
 
     // Calculate DOM styles for a placement
-    const getPlacementStyle = (p: Placement) => {
+    const getPlacementStyle = (p: Placement, willChangeTransform: boolean) => {
         if (!pageViewport) return { display: 'none' };
 
         // Convert PDF Points (Bottom-Left) to DOM Pixels (Top-Left)
@@ -565,11 +621,13 @@ function DocumentSigningPage() {
         const hPx = p.height * scale;
 
         return {
-            left: `${xPx}px`,
-            top: `${yPx}px`,
+            left: 0,
+            top: 0,
             width: `${wPx}px`,
             height: `${hPx}px`,
             position: 'absolute' as const,
+            transform: `translate3d(${xPx}px, ${yPx}px, 0)`,
+            ...(willChangeTransform ? { willChange: 'transform' as const } : {}),
         };
     };
 
@@ -632,37 +690,29 @@ function DocumentSigningPage() {
                         className="relative flex min-h-[500px] justify-center overflow-hidden bg-muted/30 p-4 select-none"
                         ref={viewerRef}
                     >
-                        {selectedPdfUrl ? (
-                            <div className="relative shadow-premium ring-1 ring-border/50">
-                                    <Document
-                                        file={selectedPdfUrl}
-                                        loading={<div className="p-10 text-muted-foreground">Loading PDF...</div>}
-                                        error={<div className="p-10 text-destructive">Failed to load PDF</div>}
-                                    >
-                                        <Page
-                                            pageNumber={1}
-                                            width={containerWidth || undefined}
-                                            onLoadSuccess={handlePageLoad}
-                                            renderTextLayer={false}
-                                            renderAnnotationLayer={false}
-                                            className="bg-background"
-                                        />
-                                    </Document>
+                         {selectedPdfUrl ? (
+                             <div className="relative shadow-premium ring-1 ring-border/50">
+                                 <PdfPane
+                                     fileUrl={selectedPdfUrl}
+                                     containerWidth={containerWidth}
+                                     onPageLoad={handlePageLoad}
+                                 />
 
-                                {/* Overlay Layer */}
-                                {placements.map(p => (
-                                    <div
-                                        key={p.id}
-                                        className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
-                                        style={{ ...getPlacementStyle(p), touchAction: 'none' }}
-                                        onPointerDown={(e) => handlePointerDown(e, p.id)}
-                                        onPointerMove={handlePointerMove}
-                                        onPointerUp={handlePointerUp}
-                                        onPointerCancel={handlePointerUp}
-                                        onTouchStart={(e) => handleTouchStart(e, p.id)}
-                                        onTouchMove={handleTouchMove}
-                                        onTouchEnd={handleWindowTouchEnd}
-                                    >
+                                 {/* Overlay Layer */}
+                                 {placements.map(p => (
+                                     <div
+                                         key={p.id}
+                                         className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
+                                         style={{
+                                             ...getPlacementStyle(
+                                                 p,
+                                                 activeInteraction?.id === p.id && activeInteraction.mode === 'drag'
+                                             ),
+                                             touchAction: 'none'
+                                         }}
+                                         onPointerDown={(e) => handlePointerDown(e, p.id)}
+                                         onTouchStart={(e) => handleTouchStart(e, p.id)}
+                                     >
                                         <img
                                             src={p.dataUrl}
                                             alt="Signature"
@@ -684,17 +734,14 @@ function DocumentSigningPage() {
                                             </Button>
                                         )}
 
-                                        {(selectedPlacementId === p.id) && (
-                                            <div
-                                                data-resize-handle
-                                                className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
-                                                onPointerDown={(e) => handleResizePointerDown(e, p.id)}
-                                                onPointerUp={handlePointerUp}
-                                                onPointerCancel={handlePointerUp}
-                                                onTouchStart={(e) => handleResizeTouchStart(e, p.id)}
-                                                onTouchEnd={handleWindowTouchEnd}
-                                                style={{ touchAction: 'none' }}
-                                            >
+                                         {(selectedPlacementId === p.id) && (
+                                             <div
+                                                 data-resize-handle
+                                                 className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
+                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
+                                                 onTouchStart={(e) => handleResizeTouchStart(e, p.id)}
+                                                 style={{ touchAction: 'none' }}
+                                             >
                                                 <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <path d="M18 6L6 18" />
                                                     <path d="M12 6h6v6" />
