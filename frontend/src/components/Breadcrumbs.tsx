@@ -29,17 +29,17 @@ export function Breadcrumbs() {
   });
 
   return (
-    <div className="flex items-center text-xs text-slate-500">
-      <Link to="/" className="hover:text-slate-900 transition-colors">
+    <div className="flex items-center text-xs text-muted-foreground">
+      <Link to="/" className="hover:text-foreground transition-colors">
         Dashboard
       </Link>
       {crumbs.map((crumb) => (
         <div key={crumb.path} className="flex items-center">
-          <ChevronRight className="mx-1.5 h-3.5 w-3.5 text-slate-400" />
+          <ChevronRight className="mx-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
           {crumb.isId ? (
-            <span className="text-slate-600">{crumb.label}</span>
+            <span className="text-foreground">{crumb.label}</span>
           ) : (
-            <Link to={crumb.path} className="hover:text-slate-900 transition-colors">
+            <Link to={crumb.path} className="hover:text-foreground transition-colors">
               {crumb.label}
             </Link>
           )}
