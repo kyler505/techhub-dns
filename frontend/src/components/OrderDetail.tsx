@@ -53,6 +53,7 @@ export default function OrderDetail({
   const latestNotification = notifications[0];
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
   const [tagConfirming, setTagConfirming] = useState(false);
+  const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
 
   const requestSentAt =
@@ -66,15 +67,24 @@ export default function OrderDetail({
     !requestSent &&
     Boolean(order.inflow_order_id);
 
-  const handleRequestTags = async () => {
-    if (!canRequestTags) return;
+  const handleRequestTags = async (): Promise<boolean> => {
+    if (!canRequestTags) return false;
 
     setRequestingTags(true);
     try {
       await onRequestTags();
+      return true;
+    } catch (error) {
+      toast.error("Failed to request tags");
+      return false;
     } finally {
       setRequestingTags(false);
     }
+  };
+
+  const handleRequestTagsConfirm = async () => {
+    const ok = await handleRequestTags();
+    if (ok) setRequestTagsConfirmOpen(false);
   };
 
   const handleTagPrintedConfirm = async () => {
@@ -190,11 +200,11 @@ export default function OrderDetail({
                   </Button>
                 ) : (
                   <Button
-                    onClick={() => void handleRequestTags()}
+                    onClick={() => setRequestTagsConfirmOpen(true)}
                     disabled={!canRequestTags || requestingTags}
                     size="sm"
                   >
-                    {requestingTags ? "Requesting..." : "Request Tags"}
+                    Request Tags
                   </Button>
                 )}
                 {!order.tagged_at && requestSent && (
@@ -394,6 +404,42 @@ export default function OrderDetail({
           </details>
         </Card>
       )}
+
+      <Dialog
+        open={requestTagsConfirmOpen}
+        onOpenChange={(open) => {
+          if (requestingTags) return;
+          setRequestTagsConfirmOpen(open);
+        }}
+      >
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request tags for {order.inflow_order_id}?</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-1 text-sm">
+            <p className="text-foreground">
+              <span className="font-medium">Recipient:</span> {order.recipient_name || "N/A"}
+            </p>
+            <p className="text-foreground">
+              <span className="font-medium">Location:</span> {order.delivery_location || "N/A"}
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setRequestTagsConfirmOpen(false)}
+              disabled={requestingTags}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRequestTagsConfirm()} disabled={requestingTags}>
+              {requestingTags ? "Requesting..." : "Request Tags"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={tagPrintedDialogOpen} onOpenChange={setTagPrintedDialogOpen}>
         <DialogContent className="sm:max-w-md">
