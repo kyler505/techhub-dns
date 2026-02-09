@@ -548,21 +548,63 @@ class InflowService:
     def _normalize_category_name(self, name: str) -> str:
         return " ".join(name.lower().replace("-", " ").split())
 
-    def _is_asset_tag_category(
-        self,
-        category_name: Optional[str],
-        product_name: Optional[str] = None,
-        custom_fields: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        normalized_category = self._normalize_category_name(category_name) if category_name else ""
-        normalized_product = self._normalize_category_name(product_name) if product_name else ""
-        normalized = normalized_category or normalized_product
+    def _is_asset_tag_required_line(self, category_name: Optional[str], unit_price: float) -> bool:
+        if unit_price <= 500:
+            return False
 
-        if any(keyword in normalized for keyword in ["laptop", "desktop", "all in one", "aio"]):
-            return True
+        normalized = self._normalize_category_name(category_name) if category_name else ""
+        return (
+            normalized.startswith("desktops ")
+            or normalized.startswith("laptops ")
+            or normalized == "custom computer"
+        )
 
-        custom2 = (custom_fields or {}).get("custom2")
-        return str(custom2).startswith("432115") if custom2 is not None else False
+    def requires_asset_tags(self, order: Dict[str, Any]) -> bool:
+        lines = order.get("lines", []) or []
+        if not isinstance(lines, list) or not lines:
+            return False
+
+        pending_category_ids: list[tuple[str, float]] = []
+
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+
+            raw_price = line.get("unitPrice")
+            try:
+                unit_price = float(raw_price or 0)
+            except (TypeError, ValueError):
+                unit_price = 0
+
+            if unit_price <= 500:
+                continue
+
+            category_name = self._extract_category_name(line)
+            if category_name:
+                if self._is_asset_tag_required_line(category_name, unit_price):
+                    return True
+                continue
+
+            category_id = self._extract_category_id(line)
+            if category_id:
+                pending_category_ids.append((str(category_id), unit_price))
+
+        if not pending_category_ids:
+            return False
+
+        category_map: Dict[str, str] = {}
+        try:
+            category_map = self.get_category_map_sync()
+        except Exception as exc:
+            logger.warning(f"Failed to fetch inflow categories: {exc}")
+            return False
+
+        for category_id, unit_price in pending_category_ids:
+            category_name = category_map.get(category_id)
+            if self._is_asset_tag_required_line(category_name, unit_price):
+                return True
+
+        return False
 
     def _extract_product_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> str:
         product = line.get("product", {})
@@ -625,11 +667,27 @@ class InflowService:
 
     def get_asset_tag_serials(self, order: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Extract serial numbers for laptop/desktop/AIO categories from inflow order data.
+        Extract serial numbers for asset-tag-required items from inflow order data.
         Uses pickLines when available to preserve device pick order.
         """
         lines = order.get("lines", [])
         pick_lines = order.get("pickLines", [])
+
+        line_unit_price_by_product: Dict[str, float] = {}
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+            raw_price = line.get("unitPrice")
+            try:
+                unit_price = float(raw_price or 0)
+            except (TypeError, ValueError):
+                unit_price = 0
+            existing = line_unit_price_by_product.get(product_id)
+            if existing is None or unit_price > existing:
+                line_unit_price_by_product[product_id] = unit_price
 
         def has_serials(source: List[Dict[str, Any]]) -> bool:
             return any(
@@ -660,11 +718,7 @@ class InflowService:
                 "custom_fields": line.get("product", {}).get("customFields"),
             }
 
-        category_map: Dict[str, str] = {}
-        try:
-            category_map = self.get_category_map_sync()
-        except Exception as exc:
-            logger.warning(f"Failed to fetch inflow categories: {exc}")
+        category_map: Optional[Dict[str, str]] = None
 
         asset_tag_serials: List[Dict[str, Any]] = []
         index_by_product: Dict[str, int] = {}
@@ -674,16 +728,25 @@ class InflowService:
             fallback_info = line_products.get(product_id or "")
             product_name = self._extract_product_name(line, fallback_info)
             category_id = self._extract_category_id(line, fallback_info)
-            category_name = self._extract_category_name(line, fallback_info) or (
-                category_map.get(str(category_id)) if category_id else None
-            )
-            custom_fields = (line.get("product") or {}).get("customFields") or (fallback_info or {}).get("custom_fields")
+            category_name = self._extract_category_name(line, fallback_info)
+            if not category_name and category_id:
+                if category_map is None:
+                    try:
+                        category_map = self.get_category_map_sync()
+                    except Exception as exc:
+                        logger.warning(f"Failed to fetch inflow categories: {exc}")
+                        category_map = {}
+                category_name = category_map.get(str(category_id))
 
-            if not self._is_asset_tag_category(
-                category_name,
-                product_name if not category_name else None,
-                custom_fields
-            ):
+            raw_price = line.get("unitPrice")
+            try:
+                unit_price = float(raw_price) if raw_price is not None else float(
+                    line_unit_price_by_product.get(product_id or "", 0)
+                )
+            except (TypeError, ValueError):
+                unit_price = float(line_unit_price_by_product.get(product_id or "", 0) or 0)
+
+            if not self._is_asset_tag_required_line(category_name, unit_price):
                 continue
 
             serial_numbers = list(line.get("quantity", {}).get("serialNumbers", []) or [])

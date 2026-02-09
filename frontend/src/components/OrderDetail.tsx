@@ -56,12 +56,15 @@ export default function OrderDetail({
   const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
 
+  const assetTagRequired = order.asset_tag_required !== false;
+
   const requestSentAt =
     order.tag_data?.canopyorders_request_sent_at || order.tag_data?.tag_request_sent_at;
   const requestSentBy = order.tag_data?.canopyorders_request_sent_by;
   const requestSent = Boolean(requestSentAt || order.tag_data?.tag_request_status === "sent");
 
   const canRequestTags =
+    assetTagRequired &&
     order.status === OrderStatus.PICKED &&
     !order.tagged_at &&
     !requestSent &&
@@ -181,33 +184,36 @@ export default function OrderDetail({
               <div>
                 <p className="font-medium text-foreground">Asset Tagging</p>
                 <p className="text-sm text-muted-foreground">
-                  {order.tagged_at
-                    ? `Completed ${formatToCentralTime(order.tagged_at)}`
-                    : requestSentAt
-                      ? `Requested ${formatToCentralTime(requestSentAt)}`
-                      : "Pending"}
+                  {!assetTagRequired
+                    ? "Not required"
+                    : order.tagged_at
+                      ? `Completed ${formatToCentralTime(order.tagged_at)}`
+                      : requestSentAt
+                        ? `Requested ${formatToCentralTime(requestSentAt)}`
+                        : "Pending"}
                 </p>
-                {requestSent && !order.tagged_at && requestSentBy && (
+                {assetTagRequired && requestSent && !order.tagged_at && requestSentBy && (
                   <p className="text-xs text-muted-foreground">
                     Requested by {requestSentBy}
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {requestSent ? (
-                  <Button asChild variant="outline" size="sm">
-                    <Link to="/tag-request">Open Tag Request</Link>
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => setRequestTagsConfirmOpen(true)}
-                    disabled={!canRequestTags || requestingTags}
-                    size="sm"
-                  >
-                    Request Tags
-                  </Button>
-                )}
-                {!order.tagged_at && requestSent && (
+                {assetTagRequired &&
+                  (requestSent ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/tag-request">Open Tag Request</Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => setRequestTagsConfirmOpen(true)}
+                      disabled={!canRequestTags || requestingTags}
+                      size="sm"
+                    >
+                      Request Tags
+                    </Button>
+                  ))}
+                {assetTagRequired && !order.tagged_at && requestSent && (
                   <Button
                     onClick={() => setTagPrintedDialogOpen(true)}
                     variant="secondary"
@@ -247,7 +253,9 @@ export default function OrderDetail({
               </div>
               <Button
                 onClick={onGeneratePicklist}
-                disabled={!order.tagged_at || Boolean(order.picklist_generated_at)}
+                disabled={
+                  (assetTagRequired && !order.tagged_at) || Boolean(order.picklist_generated_at)
+                }
                 size="sm"
               >
                 {order.picklist_generated_at ? "Generated" : "Generate & Email"}
