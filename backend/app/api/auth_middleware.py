@@ -11,6 +11,7 @@ from flask import request, g, jsonify
 from app.config import settings
 from app.database import get_db, get_db_session
 from app.services.saml_auth_service import saml_auth_service
+from app.services.system_setting_service import SystemSettingService, SETTING_ADMIN_EMAILS
 
 logger = logging.getLogger(__name__)
 
@@ -134,14 +135,32 @@ def is_current_user_admin() -> bool:
     if not getattr(g, "user_id", None):
         return False
 
-    allowlist = settings.get_admin_emails()
-    if allowlist:
-        user = getattr(g, "user", None)
-        user_email = getattr(user, "email", None) if user is not None else None
-        email = (user_email or get_current_user_email() or "").strip().lower()
-        return bool(email) and email in allowlist
+    user = getattr(g, "user", None)
+    user_email = getattr(user, "email", None) if user is not None else None
+    email = (user_email or get_current_user_email() or "").strip().lower()
+    if not email:
+        return False
 
-    return settings.is_dev()
+    env_allowlist = settings.get_admin_emails()
+    if env_allowlist:
+        return email in env_allowlist
+
+    # No env override: consult DB allowlist (if configured).
+    db = getattr(g, "_auth_session", None) or get_db_session()
+    close_db = not hasattr(g, "_auth_session") or getattr(g, "_auth_session", None) is None
+    try:
+        raw = SystemSettingService.get_setting(db, SETTING_ADMIN_EMAILS)
+        db_allowlist = settings._parse_admin_emails(raw)
+        if db_allowlist:
+            return email in db_allowlist
+    finally:
+        if close_db:
+            db.close()
+
+    # Default behavior when no allowlist is configured.
+    if settings.is_dev():
+        return True
+    return False
 
 
 def require_admin(f):
