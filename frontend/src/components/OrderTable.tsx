@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Order, OrderStatus } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
@@ -57,6 +57,30 @@ export default function OrderTable({
         }
         setSortKey(key);
         setSortDir("desc");
+    };
+
+    const isInteractiveTarget = (target: EventTarget | null): boolean => {
+        const el = target as HTMLElement | null;
+        if (!el) return false;
+        return Boolean(
+            el.closest(
+                "a,button,input,select,textarea,label,[role='button'],[role='link'],[data-row-click-ignore]",
+            ),
+        );
+    };
+
+    const navigateToOrder = (orderId: string) => onViewDetail(orderId);
+
+    const onRowClick = (e: MouseEvent<HTMLTableRowElement>, orderId: string) => {
+        if (isInteractiveTarget(e.target)) return;
+        navigateToOrder(orderId);
+    };
+
+    const onRowKeyDown = (e: KeyboardEvent<HTMLTableRowElement>, orderId: string) => {
+        if (isInteractiveTarget(e.target)) return;
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        navigateToOrder(orderId);
     };
 
     if (orders.length === 0) {
@@ -129,13 +153,23 @@ export default function OrderTable({
                         </TableHead>
                     </TableRow>
                 </TableHeader>
-            <TableBody>
-                {sortedOrders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-muted/50 transition-colors">
+                <TableBody>
+                    {sortedOrders.map((order) => (
+                        <TableRow
+                            key={order.id}
+                            tabIndex={0}
+                            role="link"
+                            onClick={(e) => onRowClick(e, order.id)}
+                            onKeyDown={(e) => onRowKeyDown(e, order.id)}
+                            className="cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
                         <TableCell>
                             <Button
                                 variant="link"
-                                onClick={() => onViewDetail(order.id)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigateToOrder(order.id);
+                                }}
                                 className="p-0 h-auto font-normal text-foreground/90 hover:text-foreground"
                             >
                                 {order.inflow_order_id}
@@ -149,9 +183,9 @@ export default function OrderTable({
                         <TableCell>
                             <StatusBadge status={order.status} />
                         </TableCell>
-                    </TableRow>
-                ))}
-            </TableBody>
+                        </TableRow>
+                    ))}
+                </TableBody>
             </Table>
         </div>
     );
