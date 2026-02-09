@@ -4,8 +4,11 @@ System status API routes.
 Provides endpoints for checking backend feature statuses.
 """
 
+import json
+import re
+
 from flask import Blueprint, jsonify, request
-from typing import Dict, Any, cast
+from typing import Dict, Any, cast, Optional
 from datetime import datetime
 
 from app.config import settings
@@ -17,6 +20,7 @@ from app.database import get_db_session
 from app.models.system_setting import SystemSetting
 from app.models.order import Order
 from app.api.auth_middleware import get_current_user_email, require_admin
+from app.services.audit_service import AuditService
 import logging
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
@@ -27,8 +31,52 @@ from app.services.system_setting_service import (
     SystemSettingService,
     DEFAULT_SETTINGS,
     SETTING_EMAIL_ENABLED,
-    SETTING_TEAMS_RECIPIENT_ENABLED
+    SETTING_TEAMS_RECIPIENT_ENABLED,
+    SETTING_ADMIN_EMAILS,
 )
+
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
+
+
+def _normalize_admin_emails(raw_emails: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for item in raw_emails:
+        email = (item or "").strip().lower()
+        if not email:
+            continue
+        normalized.append(email)
+    # Deterministic order for diffs and UX.
+    return sorted(set(normalized))
+
+
+def _parse_allowlist_string(raw_value: Optional[str]) -> list[str]:
+    # Reuse env parsing logic (accept JSON list string and CSV).
+    parsed = settings._parse_admin_emails(raw_value)
+    return _normalize_admin_emails(parsed)
+
+
+def _get_request_user_email_normalized() -> str:
+    # Prefer request-scoped g.user (if attached) to avoid extra DB query.
+    from flask import g
+
+    user = getattr(g, "user", None)
+    user_email = getattr(user, "email", None) if user is not None else None
+    email = (user_email or get_current_user_email() or "").strip().lower()
+    return email
+
+
+def _get_db_admin_allowlist() -> list[str]:
+    db = get_db_session()
+    try:
+        raw = SystemSettingService.get_setting(db, SETTING_ADMIN_EMAILS)
+        return _parse_allowlist_string(raw)
+    finally:
+        db.close()
+
+
+def _is_env_admin_override_active() -> bool:
+    return bool(settings.get_admin_emails())
 
 # ============ Settings Endpoints ============
 
@@ -48,6 +96,9 @@ def update_system_setting(key: str):
     if key not in DEFAULT_SETTINGS:
         return jsonify({"error": f"Unknown setting: {key}"}), 400
 
+    if key == SETTING_ADMIN_EMAILS:
+        return jsonify({"error": "Admin allowlist must be updated via /api/system/admins"}), 400
+
     data = request.get_json()
     if not data or "value" not in data:
         return jsonify({"error": "Missing 'value' in request body"}), 400
@@ -63,6 +114,144 @@ def update_system_setting(key: str):
         "updated_at": setting.updated_at.isoformat() if setting.updated_at is not None else None,
         "updated_by": setting.updated_by,
     })
+
+
+# ============ Admin Allowlist Endpoints ============
+
+
+@bp.route("/admins", methods=["GET"])
+@require_admin
+def get_admins():
+    """Get the effective admin allowlist + its source."""
+    env_admins = _normalize_admin_emails(settings.get_admin_emails())
+    db_admins = _get_db_admin_allowlist()
+
+    if env_admins:
+        source = "env"
+        admins = env_admins
+    elif db_admins:
+        source = "db"
+        admins = db_admins
+    else:
+        source = "default"
+        admins = []
+
+    response: dict[str, Any] = {
+        "admins": admins,
+        "source": source,
+        "env_admins": env_admins,
+        "db_admins": db_admins,
+    }
+    return jsonify(response)
+
+
+@bp.route("/admins", methods=["PUT"])
+@require_admin
+def update_admins():
+    """Update the DB-backed admin allowlist (unless ADMIN_EMAILS override active)."""
+    if _is_env_admin_override_active():
+        return (
+            jsonify(
+                {
+                    "error": "ADMIN_EMAILS env override is active; admin allowlist is read-only and must be updated via environment variables.",
+                }
+            ),
+            409,
+        )
+
+    data = request.get_json(silent=True) or {}
+    admins_payload = data.get("admins")
+    if not isinstance(admins_payload, list):
+        return jsonify({"error": "Missing 'admins' list in request body"}), 400
+
+    raw_emails: list[str] = []
+    for item in admins_payload:
+        if not isinstance(item, str):
+            return jsonify({"error": "Each admin email must be a string"}), 400
+        raw_emails.append(item)
+
+    normalized = _normalize_admin_emails(raw_emails)
+
+    invalid = [email for email in normalized if not EMAIL_RE.match(email)]
+    if invalid:
+        return (
+            jsonify(
+                {
+                    "error": "One or more admin emails are invalid.",
+                    "invalid": invalid,
+                }
+            ),
+            400,
+        )
+
+    caller_email = _get_request_user_email_normalized()
+    caller_looks_like_email = bool(caller_email and EMAIL_RE.match(caller_email))
+
+    if not settings.is_dev():
+        if not normalized:
+            return (
+                jsonify(
+                    {
+                        "error": "Refusing to set an empty admin allowlist in non-development environments (would lock out all admins).",
+                    }
+                ),
+                400,
+            )
+        if caller_looks_like_email and caller_email not in normalized:
+            return (
+                jsonify(
+                    {
+                        "error": f"Refusing to remove your own admin access. The allowlist must include your email ({caller_email}) to prevent accidental lockout.",
+                    }
+                ),
+                400,
+            )
+
+    db = get_db_session()
+    try:
+        setting = db.query(SystemSetting).filter(SystemSetting.key == SETTING_ADMIN_EMAILS).first()
+        old_raw = setting.value if setting else None
+        old_list = _parse_allowlist_string(old_raw)
+
+        new_raw = json.dumps(normalized)
+        updated_by = caller_email or get_current_user_email()
+
+        if not setting:
+            setting = SystemSetting(
+                key=SETTING_ADMIN_EMAILS,
+                value=new_raw,
+                description=DEFAULT_SETTINGS.get(SETTING_ADMIN_EMAILS, {}).get("description"),
+                updated_by=updated_by,
+            )
+            db.add(setting)
+        else:
+            setting.value = new_raw
+            setting.updated_by = updated_by
+
+        audit = AuditService(db)
+        audit.log_system_action(
+            action="admins.update",
+            entity_id="admin_allowlist",
+            user_id=updated_by,
+            old_value={"admins": old_list},
+            new_value={"admins": normalized},
+            description=f"Updated admin allowlist ({len(old_list)} -> {len(normalized)})",
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        db.commit()
+
+        return jsonify({
+            "admins": normalized,
+            "source": "db",
+            "updated_by": updated_by,
+        })
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 # ============ Testing Endpoints ============

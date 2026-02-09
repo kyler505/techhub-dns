@@ -8,9 +8,13 @@ from app.models.system_setting import SystemSetting
 SETTING_EMAIL_ENABLED = "email_notifications_enabled"
 SETTING_TEAMS_RECIPIENT_ENABLED = "teams_recipient_notifications_enabled"
 
+# Admin allowlist
+SETTING_ADMIN_EMAILS = "admin_emails"
+
 DEFAULT_SETTINGS = {
     SETTING_EMAIL_ENABLED: {"value": "true", "description": "Enable sending email notifications (Order Details PDFs)"},
     SETTING_TEAMS_RECIPIENT_ENABLED: {"value": "false", "description": "Enable sending delivery notifications to recipients via Teams"},
+    SETTING_ADMIN_EMAILS: {"value": "[]", "description": "Admin email allowlist (JSON array string preferred; CSV accepted)"},
 }
 
 class SystemSettingService:

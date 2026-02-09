@@ -45,6 +45,7 @@ interface SystemStatus {
 
 const FlowTab = lazy(() => import("../components/admin/FlowTab"));
 const DatabaseTab = lazy(() => import("../components/admin/DatabaseTab"));
+const AdminsTab = lazy(() => import("../components/admin/AdminsTab"));
 
 // Default values when settings haven't been loaded yet
 const DEFAULT_SETTING = { value: "true", description: "Loading...", updated_at: null, updated_by: null };
@@ -86,7 +87,7 @@ export default function Admin() {
     const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations" | "flow" | "database">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations" | "admins" | "flow" | "database">("overview");
 
     // Inflow webhook state
     const [inflowWebhooks, setInflowWebhooks] = useState<WebhookResponse[]>([]);
@@ -439,6 +440,7 @@ export default function Admin() {
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="notifications">Notifications</TabsTrigger>
                         <TabsTrigger value="operations">Operations</TabsTrigger>
+                        <TabsTrigger value="admins">Admins</TabsTrigger>
                         <TabsTrigger value="flow">Flow</TabsTrigger>
                         <TabsTrigger value="database">Database</TabsTrigger>
                     </TabsList>
@@ -793,6 +795,23 @@ export default function Admin() {
                         }
                     >
                         <FlowTab />
+                    </Suspense>
+                </TabsContent>
+
+                <TabsContent value="admins" className="mt-4 space-y-6">
+                    <Suspense
+                        fallback={
+                            <Card>
+                                <CardContent className="p-6">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Loading admins...
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        }
+                    >
+                        <AdminsTab />
                     </Suspense>
                 </TabsContent>
 

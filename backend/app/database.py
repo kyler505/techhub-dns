@@ -4,13 +4,23 @@ from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
 from app.config import settings
 
-engine = create_engine(
-    settings.database_url,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    pool_recycle=3600  # MySQL connection timeout handling
-)
+database_url = settings.database_url
+
+# SQLite does not support the MySQL connection pool arguments used in production.
+if str(database_url).strip().lower().startswith("sqlite"):
+    engine = create_engine(
+        database_url,
+        pool_pre_ping=True,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=3600,  # MySQL connection timeout handling
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
