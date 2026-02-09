@@ -59,25 +59,24 @@ export default function OrderTable({
         setSortDir("desc");
     };
 
-    const isInteractiveTarget = (target: EventTarget | null): boolean => {
+    const isInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLElement): boolean => {
         const el = target as HTMLElement | null;
         if (!el) return false;
-        return Boolean(
-            el.closest(
-                "a,button,input,select,textarea,label,[role='button'],[role='link'],[data-row-click-ignore]",
-            ),
+        const hit = el.closest(
+            "a,button,input,select,textarea,label,[role='button'],[role='link'],[data-row-click-ignore]",
         );
+        return Boolean(hit && hit !== currentTarget);
     };
 
     const navigateToOrder = (orderId: string) => onViewDetail(orderId);
 
     const onRowClick = (e: MouseEvent<HTMLTableRowElement>, orderId: string) => {
-        if (isInteractiveTarget(e.target)) return;
+        if (isInteractiveTarget(e.target, e.currentTarget)) return;
         navigateToOrder(orderId);
     };
 
     const onRowKeyDown = (e: KeyboardEvent<HTMLTableRowElement>, orderId: string) => {
-        if (isInteractiveTarget(e.target)) return;
+        if (isInteractiveTarget(e.target, e.currentTarget)) return;
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
         navigateToOrder(orderId);
