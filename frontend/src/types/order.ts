@@ -98,6 +98,7 @@ export interface TagData {
 
 export interface OrderDetail extends Order {
   inflow_data?: Record<string, any>;
+  asset_tag_required?: boolean;
 }
 
 export interface AssetTagSerial {

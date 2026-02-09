@@ -150,6 +150,7 @@ def get_tag_request_candidates():
     search = (request.args.get("search") or "").strip()
 
     with get_db() as db:
+        inflow_service = InflowService()
         query = (
             db.query(Order)
             .filter(Order.status == OrderStatus.PICKED.value)
@@ -176,6 +177,12 @@ def get_tag_request_candidates():
             sent_at = tag_data.get("canopyorders_request_sent_at") or tag_data.get("tag_request_sent_at")
             if sent_at or tag_data.get("tag_request_status") == "sent":
                 continue
+
+            if not order.inflow_data:
+                continue
+            if not inflow_service.requires_asset_tags(order.inflow_data):
+                continue
+
             needing_request.append(OrderResponse.model_validate(order).model_dump())
             if len(needing_request) >= limit:
                 break
@@ -194,6 +201,7 @@ def get_order(order_id):
         response_data = OrderDetailResponse.model_validate(order).model_dump()
         if order.inflow_data:
             inflow_service = InflowService()
+            response_data["asset_tag_required"] = inflow_service.requires_asset_tags(order.inflow_data)
             response_data["asset_tag_serials"] = inflow_service.get_asset_tag_serials(order.inflow_data)
 
         return jsonify(response_data)

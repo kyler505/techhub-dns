@@ -123,6 +123,7 @@ class OrderResponse(OrderBase):
 class OrderDetailResponse(OrderResponse):
     inflow_data: Optional[Dict[str, Any]] = None
     asset_tag_serials: Optional[List[Dict[str, Any]]] = None
+    asset_tag_required: Optional[bool] = None
 
 
 

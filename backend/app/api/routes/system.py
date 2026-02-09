@@ -303,6 +303,7 @@ def upload_canopy_orders():
 
     db = get_db_session()
     try:
+        inflow_service = InflowService()
         db_orders = (
             db.query(Order)
             .filter(Order.inflow_order_id.in_(normalized_orders))
@@ -338,6 +339,11 @@ def upload_canopy_orders():
             )
             if already_requested:
                 ineligible_orders.append({"order": th, "reason": "already requested"})
+                continue
+
+            inflow_data = getattr(order, "inflow_data", None)
+            if not inflow_data or not inflow_service.requires_asset_tags(inflow_data):
+                ineligible_orders.append({"order": th, "reason": "not asset-tag required"})
                 continue
 
             eligible_orders.append(th)
