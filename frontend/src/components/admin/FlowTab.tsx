@@ -234,7 +234,6 @@ export default function FlowTab() {
 
     useEffect(() => {
         void load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [range, includeSystemAudit]);
 
     const timeline = useMemo(() => {
