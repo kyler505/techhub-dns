@@ -39,6 +39,22 @@
 | PUT | `/api/delivery-runs/{id}/finish` | Complete run |
 | GET | `/api/delivery-runs/vehicles/available` | Vehicle availability |
 
+### POST `/api/delivery-runs`
+
+Notes:
+- `runner` is derived from the authenticated session user and is not provided in the request.
+
+Request:
+```json
+{
+  "order_ids": [
+    "11111111-1111-1111-1111-111111111111",
+    "22222222-2222-2222-2222-222222222222"
+  ],
+  "vehicle": "van"
+}
+```
+
 ## Vehicle Checkouts API (`/api/vehicle-checkouts`)
 
 Tracks who has physically checked out a shared vehicle (independent of delivery runs).
@@ -53,11 +69,13 @@ Allowed `vehicle` values: `van`, `golf_cart`.
 
 ### POST `/api/vehicle-checkouts/checkout`
 
+Notes:
+- `checked_out_by` is derived from the authenticated session user and is not provided in the request.
+
 Request:
 ```json
 {
   "vehicle": "van",
-  "checked_out_by": "Alice",
   "purpose": "Delivery",
   "notes": "Morning run"
 }
@@ -77,11 +95,13 @@ Response:
 
 ### POST `/api/vehicle-checkouts/checkin`
 
+Notes:
+- Check-in identity is derived from the authenticated session user and is not provided in the request.
+
 Request:
 ```json
 {
   "vehicle": "van",
-  "checked_in_by": "Alice",
   "notes": "Returned"
 }
 ```
