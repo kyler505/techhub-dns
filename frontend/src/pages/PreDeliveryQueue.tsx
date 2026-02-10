@@ -10,6 +10,8 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { formatDeliveryLocation } from "../utils/location";
 import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
+import VehicleCheckoutPanel from "../components/VehicleCheckoutPanel";
+import type { VehicleStatusItem } from "../api/vehicleCheckouts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { AlertTriangle } from "lucide-react";
 
@@ -20,6 +22,8 @@ export default function PreDeliveryQueue() {
     const [loading, setLoading] = useState(true);
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
     const [iscreateDeliveryOpen, setIsCreateDeliveryOpen] = useState(false);
+
+    const [vehicleStatuses, setVehicleStatuses] = useState<VehicleStatusItem[] | null>(null);
 
     // Listen for real-time updates
     const { orders: websocketOrders } = useOrdersWebSocket();
@@ -159,6 +163,7 @@ export default function PreDeliveryQueue() {
 
     return (
         <div className="space-y-4">
+            <VehicleCheckoutPanel onStatusesChange={setVehicleStatuses} />
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
                 <Button
                     onClick={handleBulkStartDelivery}
@@ -257,6 +262,7 @@ export default function PreDeliveryQueue() {
                 onClose={() => setIsCreateDeliveryOpen(false)}
                 onCreateDelivery={handleCreateDelivery}
                 selectedOrdersCount={selectedOrders.size}
+                vehicleStatuses={vehicleStatuses ?? undefined}
             />
 
             {/* Generic Info/Error Dialog */}

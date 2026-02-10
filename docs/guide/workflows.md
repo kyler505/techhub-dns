@@ -202,6 +202,14 @@ Groups multiple orders into coordinated delivery runs with vehicle and runner tr
 **Service**: `backend/app/services/delivery_run_service.py`
 **Page**: `frontend/src/pages/DeliveryDashboard.tsx`
 
+### Vehicle Checkout Rules
+
+Vehicle checkout is tracked separately from delivery runs.
+
+- Vehicle checkout is independent of delivery runs (a vehicle can be checked out before any run is started).
+- Starting a delivery run requires the vehicle is checked out and the run `runner` matches `checked_out_by`.
+- Vehicle check-in is blocked while a delivery run is active to preserve accountability and prevent a vehicle from being "returned" while it is still assigned to an active run.
+
 ### Delivery Run Model
 
 ```python
@@ -234,7 +242,9 @@ class DeliveryRun:
 | `van` | Full-size delivery van |
 | `golf_cart` | Campus golf cart |
 
-**Availability Check**: Only one active run per vehicle.
+**Availability Check**:
+- Only one active run per vehicle.
+- To start a new run, the vehicle must also be checked out (and the runner must match the active checkout).
 
 ### Run Completion
 

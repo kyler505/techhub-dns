@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import settings
-from app.api.routes import orders, inflow, audit, delivery_runs, sharepoint, auth, system, analytics, observability
+from app.api.routes import orders, inflow, audit, delivery_runs, sharepoint, auth, system, analytics, observability, vehicle_checkouts
 from app.api.middleware import register_error_handlers
 from app.api.auth_middleware import init_auth_middleware
 from app.scheduler import start_scheduler
@@ -212,6 +212,8 @@ app.register_blueprint(orders.bp, url_prefix="/api/orders")
 app.register_blueprint(inflow.bp, url_prefix="/api/inflow")
 app.register_blueprint(audit.bp, url_prefix="/api/audit")
 app.register_blueprint(delivery_runs.bp, url_prefix="/api/delivery-runs")
+app.register_blueprint(vehicle_checkouts.vehicle_checkouts_bp)
+app.register_blueprint(vehicle_checkouts.vehicles_bp)
 app.register_blueprint(analytics.bp, url_prefix="/api/analytics")
 app.register_blueprint(observability.bp, url_prefix="/api/observability")
 app.register_blueprint(sharepoint.sharepoint_bp)
