@@ -200,15 +200,7 @@ Orders cannot advance to PreDelivery without completing:
 Groups multiple orders into coordinated delivery runs with vehicle and runner tracking.
 
 **Service**: `backend/app/services/delivery_run_service.py`
-**Page**: `frontend/src/pages/DeliveryDashboard.tsx`
-
-### Vehicle Checkout Rules
-
-Vehicle checkout is tracked separately from delivery runs.
-
-- Vehicle checkout is independent of delivery runs (a vehicle can be checked out before any run is started).
-- Starting a delivery run requires the vehicle is checked out and the authenticated session user matches `checked_out_by`.
-- Vehicle check-in is blocked while a delivery run is active to preserve accountability and prevent a vehicle from being "returned" while it is still assigned to an active run.
+**Pages**: `frontend/src/pages/delivery/Dispatch.tsx`, `frontend/src/pages/delivery/Fleet.tsx`
 
 ### Delivery Run Model
 
@@ -216,7 +208,7 @@ Vehicle checkout is tracked separately from delivery runs.
 class DeliveryRun:
     id: String(36)           # UUID
     name: String             # Auto-generated (e.g., "Morning Run 1")
-    runner: String           # Derived from authenticated session user
+    runner: String           # Assigned runner name
     vehicle: Enum            # 'van' or 'golf_cart'
     status: Enum             # 'Active', 'Completed', 'Cancelled'
     start_time: DateTime     # Run creation time
@@ -227,7 +219,8 @@ class DeliveryRun:
 ### Run Creation Process
 
 1. Select Pre-Delivery orders from queue
-2. Select vehicle (runner is derived from authenticated session user)
+2. Select vehicle (runner identity is derived from authenticated session)
+3. Ensure the selected vehicle is checked out by the current user with checkout type `delivery_run`
 3. System generates run name based on time:
    - Morning (before 12:00): "Morning Run N"
    - Afternoon (12:00-17:00): "Afternoon Run N"
@@ -242,9 +235,17 @@ class DeliveryRun:
 | `van` | Full-size delivery van |
 | `golf_cart` | Campus golf cart |
 
-**Availability Check**:
-- Only one active run per vehicle.
-- To start a new run, the vehicle must also be checked out (and the runner must match the active checkout).
+**Availability Check**: Only one active run per vehicle.
+
+### Vehicle Checkout Workflow
+
+Vehicles are checked out independently from delivery runs.
+
+- Checkout types:
+  - `delivery_run`: eligible to start a delivery run
+  - `other`: non-delivery usage; requires a non-empty `purpose`
+- Starting a delivery run requires an active checkout owned by the current user with type `delivery_run`.
+- If a vehicle is checked out as `other`, the user must check it in and then check it out again as `delivery_run` (no in-place conversion).
 
 ### Run Completion
 

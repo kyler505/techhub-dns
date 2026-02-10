@@ -33,134 +33,26 @@
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/delivery-runs` | Create delivery run |
+| POST | `/api/delivery-runs` | Create delivery run (requires vehicle checked out for `delivery_run` by current user; runner derived from session) |
 | GET | `/api/delivery-runs/active` | Get active runs |
 | GET | `/api/delivery-runs/{id}` | Get run details |
 | PUT | `/api/delivery-runs/{id}/finish` | Complete run |
 | GET | `/api/delivery-runs/vehicles/available` | Vehicle availability |
 
-### POST `/api/delivery-runs`
-
-Notes:
-- `runner` is derived from the authenticated session user and is not provided in the request.
-
-Request:
-```json
-{
-  "order_ids": [
-    "11111111-1111-1111-1111-111111111111",
-    "22222222-2222-2222-2222-222222222222"
-  ],
-  "vehicle": "van"
-}
-```
-
 ## Vehicle Checkouts API (`/api/vehicle-checkouts`)
-
-Tracks who has physically checked out a shared vehicle (independent of delivery runs).
-
-Allowed `vehicle` values: `van`, `golf_cart`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/vehicle-checkouts/checkout` | Check out a vehicle |
+| POST | `/api/vehicle-checkouts/checkout` | Check out a vehicle (type: `delivery_run` or `other`; purpose required when `other`) |
 | POST | `/api/vehicle-checkouts/checkin` | Check in a vehicle |
-| GET | `/api/vehicle-checkouts/active` | List active (not checked in) vehicle checkouts |
-
-### POST `/api/vehicle-checkouts/checkout`
-
-Notes:
-- `checked_out_by` is derived from the authenticated session user and is not provided in the request.
-
-Request:
-```json
-{
-  "vehicle": "van",
-  "purpose": "Delivery",
-  "notes": "Morning run"
-}
-```
-
-Response:
-```json
-{
-  "id": "6e2d0fd4-3d98-4f92-b0c3-8a3a54a9f8a8",
-  "vehicle": "van",
-  "checked_out_by": "Alice",
-  "purpose": "Delivery",
-  "checked_out_at": "2026-02-10T15:04:05.123456",
-  "checked_in_at": null
-}
-```
-
-### POST `/api/vehicle-checkouts/checkin`
-
-Notes:
-- Check-in identity is derived from the authenticated session user and is not provided in the request.
-
-Request:
-```json
-{
-  "vehicle": "van",
-  "notes": "Returned"
-}
-```
-
-Response:
-```json
-{
-  "id": "6e2d0fd4-3d98-4f92-b0c3-8a3a54a9f8a8",
-  "vehicle": "van",
-  "checked_out_by": "Alice",
-  "purpose": "Delivery",
-  "checked_out_at": "2026-02-10T15:04:05.123456",
-  "checked_in_at": "2026-02-10T17:22:01.654321"
-}
-```
-
-### GET `/api/vehicle-checkouts/active`
-
-Response:
-```json
-[
-  {
-    "id": "6e2d0fd4-3d98-4f92-b0c3-8a3a54a9f8a8",
-    "vehicle": "van",
-    "checked_out_by": "Alice",
-    "purpose": "Delivery",
-    "checked_out_at": "2026-02-10T15:04:05.123456",
-    "checked_in_at": null
-  }
-]
-```
+| GET | `/api/vehicle-checkouts/active` | List active checkouts (auth required) |
+| GET | `/api/vehicle-checkouts` | List checkout history (auth required; supports `vehicle`, `checkout_type`, `page`, `page_size`) |
 
 ## Vehicles API (`/api/vehicles`)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/vehicles/status` | Get per-vehicle checkout + delivery run status |
-
-### GET `/api/vehicles/status`
-
-Response:
-```json
-{
-  "vehicles": [
-    {
-      "vehicle": "van",
-      "checked_out": true,
-      "checked_out_by": "Alice",
-      "delivery_run_active": false
-    },
-    {
-      "vehicle": "golf_cart",
-      "checked_out": false,
-      "checked_out_by": null,
-      "delivery_run_active": false
-    }
-  ]
-}
-```
+| GET | `/api/vehicles/status` | Get per-vehicle status (includes checkout info when checked out) |
 
 ## Auth API (`/auth`)
 
