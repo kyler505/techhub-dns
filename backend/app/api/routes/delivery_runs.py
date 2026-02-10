@@ -10,6 +10,8 @@ from app.api.auth_middleware import require_auth
 from app.services.delivery_run_service import DeliveryRunService
 from app.schemas.delivery_run import CreateDeliveryRunRequest, DeliveryRunResponse
 from app.models.delivery_run import VehicleEnum
+from app.utils.exceptions import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 
 bp = Blueprint('delivery_runs', __name__)
 bp.strict_slashes = False
@@ -58,7 +60,11 @@ def create_run():
         service = DeliveryRunService(db)
         try:
             req = CreateDeliveryRunRequest(**data)
-            run = service.create_run(order_ids=req.order_ids, vehicle=req.vehicle)
+        except PydanticValidationError as exc:
+            raise ValidationError("Invalid create run request", details={"errors": exc.errors()})
+
+        try:
+            run = service.create_run_for_current_user(order_ids=req.order_ids, vehicle=req.vehicle)
 
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()
@@ -91,10 +97,11 @@ def create_run():
 def get_runs():
     """Get delivery runs (optionally filtered by status)"""
     status_filter = request.args.getlist('status')
+    vehicle = request.args.get('vehicle')
 
     with get_db() as db:
         service = DeliveryRunService(db)
-        runs = service.get_all_run_details(status=status_filter if status_filter else None)
+        runs = service.get_all_run_details(status=status_filter if status_filter else None, vehicle=vehicle)
 
         result = []
         for r in runs:
