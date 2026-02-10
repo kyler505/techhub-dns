@@ -53,3 +53,36 @@ class SystemAuditLog(Base):
     # Timestamps
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SystemAuditLogArchive(Base):
+    """Archive table for historical system audit logs (kept forever)."""
+
+    __tablename__ = "system_audit_logs_archive"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    # Entity tracking
+    entity_type = Column(String(100), nullable=False, index=True)
+    entity_id = Column(String(36), nullable=False, index=True)
+
+    # Action details
+    action = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # User tracking
+    user_id = Column(String(255), nullable=True)
+    user_role = Column(String(100), nullable=True)
+
+    # State changes
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+
+    # Context and metadata
+    audit_metadata = Column(JSON, nullable=True, name="metadata")
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+
+    # Timestamps
+    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import and_, func, inspect, or_
+from sqlalchemy import and_, func, inspect, or_, select, union_all
 from sqlalchemy.orm import Session
 
 from app.api.auth_middleware import require_admin
 from app.database import engine, get_db
-from app.models.audit_log import AuditLog, SystemAuditLog
+from app.models.audit_log import AuditLog, SystemAuditLog, SystemAuditLogArchive
 from app.models.delivery_run import DeliveryRun
 from app.models.order import Order
 from app.models.session import Session as UserSession
@@ -155,6 +155,35 @@ def _decode_cursor(cursor: str) -> Optional[tuple[datetime, str]]:
         return None
 
 
+def _row_get(row: Any, key: str) -> Any:
+    """Get a value from either an ORM row or a RowMapping."""
+    if row is None:
+        return None
+    if hasattr(row, "get"):
+        try:
+            return row.get(key)
+        except Exception:
+            return None
+    return getattr(row, key, None)
+
+
+def _system_audit_select(model):
+    return select(
+        model.id.label("id"),
+        model.timestamp.label("timestamp"),
+        model.entity_type.label("entity_type"),
+        model.entity_id.label("entity_id"),
+        model.action.label("action"),
+        model.description.label("description"),
+        model.user_id.label("user_id"),
+        model.user_role.label("user_role"),
+        model.ip_address.label("ip_address"),
+        model.user_agent.label("user_agent"),
+        model.old_value.label("old_value"),
+        model.new_value.label("new_value"),
+    )
+
+
 @bp.route("/table-stats", methods=["GET"])
 @require_admin
 def get_table_stats():
@@ -201,6 +230,14 @@ def get_table_stats():
         tables.append(
             table_stat(
                 db,
+                name="system_audit_logs_archive",
+                row_count_query=db.query(func.count()).select_from(SystemAuditLogArchive),
+                last_updated_query=db.query(func.max(SystemAuditLogArchive.timestamp)).select_from(SystemAuditLogArchive),
+            )
+        )
+        tables.append(
+            table_stat(
+                db,
                 name="delivery_runs",
                 row_count_query=db.query(func.count()).select_from(DeliveryRun),
                 last_updated_query=db.query(func.max(DeliveryRun.updated_at)).select_from(DeliveryRun),
@@ -238,6 +275,7 @@ def get_schema_summary():
         "orders",
         "audit_logs",
         "system_audit_logs",
+        "system_audit_logs_archive",
     ]
 
     inspector = inspect(engine)
@@ -320,39 +358,69 @@ def get_system_audit():
     since = _parse_since(request.args.get("since"))
     cursor = (request.args.get("cursor") or "").strip()
     include_values = _parse_bool(request.args.get("include_values"), default=False)
+    include_archive = _parse_bool(request.args.get("include_archive"), default=False)
 
     cursor_value = _decode_cursor(cursor) if cursor else None
 
     with get_db() as db:
-        query = db.query(SystemAuditLog)
+        if not include_archive:
+            query = db.query(SystemAuditLog)
 
-        if entity_type:
-            query = query.filter(SystemAuditLog.entity_type == entity_type)
-        if entity_id:
-            query = query.filter(SystemAuditLog.entity_id == entity_id)
-        if action:
-            query = query.filter(SystemAuditLog.action == action)
-        if since is not None:
-            query = query.filter(SystemAuditLog.timestamp >= since)
+            if entity_type:
+                query = query.filter(SystemAuditLog.entity_type == entity_type)
+            if entity_id:
+                query = query.filter(SystemAuditLog.entity_id == entity_id)
+            if action:
+                query = query.filter(SystemAuditLog.action == action)
+            if since is not None:
+                query = query.filter(SystemAuditLog.timestamp >= since)
 
-        if cursor_value is not None:
-            cursor_ts, cursor_id = cursor_value
-            query = query.filter(
-                or_(
-                    SystemAuditLog.timestamp < cursor_ts,
-                    and_(SystemAuditLog.timestamp == cursor_ts, SystemAuditLog.id < cursor_id),
+            if cursor_value is not None:
+                cursor_ts, cursor_id = cursor_value
+                query = query.filter(
+                    or_(
+                        SystemAuditLog.timestamp < cursor_ts,
+                        and_(SystemAuditLog.timestamp == cursor_ts, SystemAuditLog.id < cursor_id),
+                    )
                 )
-            )
 
-        query = query.order_by(SystemAuditLog.timestamp.desc(), SystemAuditLog.id.desc()).limit(limit + 1)
+            query = query.order_by(SystemAuditLog.timestamp.desc(), SystemAuditLog.id.desc()).limit(limit + 1)
+            rows_any: list[Any] = query.all()
+        else:
+            hot = _system_audit_select(SystemAuditLog)
+            archived = _system_audit_select(SystemAuditLogArchive)
+            combined = union_all(hot, archived).subquery("system_audit_union")
 
-        rows = query.all()
+            stmt = select(combined)
+
+            if entity_type:
+                stmt = stmt.where(combined.c.entity_type == entity_type)
+            if entity_id:
+                stmt = stmt.where(combined.c.entity_id == entity_id)
+            if action:
+                stmt = stmt.where(combined.c.action == action)
+            if since is not None:
+                stmt = stmt.where(combined.c.timestamp >= since)
+
+            if cursor_value is not None:
+                cursor_ts, cursor_id = cursor_value
+                stmt = stmt.where(
+                    or_(
+                        combined.c.timestamp < cursor_ts,
+                        and_(combined.c.timestamp == cursor_ts, combined.c.id < cursor_id),
+                    )
+                )
+
+            stmt = stmt.order_by(combined.c.timestamp.desc(), combined.c.id.desc()).limit(limit + 1)
+            rows_any = [r._mapping for r in db.execute(stmt).all()]
+
+        rows = rows_any
 
         # Batch lookup order entity_id -> inflow_order_id for display purposes.
         order_entity_ids = {
-            str(getattr(r, "entity_id", "") or "")
+            str(_row_get(r, "entity_id") or "")
             for r in rows
-            if str(getattr(r, "entity_type", "") or "").strip().lower() == "order"
+            if str(_row_get(r, "entity_type") or "").strip().lower() == "order"
         }
         order_entity_ids = {oid for oid in order_entity_ids if oid}
         order_entity_ids_lower = sorted({oid.lower() for oid in order_entity_ids})
@@ -382,28 +450,27 @@ def get_system_audit():
         next_cursor: Optional[str] = None
         if len(rows) > limit:
             last = rows[limit - 1]
-            last_ts = getattr(last, "timestamp", None)
-            last_id = getattr(last, "id", None)
+            last_ts = _row_get(last, "timestamp")
+            last_id = _row_get(last, "id")
             if isinstance(last_ts, datetime) and isinstance(last_id, str):
                 next_cursor = _encode_cursor(last_ts, last_id)
             rows = rows[:limit]
 
         items: list[dict[str, Any]] = []
         for row in rows:
-            row_any: Any = row
-            row_ts = getattr(row_any, "timestamp", None)
-            row_description = getattr(row_any, "description", None)
-            row_user_agent = getattr(row_any, "user_agent", None)
+            row_ts = _row_get(row, "timestamp")
+            row_description = _row_get(row, "description")
+            row_user_agent = _row_get(row, "user_agent")
             item: dict[str, Any] = {
-                "id": getattr(row, "id"),
+                "id": _row_get(row, "id"),
                 "timestamp": _to_iso_z(row_ts if isinstance(row_ts, datetime) else None),
-                "entity_type": getattr(row, "entity_type"),
-                "entity_id": getattr(row, "entity_id"),
-                "action": getattr(row, "action"),
+                "entity_type": _row_get(row, "entity_type"),
+                "entity_id": _row_get(row, "entity_id"),
+                "action": _row_get(row, "action"),
                 "description": _truncate_string(row_description if isinstance(row_description, str) else None, max_len=2000),
-                "user_id": (getattr(row, "user_id", None) or None),
-                "user_role": (getattr(row, "user_role", None) or None),
-                "ip": (getattr(row, "ip_address", None) or None),
+                "user_id": (_row_get(row, "user_id") or None),
+                "user_role": (_row_get(row, "user_role") or None),
+                "ip": (_row_get(row, "ip_address") or None),
                 "user_agent": _truncate_string(row_user_agent if isinstance(row_user_agent, str) else None, max_len=500),
             }
 
@@ -413,8 +480,8 @@ def get_system_audit():
 
             # Optionally include state change payloads (bounded).
             if include_values:
-                item["old_values"] = _truncate_json(row.old_value)
-                item["new_values"] = _truncate_json(row.new_value)
+                item["old_values"] = _truncate_json(_row_get(row, "old_value"))
+                item["new_values"] = _truncate_json(_row_get(row, "new_value"))
 
             items.append(item)
 

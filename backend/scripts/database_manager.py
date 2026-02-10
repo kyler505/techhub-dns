@@ -23,6 +23,8 @@ Usage:
     python scripts/database_manager.py --list --status PreDelivery
     python scripts/database_manager.py --search TH3970
     python scripts/database_manager.py --clear-all
+    python scripts/database_manager.py --purge-sessions
+    python scripts/database_manager.py --archive-system-audit
     python scripts/database_manager.py --reset TH3970
     python scripts/database_manager.py --create --order-number TH9999 --recipient "Test User"
 """
@@ -40,8 +42,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.database import SessionLocal
 from app.models.order import Order, OrderStatus
-from app.models.audit_log import AuditLog
+from app.models.audit_log import AuditLog, SystemAuditLog, SystemAuditLogArchive
 from app.models.teams_notification import TeamsNotification
+
+from app.models.session import Session as UserSession
+from app.services.maintenance_service import archive_system_audit_logs, purge_sessions
 
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.utils.building_mapper import extract_building_code_from_location, get_building_code_from_address
@@ -148,7 +153,6 @@ def delete_order(order_id: UUID, confirm: bool = True, cascade: bool = True) -> 
         # Delete related data if cascade is enabled
         if cascade:
             db.query(AuditLog).filter(AuditLog.order_id == order_id_str).delete()
-            db.query(AuditLog).filter(AuditLog.order_id == order_id_str).delete()
 
         # Delete the order
         db.delete(order)
@@ -167,7 +171,7 @@ def delete_order(order_id: UUID, confirm: bool = True, cascade: bool = True) -> 
 
 
 def clear_all_orders(confirm: bool = True) -> bool:
-    """Clear all orders and related data from the database."""
+    """Clear all orders and order-related data from the database."""
     db = SessionLocal()
     try:
         if confirm:
@@ -184,12 +188,12 @@ def clear_all_orders(confirm: bool = True) -> bool:
             print(f"Delivery runs: {delivery_runs_count}")
             print("="*60)
 
-            response = input("\nAre you sure you want to clear ALL data? This cannot be undone! (yes/no): ").strip().lower()
+            response = input("\nAre you sure you want to clear ALL order-related data? This cannot be undone! (yes/no): ").strip().lower()
             if response not in ['yes', 'y']:
                 print("Operation cancelled.")
                 return False
 
-        print("Clearing all data...")
+        print("Clearing all order-related data...")
 
         # Delete in order (respecting foreign key constraints)
         audit_logs_deleted = db.query(AuditLog).delete()
@@ -533,6 +537,9 @@ def get_database_stats() -> Dict[str, Any]:
         stats['delivery_runs'] = db.query(DeliveryRun).count()
         stats['audit_logs'] = db.query(AuditLog).count()
         stats['teams_notifications'] = db.query(TeamsNotification).count()
+        stats['sessions'] = db.query(UserSession).count()
+        stats['system_audit_logs'] = db.query(SystemAuditLog).count()
+        stats['system_audit_logs_archive'] = db.query(SystemAuditLogArchive).count()
 
         # Recent activity
         recent_orders = db.query(Order).order_by(Order.created_at.desc()).limit(5).all()
@@ -678,7 +685,7 @@ def interactive_mode():
             print("--- Database ---")
             print("11. Database Statistics")
             print("12. Execute Raw SQL")
-            print("13. Clear ALL Data")
+            print("13. Clear Orders Data")
             print("14. Fix Order Locations (Re-map based on current logic)")
             print("")
             print("0. Exit")
@@ -825,6 +832,9 @@ def interactive_mode():
                 print(f"  Delivery Runs: {stats['delivery_runs']}")
                 print(f"  Audit Logs: {stats['audit_logs']}")
                 print(f"  Teams Notifications: {stats['teams_notifications']}")
+                print(f"  Sessions: {stats['sessions']}")
+                print(f"  System Audit Logs (hot): {stats['system_audit_logs']}")
+                print(f"  System Audit Logs (archive): {stats['system_audit_logs_archive']}")
 
                 print(f"\nRecent Orders ({len(stats['recent_orders'])}):")
                 for order in stats['recent_orders']:
@@ -872,6 +882,8 @@ Examples:
   python scripts/database_manager.py --create --order-number TH9999 --recipient "Test User"
   python scripts/database_manager.py --reset TH3970
   python scripts/database_manager.py --clear-all
+  python scripts/database_manager.py --purge-sessions
+  python scripts/database_manager.py --archive-system-audit
   python scripts/database_manager.py --stats
         """
     )
@@ -894,7 +906,9 @@ Examples:
 
     # Maintenance operations
     parser.add_argument("--reset", type=str, help="Reset order for testing (by order number)")
-    parser.add_argument("--clear-all", action="store_true", help="Clear all orders and related data")
+    parser.add_argument("--clear-all", action="store_true", help="Clear all orders and order-related data")
+    parser.add_argument("--purge-sessions", action="store_true", help="Purge expired/revoked sessions")
+    parser.add_argument("--archive-system-audit", action="store_true", help="Archive old system audit logs to system_audit_logs_archive")
     parser.add_argument("--fix-locations", action="store_true", help="Re-process order locations using current mapping logic")
     parser.add_argument("--stats", action="store_true", help="Show database statistics")
 
@@ -992,6 +1006,32 @@ Examples:
         clear_all_orders(confirm=not args.no_confirm)
         return
 
+    if args.purge_sessions:
+        db = SessionLocal()
+        try:
+            deleted = purge_sessions(db)
+            print(f"\n✓ Purged {deleted} expired/revoked session(s)")
+        except Exception as e:
+            db.rollback()
+            print(f"\n✗ Error purging sessions: {e}")
+            raise
+        finally:
+            db.close()
+        return
+
+    if args.archive_system_audit:
+        db = SessionLocal()
+        try:
+            moved = archive_system_audit_logs(db)
+            print(f"\n✓ Archived {moved} system audit log row(s)")
+        except Exception as e:
+            db.rollback()
+            print(f"\n✗ Error archiving system audit logs: {e}")
+            raise
+        finally:
+            db.close()
+        return
+
     # Handle location fix
     if args.fix_locations:
         fix_order_locations(order_number=args.order_number, confirm=not args.no_confirm)
@@ -1012,6 +1052,9 @@ Examples:
         print(f"  Delivery Runs: {stats['delivery_runs']}")
         print(f"  Audit Logs: {stats['audit_logs']}")
         print(f"  Teams Notifications: {stats['teams_notifications']}")
+        print(f"  Sessions: {stats['sessions']}")
+        print(f"  System Audit Logs (hot): {stats['system_audit_logs']}")
+        print(f"  System Audit Logs (archive): {stats['system_audit_logs_archive']}")
 
         if stats['recent_orders']:
             print(f"\nRecent Orders ({len(stats['recent_orders'])}):")
