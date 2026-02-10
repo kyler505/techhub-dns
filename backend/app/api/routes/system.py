@@ -9,7 +9,7 @@ import re
 
 from flask import Blueprint, jsonify, request
 from typing import Dict, Any, cast, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
@@ -19,6 +19,7 @@ from app.services.inflow_service import InflowService
 from app.database import get_db_session
 from app.models.system_setting import SystemSetting
 from app.models.order import Order
+from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.api.auth_middleware import get_current_user_email, require_admin
 from app.services.audit_service import AuditService
 import logging
@@ -37,6 +38,15 @@ from app.services.system_setting_service import (
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
+
+
+def _to_utc_iso_z(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    dt = value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _normalize_admin_emails(raw_emails: list[str]) -> list[str]:
@@ -414,6 +424,40 @@ def get_system_status():
     }
 
     return jsonify(status)
+
+
+@bp.route("/sync-health", methods=["GET"])
+def get_sync_health():
+    """Get webhook health signals safe for non-admin users."""
+
+    now = datetime.now(timezone.utc)
+    inflow = {
+        "webhook_enabled": bool(settings.inflow_webhook_enabled),
+        "webhook_failed": False,
+        "last_webhook_received_at": None,
+    }
+
+    if settings.inflow_webhook_enabled:
+        db = get_db_session()
+        try:
+            webhook = (
+                db.query(InflowWebhook)
+                .filter(InflowWebhook.status.in_([WebhookStatus.active, WebhookStatus.failed]))
+                .order_by(InflowWebhook.updated_at.desc())
+                .first()
+            )
+
+            inflow["webhook_failed"] = bool(webhook and webhook.status == WebhookStatus.failed)
+            inflow["last_webhook_received_at"] = _to_utc_iso_z(getattr(webhook, "last_received_at", None))
+        finally:
+            db.close()
+
+    return jsonify(
+        {
+            "server_time": now.isoformat().replace("+00:00", "Z"),
+            "inflow": inflow,
+        }
+    )
 
 
 @bp.route("/sync", methods=["POST"])

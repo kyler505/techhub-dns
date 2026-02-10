@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { adminsApi, GetAdminsResponse } from "../../api/admins";
 import { Badge } from "../ui/badge";
@@ -139,19 +139,6 @@ export default function AdminsTab() {
                     </div>
                     <div className="flex items-center gap-2">
                         {source ? <Badge variant={sourceBadge as any}>{source}</Badge> : null}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                void load();
-                                toast.message("Refreshing admin allowlist");
-                            }}
-                            disabled={loading || saving}
-                            className="btn-lift"
-                        >
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                            Refresh
-                        </Button>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
