@@ -1,8 +1,21 @@
 import axios from "axios";
 
+function normalizeApiBaseUrl(value: string | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return "/api";
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("/")) return trimmed;
+
+  return `/${trimmed}`;
+}
+
 // Use VITE_API_URL if set (for production), otherwise use relative /api path
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
+  baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_URL),
   headers: {
     "Content-Type": "application/json",
   },
