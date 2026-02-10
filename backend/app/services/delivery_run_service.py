@@ -14,28 +14,13 @@ from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
+from app.models.vehicle_checkout import VehicleCheckout
 from app.utils.exceptions import NotFoundError, ValidationError
-from app.services.vehicle_checkout_service import VehicleCheckoutService
 
 
 class DeliveryRunService:
     def __init__(self, db: Session):
         self.db = db
-
-    def _get_authenticated_runner(self) -> tuple[str, str]:
-        user_id = (getattr(g, "user_id", None) or "").strip()
-        if not user_id:
-            raise ValidationError("Authentication required")
-
-        user = getattr(g, "user", None)
-        email = (getattr(user, "email", None) or "").strip()
-        display_name = (getattr(user, "display_name", None) or "").strip()
-
-        runner = display_name or email
-        if not runner:
-            raise ValidationError("Authenticated user missing identity")
-
-        return user_id, runner
 
     def generate_run_name(self, run_time: datetime) -> str:
         """Generate a run name based on time and existing runs that day."""
@@ -91,48 +76,91 @@ class DeliveryRunService:
         ).first()
         return active is None
 
-    def create_run(self, order_ids: List[Union[UUID, str]], vehicle: str, _runner: Optional[str] = None) -> DeliveryRun:
+    def _validate_vehicle(self, vehicle: str) -> str:
+        allowed = {v.value for v in VehicleEnum}
+        vehicle_norm = (vehicle or "").strip()
+        if vehicle_norm not in allowed:
+            raise ValidationError(
+                f"Vehicle must be one of: {sorted(allowed)}",
+                field="vehicle",
+                details={"allowed": sorted(allowed), "provided": vehicle},
+            )
+        return vehicle_norm
+
+    def _get_authenticated_actor(self) -> tuple[str, str, Optional[str]]:
+        user_id = (getattr(g, "user_id", None) or "").strip()
+        if not user_id:
+            raise ValidationError("Authentication required")
+
+        user = getattr(g, "user", None)
+        email = (getattr(user, "email", None) or "").strip()
+        display_name = (getattr(user, "display_name", None) or "").strip() or None
+        if not email:
+            raise ValidationError("Authenticated user missing email")
+
+        return user_id, email, display_name
+
+    def _format_actor_display(self, email: str, display_name: Optional[str]) -> str:
+        return (display_name or "").strip() or email.strip()
+
+    def _get_active_checkout(self, vehicle: str) -> VehicleCheckout | None:
+        return self.db.query(VehicleCheckout).filter(
+            and_(VehicleCheckout.vehicle == vehicle, VehicleCheckout.checked_in_at.is_(None))
+        ).first()
+
+    def create_run_for_current_user(self, order_ids: List[Union[UUID, str]], vehicle: str) -> DeliveryRun:
+        vehicle_norm = self._validate_vehicle(vehicle)
+        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
+        runner_display = self._format_actor_display(actor_email, actor_display_name)
+
+        active_checkout = self._get_active_checkout(vehicle_norm)
+        if not active_checkout:
+            raise ValidationError(
+                f"Vehicle {vehicle_norm} must be checked out before starting a delivery run",
+                field="vehicle",
+                details={"vehicle": vehicle_norm, "required_checkout_type": "delivery_run"},
+            )
+
+        if (active_checkout.checked_out_by_user_id or "").strip() != actor_user_id:
+            raise ValidationError(
+                f"Vehicle {vehicle_norm} is checked out by a different user",
+                field="runner",
+                details={
+                    "vehicle": vehicle_norm,
+                    "checked_out_by": active_checkout.checked_out_by,
+                },
+            )
+
+        checkout_type = (getattr(active_checkout, "checkout_type", "") or "").strip() or "delivery_run"
+        if checkout_type != "delivery_run":
+            purpose = (active_checkout.purpose or "").strip() or None
+            reason = "Vehicle is checked out for 'Other'"
+            if purpose:
+                reason += f" (purpose: {purpose})"
+
+            raise ValidationError(
+                f"{reason}. Check the vehicle in, then check it out again for a Delivery run.",
+                field="checkout_type",
+                details={
+                    "vehicle": vehicle_norm,
+                    "checkout_type": checkout_type,
+                    "purpose": purpose,
+                    "required_checkout_type": "delivery_run",
+                },
+            )
+
+        return self.create_run(runner=runner_display, order_ids=order_ids, vehicle=vehicle_norm)
+
+    def create_run(self, runner: str, order_ids: List[Union[UUID, str]], vehicle: str) -> DeliveryRun:
         """Create a delivery run and assign orders to it.
 
         Validates that orders are in Pre-Delivery and that the vehicle is available.
         """
-        # Identity is derived from the authenticated session.
-        runner_user_id, runner_display = self._get_authenticated_runner()
+        vehicle_norm = self._validate_vehicle(vehicle)
 
         # Vehicle availability
-        if not self.check_vehicle_availability(vehicle):
+        if not self.check_vehicle_availability(vehicle_norm):
             raise ValidationError(f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle})
-
-        # Vehicle checkout gating: require active checkout and current user must match.
-        checkout_service = VehicleCheckoutService(self.db)
-        active_checkout = checkout_service.get_active_checkout(vehicle)
-        if not active_checkout:
-            raise ValidationError(
-                f"Vehicle {vehicle} must be checked out before starting a delivery run",
-                field="vehicle",
-                details={"vehicle": vehicle},
-            )
-
-        checkout_user_id = (getattr(active_checkout, "checked_out_by_user_id", None) or "").strip()
-        if checkout_user_id:
-            if checkout_user_id != runner_user_id:
-                raise ValidationError(
-                    "Vehicle is checked out by a different user",
-                    field="runner",
-                    details={
-                        "vehicle": vehicle,
-                        "checked_out_by": active_checkout.checked_out_by,
-                        "checked_out_by_user_id": checkout_user_id,
-                    },
-                )
-        else:
-            # Backward compatibility for legacy checkouts created before user IDs were stored.
-            if active_checkout.checked_out_by != runner_display:
-                raise ValidationError(
-                    "Vehicle is checked out by a different user",
-                    field="runner",
-                    details={"vehicle": vehicle, "checked_out_by": active_checkout.checked_out_by},
-                )
 
         # Convert order IDs to strings for MySQL compatibility
         order_ids_str = [str(oid) for oid in order_ids]
@@ -156,8 +184,8 @@ class DeliveryRunService:
         # Create run
         run = DeliveryRun(
             name=run_name,
-            runner=runner_display,
-            vehicle=vehicle,
+            runner=runner,
+            vehicle=vehicle_norm,
             status=DeliveryRunStatus.ACTIVE.value,
             start_time=run_time
         )
@@ -174,7 +202,7 @@ class DeliveryRunService:
             # Create AuditLog entry for timeline display
             audit_log = AuditLog(
                 order_id=o.id,
-                changed_by=runner_display,
+                changed_by=runner,
                 from_status=old_status,
                 to_status=OrderStatus.IN_DELIVERY.value,
                 reason=f"Added to delivery run: {run_name}",
@@ -190,10 +218,10 @@ class DeliveryRunService:
         audit_service.log_delivery_run_action(
             run_id=str(run.id),
             action="created",
-            user_id=runner_user_id,
-            description=f"Delivery run created by {runner_display}",
+            user_id=runner,  # Runner who created the run
+            description=f"Delivery run created by {runner}",
             audit_metadata={
-                "vehicle": vehicle,
+                "vehicle": vehicle_norm,
                 "order_count": len(order_ids),
                 "order_ids": order_ids_str,
                 "run_name": run_name
@@ -209,12 +237,16 @@ class DeliveryRunService:
     def get_active_runs_with_details(self) -> List[DeliveryRun]:
         return self.db.query(DeliveryRun).filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value).all()
 
-    def get_all_run_details(self, status: Optional[List[str]] = None) -> List[DeliveryRun]:
-        """Get all delivery runs, optionally filtered by status"""
+    def get_all_run_details(self, status: Optional[List[str]] = None, vehicle: Optional[str] = None) -> List[DeliveryRun]:
+        """Get all delivery runs, optionally filtered by status/vehicle."""
         query = self.db.query(DeliveryRun)
 
         if status:
             query = query.filter(DeliveryRun.status.in_(status))
+
+        if vehicle is not None:
+            vehicle_norm = self._validate_vehicle(vehicle)
+            query = query.filter(DeliveryRun.vehicle == vehicle_norm)
 
         return query.order_by(DeliveryRun.created_at.desc()).all()
 

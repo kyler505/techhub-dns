@@ -33,6 +33,7 @@ def checkout_vehicle():
         service = VehicleCheckoutService(db)
         checkout = service.checkout(
             vehicle=req.vehicle,
+            checkout_type=req.checkout_type,
             purpose=req.purpose,
             notes=req.notes,
         )
@@ -57,12 +58,28 @@ def checkin_vehicle():
 
 
 @vehicle_checkouts_bp.route("/active", methods=["GET"])
+@require_auth
 def get_active_checkouts():
     with get_db() as db:
         service = VehicleCheckoutService(db)
         active = service.get_active_checkouts()
         response = [VehicleCheckoutResponse.model_validate(c).model_dump() for c in active]
         return jsonify(response)
+
+
+@vehicle_checkouts_bp.route("", methods=["GET"])
+@require_auth
+def list_vehicle_checkouts():
+    """List vehicle checkout history (paged)."""
+    vehicle = request.args.get("vehicle")
+    checkout_type = request.args.get("checkout_type")
+    page = request.args.get("page", type=int) or 1
+    page_size = request.args.get("page_size", type=int) or 25
+
+    with get_db() as db:
+        service = VehicleCheckoutService(db)
+        result = service.list_checkouts(vehicle=vehicle, checkout_type=checkout_type, page=page, page_size=page_size)
+        return jsonify(result)
 
 
 @vehicles_bp.route("/status", methods=["GET"])

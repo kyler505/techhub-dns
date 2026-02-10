@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.delivery_run import VehicleEnum
 
@@ -17,6 +17,7 @@ class CheckoutRequest(BaseModel):
     vehicle: str
     # Deprecated/ignored: identity is derived from the authenticated session.
     checked_out_by: Optional[str] = None
+    checkout_type: Literal["delivery_run", "other"] = "delivery_run"
     purpose: Optional[str] = None
     notes: Optional[str] = None
 
@@ -37,6 +38,14 @@ class CheckoutRequest(BaseModel):
         normalized = v.strip()
         return normalized or None
 
+    @field_validator("checkout_type")
+    @classmethod
+    def validate_checkout_type(cls, v: str) -> str:
+        v_norm = (v or "").strip()
+        if v_norm not in {"delivery_run", "other"}:
+            raise ValueError("checkout_type must be 'delivery_run' or 'other'")
+        return v_norm
+
     @field_validator("purpose")
     @classmethod
     def validate_purpose(cls, v: Optional[str]) -> Optional[str]:
@@ -44,6 +53,12 @@ class CheckoutRequest(BaseModel):
             return None
         normalized = v.strip()
         return normalized or None
+
+    @model_validator(mode="after")
+    def validate_purpose_required_for_other(self) -> "CheckoutRequest":
+        if self.checkout_type == "other" and not (self.purpose or "").strip():
+            raise ValueError("purpose is required when checkout_type is 'other'")
+        return self
 
     @field_validator("notes")
     @classmethod
@@ -90,6 +105,8 @@ class VehicleCheckoutResponse(BaseModel):
     vehicle: str
     checked_out_by: str
     checked_out_by_email: Optional[str] = None
+    checked_out_by_user_id: Optional[str] = None
+    checkout_type: str
     purpose: Optional[str] = None
     checked_out_at: datetime
     checked_in_at: Optional[datetime] = None
@@ -101,6 +118,10 @@ class VehicleStatusItem(BaseModel):
     vehicle: str
     checked_out: bool
     checked_out_by: Optional[str] = None
+    checked_out_by_user_id: Optional[str] = None
+    checkout_type: Optional[str] = None
+    purpose: Optional[str] = None
+    checked_out_at: Optional[datetime] = None
     delivery_run_active: bool
 
 

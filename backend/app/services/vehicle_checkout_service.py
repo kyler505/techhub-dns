@@ -62,12 +62,29 @@ class VehicleCheckoutService:
     def checkout(
         self,
         vehicle: str,
+        checkout_type: str = "delivery_run",
         purpose: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
         checked_out_by_display = self._format_actor_display(actor_email, actor_display_name)
+
+        checkout_type_norm = (checkout_type or "").strip()
+        if checkout_type_norm not in {"delivery_run", "other"}:
+            raise ValidationError(
+                "checkout_type must be 'delivery_run' or 'other'",
+                field="checkout_type",
+                details={"provided": checkout_type},
+            )
+
+        purpose_norm = (purpose or "").strip() or None
+        if checkout_type_norm == "other" and not purpose_norm:
+            raise ValidationError(
+                "Purpose is required when checking out with type 'Other'",
+                field="purpose",
+                details={"checkout_type": checkout_type_norm},
+            )
 
         if self._delivery_run_active(vehicle_norm):
             raise ValidationError(
@@ -94,7 +111,8 @@ class VehicleCheckoutService:
             checked_out_by_user_id=actor_user_id,
             checked_out_by_email=actor_email,
             checked_out_by_display_name=actor_display_name,
-            purpose=(purpose.strip() if purpose else None) or None,
+            checkout_type=checkout_type_norm,
+            purpose=purpose_norm,
             notes=(notes.strip() if notes else None) or None,
             checked_out_at=datetime.utcnow(),
         )
@@ -156,7 +174,71 @@ class VehicleCheckoutService:
                     "vehicle": vehicle,
                     "checked_out": active_checkout is not None,
                     "checked_out_by": active_checkout.checked_out_by if active_checkout else None,
+                    "checked_out_by_user_id": active_checkout.checked_out_by_user_id if active_checkout else None,
+                    "checkout_type": getattr(active_checkout, "checkout_type", None) if active_checkout else None,
+                    "purpose": active_checkout.purpose if active_checkout else None,
+                    "checked_out_at": active_checkout.checked_out_at if active_checkout else None,
                     "delivery_run_active": self._delivery_run_active(vehicle),
                 }
             )
         return statuses
+
+    def list_checkouts(
+        self,
+        vehicle: Optional[str] = None,
+        checkout_type: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> dict:
+        if page < 1:
+            raise ValidationError("page must be >= 1", field="page")
+        if page_size < 1 or page_size > 200:
+            raise ValidationError("page_size must be between 1 and 200", field="page_size")
+
+        query = self.db.query(VehicleCheckout)
+
+        if vehicle is not None:
+            vehicle_norm = self._validate_vehicle(vehicle)
+            query = query.filter(VehicleCheckout.vehicle == vehicle_norm)
+
+        if checkout_type is not None:
+            checkout_type_norm = (checkout_type or "").strip()
+            if checkout_type_norm not in {"delivery_run", "other"}:
+                raise ValidationError(
+                    "checkout_type must be 'delivery_run' or 'other'",
+                    field="checkout_type",
+                    details={"provided": checkout_type},
+                )
+            query = query.filter(VehicleCheckout.checkout_type == checkout_type_norm)
+
+        total = query.count()
+        items = (
+            query.order_by(VehicleCheckout.checked_out_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        return {
+            "items": [
+                {
+                    **{
+                        "id": str(c.id),
+                        "vehicle": c.vehicle,
+                        "checked_out_by": c.checked_out_by,
+                        "checked_out_by_user_id": c.checked_out_by_user_id,
+                        "checked_out_by_email": c.checked_out_by_email,
+                        "checkout_type": c.checkout_type,
+                        "purpose": c.purpose,
+                        "notes": c.notes,
+                        "checked_out_at": c.checked_out_at.isoformat() if c.checked_out_at else None,
+                        "checked_in_at": c.checked_in_at.isoformat() if c.checked_in_at else None,
+                        "checked_in_by": c.checked_in_by,
+                    }
+                }
+                for c in items
+            ],
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+        }

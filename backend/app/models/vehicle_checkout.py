@@ -16,6 +16,9 @@ class VehicleCheckout(Base):
     checked_out_by_user_id = Column(String(36), nullable=True, index=True)
     checked_out_by_email = Column(String(255), nullable=True)
     checked_out_by_display_name = Column(String(255), nullable=True)
+
+    # Values: delivery_run | other
+    checkout_type = Column(String(50), nullable=False, default="delivery_run")
     purpose = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
 
