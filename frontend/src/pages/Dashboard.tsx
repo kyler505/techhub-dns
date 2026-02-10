@@ -116,6 +116,7 @@ export default function Dashboard() {
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   const socketRef = useRef<Socket | null>(null);
+  const socketStatusLabel = socketStatus === "connected" ? "Connected" : socketStatus === "connecting" ? "Connecting" : "Disconnected";
 
   // Fetch all analytics data
   const fetchAnalytics = async () => {
@@ -272,46 +273,56 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        <Card className="xl:col-span-2 h-full">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
+        <Card className="xl:col-span-8 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Live Status</CardTitle>
-            <span className="status-live text-xs text-muted-foreground">Connected</span>
+            <CardTitle className="text-base">Active Deliveries</CardTitle>
+            <span
+              className={
+                socketStatus === "connected"
+                  ? "status-live text-xs text-muted-foreground"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              {socketStatusLabel}
+            </span>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <LiveDeliveryDashboard />
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
-          <StatCard
-            title="Picked"
-            value={statusCounts.picked ?? 0}
-            icon={Package}
-            loading={statusLoading}
-            accent="slate"
-          />
-          <StatCard
-            title="Ready for QA"
-            value={statusCounts.qa ?? 0}
-            icon={CheckCircle2}
-            loading={statusLoading}
-            accent="maroon"
-          />
-          <StatCard
-            title="Completed Today"
-            value={deliveryPerf.completed_today}
-            icon={Truck}
-            loading={perfLoading}
-            accent="green"
-          />
-          <StatCard
-            title="Ready for Delivery"
-            value={deliveryPerf.ready_for_delivery}
-            icon={Activity}
-            loading={perfLoading}
-            accent="slate"
-          />
+        <div className="xl:col-span-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
+            <StatCard
+              title="Picked"
+              value={statusCounts.picked ?? 0}
+              icon={Package}
+              loading={statusLoading}
+              accent="slate"
+            />
+            <StatCard
+              title="Ready for QA"
+              value={statusCounts.qa ?? 0}
+              icon={CheckCircle2}
+              loading={statusLoading}
+              accent="maroon"
+            />
+            <StatCard
+              title="Completed Today"
+              value={deliveryPerf.completed_today}
+              icon={Truck}
+              loading={perfLoading}
+              accent="green"
+            />
+            <StatCard
+              title="Ready for Delivery"
+              value={deliveryPerf.ready_for_delivery}
+              icon={Activity}
+              loading={perfLoading}
+              accent="slate"
+            />
+          </div>
         </div>
       </div>
 
