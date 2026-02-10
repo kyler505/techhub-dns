@@ -12,7 +12,10 @@ import { SyncHealthBanner } from "./components/SyncHealthBanner";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
 const OrderDetailPage = lazy(() => import("./pages/OrderDetailPage"));
-const DeliveryDashboard = lazy(() => import("./pages/DeliveryDashboard"));
+const DeliveryLayout = lazy(() => import("./pages/delivery/DeliveryLayout"));
+const DeliveryDispatchPage = lazy(() => import("./pages/delivery/Dispatch"));
+const DeliveryFleetPage = lazy(() => import("./pages/delivery/Fleet"));
+const DeliveryFleetHistoryPage = lazy(() => import("./pages/delivery/FleetHistory"));
 const Shipping = lazy(() => import("./pages/Shipping"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DocumentSigningPage = lazy(() => import("./pages/DocumentSigningPage"));
@@ -90,7 +93,12 @@ function AppContent() {
                                         <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
                                         <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
                                         <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
-                                        <Route path="/delivery" element={<ProtectedRoute><DeliveryDashboard /></ProtectedRoute>} />
+                                        <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
+                                            <Route index element={<Navigate to="dispatch" replace />} />
+                                            <Route path="dispatch" element={<DeliveryDispatchPage />} />
+                                            <Route path="fleet" element={<DeliveryFleetPage />} />
+                                            <Route path="fleet/:vehicle/history" element={<DeliveryFleetHistoryPage />} />
+                                        </Route>
                                         <Route path="/delivery/runs/:runId" element={<ProtectedRoute><DeliveryRunDetailPage /></ProtectedRoute>} />
                                         <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
                                         <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />

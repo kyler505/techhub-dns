@@ -12,17 +12,19 @@ import {
   ChevronRight,
   Send,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import boxTAM from "../../assets/boxTAM.svg";
 import { useAuth } from "../contexts/AuthContext";
 
-const navItems = [
+const navItems: Array<{ path: string; to?: string; label: string; icon: LucideIcon }> = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/orders", label: "Orders", icon: Package },
   { path: "/tag-request", label: "Tag Request", icon: Tag },
   { path: "/order-qa", label: "QA Checklist", icon: ClipboardCheck },
-  { path: "/delivery", label: "Delivery", icon: Truck },
+  // Keep active state across Delivery subroutes, but land on dispatch.
+  { path: "/delivery", to: "/delivery/dispatch", label: "Delivery", icon: Truck },
   { path: "/shipping", label: "Shipping", icon: Send },
 ];
 
@@ -102,7 +104,7 @@ export function Sidebar({ className }: { className?: string }) {
           const active = isActive(item.path);
           const Icon = item.icon;
           return (
-            <NavLink key={item.path} to={item.path}
+            <NavLink key={item.path} to={item.to ?? item.path}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                 active
