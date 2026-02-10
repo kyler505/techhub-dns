@@ -7,7 +7,8 @@ from app.models.delivery_run import VehicleEnum, DeliveryRunStatus
 
 
 class CreateDeliveryRunRequest(BaseModel):
-    runner: str
+    # Deprecated/ignored: identity is derived from the authenticated session.
+    runner: Optional[str] = None
     order_ids: List[UUID]
     vehicle: str
 

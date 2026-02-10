@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import axios from "axios";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import {
   Dialog,
   DialogContent,
@@ -12,11 +11,12 @@ import {
 } from "./ui/dialog";
 import { toast } from "sonner";
 import type { VehicleStatusItem } from "../api/vehicleCheckouts";
+import { useAuth } from "../contexts/AuthContext";
 
 interface CreateDeliveryDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateDelivery: (runner: string, vehicle: string) => Promise<void>;
+  onCreateDelivery: (vehicle: string) => Promise<void>;
   selectedOrdersCount: number;
   vehicleStatuses?: VehicleStatusItem[];
 }
@@ -28,26 +28,26 @@ export default function CreateDeliveryDialog({
   selectedOrdersCount,
   vehicleStatuses,
 }: CreateDeliveryDialogProps) {
-  const [runner, setRunner] = useState("");
+  const { user } = useAuth();
+
   const [vehicle, setVehicle] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [runnerLocked, setRunnerLocked] = useState(false);
+
+  const runnerDisplay = useMemo(() => {
+    return user?.display_name || user?.email || "you";
+  }, [user?.display_name, user?.email]);
 
   const selectedVehicleStatus = vehicleStatuses?.find((s) => s.vehicle === vehicle);
   const requiresCheckout = Boolean(vehicleStatuses);
   const vehicleCheckedOut = Boolean(selectedVehicleStatus?.checked_out);
   const vehicleDeliveryRunActive = Boolean(selectedVehicleStatus?.delivery_run_active);
+  const vehicleCheckedOutBy = selectedVehicleStatus?.checked_out_by || null;
+  const vehicleCheckedOutBySomeoneElse = Boolean(
+    requiresCheckout && vehicleCheckedOutBy && vehicleCheckedOutBy !== runnerDisplay
+  );
 
   const applyVehicleSelection = (nextVehicle: string) => {
     setVehicle(nextVehicle);
-
-    const status = vehicleStatuses?.find((s) => s.vehicle === nextVehicle);
-    if (status?.checked_out && status.checked_out_by) {
-      setRunner(status.checked_out_by);
-      setRunnerLocked(true);
-      return;
-    }
-    setRunnerLocked(false);
   };
 
   const getApiErrorMessage = (error: unknown): string => {
@@ -63,11 +63,6 @@ export default function CreateDeliveryDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!runner.trim()) {
-      toast.error("Please enter a deliverer name");
-      return;
-    }
 
     if (!vehicle) {
       toast.error("Please select a vehicle");
@@ -86,10 +81,8 @@ export default function CreateDeliveryDialog({
 
     setIsLoading(true);
     try {
-      await onCreateDelivery(runner.trim(), vehicle);
-      setRunner("");
+      await onCreateDelivery(vehicle);
       setVehicle("");
-      setRunnerLocked(false);
       onClose();
     } catch (error) {
       console.error("Failed to create delivery:", error);
@@ -100,9 +93,7 @@ export default function CreateDeliveryDialog({
   };
 
   const handleClose = () => {
-    setRunner("");
     setVehicle("");
-    setRunnerLocked(false);
     onClose();
   };
 
@@ -118,25 +109,7 @@ export default function CreateDeliveryDialog({
 
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="runner" className="text-right">
-                Deliverer
-              </label>
-              <Input
-                id="runner"
-                type="text"
-                placeholder="Enter deliverer name"
-                value={runner}
-                onChange={(e) => setRunner(e.target.value)}
-                className="col-span-3"
-                disabled={isLoading || runnerLocked}
-              />
-            </div>
-            {requiresCheckout && runnerLocked && selectedVehicleStatus?.checked_out_by ? (
-              <div className="text-xs text-muted-foreground">
-                Runner is locked to the active checkout: {selectedVehicleStatus.checked_out_by}
-              </div>
-            ) : null}
+            <div className="text-xs text-muted-foreground">Runner: {runnerDisplay}</div>
 
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="vehicle" className="text-right">
@@ -158,6 +131,12 @@ export default function CreateDeliveryDialog({
             {requiresCheckout && vehicle && !vehicleCheckedOut ? (
               <div className="text-xs text-muted-foreground">
                 Vehicle must be checked out before starting a delivery.
+              </div>
+            ) : null}
+
+            {requiresCheckout && vehicle && vehicleCheckedOutBySomeoneElse ? (
+              <div className="text-xs text-muted-foreground">
+                Vehicle is checked out by {vehicleCheckedOutBy}. You must check it out to start a run.
               </div>
             ) : null}
 

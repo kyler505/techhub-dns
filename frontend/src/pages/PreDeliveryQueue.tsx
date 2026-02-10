@@ -97,10 +97,9 @@ export default function PreDeliveryQueue() {
         setIsCreateDeliveryOpen(true);
     };
 
-    const handleCreateDelivery = async (runner: string, vehicle: string) => {
+    const handleCreateDelivery = async (vehicle: string) => {
         try {
             await deliveryRunsApi.createRun({
-                runner: runner,
                 order_ids: Array.from(selectedOrders),
                 vehicle: vehicle as "van" | "golf_cart", // Cast to match expected enum
             });
