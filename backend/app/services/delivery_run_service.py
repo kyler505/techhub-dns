@@ -14,6 +14,7 @@ from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
 from app.utils.exceptions import NotFoundError, ValidationError
+from app.services.vehicle_checkout_service import VehicleCheckoutService
 
 
 class DeliveryRunService:
@@ -82,6 +83,22 @@ class DeliveryRunService:
         # Vehicle availability
         if not self.check_vehicle_availability(vehicle):
             raise ValidationError(f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle})
+
+        # Vehicle checkout gating: require active checkout and runner must match.
+        checkout_service = VehicleCheckoutService(self.db)
+        active_checkout = checkout_service.get_active_checkout(vehicle)
+        if not active_checkout:
+            raise ValidationError(
+                f"Vehicle {vehicle} must be checked out before starting a delivery run",
+                field="vehicle",
+                details={"vehicle": vehicle},
+            )
+        if active_checkout.checked_out_by != runner:
+            raise ValidationError(
+                "Vehicle is checked out by a different user",
+                field="runner",
+                details={"vehicle": vehicle, "checked_out_by": active_checkout.checked_out_by},
+            )
 
         # Convert order IDs to strings for MySQL compatibility
         order_ids_str = [str(oid) for oid in order_ids]

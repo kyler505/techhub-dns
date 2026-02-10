@@ -39,6 +39,109 @@
 | PUT | `/api/delivery-runs/{id}/finish` | Complete run |
 | GET | `/api/delivery-runs/vehicles/available` | Vehicle availability |
 
+## Vehicle Checkouts API (`/api/vehicle-checkouts`)
+
+Tracks who has physically checked out a shared vehicle (independent of delivery runs).
+
+Allowed `vehicle` values: `van`, `golf_cart`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/vehicle-checkouts/checkout` | Check out a vehicle |
+| POST | `/api/vehicle-checkouts/checkin` | Check in a vehicle |
+| GET | `/api/vehicle-checkouts/active` | List active (not checked in) vehicle checkouts |
+
+### POST `/api/vehicle-checkouts/checkout`
+
+Request:
+```json
+{
+  "vehicle": "van",
+  "checked_out_by": "Alice",
+  "purpose": "Delivery",
+  "notes": "Morning run"
+}
+```
+
+Response:
+```json
+{
+  "id": "6e2d0fd4-3d98-4f92-b0c3-8a3a54a9f8a8",
+  "vehicle": "van",
+  "checked_out_by": "Alice",
+  "purpose": "Delivery",
+  "checked_out_at": "2026-02-10T15:04:05.123456",
+  "checked_in_at": null
+}
+```
+
+### POST `/api/vehicle-checkouts/checkin`
+
+Request:
+```json
+{
+  "vehicle": "van",
+  "checked_in_by": "Alice",
+  "notes": "Returned"
+}
+```
+
+Response:
+```json
+{
+  "id": "6e2d0fd4-3d98-4f92-b0c3-8a3a54a9f8a8",
+  "vehicle": "van",
+  "checked_out_by": "Alice",
+  "purpose": "Delivery",
+  "checked_out_at": "2026-02-10T15:04:05.123456",
+  "checked_in_at": "2026-02-10T17:22:01.654321"
+}
+```
+
+### GET `/api/vehicle-checkouts/active`
+
+Response:
+```json
+[
+  {
+    "id": "6e2d0fd4-3d98-4f92-b0c3-8a3a54a9f8a8",
+    "vehicle": "van",
+    "checked_out_by": "Alice",
+    "purpose": "Delivery",
+    "checked_out_at": "2026-02-10T15:04:05.123456",
+    "checked_in_at": null
+  }
+]
+```
+
+## Vehicles API (`/api/vehicles`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/vehicles/status` | Get per-vehicle checkout + delivery run status |
+
+### GET `/api/vehicles/status`
+
+Response:
+```json
+{
+  "vehicles": [
+    {
+      "vehicle": "van",
+      "checked_out": true,
+      "checked_out_by": "Alice",
+      "delivery_run_active": false
+    },
+    {
+      "vehicle": "golf_cart",
+      "checked_out": false,
+      "checked_out_by": null,
+      "delivery_run_active": false
+    }
+  ]
+}
+```
+
 ## Auth API (`/auth`)
 
 | Method | Endpoint | Description |

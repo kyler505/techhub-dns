@@ -5,6 +5,7 @@ from app.models.teams_config import TeamsConfig
 
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.models.delivery_run import DeliveryRun, VehicleEnum, DeliveryRunStatus
+from app.models.vehicle_checkout import VehicleCheckout
 from app.models.user import User
 from app.models.session import Session
 from app.models.system_setting import SystemSetting
@@ -21,6 +22,7 @@ __all__ = [
     "DeliveryRun",
     "VehicleEnum",
     "DeliveryRunStatus",
+    "VehicleCheckout",
     "User",
     "Session",
     "SystemSetting",

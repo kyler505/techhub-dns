@@ -49,7 +49,6 @@ export default function AdminsTab() {
 
     useEffect(() => {
         void load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const sortedDraft = useMemo(() => {
