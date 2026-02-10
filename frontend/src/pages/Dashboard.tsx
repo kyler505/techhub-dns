@@ -8,11 +8,11 @@ import { analyticsApi, StatusCountsResponse, DeliveryPerformanceResponse, TimeTr
 import { ordersApi } from "../api/orders";
 import { Order, OrderStatus } from "../types/order";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
-import { VehicleStatusStrip } from "../components/vehicles/VehicleStatusStrip";
 import OrdersLineChart from "../components/charts/OrdersLineChart";
 import OrdersBarChart from "../components/charts/OrdersBarChart";
-import { Activity, Package, CheckCircle2, Truck, RefreshCw } from "lucide-react";
+import { VehicleStatusStrip } from "../components/vehicles/VehicleStatusStrip";
 import { useVehicleStatuses } from "../hooks/useVehicleStatuses";
+import { Activity, Package, CheckCircle2, Truck, RefreshCw } from "lucide-react";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -119,11 +119,7 @@ export default function Dashboard() {
 
   const socketRef = useRef<Socket | null>(null);
 
-  const {
-    statusByVehicle,
-    isLoading: vehicleStatusesLoading,
-    refresh: refreshVehicleStatuses,
-  } = useVehicleStatuses();
+  const { statusByVehicle, isLoading: vehicleStatusesLoading, refresh: refreshVehicleStatuses } = useVehicleStatuses();
 
   // Fetch all analytics data
   const fetchAnalytics = async () => {
@@ -280,51 +276,41 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        <Card className="xl:col-span-2 h-full">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
+        <Card className="xl:col-span-5 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Live Status</CardTitle>
+            <CardTitle className="text-base">Active Deliveries</CardTitle>
             <span
-              className={
-                socketStatus === "connected"
-                  ? "status-live text-xs text-muted-foreground"
-                  : "text-xs text-muted-foreground"
-              }
+              className={`${socketStatus === "connected" ? "status-live " : ""}text-xs text-muted-foreground`}
             >
-              {socketStatus === "connected"
-                ? "Connected"
-                : socketStatus === "connecting"
-                  ? "Connecting"
-                  : "Disconnected"}
+              {socketStatus === "connected" ? "Connected" : socketStatus === "connecting" ? "Connecting" : "Disconnected"}
             </span>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="p-6 pt-0">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Fleet
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={refreshVehicleStatuses}
-                  disabled={vehicleStatusesLoading}
-                  className="btn-lift"
-                >
-                  {vehicleStatusesLoading ? "Refreshing..." : "Refresh"}
-                </Button>
-              </div>
-              <div className="mt-3">
-                <VehicleStatusStrip statusByVehicle={statusByVehicle} isLoading={vehicleStatusesLoading} />
-              </div>
-            </div>
-            <div className="border-t border-border">
-              <LiveDeliveryDashboard />
-            </div>
+            <LiveDeliveryDashboard />
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
+        <Card className="xl:col-span-3 h-full">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Fleet</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshVehicleStatuses}
+              disabled={vehicleStatusesLoading}
+              className="btn-lift"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <VehicleStatusStrip statusByVehicle={statusByVehicle} isLoading={vehicleStatusesLoading} />
+          </CardContent>
+        </Card>
+
+        <div className="xl:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
           <StatCard
             title="Picked"
             value={statusCounts.picked ?? 0}
