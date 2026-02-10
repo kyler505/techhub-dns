@@ -34,9 +34,9 @@ class Session(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
     last_seen_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    revoked_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True, index=True)
     user_agent = Column(String(500), nullable=True)
     ip_address = Column(String(45), nullable=True)  # Supports IPv6
 

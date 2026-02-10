@@ -266,9 +266,11 @@ class SamlAuthService:
 
     def get_user_sessions(self, db: DbSession, user_id: str) -> list:
         """Get all active sessions for a user."""
+        now = datetime.utcnow()
         return db.query(Session).filter(
             Session.user_id == user_id,
-            Session.revoked_at.is_(None)
+            Session.revoked_at.is_(None),
+            Session.expires_at > now,
         ).order_by(Session.created_at.desc()).all()
 
 

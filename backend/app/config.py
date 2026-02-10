@@ -89,6 +89,15 @@ class Settings(BaseSettings):
     session_cookie_name: str = "techhub_session"
     session_max_age_hours: int = 168  # 7 days
 
+    # Maintenance jobs
+    session_purge_enabled: bool = True
+    session_purge_interval_hours: int = 24
+
+    system_audit_archive_enabled: bool = True
+    system_audit_archive_days: int = 90
+    system_audit_archive_batch_size: int = 1000
+    system_audit_archive_interval_hours: int = 24
+
     # Flask environment
     flask_env: str = "development"
 
