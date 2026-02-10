@@ -6,6 +6,7 @@ export interface VehicleCheckoutResponse {
   id: string;
   vehicle: Vehicle;
   checked_out_by: string;
+  checked_out_by_email?: string | null;
   purpose?: string | null;
   checked_out_at: string;
   checked_in_at?: string | null;
@@ -13,14 +14,12 @@ export interface VehicleCheckoutResponse {
 
 export interface CheckoutRequest {
   vehicle: Vehicle;
-  checked_out_by: string;
   purpose?: string;
   notes?: string;
 }
 
 export interface CheckinRequest {
   vehicle: Vehicle;
-  checked_in_by?: string;
   notes?: string;
 }
 

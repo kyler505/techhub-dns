@@ -6,6 +6,7 @@ from uuid import UUID
 import threading
 
 from app.database import get_db, get_db_session
+from app.api.auth_middleware import require_auth
 from app.services.delivery_run_service import DeliveryRunService
 from app.schemas.delivery_run import CreateDeliveryRunRequest, DeliveryRunResponse
 from app.models.delivery_run import VehicleEnum
@@ -48,15 +49,16 @@ def _broadcast_active_runs_sync(db_session: Session = None):
 
 
 @bp.route("", methods=["POST"])
+@require_auth
 def create_run():
     """Create a new delivery run"""
-    data = request.get_json()
+    data = request.get_json() or {}
 
     with get_db() as db:
         service = DeliveryRunService(db)
         try:
             req = CreateDeliveryRunRequest(**data)
-            run = service.create_run(runner=req.runner, order_ids=req.order_ids, vehicle=req.vehicle)
+            run = service.create_run(order_ids=req.order_ids, vehicle=req.vehicle)
 
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()

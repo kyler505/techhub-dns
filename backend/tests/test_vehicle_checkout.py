@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def _set_test_db_url(db_path: Path) -> None:
@@ -43,11 +44,14 @@ def _create_pre_delivery_orders(db, count: int) -> list[str]:
 
 
 def test_vehicle_checkout_flow() -> None:
+    from flask import Flask, g
     from app.database import SessionLocal
     from app.services.delivery_run_service import DeliveryRunService
     from app.services.vehicle_checkout_service import VehicleCheckoutService
     from app.models.delivery_run import DeliveryRunStatus
     from app.utils.exceptions import ValidationError
+
+    app = Flask(__name__)
 
     db = SessionLocal()
     try:
@@ -56,7 +60,10 @@ def test_vehicle_checkout_flow() -> None:
         checkout_svc = VehicleCheckoutService(db)
 
         # Checkout van by Alice.
-        checkout = checkout_svc.checkout(vehicle="van", checked_out_by="Alice", purpose="Delivery")
+        with app.app_context():
+            g.user_id = "user-alice"
+            g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+            checkout = checkout_svc.checkout(vehicle="van", purpose="Delivery")
         assert checkout.vehicle == "van"
         assert checkout.checked_out_by == "Alice"
         assert checkout.checked_in_at is None
@@ -64,7 +71,10 @@ def test_vehicle_checkout_flow() -> None:
 
         # Cannot checkout van again by Bob.
         try:
-            checkout_svc.checkout(vehicle="van", checked_out_by="Bob", purpose="Delivery")
+            with app.app_context():
+                g.user_id = "user-bob"
+                g.user = SimpleNamespace(email="bob@example.com", display_name="Bob")
+                checkout_svc.checkout(vehicle="van", purpose="Delivery")
             raise AssertionError("Expected ValidationError for duplicate checkout")
         except ValidationError as exc:
             assert "already checked out" in exc.message.lower()
@@ -74,7 +84,10 @@ def test_vehicle_checkout_flow() -> None:
 
         # Cannot create delivery run for van by Bob (mismatch).
         try:
-            run_svc.create_run(runner="Bob", order_ids=order_ids, vehicle="van")
+            with app.app_context():
+                g.user_id = "user-bob"
+                g.user = SimpleNamespace(email="bob@example.com", display_name="Bob")
+                run_svc.create_run(order_ids=order_ids, vehicle="van")
             raise AssertionError("Expected ValidationError for runner mismatch")
         except ValidationError as exc:
             assert exc.field == "runner"
@@ -82,14 +95,20 @@ def test_vehicle_checkout_flow() -> None:
         print("[PASS] cannot create run for van by Bob (mismatch)")
 
         # Can create delivery run for van by Alice.
-        run = run_svc.create_run(runner="Alice", order_ids=order_ids, vehicle="van")
+        with app.app_context():
+            g.user_id = "user-alice"
+            g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+            run = run_svc.create_run(order_ids=order_ids, vehicle="van")
         assert run.vehicle == "van"
         assert run.status == "Active"
         print("[PASS] can create run for van by Alice")
 
         # Checkin should be blocked while active run exists.
         try:
-            checkout_svc.checkin(vehicle="van", checked_in_by="Alice")
+            with app.app_context():
+                g.user_id = "user-alice"
+                g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+                checkout_svc.checkin(vehicle="van")
             raise AssertionError("Expected ValidationError for checkin during active run")
         except ValidationError as exc:
             assert "active" in exc.message.lower()
@@ -100,7 +119,10 @@ def test_vehicle_checkout_flow() -> None:
         run.end_time = datetime.utcnow()
         db.commit()
 
-        checked_in = checkout_svc.checkin(vehicle="van", checked_in_by="Alice", notes="Returned")
+        with app.app_context():
+            g.user_id = "user-alice"
+            g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+            checked_in = checkout_svc.checkin(vehicle="van", notes="Returned")
         assert checked_in.checked_in_at is not None
         print("[PASS] checkin van after run completion")
 

@@ -1,7 +1,6 @@
 import apiClient from "./client";
 
 export interface CreateDeliveryRunRequest {
-  runner: string;
   order_ids: string[];
   vehicle: "van" | "golf_cart";
 }

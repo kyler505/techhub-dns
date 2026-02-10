@@ -13,16 +13,10 @@ def _allowed_vehicles() -> list[str]:
     return [v.value for v in VehicleEnum]
 
 
-def _normalize_non_empty(value: str, field_name: str) -> str:
-    normalized = (value or "").strip()
-    if not normalized:
-        raise ValueError(f"{field_name} is required")
-    return normalized
-
-
 class CheckoutRequest(BaseModel):
     vehicle: str
-    checked_out_by: str
+    # Deprecated/ignored: identity is derived from the authenticated session.
+    checked_out_by: Optional[str] = None
     purpose: Optional[str] = None
     notes: Optional[str] = None
 
@@ -37,8 +31,11 @@ class CheckoutRequest(BaseModel):
 
     @field_validator("checked_out_by")
     @classmethod
-    def validate_checked_out_by(cls, v: str) -> str:
-        return _normalize_non_empty(v, "checked_out_by")
+    def validate_checked_out_by(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalized = v.strip()
+        return normalized or None
 
     @field_validator("purpose")
     @classmethod
@@ -92,6 +89,7 @@ class VehicleCheckoutResponse(BaseModel):
     id: UUID
     vehicle: str
     checked_out_by: str
+    checked_out_by_email: Optional[str] = None
     purpose: Optional[str] = None
     checked_out_at: datetime
     checked_in_at: Optional[datetime] = None

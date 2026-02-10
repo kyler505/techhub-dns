@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from flask import g
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
@@ -41,17 +42,32 @@ class VehicleCheckoutService:
     def get_active_checkouts(self) -> list[VehicleCheckout]:
         return self.db.query(VehicleCheckout).filter(VehicleCheckout.checked_in_at.is_(None)).all()
 
+    def _get_authenticated_actor(self) -> tuple[str, str, Optional[str]]:
+        user_id = (getattr(g, "user_id", None) or "").strip()
+        if not user_id:
+            raise ValidationError("Authentication required")
+
+        user = getattr(g, "user", None)
+        email = (getattr(user, "email", None) or "").strip()
+        display_name = (getattr(user, "display_name", None) or "").strip() or None
+
+        if not email:
+            raise ValidationError("Authenticated user missing email")
+
+        return user_id, email, display_name
+
+    def _format_actor_display(self, email: str, display_name: Optional[str]) -> str:
+        return (display_name or "").strip() or email.strip()
+
     def checkout(
         self,
         vehicle: str,
-        checked_out_by: str,
         purpose: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
-        checked_out_by_norm = (checked_out_by or "").strip()
-        if not checked_out_by_norm:
-            raise ValidationError("checked_out_by is required", field="checked_out_by")
+        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
+        checked_out_by_display = self._format_actor_display(actor_email, actor_display_name)
 
         if self._delivery_run_active(vehicle_norm):
             raise ValidationError(
@@ -74,7 +90,10 @@ class VehicleCheckoutService:
 
         checkout = VehicleCheckout(
             vehicle=vehicle_norm,
-            checked_out_by=checked_out_by_norm,
+            checked_out_by=checked_out_by_display,
+            checked_out_by_user_id=actor_user_id,
+            checked_out_by_email=actor_email,
+            checked_out_by_display_name=actor_display_name,
             purpose=(purpose.strip() if purpose else None) or None,
             notes=(notes.strip() if notes else None) or None,
             checked_out_at=datetime.utcnow(),
@@ -87,10 +106,11 @@ class VehicleCheckoutService:
     def checkin(
         self,
         vehicle: str,
-        checked_in_by: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
+        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
+        checked_in_by_display = self._format_actor_display(actor_email, actor_display_name)
         if self._delivery_run_active(vehicle_norm):
             raise ValidationError(
                 f"Cannot check in {vehicle_norm} while a delivery run is active",
@@ -106,7 +126,6 @@ class VehicleCheckoutService:
                 details={"vehicle": vehicle_norm},
             )
 
-        checked_in_by_norm = (checked_in_by or "").strip() or None
         notes_norm = (notes or "").strip() or None
         if notes_norm:
             if checkout.notes:
@@ -115,7 +134,10 @@ class VehicleCheckoutService:
                 checkout.notes = f"[Checkin note] {notes_norm}"
 
         checkout.checked_in_at = datetime.utcnow()
-        checkout.checked_in_by = checked_in_by_norm
+        checkout.checked_in_by = checked_in_by_display
+        checkout.checked_in_by_user_id = actor_user_id
+        checkout.checked_in_by_email = actor_email
+        checkout.checked_in_by_display_name = actor_display_name
         checkout.updated_at = datetime.utcnow()
 
         self.db.commit()

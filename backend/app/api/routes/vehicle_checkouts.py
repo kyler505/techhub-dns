@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError as PydanticValidationError
 
+from app.api.auth_middleware import require_auth
 from app.database import get_db
 from app.schemas.vehicle_checkout import (
     CheckoutRequest,
@@ -20,6 +21,7 @@ vehicles_bp = Blueprint("vehicles", __name__, url_prefix="/api/vehicles")
 
 
 @vehicle_checkouts_bp.route("/checkout", methods=["POST"])
+@require_auth
 def checkout_vehicle():
     data = request.get_json() or {}
     try:
@@ -31,7 +33,6 @@ def checkout_vehicle():
         service = VehicleCheckoutService(db)
         checkout = service.checkout(
             vehicle=req.vehicle,
-            checked_out_by=req.checked_out_by,
             purpose=req.purpose,
             notes=req.notes,
         )
@@ -40,6 +41,7 @@ def checkout_vehicle():
 
 
 @vehicle_checkouts_bp.route("/checkin", methods=["POST"])
+@require_auth
 def checkin_vehicle():
     data = request.get_json() or {}
     try:
@@ -49,7 +51,7 @@ def checkin_vehicle():
 
     with get_db() as db:
         service = VehicleCheckoutService(db)
-        checkout = service.checkin(vehicle=req.vehicle, checked_in_by=req.checked_in_by, notes=req.notes)
+        checkout = service.checkin(vehicle=req.vehicle, notes=req.notes)
         response = VehicleCheckoutResponse.model_validate(checkout)
         return jsonify(response.model_dump())
 

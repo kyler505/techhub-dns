@@ -12,6 +12,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { useAuth } from "../contexts/AuthContext";
 
 type VehicleDescriptor = {
   vehicle: Vehicle;
@@ -41,6 +42,8 @@ export default function VehicleCheckoutPanel({
 }: {
   onStatusesChange?: (statuses: VehicleStatusItem[]) => void;
 }) {
+  const { user } = useAuth();
+
   const [statuses, setStatuses] = useState<VehicleStatusItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -48,7 +51,6 @@ export default function VehicleCheckoutPanel({
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [activeVehicle, setActiveVehicle] = useState<Vehicle | null>(null);
 
-  const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -79,7 +81,6 @@ export default function VehicleCheckoutPanel({
 
   const openCheckout = (vehicle: Vehicle) => {
     setActiveVehicle(vehicle);
-    setName("");
     setPurpose("");
     setNotes("");
     setCheckoutOpen(true);
@@ -87,7 +88,6 @@ export default function VehicleCheckoutPanel({
 
   const openCheckin = (vehicle: Vehicle) => {
     setActiveVehicle(vehicle);
-    setName("");
     setNotes("");
     setCheckinOpen(true);
   };
@@ -96,15 +96,9 @@ export default function VehicleCheckoutPanel({
     const vehicle = activeVehicle;
     if (!vehicle) return;
 
-    if (!name.trim()) {
-      toast.error("Please enter a name");
-      return;
-    }
-
     try {
       await vehicleCheckoutsApi.checkout({
         vehicle,
-        checked_out_by: name.trim(),
         purpose: purpose.trim() || undefined,
         notes: notes.trim() || undefined,
       });
@@ -123,7 +117,6 @@ export default function VehicleCheckoutPanel({
     try {
       await vehicleCheckoutsApi.checkin({
         vehicle,
-        checked_in_by: name.trim() || undefined,
         notes: notes.trim() || undefined,
       });
       toast.success("Vehicle checked in");
@@ -205,13 +198,8 @@ export default function VehicleCheckoutPanel({
             <DialogTitle>Check Out Vehicle</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid gap-1">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Alice"
-              />
+            <div className="text-xs text-muted-foreground">
+              Checked out as: {user?.display_name || user?.email || "your account"}
             </div>
             <div className="grid gap-1">
               <label className="text-sm font-medium">Purpose (optional)</label>
@@ -248,13 +236,8 @@ export default function VehicleCheckoutPanel({
             <DialogTitle>Check In Vehicle</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid gap-1">
-              <label className="text-sm font-medium">Name (optional)</label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Alice"
-              />
+            <div className="text-xs text-muted-foreground">
+              Checking in as: {user?.display_name || user?.email || "your account"}
             </div>
             <div className="grid gap-1">
               <label className="text-sm font-medium">Notes (optional)</label>
