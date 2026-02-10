@@ -207,7 +207,7 @@ Groups multiple orders into coordinated delivery runs with vehicle and runner tr
 Vehicle checkout is tracked separately from delivery runs.
 
 - Vehicle checkout is independent of delivery runs (a vehicle can be checked out before any run is started).
-- Starting a delivery run requires the vehicle is checked out and the run `runner` matches `checked_out_by`.
+- Starting a delivery run requires the vehicle is checked out and the authenticated session user matches `checked_out_by`.
 - Vehicle check-in is blocked while a delivery run is active to preserve accountability and prevent a vehicle from being "returned" while it is still assigned to an active run.
 
 ### Delivery Run Model
@@ -216,7 +216,7 @@ Vehicle checkout is tracked separately from delivery runs.
 class DeliveryRun:
     id: String(36)           # UUID
     name: String             # Auto-generated (e.g., "Morning Run 1")
-    runner: String           # Assigned runner name
+    runner: String           # Derived from authenticated session user
     vehicle: Enum            # 'van' or 'golf_cart'
     status: Enum             # 'Active', 'Completed', 'Cancelled'
     start_time: DateTime     # Run creation time
@@ -227,7 +227,7 @@ class DeliveryRun:
 ### Run Creation Process
 
 1. Select Pre-Delivery orders from queue
-2. Assign runner and vehicle
+2. Select vehicle (runner is derived from authenticated session user)
 3. System generates run name based on time:
    - Morning (before 12:00): "Morning Run N"
    - Afternoon (12:00-17:00): "Afternoon Run N"
