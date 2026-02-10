@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -38,14 +38,19 @@ function getApiErrorMessage(error: unknown): string {
 }
 
 export default function VehicleCheckoutPanel({
-  onStatusesChange,
+  statuses,
+  isLoading,
+  refresh,
+  readonly,
 }: {
-  onStatusesChange?: (statuses: VehicleStatusItem[]) => void;
+  statuses: VehicleStatusItem[];
+  isLoading: boolean;
+  refresh: () => Promise<void>;
+  readonly?: boolean;
 }) {
   const { user } = useAuth();
 
-  const [statuses, setStatuses] = useState<VehicleStatusItem[] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -56,28 +61,11 @@ export default function VehicleCheckoutPanel({
 
   const statusByVehicle = useMemo(() => {
     const map = new Map<Vehicle, VehicleStatusItem>();
-    for (const item of statuses ?? []) {
+    for (const item of statuses) {
       map.set(item.vehicle, item);
     }
     return map;
   }, [statuses]);
-
-  const refresh = async () => {
-    setIsLoading(true);
-    try {
-      const response = await vehicleCheckoutsApi.getStatuses();
-      setStatuses(response.vehicles);
-      onStatusesChange?.(response.vehicles);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-  }, []);
 
   const openCheckout = (vehicle: Vehicle) => {
     setActiveVehicle(vehicle);
@@ -97,6 +85,7 @@ export default function VehicleCheckoutPanel({
     if (!vehicle) return;
 
     try {
+      setIsSubmitting(true);
       await vehicleCheckoutsApi.checkout({
         vehicle,
         purpose: purpose.trim() || undefined,
@@ -107,6 +96,8 @@ export default function VehicleCheckoutPanel({
       await refresh();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -115,6 +106,7 @@ export default function VehicleCheckoutPanel({
     if (!vehicle) return;
 
     try {
+      setIsSubmitting(true);
       await vehicleCheckoutsApi.checkin({
         vehicle,
         notes: notes.trim() || undefined,
@@ -124,6 +116,8 @@ export default function VehicleCheckoutPanel({
       await refresh();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -132,7 +126,7 @@ export default function VehicleCheckoutPanel({
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">Vehicles</div>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading || isSubmitting}>
             {isLoading ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
@@ -143,6 +137,7 @@ export default function VehicleCheckoutPanel({
             const checkedOutBy = status?.checked_out_by ?? null;
             const checkedOut = Boolean(status?.checked_out);
             const runActive = Boolean(status?.delivery_run_active);
+            const disableActions = Boolean(readonly) || isLoading || isSubmitting || runActive;
 
             return (
               <div
@@ -171,7 +166,7 @@ export default function VehicleCheckoutPanel({
                     <Button
                       size="sm"
                       onClick={() => openCheckout(vehicle)}
-                      disabled={isLoading || runActive}
+                      disabled={disableActions}
                     >
                       Check Out
                     </Button>
@@ -180,7 +175,7 @@ export default function VehicleCheckoutPanel({
                       size="sm"
                       variant="outline"
                       onClick={() => openCheckin(vehicle)}
-                      disabled={isLoading || runActive}
+                      disabled={disableActions}
                     >
                       Check In
                     </Button>
@@ -223,7 +218,7 @@ export default function VehicleCheckoutPanel({
             <Button variant="outline" onClick={() => setCheckoutOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCheckout} disabled={isLoading}>
+            <Button onClick={handleCheckout} disabled={isLoading || isSubmitting}>
               Check Out
             </Button>
           </DialogFooter>
@@ -253,7 +248,7 @@ export default function VehicleCheckoutPanel({
             <Button variant="outline" onClick={() => setCheckinOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCheckin} disabled={isLoading}>
+            <Button onClick={handleCheckin} disabled={isLoading || isSubmitting}>
               Check In
             </Button>
           </DialogFooter>

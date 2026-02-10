@@ -8,9 +8,11 @@ import { analyticsApi, StatusCountsResponse, DeliveryPerformanceResponse, TimeTr
 import { ordersApi } from "../api/orders";
 import { Order, OrderStatus } from "../types/order";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
+import { VehicleStatusStrip } from "../components/vehicles/VehicleStatusStrip";
 import OrdersLineChart from "../components/charts/OrdersLineChart";
 import OrdersBarChart from "../components/charts/OrdersBarChart";
 import { Activity, Package, CheckCircle2, Truck, RefreshCw } from "lucide-react";
+import { useVehicleStatuses } from "../hooks/useVehicleStatuses";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -116,6 +118,12 @@ export default function Dashboard() {
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   const socketRef = useRef<Socket | null>(null);
+
+  const {
+    statusByVehicle,
+    isLoading: vehicleStatusesLoading,
+    refresh: refreshVehicleStatuses,
+  } = useVehicleStatuses();
 
   // Fetch all analytics data
   const fetchAnalytics = async () => {
@@ -276,10 +284,43 @@ export default function Dashboard() {
         <Card className="xl:col-span-2 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
-            <span className="status-live text-xs text-muted-foreground">Connected</span>
+            <span
+              className={
+                socketStatus === "connected"
+                  ? "status-live text-xs text-muted-foreground"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              {socketStatus === "connected"
+                ? "Connected"
+                : socketStatus === "connecting"
+                  ? "Connecting"
+                  : "Disconnected"}
+            </span>
           </CardHeader>
-          <CardContent>
-            <LiveDeliveryDashboard />
+          <CardContent className="p-0">
+            <div className="p-6 pt-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Fleet
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshVehicleStatuses}
+                  disabled={vehicleStatusesLoading}
+                  className="btn-lift"
+                >
+                  {vehicleStatusesLoading ? "Refreshing..." : "Refresh"}
+                </Button>
+              </div>
+              <div className="mt-3">
+                <VehicleStatusStrip statusByVehicle={statusByVehicle} isLoading={vehicleStatusesLoading} />
+              </div>
+            </div>
+            <div className="border-t border-border">
+              <LiveDeliveryDashboard />
+            </div>
           </CardContent>
         </Card>
 
