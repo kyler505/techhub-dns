@@ -46,11 +46,15 @@ export const deliveryRunsApi = {
     return response.data;
   },
 
-  getRuns: async (status?: string[]): Promise<DeliveryRunResponse[]> => {
+  getRuns: async (query?: { status?: string[]; vehicle?: "van" | "golf_cart" }): Promise<DeliveryRunResponse[]> => {
     const params = new URLSearchParams();
-    if (status) {
-      status.forEach(s => params.append('status', s));
+    if (query?.status) {
+      query.status.forEach((s) => params.append("status", s));
     }
+    if (query?.vehicle) {
+      params.append("vehicle", query.vehicle);
+    }
+
     const response = await apiClient.get<DeliveryRunResponse[]>("/delivery-runs", { params });
     return response.data;
   },

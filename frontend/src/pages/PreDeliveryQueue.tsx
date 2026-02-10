@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
@@ -9,28 +9,17 @@ import { Card, CardContent } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { formatDeliveryLocation } from "../utils/location";
-import VehicleCheckoutPanel from "../components/VehicleCheckoutPanel";
+import CreateDeliveryDialog from "../components/CreateDeliveryDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { AlertTriangle } from "lucide-react";
 
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
-import { useVehicleStatuses } from "../hooks/useVehicleStatuses";
-import { useAuth } from "../contexts/AuthContext";
-import DeliveryPrepCard from "../components/delivery/DeliveryPrepCard";
-import type { Vehicle } from "../api/vehicleCheckouts";
 
 export default function PreDeliveryQueue() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-
-    const { user } = useAuth();
-    const {
-        statuses: vehicleStatuses,
-        statusByVehicle,
-        isLoading: vehicleStatusesLoading,
-        refresh: refreshVehicleStatuses,
-    } = useVehicleStatuses();
+    const [iscreateDeliveryOpen, setIsCreateDeliveryOpen] = useState(false);
 
     // Listen for real-time updates
     const { orders: websocketOrders } = useOrdersWebSocket();
@@ -47,7 +36,6 @@ export default function PreDeliveryQueue() {
     // Partial pick confirmation dialog
     const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
     const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
-    const [pendingStartVehicle, setPendingStartVehicle] = useState<Vehicle | null>(null);
 
     const navigate = useNavigate();
 
@@ -77,32 +65,8 @@ export default function PreDeliveryQueue() {
         setSelectedOrders(newSelected);
     };
 
-    const selectedOrdersCount = selectedOrders.size;
-    const selectedOrderIds = useMemo(() => Array.from(selectedOrders), [selectedOrders]);
-
-    const createDeliveryRun = async (vehicle: Vehicle) => {
-        try {
-            await deliveryRunsApi.createRun({
-                order_ids: selectedOrderIds,
-                vehicle,
-            });
-            setSelectedOrders(new Set());
-
-            await Promise.all([loadOrders(), refreshVehicleStatuses()]);
-
-            setInfoDialogTitle("Success");
-            setInfoDialogMessage("Delivery started successfully!");
-            setInfoDialogOpen(true);
-        } catch (error) {
-            console.error("Failed to start delivery:", error);
-            setInfoDialogTitle("Error");
-            setInfoDialogMessage("Failed to start delivery.");
-            setInfoDialogOpen(true);
-        }
-    };
-
-    const handleStartDelivery = async (vehicle: Vehicle) => {
-        if (selectedOrdersCount === 0) {
+    const handleBulkStartDelivery = () => {
+        if (selectedOrders.size === 0) {
             setInfoDialogTitle("Selection Required");
             setInfoDialogMessage("Please select at least one order to start a delivery.");
             setInfoDialogOpen(true);
@@ -110,32 +74,42 @@ export default function PreDeliveryQueue() {
         }
 
         // Check for partial pick orders
-        const selectedOrdersList = orders.filter((o) => selectedOrders.has(o.id));
+        const selectedOrdersList = orders.filter(o => selectedOrders.has(o.id));
         const partialPicks = selectedOrdersList.filter(
-            (o) => o.pick_status && !o.pick_status.is_fully_picked
+            o => o.pick_status && !o.pick_status.is_fully_picked
         );
 
         if (partialPicks.length > 0) {
-            setPendingStartVehicle(vehicle);
             setPartialPickOrders(partialPicks);
             setPartialPickDialogOpen(true);
             return;
         }
 
-        await createDeliveryRun(vehicle);
+        setIsCreateDeliveryOpen(true);
     };
 
-    const handlePartialPickConfirm = async () => {
+    const handlePartialPickConfirm = () => {
         setPartialPickDialogOpen(false);
-        const vehicle = pendingStartVehicle;
-        setPendingStartVehicle(null);
-        if (!vehicle) return;
-        await createDeliveryRun(vehicle);
+        setIsCreateDeliveryOpen(true);
     };
 
-    const scrollToVehicleCheckout = () => {
-        const el = document.getElementById("vehicle-checkout-panel");
-        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const handleCreateDelivery = async (vehicle: string) => {
+        try {
+            await deliveryRunsApi.createRun({
+                order_ids: Array.from(selectedOrders),
+                vehicle: vehicle as "van" | "golf_cart", // Cast to match expected enum
+            });
+            setSelectedOrders(new Set());
+            loadOrders();
+            setIsCreateDeliveryOpen(false);
+
+            setInfoDialogTitle("Success");
+            setInfoDialogMessage("Delivery started successfully!");
+            setInfoDialogOpen(true);
+        } catch (error) {
+            console.error("Failed to start delivery:", error);
+            throw error; // Re-throw to be caught by the dialog
+        }
     };
 
     const openIssueDialog = (orderId: string) => {
@@ -184,20 +158,14 @@ export default function PreDeliveryQueue() {
 
     return (
         <div className="space-y-4">
-            <DeliveryPrepCard
-                selectedOrdersCount={selectedOrdersCount}
-                user={user}
-                statusByVehicle={statusByVehicle}
-                statusesLoading={vehicleStatusesLoading}
-                onStartRun={handleStartDelivery}
-                onRequestCheckout={scrollToVehicleCheckout}
-            />
-            <div id="vehicle-checkout-panel">
-                <VehicleCheckoutPanel
-                    statuses={vehicleStatuses}
-                    isLoading={vehicleStatusesLoading}
-                    refresh={refreshVehicleStatuses}
-                />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <Button
+                    onClick={handleBulkStartDelivery}
+                    disabled={selectedOrders.size === 0}
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                    Start Delivery ({selectedOrders.size} selected)
+                </Button>
             </div>
             {orders.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
@@ -282,6 +250,13 @@ export default function PreDeliveryQueue() {
             )}
 
             {/* StatusTransition will be handled by parent DeliveryDashboard */}
+
+            <CreateDeliveryDialog
+                isOpen={iscreateDeliveryOpen}
+                onClose={() => setIsCreateDeliveryOpen(false)}
+                onCreateDelivery={handleCreateDelivery}
+                selectedOrdersCount={selectedOrders.size}
+            />
 
             {/* Generic Info/Error Dialog */}
             <Dialog open={infoDialogOpen} onOpenChange={setInfoDialogOpen}>

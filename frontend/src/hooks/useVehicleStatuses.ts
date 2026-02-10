@@ -14,12 +14,25 @@ type StatusByVehicle = Record<Vehicle, VehicleStatus>;
 
 function buildStatusByVehicle(statuses: VehicleStatusItem[]): StatusByVehicle {
   const base: StatusByVehicle = {
-    van: { vehicle: "van", checked_out: false, delivery_run_active: false, checked_out_by: null },
+    van: {
+      vehicle: "van",
+      checked_out: false,
+      delivery_run_active: false,
+      checked_out_by: null,
+      checked_out_by_user_id: null,
+      checkout_type: null,
+      purpose: null,
+      checked_out_at: null,
+    },
     golf_cart: {
       vehicle: "golf_cart",
       checked_out: false,
       delivery_run_active: false,
       checked_out_by: null,
+      checked_out_by_user_id: null,
+      checkout_type: null,
+      purpose: null,
+      checked_out_at: null,
     },
   };
 

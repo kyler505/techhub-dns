@@ -11,7 +11,7 @@ type Props = {
   statusByVehicle: Record<Vehicle, VehicleStatusItem>;
   statusesLoading: boolean;
   onStartRun: (vehicle: Vehicle) => Promise<void>;
-  onRequestCheckout: () => void;
+  onCheckoutForDeliveryRun: (vehicle: Vehicle) => Promise<void>;
 };
 
 function runnerDisplay(user: User | null): string {
@@ -20,6 +20,11 @@ function runnerDisplay(user: User | null): string {
 
 function checkedOutByCurrentUser(status: VehicleStatusItem, user: User | null): boolean {
   if (!status.checked_out) return false;
+
+  const checkedOutByUserId = status.checked_out_by_user_id;
+  if (checkedOutByUserId && user?.id) {
+    return checkedOutByUserId === user.id;
+  }
 
   const checkedOutBy = status.checked_out_by;
   if (!checkedOutBy) return false;
@@ -36,7 +41,7 @@ export default function DeliveryPrepCard({
   statusByVehicle,
   statusesLoading,
   onStartRun,
-  onRequestCheckout,
+  onCheckoutForDeliveryRun,
 }: Props) {
   const [vehicle, setVehicle] = useState<Vehicle>("van");
   const [isStarting, setIsStarting] = useState(false);
@@ -49,7 +54,14 @@ export default function DeliveryPrepCard({
     if (statusesLoading) return "Loading vehicle status";
 
     if (status.delivery_run_active) return "Vehicle already has an active run";
-    if (!status.checked_out) return "Vehicle must be checked out";
+    if (!status.checked_out) return "Vehicle must be checked out for a Delivery run";
+
+    if (status.checkout_type === "other") {
+      const purpose = status.purpose?.trim();
+      const suffix = purpose ? ` (purpose: ${purpose})` : "";
+      return `Checked out for Other${suffix}. Check in, then check out again for a Delivery run.`;
+    }
+
     if (!checkedOutByCurrentUser(status, user)) {
       const who = status.checked_out_by;
       return who ? `Checked out by ${who}` : "Checked out by another user";
@@ -65,6 +77,16 @@ export default function DeliveryPrepCard({
     setIsStarting(true);
     try {
       await onStartRun(vehicle);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    if (statusesLoading || isStarting) return;
+    setIsStarting(true);
+    try {
+      await onCheckoutForDeliveryRun(vehicle);
     } finally {
       setIsStarting(false);
     }
@@ -126,8 +148,8 @@ export default function DeliveryPrepCard({
               <div className="text-xs text-muted-foreground">{startDisabledReason}</div>
             ) : null}
             {!status.checked_out && !statusesLoading ? (
-              <Button variant="outline" size="sm" onClick={onRequestCheckout} disabled={isStarting}>
-                Check out
+              <Button variant="outline" size="sm" onClick={handleCheckout} disabled={isStarting}>
+                Check out for Delivery run
               </Button>
             ) : null}
           </div>
