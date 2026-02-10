@@ -7,6 +7,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/Skeleton";
 import { Breadcrumbs } from "./components/Breadcrumbs";
+import { SyncHealthBanner } from "./components/SyncHealthBanner";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -64,6 +65,8 @@ function AppContent() {
 							<Breadcrumbs />
 						</div>
 					</div>
+
+					<SyncHealthBanner />
 
                     <div className="p-6 lg:p-8">
                         <Suspense fallback={

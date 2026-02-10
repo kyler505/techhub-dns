@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Loader2, Search } from "lucide-react";
 
 import analyticsApi, { ActivityItem } from "../../api/analytics";
 import observabilityApi, { SystemAuditItem } from "../../api/observability";
@@ -381,12 +381,6 @@ export default function FlowTab() {
                     <div>
                         <CardTitle className="text-base">Flow</CardTitle>
                         <CardDescription>Recent activity plus background/system audit, with an order inspector.</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => void load()} className="btn-lift" disabled={loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                            Refresh
-                        </Button>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">

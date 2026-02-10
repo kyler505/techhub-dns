@@ -10,7 +10,7 @@ import { Order, OrderStatus } from "../types/order";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import OrdersLineChart from "../components/charts/OrdersLineChart";
 import OrdersBarChart from "../components/charts/OrdersBarChart";
-import { Activity, Package, CheckCircle2, Truck, RefreshCw } from "lucide-react";
+import { Activity, Package, CheckCircle2, Truck } from "lucide-react";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -113,10 +113,8 @@ export default function Dashboard() {
 
   // Error states
   const [error, setError] = useState<string | null>(null);
-  const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   const socketRef = useRef<Socket | null>(null);
-  const socketStatusLabel = socketStatus === "connected" ? "Connected" : socketStatus === "connecting" ? "Connecting" : "Disconnected";
 
   // Fetch all analytics data
   const fetchAnalytics = async () => {
@@ -194,7 +192,6 @@ export default function Dashboard() {
 
     socket.on("connect", () => {
       console.debug("Dashboard Socket.IO connected");
-      setSocketStatus("connected");
       socket.emit("join", { room: "orders" });
     });
 
@@ -211,12 +208,10 @@ export default function Dashboard() {
 
     socket.on("disconnect", () => {
       console.debug("Dashboard Socket.IO disconnected");
-      setSocketStatus("disconnected");
     });
 
     socket.on("connect_error", (err) => {
       console.debug("Dashboard Socket.IO error (expected if backend not running)", err);
-      setSocketStatus("disconnected");
     });
 
     // Refresh every 60 seconds as backup
@@ -251,78 +246,54 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
         </div>
-        <div className="flex items-center gap-2">
-          {(error || socketStatus === "disconnected") && (
-            <Button variant="outline" size="sm" onClick={fetchAnalytics} className="btn-lift">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
-          )}
-        </div>
       </motion.div>
 
       {error && (
         <div className="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4">
           <p className="font-medium">{error}</p>
-          <button
-            onClick={fetchAnalytics}
-            className="mt-2 text-sm underline hover:no-underline"
-          >
-            Retry
-          </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
-        <Card className="xl:col-span-8 h-full">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
+        <Card className="xl:col-span-2 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Active Deliveries</CardTitle>
-            <span
-              className={
-                socketStatus === "connected"
-                  ? "status-live text-xs text-muted-foreground"
-                  : "text-xs text-muted-foreground"
-              }
-            >
-              {socketStatusLabel}
-            </span>
+            <CardTitle className="text-base">Live Status</CardTitle>
+            <span className="status-live text-xs text-muted-foreground">Connected</span>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             <LiveDeliveryDashboard />
           </CardContent>
         </Card>
 
-        <div className="xl:col-span-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
-            <StatCard
-              title="Picked"
-              value={statusCounts.picked ?? 0}
-              icon={Package}
-              loading={statusLoading}
-              accent="slate"
-            />
-            <StatCard
-              title="Ready for QA"
-              value={statusCounts.qa ?? 0}
-              icon={CheckCircle2}
-              loading={statusLoading}
-              accent="maroon"
-            />
-            <StatCard
-              title="Completed Today"
-              value={deliveryPerf.completed_today}
-              icon={Truck}
-              loading={perfLoading}
-              accent="green"
-            />
-            <StatCard
-              title="Ready for Delivery"
-              value={deliveryPerf.ready_for_delivery}
-              icon={Activity}
-              loading={perfLoading}
-              accent="slate"
-            />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
+          <StatCard
+            title="Picked"
+            value={statusCounts.picked ?? 0}
+            icon={Package}
+            loading={statusLoading}
+            accent="slate"
+          />
+          <StatCard
+            title="Ready for QA"
+            value={statusCounts.qa ?? 0}
+            icon={CheckCircle2}
+            loading={statusLoading}
+            accent="maroon"
+          />
+          <StatCard
+            title="Completed Today"
+            value={deliveryPerf.completed_today}
+            icon={Truck}
+            loading={perfLoading}
+            accent="green"
+          />
+          <StatCard
+            title="Ready for Delivery"
+            value={deliveryPerf.ready_for_delivery}
+            icon={Activity}
+            loading={perfLoading}
+            accent="slate"
+          />
         </div>
       </div>
 

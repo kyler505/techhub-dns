@@ -7,7 +7,6 @@ import {
   type Vehicle,
   type VehicleStatusItem,
 } from "../api/vehicleCheckouts";
-import { TroubleshootingActions } from "./TroubleshootingActions";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
@@ -127,11 +126,6 @@ export default function VehicleCheckoutPanel({
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">Vehicles</div>
-          <TroubleshootingActions hint="Use if data looks stale.">
-            <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading || isSubmitting}>
-              {isLoading ? "Refreshing..." : "Refresh"}
-            </Button>
-          </TroubleshootingActions>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
