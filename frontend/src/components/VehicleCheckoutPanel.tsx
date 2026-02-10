@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 
 import {
   vehicleCheckoutsApi,
   type Vehicle,
   type VehicleStatusItem,
+  type VehicleCheckoutType,
 } from "../api/vehicleCheckouts";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -56,6 +58,7 @@ export default function VehicleCheckoutPanel({
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [activeVehicle, setActiveVehicle] = useState<Vehicle | null>(null);
 
+  const [checkoutType, setCheckoutType] = useState<VehicleCheckoutType>("delivery_run");
   const [purpose, setPurpose] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -69,6 +72,7 @@ export default function VehicleCheckoutPanel({
 
   const openCheckout = (vehicle: Vehicle) => {
     setActiveVehicle(vehicle);
+    setCheckoutType("delivery_run");
     setPurpose("");
     setNotes("");
     setCheckoutOpen(true);
@@ -84,10 +88,16 @@ export default function VehicleCheckoutPanel({
     const vehicle = activeVehicle;
     if (!vehicle) return;
 
+    if (checkoutType === "other" && !purpose.trim()) {
+      toast.error("Purpose is required for 'Other' checkouts");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await vehicleCheckoutsApi.checkout({
         vehicle,
+        checkout_type: checkoutType,
         purpose: purpose.trim() || undefined,
         notes: notes.trim() || undefined,
       });
@@ -136,6 +146,10 @@ export default function VehicleCheckoutPanel({
             const runActive = Boolean(status?.delivery_run_active);
             const disableActions = Boolean(readonly) || isLoading || isSubmitting || runActive;
 
+            const type = status?.checkout_type ?? null;
+            const purposeText = (status?.purpose ?? "").trim() || null;
+            const typeLabel = type === "other" ? "Other" : type === "delivery_run" ? "Delivery run" : null;
+
             return (
               <div
                 key={vehicle}
@@ -155,7 +169,15 @@ export default function VehicleCheckoutPanel({
                 </div>
 
                 <div className="mt-2 text-xs text-muted-foreground">
-                  {checkedOut ? `Checked out by: ${checkedOutBy ?? "Unknown"}` : "Not checked out"}
+                  {checkedOut ? (
+                    <div className="space-y-1">
+                      <div>{`Checked out by: ${checkedOutBy ?? "Unknown"}`}</div>
+                      {typeLabel ? <div>{`Type: ${typeLabel}`}</div> : null}
+                      {purposeText ? <div>{`Purpose: ${purposeText}`}</div> : null}
+                    </div>
+                  ) : (
+                    "Not checked out"
+                  )}
                 </div>
 
                 <div className="mt-3 flex items-center gap-2">
@@ -177,6 +199,10 @@ export default function VehicleCheckoutPanel({
                       Check In
                     </Button>
                   )}
+
+                  <Button asChild size="sm" variant="ghost" disabled={isLoading || isSubmitting}>
+                    <Link to={`/delivery/fleet/${vehicle}/history`}>History</Link>
+                  </Button>
                 </div>
               </div>
             );
@@ -194,11 +220,24 @@ export default function VehicleCheckoutPanel({
               Checked out as: {user?.display_name || user?.email || "your account"}
             </div>
             <div className="grid gap-1">
-              <label className="text-sm font-medium">Purpose (optional)</label>
+              <label className="text-sm font-medium">Checkout type</label>
+              <select
+                value={checkoutType}
+                onChange={(e) => setCheckoutType(e.target.value as VehicleCheckoutType)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="delivery_run">Delivery run</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">
+                Purpose{checkoutType === "other" ? " (required)" : " (optional)"}
+              </label>
               <Input
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
-                placeholder="e.g., Morning delivery run"
+                placeholder={checkoutType === "other" ? "e.g., Maintenance" : "e.g., Morning delivery run"}
               />
             </div>
             <div className="grid gap-1">

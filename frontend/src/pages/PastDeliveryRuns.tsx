@@ -16,7 +16,7 @@ export default function PastDeliveryRuns() {
             try {
                 setLoading(true);
                 // Fetch completed and cancelled runs
-                const data = await deliveryRunsApi.getRuns(["Completed", "Cancelled"]);
+                const data = await deliveryRunsApi.getRuns({ status: ["Completed", "Cancelled"] });
                 setRuns(data);
             } catch (error) {
                 console.error("Failed to fetch past runs:", error);
