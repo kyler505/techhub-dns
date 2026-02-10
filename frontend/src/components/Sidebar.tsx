@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -65,8 +65,7 @@ export function Sidebar({ className }: { className?: string }) {
   const { isAdmin } = useAuth();
 
   const isOnDeliveryRoute = location.pathname.startsWith("/delivery");
-  const [deliveryGroupOpen, setDeliveryGroupOpen] = useState(isOnDeliveryRoute);
-  const wasOnDeliveryRoute = useRef(isOnDeliveryRoute);
+  const [deliveryGroupOpen, setDeliveryGroupOpen] = useState(false);
 
   const visibleAdminItems = isAdmin ? adminItems : adminItems.filter((item) => item.path !== "/admin");
 
@@ -74,13 +73,6 @@ export function Sidebar({ className }: { className?: string }) {
     if (typeof document === "undefined") return;
     document.documentElement.style.setProperty("--sidebar-width", collapsed ? "72px" : "256px");
   }, [collapsed]);
-
-  useEffect(() => {
-    if (isOnDeliveryRoute && !wasOnDeliveryRoute.current) {
-      setDeliveryGroupOpen(true);
-    }
-    wasOnDeliveryRoute.current = isOnDeliveryRoute;
-  }, [isOnDeliveryRoute]);
 
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
@@ -138,7 +130,7 @@ export function Sidebar({ className }: { className?: string }) {
 
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         {navItems.map((item) => {
-          const active = isActive(item.path);
+          const active = item.path === "/delivery" ? isOnDeliveryRoute : isActive(item.path);
           const Icon = item.icon;
 
           if (item.kind === "leaf") {
@@ -185,10 +177,10 @@ export function Sidebar({ className }: { className?: string }) {
                 )}
               >
                 <NavLink
-                  to={item.to}
+                 to={item.to}
                   className="flex min-w-0 flex-1 items-center gap-3"
                   onClick={() => {
-                    if (!collapsed && item.path === "/delivery") {
+                    if (item.path === "/delivery") {
                       setDeliveryGroupOpen(true);
                     }
                   }}
@@ -240,24 +232,26 @@ export function Sidebar({ className }: { className?: string }) {
                     transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
                     className="overflow-hidden pl-6"
                   >
-                    <div className="space-y-1">
-                      {item.children.map((child) => (
-                        <NavLink
-                          key={child.to}
-                          to={child.to}
-                          className={({ isActive: childActive }) =>
-                            cn(
-                              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                              childActive
-                                ? "bg-accent/70 text-accent-foreground"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )
-                          }
-                        >
-                          <span className="w-5" />
-                          <span className="whitespace-nowrap">{child.label}</span>
-                        </NavLink>
-                      ))}
+                    <div className="rounded-lg bg-muted/30 border border-border/60 shadow-sm p-1">
+                      <div className="space-y-1">
+                        {item.children.map((child) => (
+                          <NavLink
+                            key={child.to}
+                            to={child.to}
+                            className={({ isActive: childActive }) =>
+                              cn(
+                                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+                                childActive
+                                  ? "bg-accent/70 text-accent-foreground"
+                                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                              )
+                            }
+                          >
+                            <span className="w-5" />
+                            <span className="whitespace-nowrap">{child.label}</span>
+                          </NavLink>
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}
