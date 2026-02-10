@@ -12,7 +12,8 @@
 set -e  # Exit on error
 
 # Configuration
-PROJECT_ROOT="/home/techhub/techhub-dns"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WSGI_FILE="/var/www/techhub_pythonanywhere_com_wsgi.py"
 LOG_FILE="${PROJECT_ROOT}/deploy.log"
 BRANCH="main"
@@ -72,6 +73,32 @@ log "Pulling latest changes from origin/$BRANCH..."
 git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 log "Git pull complete"
+
+# Run DB migrations (prevents schema drift causing 500s)
+BACKEND_DIR="$PROJECT_ROOT/backend"
+if [ -d "$BACKEND_DIR" ]; then
+    log "Running DB migrations (alembic upgrade head)..."
+
+    if [ -f "$BACKEND_DIR/.venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        . "$BACKEND_DIR/.venv/bin/activate"
+        log "Activated backend virtualenv: $BACKEND_DIR/.venv"
+    elif [ -f "$PROJECT_ROOT/.venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        . "$PROJECT_ROOT/.venv/bin/activate"
+        log "Activated project virtualenv: $PROJECT_ROOT/.venv"
+    else
+        log "WARNING: No virtualenv found; running migrations with system python"
+    fi
+
+    cd "$BACKEND_DIR"
+    python -m alembic upgrade head
+    cd "$PROJECT_ROOT"
+
+    log "DB migrations complete"
+else
+    log "WARNING: Backend directory not found at $BACKEND_DIR; skipping migrations"
+fi
 
 # Build frontend on PythonAnywhere
 if [ -d "$PROJECT_ROOT/frontend" ]; then
