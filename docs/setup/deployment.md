@@ -286,6 +286,49 @@ The backend automatically detects the frontend dist path:
 | SAML login fails | Check certificate path and IdP URLs |
 | Git push fails | Run `git config http.postBuffer 524288000` |
 
+### Fixing Alembic revision overlap (multiple rows in `alembic_version`)
+
+If deploy fails with an error like:
+
+`Requested revision 0006_add_vehicle_checkouts overlaps with other requested revisions 0005_archive_system_audit_and_session_indexes`
+
+it usually means the `alembic_version` table contains multiple rows (for example, both `0005` and `0006`). Alembic expects exactly one row.
+
+1) Inspect the current rows (no secrets printed):
+
+```bash
+cd ~/techhub-dns/backend
+source .venv/bin/activate
+
+python - <<'PY'
+from sqlalchemy import create_engine, text
+from app.config import settings
+
+engine = create_engine(settings.database_url)
+with engine.connect() as conn:
+    rows = conn.execute(text("select version_num from alembic_version")).fetchall()
+print("alembic_version rows:", [r[0] for r in rows])
+PY
+```
+
+2) Identify the latest revision to keep:
+
+```bash
+python -m alembic heads
+```
+
+3) Delete older rows, leaving only the latest revision. For example, if the latest is `0006_add_vehicle_checkouts`, delete everything else:
+
+```sql
+delete from alembic_version where version_num != '0006_add_vehicle_checkouts';
+```
+
+4) Rerun migrations:
+
+```bash
+python -m alembic upgrade head
+```
+
 ### Checking if Site is Running
 
 ```bash
