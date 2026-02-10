@@ -59,15 +59,57 @@ def test_vehicle_checkout_flow() -> None:
 
         checkout_svc = VehicleCheckoutService(db)
 
-        # Checkout van by Alice.
+        # Checkout type=other must include purpose.
+        try:
+            with app.app_context():
+                g.user_id = "user-alice"
+                g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+                checkout_svc.checkout(vehicle="van", checkout_type="other", purpose=None)
+            raise AssertionError("Expected ValidationError for missing purpose")
+        except ValidationError as exc:
+            assert exc.field == "purpose"
+        print("[PASS] other checkout requires purpose")
+
+        # Checkout van by Alice for Other.
         with app.app_context():
             g.user_id = "user-alice"
             g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
-            checkout = checkout_svc.checkout(vehicle="van", purpose="Delivery")
+            checkout = checkout_svc.checkout(vehicle="van", checkout_type="other", purpose="Maintenance")
         assert checkout.vehicle == "van"
         assert checkout.checked_out_by == "Alice"
+        assert checkout.checkout_type == "other"
+        assert checkout.purpose == "Maintenance"
         assert checkout.checked_in_at is None
-        print("[PASS] checkout van by Alice")
+        print("[PASS] checkout van by Alice (other)")
+
+        run_svc = DeliveryRunService(db)
+
+        # Cannot create delivery run for van while checked out for Other.
+        try:
+            with app.app_context():
+                g.user_id = "user-alice"
+                g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+                run_svc.create_run_for_current_user(order_ids=order_ids, vehicle="van")
+            raise AssertionError("Expected ValidationError for checkout_type=other")
+        except ValidationError as exc:
+            assert exc.field == "checkout_type"
+            assert "check" in exc.message.lower()
+        print("[PASS] cannot create run when checkout_type=other")
+
+        # Check in before re-checkout as delivery run.
+        with app.app_context():
+            g.user_id = "user-alice"
+            g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+            checkout_svc.checkin(vehicle="van", notes="Done")
+        print("[PASS] checkin van after other")
+
+        # Checkout van by Alice for Delivery run.
+        with app.app_context():
+            g.user_id = "user-alice"
+            g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
+            checkout = checkout_svc.checkout(vehicle="van", checkout_type="delivery_run")
+        assert checkout.checkout_type == "delivery_run"
+        print("[PASS] checkout van by Alice (delivery_run)")
 
         # Cannot checkout van again by Bob.
         try:
@@ -80,14 +122,12 @@ def test_vehicle_checkout_flow() -> None:
             assert "already checked out" in exc.message.lower()
         print("[PASS] cannot checkout van by Bob while active")
 
-        run_svc = DeliveryRunService(db)
-
-        # Cannot create delivery run for van by Bob (mismatch).
+        # Cannot create delivery run for van by Bob (checkout owned by Alice).
         try:
             with app.app_context():
                 g.user_id = "user-bob"
                 g.user = SimpleNamespace(email="bob@example.com", display_name="Bob")
-                run_svc.create_run(order_ids=order_ids, vehicle="van")
+                run_svc.create_run_for_current_user(order_ids=order_ids, vehicle="van")
             raise AssertionError("Expected ValidationError for runner mismatch")
         except ValidationError as exc:
             assert exc.field == "runner"
@@ -98,7 +138,7 @@ def test_vehicle_checkout_flow() -> None:
         with app.app_context():
             g.user_id = "user-alice"
             g.user = SimpleNamespace(email="alice@example.com", display_name="Alice")
-            run = run_svc.create_run(order_ids=order_ids, vehicle="van")
+            run = run_svc.create_run_for_current_user(order_ids=order_ids, vehicle="van")
         assert run.vehicle == "van"
         assert run.status == "Active"
         print("[PASS] can create run for van by Alice")
