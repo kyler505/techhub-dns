@@ -14,6 +14,7 @@ import { Card, CardContent } from "./ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { useAuth } from "../contexts/AuthContext";
+import { getStatusBadge, VehicleStatusMeta } from "./vehicles/VehicleStatusStrip";
 
 type VehicleDescriptor = {
   vehicle: Vehicle;
@@ -139,14 +140,16 @@ export default function VehicleCheckoutPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           {VEHICLES.map(({ vehicle, label }) => {
             const status = statusByVehicle.get(vehicle);
-            const checkedOutBy = status?.checked_out_by ?? null;
             const checkedOut = Boolean(status?.checked_out);
             const runActive = Boolean(status?.delivery_run_active);
             const disableActions = Boolean(readonly) || isLoading || isSubmitting || runActive;
-
-            const type = status?.checkout_type ?? null;
-            const purposeText = (status?.purpose ?? "").trim() || null;
-            const typeLabel = type === "other" ? "Other" : type === "delivery_run" ? "Delivery run" : null;
+            const badge = getStatusBadge(
+              status ?? {
+                vehicle,
+                checked_out: false,
+                delivery_run_active: false,
+              }
+            );
 
             return (
               <div
@@ -156,25 +159,11 @@ export default function VehicleCheckoutPanel({
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-medium">{label}</div>
                   <div className="flex items-center gap-2">
-                    {runActive ? (
-                      <Badge variant="warning">Active Run</Badge>
-                    ) : checkedOut ? (
-                      <Badge variant="secondary">Checked Out</Badge>
-                    ) : (
-                      <Badge>Available</Badge>
-                    )}
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
                   </div>
                 </div>
 
-                {checkedOut ? (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    <div className="space-y-1">
-                      <div>{`Checked out by: ${checkedOutBy ?? "Unknown"}`}</div>
-                      {typeLabel ? <div>{`Type: ${typeLabel}`}</div> : null}
-                      {purposeText ? <div>{`Purpose: ${purposeText}`}</div> : null}
-                    </div>
-                  </div>
-                ) : null}
+                {status ? <VehicleStatusMeta status={status} showType showPurpose /> : null}
 
                 <div className="mt-3 flex items-center gap-2">
                   {!checkedOut ? (

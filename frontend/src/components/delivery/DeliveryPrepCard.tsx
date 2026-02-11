@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import type { User } from "../../contexts/AuthContext";
 import type { Vehicle, VehicleStatusItem } from "../../api/vehicleCheckouts";
-import { Badge } from "../ui/badge";
+import { getStatusBadge, VehicleStatusMeta } from "../vehicles/VehicleStatusStrip";
 
 type Props = {
   selectedOrdersCount: number;
@@ -45,6 +46,7 @@ export default function DeliveryPrepCard({
   const [isStarting, setIsStarting] = useState(false);
 
   const status = statusByVehicle[vehicle];
+  const badge = getStatusBadge(status);
   const runner = useMemo(() => runnerDisplay(user), [user?.display_name, user?.email]);
 
   const startDisabledReason = useMemo((): string | null => {
@@ -108,18 +110,14 @@ export default function DeliveryPrepCard({
           <div className="grid gap-1">
             <div className="text-sm font-medium">Checkout</div>
             <div className="flex items-center gap-2">
-              {status.delivery_run_active ? (
-                <Badge variant="warning">Active Run</Badge>
-              ) : status.checked_out ? (
-                <Badge variant="secondary">Checked Out</Badge>
-              ) : (
-                <Badge>Available</Badge>
-              )}
-              {statusesLoading || status.checked_out ? (
-                <div className="text-xs text-muted-foreground">
-                  {statusesLoading ? "Loading..." : `by ${status.checked_out_by ?? "Unknown"}`}
-                </div>
-              ) : null}
+              <Badge variant={badge.variant}>{badge.label}</Badge>
+              <VehicleStatusMeta
+                status={status}
+                isLoading={statusesLoading}
+                checkedOutByFormat="short"
+                loadingText="Loading..."
+                className="text-xs text-muted-foreground"
+              />
             </div>
           </div>
 
