@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from sqlalchemy import or_
@@ -36,6 +37,49 @@ def purge_sessions(db: DbSession, *, now: Optional[datetime] = None) -> int:
     return int(deleted or 0)
 
 
+def purge_sessions_batched(
+    db: DbSession,
+    *,
+    now: Optional[datetime] = None,
+    limit: int = 5000,
+) -> int:
+    """Delete expired or revoked sessions in bounded batches.
+
+    This is intended for traffic-driven maintenance ticks where we need to
+    cap work per request.
+    """
+
+    if limit <= 0:
+        return 0
+
+    purge_now = now or datetime.utcnow()
+
+    ids = (
+        db.query(UserSession.id)
+        .filter(or_(UserSession.revoked_at.isnot(None), UserSession.expires_at < purge_now))
+        .order_by(UserSession.expires_at.asc(), UserSession.id.asc())
+        .limit(int(limit))
+        .all()
+    )
+    id_values = [row[0] for row in ids if row and row[0]]
+    if not id_values:
+        return 0
+
+    deleted = (
+        db.query(UserSession)
+        .filter(UserSession.id.in_(id_values))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(deleted or 0)
+
+
+@dataclass(frozen=True)
+class AuditArchiveRunResult:
+    moved: int
+    has_more: bool
+
+
 def archive_system_audit_logs(
     db: DbSession,
     *,
@@ -56,10 +100,37 @@ def archive_system_audit_logs(
         archive_days = int(getattr(settings, "system_audit_archive_days", 90) or 90)
         cutoff = datetime.utcnow() - timedelta(days=max(1, archive_days))
 
+    result = archive_system_audit_logs_bounded(db, cutoff=cutoff, batch_size=effective_batch_size, max_batches=None)
+    return int(result.moved)
+
+
+def archive_system_audit_logs_bounded(
+    db: DbSession,
+    *,
+    cutoff: Optional[datetime] = None,
+    batch_size: Optional[int] = None,
+    max_batches: Optional[int] = None,
+) -> AuditArchiveRunResult:
+    """Move old system audit logs with an optional per-call batch cap."""
+
+    effective_batch_size = int(batch_size or getattr(settings, "system_audit_archive_batch_size", 1000) or 1000)
+    effective_batch_size = max(1, min(effective_batch_size, 10_000))
+
+    if cutoff is None:
+        archive_days = int(getattr(settings, "system_audit_archive_days", 90) or 90)
+        cutoff = datetime.utcnow() - timedelta(days=max(1, archive_days))
+
+    if max_batches is not None and max_batches <= 0:
+        return AuditArchiveRunResult(moved=0, has_more=_has_old_system_audit_logs(db, cutoff=cutoff))
+
     total_moved = 0
-    dialect = (getattr(db.bind, "dialect", None).name if getattr(db, "bind", None) is not None else "")
+    dialect = _get_dialect_name(db)
+    batches_run = 0
 
     while True:
+        if max_batches is not None and batches_run >= max_batches:
+            break
+
         rows = (
             db.query(SystemAuditLog)
             .filter(SystemAuditLog.timestamp < cutoff)
@@ -75,7 +146,6 @@ def archive_system_audit_logs(
             break
 
         values = [_system_audit_log_values(r) for r in rows]
-
         _insert_archive_rows(db, values, dialect=dialect)
 
         deleted = (
@@ -86,8 +156,34 @@ def archive_system_audit_logs(
 
         db.commit()
         total_moved += int(deleted or 0)
+        batches_run += 1
 
-    return total_moved
+    has_more = _has_old_system_audit_logs(db, cutoff=cutoff)
+    return AuditArchiveRunResult(moved=int(total_moved), has_more=bool(has_more))
+
+
+def _get_dialect_name(db: DbSession) -> str:
+    bind = getattr(db, "bind", None)
+    if bind is None:
+        try:
+            bind = db.get_bind()
+        except Exception:
+            bind = None
+
+    dialect = getattr(bind, "dialect", None) if bind is not None else None
+    name = getattr(dialect, "name", "") if dialect is not None else ""
+    return str(name or "")
+
+
+def _has_old_system_audit_logs(db: DbSession, *, cutoff: datetime) -> bool:
+    row = (
+        db.query(SystemAuditLog.id)
+        .filter(SystemAuditLog.timestamp < cutoff)
+        .order_by(SystemAuditLog.timestamp.asc(), SystemAuditLog.id.asc())
+        .limit(1)
+        .first()
+    )
+    return row is not None
 
 
 def _system_audit_log_values(row: SystemAuditLog) -> dict[str, Any]:

@@ -5,12 +5,10 @@ from datetime import datetime, timedelta
 from app.database import get_db_session
 from app.services.inflow_service import InflowService
 from app.services.order_service import OrderService
-from app.services.maintenance_service import archive_system_audit_logs, purge_sessions
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.config import settings
 import logging
 import threading
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -77,25 +75,21 @@ def _has_active_webhook(db: Session) -> bool:
 
 def _check_webhook_health(db: Session):
     """Check webhook health and alert if no events received recently"""
-    webhook: Any = db.query(InflowWebhook).filter(
+    webhook = db.query(InflowWebhook).filter(
         InflowWebhook.status == WebhookStatus.active
     ).first()
 
-    if webhook is None:
-        return
-
-    # Alert if no events received in last 2 hours
-    last_received_at = getattr(webhook, "last_received_at", None)
-    if isinstance(last_received_at, datetime):
-        time_since_last = datetime.utcnow() - last_received_at
-        if time_since_last > timedelta(hours=2):
-            logger.warning(
-                f"Webhook health check: No events received in {time_since_last}. "
-                f"Last received: {last_received_at}"
-            )
-        return
-
-    logger.warning("Webhook health check: No events received since registration")
+    if webhook:
+        # Alert if no events received in last 2 hours
+        if webhook.last_received_at:
+            time_since_last = datetime.utcnow() - webhook.last_received_at
+            if time_since_last > timedelta(hours=2):
+                logger.warning(
+                    f"Webhook health check: No events received in {time_since_last}. "
+                    f"Last received: {webhook.last_received_at}"
+                )
+        else:
+            logger.warning("Webhook health check: No events received since registration")
 
 
 def webhook_health_check():
@@ -153,54 +147,6 @@ def start_scheduler():
     #         name="Webhook health check",
     #         replace_existing=True
     #     )
-
-    if bool(getattr(settings, "session_purge_enabled", True)):
-        purge_interval_hours = int(getattr(settings, "session_purge_interval_hours", 24) or 24)
-        purge_interval_hours = max(1, min(purge_interval_hours, 24 * 30))
-
-        def purge_sessions_job():
-            db = get_db_session()
-            try:
-                deleted = purge_sessions(db)
-                if deleted:
-                    logger.info(f"Purged {deleted} expired/revoked session(s)")
-            except Exception as e:
-                logger.error(f"Session purge job failed: {e}", exc_info=True)
-            finally:
-                db.close()
-
-        scheduler.add_job(
-            purge_sessions_job,
-            trigger=IntervalTrigger(hours=purge_interval_hours),
-            id="purge_sessions",
-            name="Purge expired/revoked sessions",
-            replace_existing=True,
-            next_run_time=datetime.now(),
-        )
-
-    if bool(getattr(settings, "system_audit_archive_enabled", True)):
-        archive_interval_hours = int(getattr(settings, "system_audit_archive_interval_hours", 24) or 24)
-        archive_interval_hours = max(1, min(archive_interval_hours, 24 * 30))
-
-        def archive_system_audit_job():
-            db = get_db_session()
-            try:
-                moved = archive_system_audit_logs(db)
-                if moved:
-                    logger.info(f"Archived {moved} system audit log row(s)")
-            except Exception as e:
-                logger.error(f"System audit archive job failed: {e}", exc_info=True)
-            finally:
-                db.close()
-
-        scheduler.add_job(
-            archive_system_audit_job,
-            trigger=IntervalTrigger(hours=archive_interval_hours),
-            id="archive_system_audit_logs",
-            name="Archive old system audit logs",
-            replace_existing=True,
-            next_run_time=datetime.now(),
-        )
 
     scheduler.start()
     if settings.inflow_polling_sync_enabled and poll_interval:
