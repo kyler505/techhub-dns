@@ -65,7 +65,7 @@ export function Sidebar({ className }: { className?: string }) {
   const { isAdmin } = useAuth();
 
   const isOnDeliveryRoute = location.pathname.startsWith("/delivery");
-  const [deliveryGroupOpen, setDeliveryGroupOpen] = useState(isOnDeliveryRoute);
+  const [deliveryGroupOpen, setDeliveryGroupOpen] = useState(false);
 
   const visibleAdminItems = isAdmin ? adminItems : adminItems.filter((item) => item.path !== "/admin");
 
@@ -75,7 +75,9 @@ export function Sidebar({ className }: { className?: string }) {
   }, [collapsed]);
 
   useEffect(() => {
-    setDeliveryGroupOpen(isOnDeliveryRoute);
+    if (!isOnDeliveryRoute) {
+      setDeliveryGroupOpen(false);
+    }
   }, [isOnDeliveryRoute]);
 
   const isActive = (path: string) =>
