@@ -4,15 +4,17 @@ import axios from "axios";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
-import { deliveryRunsApi, type DeliveryRunResponse } from "../../api/deliveryRuns";
+import { deliveryRunsApi } from "../../api/deliveryRuns";
 import { ordersApi } from "../../api/orders";
 import {
-  type ListVehicleCheckoutsResponse,
   type Vehicle,
   type VehicleStatusItem,
   vehicleCheckoutsApi,
 } from "../../api/vehicleCheckouts";
-import VehicleCommandCard from "../../components/delivery/VehicleCommandCard";
+import {
+  VEHICLE_CHECKOUT_PURPOSE_LABELS,
+  type VehicleCheckoutPurposeLabel,
+} from "../../components/delivery/vehiclePriority";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -37,23 +39,6 @@ type VehicleDescriptor = {
   id: Vehicle;
   label: string;
 };
-
-type VehicleHistoryData = {
-  checkouts: ListVehicleCheckoutsResponse["items"];
-  runs: DeliveryRunResponse[];
-};
-
-type BooleanByVehicle = Record<Vehicle, boolean>;
-
-type HistoryByVehicle = Record<Vehicle, VehicleHistoryData | null>;
-
-function createVehicleBooleanMap(defaultValue: boolean): BooleanByVehicle {
-  return { van: defaultValue, golf_cart: defaultValue };
-}
-
-function createVehicleHistoryMap(): HistoryByVehicle {
-  return { van: null, golf_cart: null };
-}
 
 const VEHICLES: VehicleDescriptor[] = [
   { id: "van", label: "Van" },
@@ -90,6 +75,15 @@ function formatRunLabel(deliveryRunId: string | undefined): string {
   return `Run ${deliveryRunId.slice(0, 8)}`;
 }
 
+function isVehicleUnavailable(status: VehicleStatusItem): boolean {
+  return status.checked_out || status.delivery_run_active;
+}
+
+function getVehicleHolderName(status: VehicleStatusItem): string {
+  const holder = status.checked_out_by?.trim();
+  return holder || "Unknown";
+}
+
 export default function DeliveryDispatchPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -100,18 +94,15 @@ export default function DeliveryDispatchPage() {
   const [inDeliveryOrders, setInDeliveryOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [actionLoadingByVehicle, setActionLoadingByVehicle] = useState<BooleanByVehicle>(() =>
-    createVehicleBooleanMap(false)
+  const [runVehicle, setRunVehicle] = useState<Vehicle>("van");
+  const [startRunLoading, setStartRunLoading] = useState(false);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [checkoutVehicle, setCheckoutVehicle] = useState<Vehicle>("van");
+  const [checkoutPurpose, setCheckoutPurpose] = useState<VehicleCheckoutPurposeLabel>(
+    VEHICLE_CHECKOUT_PURPOSE_LABELS[0]
   );
-  const [historyOpenByVehicle, setHistoryOpenByVehicle] = useState<BooleanByVehicle>(() =>
-    createVehicleBooleanMap(false)
-  );
-  const [historyLoadingByVehicle, setHistoryLoadingByVehicle] = useState<BooleanByVehicle>(() =>
-    createVehicleBooleanMap(false)
-  );
-  const [historyDataByVehicle, setHistoryDataByVehicle] = useState<HistoryByVehicle>(() =>
-    createVehicleHistoryMap()
-  );
+  const [checkoutNotes, setCheckoutNotes] = useState("");
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
 
   const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
   const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
@@ -211,60 +202,6 @@ export default function DeliveryDispatchPage() {
     });
   };
 
-  const loadVehicleHistory = useCallback(async (vehicle: Vehicle) => {
-    setHistoryLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
-    try {
-      const [checkoutsResponse, runsResponse] = await Promise.all([
-        vehicleCheckoutsApi.listCheckouts({ vehicle, page: 1, page_size: 5 }),
-        deliveryRunsApi.getRuns({ vehicle }),
-      ]);
-
-      const sortedRuns = [...runsResponse].sort((left, right) => {
-        const leftTime = Date.parse(left.end_time ?? left.start_time ?? "");
-        const rightTime = Date.parse(right.end_time ?? right.start_time ?? "");
-        const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
-        const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
-        return safeRightTime - safeLeftTime;
-      });
-
-      const sortedCheckouts = [...checkoutsResponse.items].sort((left, right) => {
-        const leftTime = Date.parse(left.checked_out_at ?? "");
-        const rightTime = Date.parse(right.checked_out_at ?? "");
-        const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
-        const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
-        return safeRightTime - safeLeftTime;
-      });
-
-      setHistoryDataByVehicle((previous) => ({
-        ...previous,
-        [vehicle]: {
-          checkouts: sortedCheckouts.slice(0, 5),
-          runs: sortedRuns.slice(0, 5),
-        },
-      }));
-    } catch {
-      toast.error("Failed to load vehicle history");
-    } finally {
-      setHistoryLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
-    }
-  }, []);
-
-  const handleToggleVehicleHistory = useCallback(
-    async (vehicle: Vehicle) => {
-      const nextOpen = !historyOpenByVehicle[vehicle];
-      setHistoryOpenByVehicle((previous) => ({ ...previous, [vehicle]: nextOpen }));
-      if (!nextOpen || historyLoadingByVehicle[vehicle] || historyDataByVehicle[vehicle]) {
-        return;
-      }
-      await loadVehicleHistory(vehicle);
-    },
-    [historyDataByVehicle, historyLoadingByVehicle, historyOpenByVehicle, loadVehicleHistory]
-  );
-
-  const invalidateVehicleHistory = useCallback((vehicle: Vehicle) => {
-    setHistoryDataByVehicle((previous) => ({ ...previous, [vehicle]: null }));
-  }, []);
-
   const handleSelectOrder = (orderId: string) => {
     setSelectedOrders((previous) => {
       const next = new Set(previous);
@@ -346,66 +283,44 @@ export default function DeliveryDispatchPage() {
     }
   };
 
-  const handleStartRunForVehicle = async (vehicle: Vehicle) => {
-    const disabledReason = getStartDisabledReason(vehicle);
+  const handleStartRun = async () => {
+    const disabledReason = getStartDisabledReason(runVehicle);
     if (disabledReason) return;
 
-    setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
+    setStartRunLoading(true);
     try {
-      await doStartRun(vehicle);
-      invalidateVehicleHistory(vehicle);
+      await doStartRun(runVehicle);
     } finally {
-      setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
+      setStartRunLoading(false);
     }
   };
 
-  const handleCheckoutOther = useCallback(
-    async (vehicle: Vehicle, purpose: string): Promise<boolean> => {
-      const trimmedPurpose = purpose.trim();
-      if (!trimmedPurpose) {
-        toast.error("Purpose is required");
-        return false;
-      }
+  const handleCheckoutOther = useCallback(async (): Promise<void> => {
+    const trimmedPurpose = checkoutPurpose.trim();
+    if (!trimmedPurpose) {
+      toast.error("Purpose is required");
+      return;
+    }
 
-      setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
-      try {
-        await vehicleCheckoutsApi.checkout({
-          vehicle,
-          checkout_type: "other",
-          purpose: trimmedPurpose,
-        });
-        toast.success("Vehicle checked out");
-        invalidateVehicleHistory(vehicle);
-        await refreshStatuses();
-        return true;
-      } catch (error) {
-        toast.error(getApiErrorMessage(error));
-        await refreshStatuses();
-        return false;
-      } finally {
-        setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
-      }
-    },
-    [invalidateVehicleHistory, refreshStatuses]
-  );
-
-  const handleCheckin = useCallback(
-    async (vehicle: Vehicle): Promise<void> => {
-      setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
-      try {
-        await vehicleCheckoutsApi.checkin({ vehicle });
-        toast.success("Vehicle checked in");
-        invalidateVehicleHistory(vehicle);
-        await refreshStatuses();
-      } catch (error) {
-        toast.error(getApiErrorMessage(error));
-        await refreshStatuses();
-      } finally {
-        setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
-      }
-    },
-    [invalidateVehicleHistory, refreshStatuses]
-  );
+    setCheckoutSubmitting(true);
+    try {
+      await vehicleCheckoutsApi.checkout({
+        vehicle: checkoutVehicle,
+        checkout_type: "other",
+        purpose: trimmedPurpose,
+        notes: checkoutNotes.trim() || undefined,
+      });
+      toast.success("Vehicle checked out");
+      setCheckoutDialogOpen(false);
+      setCheckoutNotes("");
+      await refreshStatuses();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      await refreshStatuses();
+    } finally {
+      setCheckoutSubmitting(false);
+    }
+  }, [checkoutNotes, checkoutPurpose, checkoutVehicle, refreshStatuses]);
 
   const handlePartialPickConfirm = async () => {
     setPartialPickDialogOpen(false);
@@ -419,12 +334,50 @@ export default function DeliveryDispatchPage() {
     navigate(`/orders/${orderId}`);
   };
 
+  const startRunDisabledReason = getStartDisabledReason(runVehicle);
+
   if (loading) {
     return <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">Loading...</div>;
   }
 
   return (
     <div className="space-y-4">
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold">Vehicle Status</div>
+            <Button
+              size="sm"
+              onClick={() => setCheckoutDialogOpen(true)}
+              disabled={statusesLoading || checkoutSubmitting}
+            >
+              Check Out
+            </Button>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {VEHICLES.map((vehicle) => {
+              const status = statusByVehicle[vehicle.id];
+              const unavailable = isVehicleUnavailable(status);
+
+              return (
+                <div key={vehicle.id} className="rounded border border-border px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-medium text-foreground">{vehicle.label}</div>
+                    <Badge variant={unavailable ? "secondary" : "success"}>
+                      {unavailable ? "Unavailable" : "Available"}
+                    </Badge>
+                  </div>
+                  {unavailable ? (
+                    <div className="mt-1 text-xs text-muted-foreground">Holder: {getVehicleHolderName(status)}</div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 xl:grid-cols-3">
         <section className="space-y-3">
           <div className="space-y-1">
@@ -516,14 +469,47 @@ export default function DeliveryDispatchPage() {
                   <div className="text-lg font-semibold">{selectedPartialPickCount}</div>
                 </div>
               </div>
+
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="grid gap-1">
+                  <label htmlFor="dispatch-run-vehicle" className="text-sm font-medium">
+                    Run vehicle
+                  </label>
+                  <select
+                    id="dispatch-run-vehicle"
+                    value={runVehicle}
+                    onChange={(event) => setRunVehicle(event.target.value as Vehicle)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    disabled={startRunLoading}
+                  >
+                    {VEHICLES.map((vehicle) => (
+                      <option key={vehicle.id} value={vehicle.id}>
+                        {vehicle.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <Button
+                  onClick={() => void handleStartRun()}
+                  disabled={startRunLoading || Boolean(startRunDisabledReason)}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  {startRunLoading ? "Starting..." : `Start Run (${selectedOrders.size})`}
+                </Button>
+              </div>
+
+              {startRunDisabledReason ? (
+                <div className="text-xs text-muted-foreground">{startRunDisabledReason}</div>
+              ) : null}
             </CardContent>
           </Card>
         </section>
 
         <section className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-base font-semibold">Fleet Status</h2>
-            <p className="text-xs text-muted-foreground">Operational priority and dispatchability by vehicle.</p>
+            <h2 className="text-base font-semibold">Active Runs</h2>
+            <p className="text-xs text-muted-foreground">Current run and in-delivery order visibility.</p>
           </div>
 
           <Card>
@@ -566,29 +552,89 @@ export default function DeliveryDispatchPage() {
               )}
             </CardContent>
           </Card>
-
-          <div className="space-y-2">
-            {VEHICLES.map((vehicle) => (
-              <VehicleCommandCard
-                key={vehicle.id}
-                label={vehicle.label}
-                status={statusByVehicle[vehicle.id]}
-                isLoading={statusesLoading}
-                isActionLoading={actionLoadingByVehicle[vehicle.id]}
-                onCheckoutOther={(purpose) => handleCheckoutOther(vehicle.id, purpose)}
-                onCheckin={() => handleCheckin(vehicle.id)}
-                onStartRun={() => handleStartRunForVehicle(vehicle.id)}
-                startRunDisabledReason={getStartDisabledReason(vehicle.id)}
-                historyOpen={historyOpenByVehicle[vehicle.id]}
-                historyLoading={historyLoadingByVehicle[vehicle.id]}
-                historyCheckouts={historyDataByVehicle[vehicle.id]?.checkouts ?? []}
-                historyRuns={historyDataByVehicle[vehicle.id]?.runs ?? []}
-                onToggleHistory={() => void handleToggleVehicleHistory(vehicle.id)}
-              />
-            ))}
-          </div>
         </section>
       </div>
+
+      <Dialog
+        open={checkoutDialogOpen}
+        onOpenChange={(open) => {
+          setCheckoutDialogOpen(open);
+          if (!open) {
+            setCheckoutPurpose(VEHICLE_CHECKOUT_PURPOSE_LABELS[0]);
+            setCheckoutNotes("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Check Out Vehicle</DialogTitle>
+            <DialogDescription>Creates a non-delivery checkout.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1">
+              <label htmlFor="dispatch-checkout-vehicle" className="text-sm font-medium">
+                Vehicle
+              </label>
+              <select
+                id="dispatch-checkout-vehicle"
+                value={checkoutVehicle}
+                onChange={(event) => setCheckoutVehicle(event.target.value as Vehicle)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                disabled={checkoutSubmitting}
+              >
+                {VEHICLES.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid gap-1">
+              <label htmlFor="dispatch-checkout-purpose" className="text-sm font-medium">
+                Purpose
+              </label>
+              <select
+                id="dispatch-checkout-purpose"
+                value={checkoutPurpose}
+                onChange={(event) => setCheckoutPurpose(event.target.value as VehicleCheckoutPurposeLabel)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                disabled={checkoutSubmitting}
+              >
+                {VEHICLE_CHECKOUT_PURPOSE_LABELS.map((purposeLabel) => (
+                  <option key={purposeLabel} value={purposeLabel}>
+                    {purposeLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid gap-1">
+              <label htmlFor="dispatch-checkout-notes" className="text-sm font-medium">
+                Notes (optional)
+              </label>
+              <textarea
+                id="dispatch-checkout-notes"
+                value={checkoutNotes}
+                onChange={(event) => setCheckoutNotes(event.target.value)}
+                className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                placeholder="Optional notes"
+                disabled={checkoutSubmitting}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)} disabled={checkoutSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleCheckoutOther()} disabled={checkoutSubmitting}>
+              {checkoutSubmitting ? "Checking Out..." : "Check Out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={partialPickDialogOpen} onOpenChange={setPartialPickDialogOpen}>
         <DialogContent>

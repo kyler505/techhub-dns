@@ -2,6 +2,10 @@ import type { VehicleStatusItem } from "../../api/vehicleCheckouts";
 
 type PriorityTier = "P1" | "P2" | "P3";
 
+export const VEHICLE_CHECKOUT_PURPOSE_LABELS = ["Delivery", "Tech Duty", "Administrative"] as const;
+
+export type VehicleCheckoutPurposeLabel = (typeof VEHICLE_CHECKOUT_PURPOSE_LABELS)[number];
+
 export type PrioritySemantics = {
   tier: PriorityTier;
   label: string;
