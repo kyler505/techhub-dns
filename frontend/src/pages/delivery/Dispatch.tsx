@@ -80,31 +80,64 @@ export default function DeliveryDispatchPage() {
     });
   };
 
-  const handleCheckoutForDeliveryRun = async (vehicle: Vehicle) => {
-    try {
-      await vehicleCheckoutsApi.checkout({ vehicle, checkout_type: "delivery_run" });
-      toast.success("Checked out for Delivery run");
-      await refreshStatuses();
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
+  const doStartRun = async (
+    vehicle: Vehicle,
+    options?: {
+      skipPartialPickConfirm?: boolean;
     }
-  };
-
-  const doStartRun = async (vehicle: Vehicle) => {
+  ) => {
     if (selectedOrders.size === 0) {
       toast.error("Select at least one order to start a run");
       return;
     }
 
-    const partialPicks = selectedOrdersList.filter((o) => o.pick_status && !o.pick_status.is_fully_picked);
-    if (partialPicks.length > 0) {
-      setPartialPickOrders(partialPicks);
-      setPendingStartVehicle(vehicle);
-      setPartialPickDialogOpen(true);
-      return;
+    if (!options?.skipPartialPickConfirm) {
+      const partialPicks = selectedOrdersList.filter((o) => o.pick_status && !o.pick_status.is_fully_picked);
+      if (partialPicks.length > 0) {
+        setPartialPickOrders(partialPicks);
+        setPendingStartVehicle(vehicle);
+        setPartialPickDialogOpen(true);
+        return;
+      }
     }
 
     try {
+      const status = statusByVehicle[vehicle];
+      if (status.delivery_run_active) {
+        toast.error("Vehicle already has an active run");
+        await refreshStatuses();
+        return;
+      }
+
+      if (status.checked_out) {
+        if (status.checkout_type === "other") {
+          const purpose = status.purpose?.trim();
+          const suffix = purpose ? ` (purpose: ${purpose})` : "";
+          toast.error(
+            `Checked out for Other${suffix}. Check in, then check out again for a Delivery run.`
+          );
+          await refreshStatuses();
+          return;
+        }
+
+        const checkedOutByUserId = status.checked_out_by_user_id;
+        const checkedOutByName = status.checked_out_by;
+        const currentUserId = user?.id ?? null;
+        const currentUserCandidates = [user?.display_name, user?.email].filter(
+          (value): value is string => typeof value === "string" && Boolean(value.trim())
+        );
+        const isCheckedOutByCurrentUser =
+          (checkedOutByUserId && currentUserId && checkedOutByUserId === currentUserId) ||
+          (checkedOutByName ? currentUserCandidates.includes(checkedOutByName) : false);
+        if (!isCheckedOutByCurrentUser) {
+          toast.error(checkedOutByName ? `Checked out by ${checkedOutByName}` : "Checked out by another user");
+          await refreshStatuses();
+          return;
+        }
+      } else {
+        await vehicleCheckoutsApi.checkout({ vehicle, checkout_type: "delivery_run" });
+      }
+
       await deliveryRunsApi.createRun({
         order_ids: Array.from(selectedOrders),
         vehicle,
@@ -123,7 +156,7 @@ export default function DeliveryDispatchPage() {
     const vehicle = pendingStartVehicle;
     setPendingStartVehicle(null);
     if (!vehicle) return;
-    await doStartRun(vehicle);
+    await doStartRun(vehicle, { skipPartialPickConfirm: true });
   };
 
   const handleViewDetail = (orderId: string) => {
@@ -142,7 +175,6 @@ export default function DeliveryDispatchPage() {
         statusByVehicle={statusByVehicle}
         statusesLoading={statusesLoading}
         onStartRun={doStartRun}
-        onCheckoutForDeliveryRun={handleCheckoutForDeliveryRun}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

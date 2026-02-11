@@ -34,13 +34,11 @@ function VehicleTile({
         <div className="text-sm font-medium">{label}</div>
         <Badge variant={badge.variant}>{badge.label}</Badge>
       </div>
-      <div className="mt-2 text-xs text-muted-foreground">
-        {isLoading
-          ? "Loading status..."
-          : status.checked_out
-            ? `Checked out by: ${checkedOutBy ?? "Unknown"}`
-            : "Not checked out"}
-      </div>
+      {isLoading || status.checked_out ? (
+        <div className="mt-2 text-xs text-muted-foreground">
+          {isLoading ? "Loading status..." : `Checked out by: ${checkedOutBy ?? "Unknown"}`}
+        </div>
+      ) : null}
     </div>
   );
 }
