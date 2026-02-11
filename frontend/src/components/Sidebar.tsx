@@ -48,7 +48,6 @@ const navItems: Array<LeafNavItem | GroupNavItem> = [
     icon: Truck,
     children: [
       { label: "Dispatch", to: "/delivery/dispatch" },
-      { label: "Fleet", to: "/delivery/fleet" },
     ],
   },
   { kind: "leaf", path: "/shipping", label: "Shipping", icon: Send },

@@ -7,7 +7,6 @@ const LABELS: Record<string, string> = {
   "order-qa": "QA Checklist",
   delivery: "Delivery",
   dispatch: "Dispatch",
-  fleet: "Fleet",
   history: "History",
   van: "Van",
   golf_cart: "Golf Cart",

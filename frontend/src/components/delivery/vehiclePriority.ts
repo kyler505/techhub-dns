@@ -31,7 +31,7 @@ export function derivePrioritySemantics(status: VehicleStatusItem): PrioritySema
   if (!status.checked_out && !status.delivery_run_active) {
     return {
       tier: "P3",
-      label: "P3 Administrative",
+      label: "Administrative",
       dispatchability: "available",
       dispatchabilityLabel: "Available",
       isRecallable: false,
@@ -41,7 +41,7 @@ export function derivePrioritySemantics(status: VehicleStatusItem): PrioritySema
   if (status.delivery_run_active || status.checkout_type === "delivery_run") {
     return {
       tier: "P1",
-      label: "P1 Delivery",
+      label: "Delivery",
       dispatchability: "in_use",
       dispatchabilityLabel: "In Use",
       isRecallable: false,
@@ -52,7 +52,7 @@ export function derivePrioritySemantics(status: VehicleStatusItem): PrioritySema
   if (includesTechKeyword(purpose)) {
     return {
       tier: "P2",
-      label: "P2 Tech Duty",
+      label: "Tech Duty",
       dispatchability: "in_use",
       dispatchabilityLabel: "In Use",
       isRecallable: false,
@@ -61,7 +61,7 @@ export function derivePrioritySemantics(status: VehicleStatusItem): PrioritySema
 
   return {
     tier: "P3",
-    label: "P3 Administrative",
+    label: "Administrative",
     dispatchability: "recallable",
     dispatchabilityLabel: "Recallable",
     isRecallable: true,

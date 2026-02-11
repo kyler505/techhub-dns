@@ -6,12 +6,7 @@ const DELIVERY_SECTIONS = [
   {
     to: "/delivery/dispatch",
     label: "Dispatch",
-    description: "Prep, queue, and active runs",
-  },
-  {
-    to: "/delivery/fleet",
-    label: "Fleet",
-    description: "Vehicle availability and checkout",
+    description: "Pre-delivery staging, runs, and vehicle status",
   },
 ] as const;
 
@@ -24,7 +19,7 @@ export default function DeliveryLayout() {
       <div className="rounded-lg border border-border bg-card p-3 sm:p-4">
         <div className="mb-3 flex flex-col gap-1">
           <h1 className="text-lg font-semibold leading-none tracking-tight">Delivery</h1>
-          <p className="text-xs text-muted-foreground">Manage dispatch workflow and fleet availability.</p>
+          <p className="text-xs text-muted-foreground">Manage dispatch workflow, run history, and vehicle availability.</p>
         </div>
 
         <nav aria-label="Delivery sections" className="flex flex-wrap gap-2">

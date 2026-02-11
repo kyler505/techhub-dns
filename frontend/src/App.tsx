@@ -14,8 +14,6 @@ const Orders = lazy(() => import("./pages/Orders"));
 const OrderDetailPage = lazy(() => import("./pages/OrderDetailPage"));
 const DeliveryLayout = lazy(() => import("./pages/delivery/DeliveryLayout"));
 const DeliveryDispatchPage = lazy(() => import("./pages/delivery/Dispatch"));
-const DeliveryFleetPage = lazy(() => import("./pages/delivery/Fleet"));
-const DeliveryFleetHistoryPage = lazy(() => import("./pages/delivery/FleetHistory"));
 const Shipping = lazy(() => import("./pages/Shipping"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DocumentSigningPage = lazy(() => import("./pages/DocumentSigningPage"));
@@ -96,8 +94,6 @@ function AppContent() {
                                         <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
                                             <Route index element={<Navigate to="dispatch" replace />} />
                                             <Route path="dispatch" element={<DeliveryDispatchPage />} />
-                                            <Route path="fleet" element={<DeliveryFleetPage />} />
-                                            <Route path="fleet/:vehicle/history" element={<DeliveryFleetHistoryPage />} />
                                             <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
                                         </Route>
                                         <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
