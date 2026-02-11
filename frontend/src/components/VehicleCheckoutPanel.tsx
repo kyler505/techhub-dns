@@ -1,20 +1,18 @@
 import { useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
 
 import {
   vehicleCheckoutsApi,
   type Vehicle,
   type VehicleStatusItem,
 } from "../api/vehicleCheckouts";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { useAuth } from "../contexts/AuthContext";
-import { getStatusBadge, VehicleStatusMeta } from "./vehicles/VehicleStatusStrip";
+import VehicleCommandCard from "./delivery/VehicleCommandCard";
 
 type VehicleDescriptor = {
   vehicle: Vehicle;
@@ -146,29 +144,16 @@ export default function VehicleCheckoutPanel({
             const checkedOut = Boolean(status?.checked_out);
             const runActive = Boolean(status?.delivery_run_active);
             const disableActions = Boolean(readonly) || isLoading || isSubmitting || runActive;
-            const badge = getStatusBadge(
+            const resolvedStatus =
               status ?? {
                 vehicle,
                 checked_out: false,
                 delivery_run_active: false,
-              }
-            );
+              };
 
             return (
-              <div
-                key={vehicle}
-                className="rounded-md border border-border bg-background p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-medium">{label}</div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={badge.variant}>{badge.label}</Badge>
-                  </div>
-                </div>
-
-                {status ? <VehicleStatusMeta status={status} showType showPurpose /> : null}
-
-                <div className="mt-3 flex items-center gap-2">
+              <VehicleCommandCard key={vehicle} label={label} status={resolvedStatus} isLoading={isLoading}>
+                <div className="flex items-center gap-2">
                   {!checkedOut ? (
                     <Button
                       size="sm"
@@ -193,12 +178,8 @@ export default function VehicleCheckoutPanel({
                   {runActive ? (
                     <span className="text-xs text-muted-foreground">Active delivery run</span>
                   ) : null}
-
-                  <Button asChild size="sm" variant="ghost" disabled={isLoading || isSubmitting}>
-                    <Link to={`/delivery/fleet/${vehicle}/history`}>History</Link>
-                  </Button>
                 </div>
-              </div>
+              </VehicleCommandCard>
             );
           })}
         </div>
