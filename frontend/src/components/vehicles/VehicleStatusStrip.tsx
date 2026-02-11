@@ -6,7 +6,19 @@ type Props = {
   isLoading?: boolean;
 };
 
-function getStatusBadge(status: VehicleStatusItem): { label: string; variant: "warning" | "secondary" | "default" } {
+type StatusBadge = { label: string; variant: "warning" | "secondary" | "default" };
+
+type VehicleStatusMetaProps = {
+  status: VehicleStatusItem;
+  isLoading?: boolean;
+  showType?: boolean;
+  showPurpose?: boolean;
+  checkedOutByFormat?: "full" | "short";
+  loadingText?: string;
+  className?: string;
+};
+
+export function getStatusBadge(status: VehicleStatusItem): StatusBadge {
   if (status.delivery_run_active) {
     return { label: "Active Run", variant: "warning" };
   }
@@ -14,6 +26,53 @@ function getStatusBadge(status: VehicleStatusItem): { label: string; variant: "w
     return { label: "Checked Out", variant: "secondary" };
   }
   return { label: "Available", variant: "default" };
+}
+
+function getCheckoutTypeLabel(status: VehicleStatusItem): string | null {
+  if (status.checkout_type === "other") return "Other";
+  if (status.checkout_type === "delivery_run") return "Delivery run";
+  return null;
+}
+
+export function VehicleStatusMeta({
+  status,
+  isLoading,
+  showType,
+  showPurpose,
+  checkedOutByFormat = "full",
+  loadingText = "Loading status...",
+  className = "mt-2 text-xs text-muted-foreground",
+}: VehicleStatusMetaProps) {
+  if (!isLoading && !status.checked_out) {
+    return null;
+  }
+
+  if (isLoading) {
+    return <div className={className}>{loadingText}</div>;
+  }
+
+  const checkedOutBy = status.checked_out_by ?? "Unknown";
+  const checkedOutByLine =
+    checkedOutByFormat === "short"
+      ? `by ${checkedOutBy}`
+      : `Checked out by: ${checkedOutBy}`;
+
+  const typeLabel = showType ? getCheckoutTypeLabel(status) : null;
+  const purposeText = showPurpose ? (status.purpose ?? "").trim() || null : null;
+
+  if (!typeLabel && !purposeText) {
+    return <div className={className}>{checkedOutByLine}</div>;
+  }
+
+  return (
+    <div className={className}>
+      <div className="space-y-1">
+        <div>{checkedOutByLine}</div>
+        {typeLabel ? <div>{`Type: ${typeLabel}`}</div> : null}
+        {purposeText ? <div>{`Purpose: ${purposeText}`}</div> : null}
+      </div>
+    </div>
+  );
 }
 
 function VehicleTile({
@@ -26,7 +85,6 @@ function VehicleTile({
   isLoading?: boolean;
 }) {
   const badge = getStatusBadge(status);
-  const checkedOutBy = status.checked_out_by ?? null;
 
   return (
     <div className="rounded-md border border-border bg-background p-3">
@@ -34,11 +92,7 @@ function VehicleTile({
         <div className="text-sm font-medium">{label}</div>
         <Badge variant={badge.variant}>{badge.label}</Badge>
       </div>
-      {isLoading || status.checked_out ? (
-        <div className="mt-2 text-xs text-muted-foreground">
-          {isLoading ? "Loading status..." : `Checked out by: ${checkedOutBy ?? "Unknown"}`}
-        </div>
-      ) : null}
+      <VehicleStatusMeta status={status} isLoading={isLoading} />
     </div>
   );
 }
