@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -27,8 +27,6 @@ import type { User } from "../../contexts/AuthContext";
 import type { Order } from "../../types/order";
 import { OrderStatus } from "../../types/order";
 import { formatDeliveryLocation } from "../../utils/location";
-
-type BacklogFilter = "all" | "queue" | "prep";
 
 type VehicleDescriptor = {
   id: Vehicle;
@@ -64,15 +62,18 @@ function checkedOutByCurrentUser(status: VehicleStatusItem, user: User | null): 
   return candidates.some((candidate) => candidate === checkedOutBy);
 }
 
-function classifyBacklog(order: Order): "queue" | "prep" {
-  if (order.pick_status?.is_fully_picked) return "queue";
-  return "prep";
-}
-
 function formatRunLabel(deliveryRunId: string | undefined): string {
   if (!deliveryRunId) return "No run";
   if (deliveryRunId.length <= 8) return `Run ${deliveryRunId}`;
   return `Run ${deliveryRunId.slice(0, 8)}`;
+}
+
+function formatRunTime(run: { start_time: string | null; end_time?: string | null }): string {
+  const timestamp = run.end_time ?? run.start_time;
+  if (!timestamp) return "No timestamp";
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return "No timestamp";
+  return parsed.toLocaleString();
 }
 
 export default function DeliveryDispatchPage() {
@@ -85,9 +86,11 @@ export default function DeliveryDispatchPage() {
   const [inDeliveryOrders, setInDeliveryOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [backlogFilter, setBacklogFilter] = useState<BacklogFilter>("all");
   const [stagingVehicle, setStagingVehicle] = useState<Vehicle>("van");
   const [isStarting, setIsStarting] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyRuns, setHistoryRuns] = useState<Array<{ id: string; name: string; status: string; vehicle: string; start_time: string | null; end_time?: string | null }>>([]);
 
   const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
   const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
@@ -119,22 +122,6 @@ export default function DeliveryDispatchPage() {
     [preDeliveryOrders, selectedOrders]
   );
 
-  const queueOrders = useMemo(
-    () => preDeliveryOrders.filter((order) => classifyBacklog(order) === "queue"),
-    [preDeliveryOrders]
-  );
-
-  const prepOrders = useMemo(
-    () => preDeliveryOrders.filter((order) => classifyBacklog(order) === "prep"),
-    [preDeliveryOrders]
-  );
-
-  const visibleBacklogOrders = useMemo(() => {
-    if (backlogFilter === "queue") return queueOrders;
-    if (backlogFilter === "prep") return prepOrders;
-    return preDeliveryOrders;
-  }, [backlogFilter, preDeliveryOrders, queueOrders, prepOrders]);
-
   const activeRunCount = useMemo(() => {
     const runIds = new Set<string>();
     for (const order of inDeliveryOrders) {
@@ -156,22 +143,7 @@ export default function DeliveryDispatchPage() {
   }, [inDeliveryOrders]);
 
   const allVisibleSelected =
-    visibleBacklogOrders.length > 0 && visibleBacklogOrders.every((order) => selectedOrders.has(order.id));
-
-  const readyRatio = preDeliveryOrders.length > 0 ? Math.round((queueOrders.length / preDeliveryOrders.length) * 100) : 0;
-
-  const destinationSummary = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const order of selectedOrdersList) {
-      const location = formatDeliveryLocation(order) || "Unknown destination";
-      counts.set(location, (counts.get(location) ?? 0) + 1);
-    }
-
-    return Array.from(counts.entries())
-      .map(([location, count]) => ({ location, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 4);
-  }, [selectedOrdersList]);
+    preDeliveryOrders.length > 0 && preDeliveryOrders.every((order) => selectedOrders.has(order.id));
 
   const selectedPartialPickCount = useMemo(
     () => selectedOrdersList.filter((order) => order.pick_status && !order.pick_status.is_fully_picked).length,
@@ -180,7 +152,7 @@ export default function DeliveryDispatchPage() {
 
   const stagingVehicleStatus = statusByVehicle[stagingVehicle];
   const startDisabledReason = useMemo((): string | null => {
-    if (selectedOrders.size === 0) return "Select orders from backlog";
+    if (selectedOrders.size === 0) return "Select pre-delivery orders";
     if (statusesLoading) return "Vehicle status is loading";
 
     if (stagingVehicleStatus.delivery_run_active) {
@@ -207,7 +179,7 @@ export default function DeliveryDispatchPage() {
     if (allVisibleSelected) {
       setSelectedOrders((previous) => {
         const next = new Set(previous);
-        for (const order of visibleBacklogOrders) {
+        for (const order of preDeliveryOrders) {
           next.delete(order.id);
         }
         return next;
@@ -217,11 +189,38 @@ export default function DeliveryDispatchPage() {
 
     setSelectedOrders((previous) => {
       const next = new Set(previous);
-      for (const order of visibleBacklogOrders) {
+      for (const order of preDeliveryOrders) {
         next.add(order.id);
       }
       return next;
     });
+  };
+
+  const loadHistoryRuns = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const runs = await deliveryRunsApi.getRuns();
+      const sortedRuns = [...runs].sort((left, right) => {
+        const leftTime = Date.parse(left.end_time ?? left.start_time ?? "");
+        const rightTime = Date.parse(right.end_time ?? right.start_time ?? "");
+        const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
+        const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
+        return safeRightTime - safeLeftTime;
+      });
+      setHistoryRuns(sortedRuns.slice(0, 8));
+    } catch {
+      toast.error("Failed to load delivery run history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const handleHistoryToggle = async () => {
+    const nextOpen = !historyOpen;
+    setHistoryOpen(nextOpen);
+    if (nextOpen && historyRuns.length === 0 && !historyLoading) {
+      await loadHistoryRuns();
+    }
   };
 
   const handleSelectOrder = (orderId: string) => {
@@ -360,68 +359,31 @@ export default function DeliveryDispatchPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <section className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-base font-semibold">Backlog</h2>
-            <p className="text-xs text-muted-foreground">Split between queue-ready and prep-hold orders.</p>
+            <h2 className="text-base font-semibold">Pre-Delivery Orders</h2>
+            <p className="text-xs text-muted-foreground">Select orders to stage the next delivery run.</p>
           </div>
 
           <Card>
             <CardContent className="space-y-3 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs text-muted-foreground">Ready workload</div>
-                <div className="text-xs font-medium">{queueOrders.length} / {preDeliveryOrders.length} queue-ready</div>
-              </div>
-              <div className="h-2 overflow-hidden rounded bg-muted">
-                <div className="h-full bg-accent" style={{ width: `${readyRatio}%` }} />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={backlogFilter === "all" ? "default" : "outline"}
-                  onClick={() => setBacklogFilter("all")}
-                >
-                  All ({preDeliveryOrders.length})
-                </Button>
-                <Button
-                  size="sm"
-                  variant={backlogFilter === "queue" ? "default" : "outline"}
-                  onClick={() => setBacklogFilter("queue")}
-                >
-                  Queue ({queueOrders.length})
-                </Button>
-                <Button
-                  size="sm"
-                  variant={backlogFilter === "prep" ? "default" : "outline"}
-                  onClick={() => setBacklogFilter("prep")}
-                >
-                  Prep ({prepOrders.length})
-                </Button>
-              </div>
-
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-muted-foreground">Quick selection</div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleToggleVisible}
-                  disabled={visibleBacklogOrders.length === 0}
+                  disabled={preDeliveryOrders.length === 0}
                 >
-                  {allVisibleSelected ? "Clear visible" : "Select visible"}
+                  {allVisibleSelected ? "Clear all" : "Select all"}
                 </Button>
               </div>
 
-              {visibleBacklogOrders.length === 0 ? (
+              {preDeliveryOrders.length === 0 ? (
                 <div className="rounded border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-                  No orders in this backlog segment
+                  No pre-delivery orders
                 </div>
               ) : (
                 <div className="space-y-2 xl:max-h-[520px] xl:overflow-y-auto xl:pr-1">
-                  {visibleBacklogOrders.map((order) => {
-                    const segment = classifyBacklog(order);
+                  {preDeliveryOrders.map((order) => {
                     const isSelected = selectedOrders.has(order.id);
 
                     return (
@@ -446,9 +408,6 @@ export default function DeliveryDispatchPage() {
                         </div>
 
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          <Badge variant={segment === "queue" ? "success" : "secondary"}>
-                            {segment === "queue" ? "Queue" : "Prep"}
-                          </Badge>
                           <span className="text-muted-foreground">Deliverer: {order.assigned_deliverer || "Unassigned"}</span>
                           {order.pick_status && !order.pick_status.is_fully_picked ? (
                             <Badge
@@ -489,22 +448,6 @@ export default function DeliveryDispatchPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Top destinations</div>
-                {destinationSummary.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No selected destinations</div>
-                ) : (
-                  <div className="space-y-2">
-                    {destinationSummary.map((item) => (
-                      <div key={item.location} className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2 text-sm">
-                        <span className="truncate">{item.location}</span>
-                        <Badge variant="secondary">{item.count}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <div className="grid gap-2">
                 <label htmlFor="dispatch-staging-vehicle" className="text-sm font-medium">
                   Vehicle for next run
@@ -536,15 +479,6 @@ export default function DeliveryDispatchPage() {
             <h2 className="text-base font-semibold">Fleet Status</h2>
             <p className="text-xs text-muted-foreground">Operational priority and dispatchability by vehicle.</p>
           </div>
-
-          <Card>
-            <CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
-              <div className="font-medium text-foreground">Priority legend</div>
-              <div>P1 Delivery: critical dispatch use, do not interrupt.</div>
-              <div>P2 Tech Duty: high priority service or support work.</div>
-              <div>P3 Administrative: low priority other usage, recallable when needed.</div>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader className="pb-2">
@@ -597,6 +531,55 @@ export default function DeliveryDispatchPage() {
               />
             ))}
           </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm">History</CardTitle>
+                  <CardDescription>Recent delivery runs</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void handleHistoryToggle()}>
+                  {historyOpen ? "Hide" : "Show"}
+                </Button>
+              </div>
+            </CardHeader>
+            {historyOpen ? (
+              <CardContent className="space-y-2 p-4 pt-0">
+                {historyLoading ? (
+                  <div className="rounded border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
+                    Loading recent runs...
+                  </div>
+                ) : historyRuns.length === 0 ? (
+                  <div className="rounded border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
+                    No recent runs available
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {historyRuns.map((run) => (
+                      <div key={run.id} className="rounded border border-border p-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium text-foreground">{run.name || formatRunLabel(run.id)}</div>
+                          <Badge variant="secondary">{run.status}</Badge>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-2 text-muted-foreground">
+                          <span>{run.vehicle || "Unknown vehicle"}</span>
+                          <span>{formatRunTime(run)}</span>
+                        </div>
+                        <Link
+                          className="mt-2 inline-flex text-xs font-medium text-foreground hover:underline"
+                          to={`/delivery/runs/${run.id}`}
+                          state={{ from: "/delivery/dispatch" }}
+                        >
+                          View run
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            ) : null}
+          </Card>
         </section>
       </div>
 
