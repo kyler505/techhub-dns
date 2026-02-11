@@ -74,6 +74,12 @@ export function Sidebar({ className }: { className?: string }) {
     document.documentElement.style.setProperty("--sidebar-width", collapsed ? "72px" : "256px");
   }, [collapsed]);
 
+  useEffect(() => {
+    if (!isOnDeliveryRoute) {
+      setDeliveryGroupOpen(false);
+    }
+  }, [isOnDeliveryRoute]);
+
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
