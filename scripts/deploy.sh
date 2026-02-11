@@ -9,72 +9,45 @@
 # Usage: bash deploy.sh
 # =============================================================================
 
-set -euo pipefail
+set -e  # Exit on error
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-: "${BRANCH:=main}"
-: "${WSGI_FILE:=/var/www/techhub_pythonanywhere_com_wsgi.py}"
-
+PROJECT_ROOT="/home/techhub/techhub-dns"
+WSGI_FILE="/var/www/techhub_pythonanywhere_com_wsgi.py"
 LOG_FILE="${PROJECT_ROOT}/deploy.log"
+BRANCH="main"
 RUNNING_FILE="${PROJECT_ROOT}/.deploy.running"
 LOCKFILE="${PROJECT_ROOT}/frontend/package-lock.json"
 
 # Log function
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-run_logged() {
-    local status
-    log "+ $*"
+install_frontend_deps() {
+    local -a install_cmd
+
+    if [ -f "$LOCKFILE" ]; then
+        log "Installing frontend dependencies (npm ci)..."
+        install_cmd=(npm ci --include=dev)
+    else
+        log "WARNING: package-lock.json not found; running npm install"
+        install_cmd=(npm install --include=dev)
+    fi
 
     set +e
-    "$@" 2>&1 | tee -a "$LOG_FILE"
-    status=${PIPESTATUS[0]}
+    "${install_cmd[@]}"
+    local first_attempt_status=$?
     set -e
 
-    return "$status"
-}
-
-run_migrations() {
-    if [ ! -d "${PROJECT_ROOT}/backend" ]; then
-        log "ERROR: Backend directory not found at ${PROJECT_ROOT}/backend"
-        return 1
+    if [ "$first_attempt_status" -eq 0 ]; then
+        return 0
     fi
 
-    local venv_activate=""
-    if [ -f "${PROJECT_ROOT}/backend/.venv/bin/activate" ]; then
-        venv_activate="${PROJECT_ROOT}/backend/.venv/bin/activate"
-    elif [ -f "${PROJECT_ROOT}/.venv/bin/activate" ]; then
-        venv_activate="${PROJECT_ROOT}/.venv/bin/activate"
-    fi
-
-    if [ -n "$venv_activate" ]; then
-        log "Activating venv: ${venv_activate}"
-        # shellcheck disable=SC1090
-        source "$venv_activate"
-    else
-        log "WARNING: No venv found; using current python on PATH"
-    fi
-
-    cd "${PROJECT_ROOT}/backend"
-
-    log "Alembic current (pre-upgrade):"
-    run_logged python -m alembic current || true
-
-    if ! run_logged python -m alembic upgrade head; then
-        log "ERROR: Alembic upgrade failed"
-        log "Alembic current (post-failure):"
-        run_logged python -m alembic current || true
-        log "Alembic heads:"
-        run_logged python -m alembic heads || true
-        return 1
-    fi
-
-    log "Alembic upgrade complete"
+    log "WARNING: Frontend dependency install failed; removing node_modules and retrying once"
+    rm -rf node_modules
+    log "Retrying frontend dependency install..."
+    "${install_cmd[@]}"
 }
 
 # Deploy lock (prevents concurrent deploys)
@@ -126,23 +99,13 @@ git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 log "Git pull complete"
 
-log "Running database migrations..."
-run_migrations
-log "Database migrations complete"
-
 # Build frontend on PythonAnywhere
 if [ -d "$PROJECT_ROOT/frontend" ]; then
     log "Building frontend..."
     cd "$PROJECT_ROOT/frontend"
 
     # Reliability > speed: always reinstall deps before building.
-    if [ -f "$LOCKFILE" ]; then
-        log "Installing frontend dependencies (npm ci)..."
-        npm ci --include=dev
-    else
-        log "WARNING: package-lock.json not found; running npm install"
-        npm install --include=dev
-    fi
+    install_frontend_deps
     log "Running frontend build..."
     npm run build
     log "Frontend build complete"
