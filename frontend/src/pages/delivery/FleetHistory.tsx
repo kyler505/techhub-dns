@@ -10,7 +10,7 @@ import {
 } from "../../api/vehicleCheckouts";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
+import { Card, CardContent } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 
 const VEHICLES: Vehicle[] = ["van", "golf_cart"];
@@ -79,12 +79,27 @@ export default function DeliveryFleetHistoryPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold">{formatVehicleLabel(validVehicle)} History</div>
-          <div className="text-xs text-muted-foreground">Vehicle checkouts and delivery runs</div>
+          <div className="text-base font-semibold">{formatVehicleLabel(validVehicle)} History</div>
+          <div className="text-xs text-muted-foreground">Checkout activity and completed/active run timeline</div>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link to="/delivery/fleet">Back to Fleet</Link>
         </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card>
+          <CardContent className="space-y-1 p-4">
+            <div className="text-xs text-muted-foreground">Checkout records</div>
+            <div className="text-xl font-semibold">{checkouts?.items.length ?? 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="space-y-1 p-4">
+            <div className="text-xs text-muted-foreground">Delivery runs</div>
+            <div className="text-xl font-semibold">{runs.length}</div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-3">
@@ -93,32 +108,34 @@ export default function DeliveryFleetHistoryPage() {
           <div className="py-8 text-center text-muted-foreground">No checkout history found</div>
         ) : (
           <Card className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider">Checked Out</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider">Checked In</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider">Type</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider">Purpose</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider">Checked Out By</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {checkouts.items.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="text-sm">{formatDateTime(c.checked_out_at)}</TableCell>
-                    <TableCell className="text-sm">{formatDateTime(c.checked_in_at)}</TableCell>
-                    <TableCell className="text-sm">
-                      <Badge variant={c.checkout_type === "other" ? "secondary" : "default"}>
-                        {c.checkout_type === "other" ? "Other" : "Delivery run"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{c.purpose || "-"}</TableCell>
-                    <TableCell className="text-sm">{c.checked_out_by}</TableCell>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[760px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Checked Out</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Checked In</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Type</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Purpose</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider">Checked Out By</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {checkouts.items.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="text-sm">{formatDateTime(c.checked_out_at)}</TableCell>
+                      <TableCell className="text-sm">{formatDateTime(c.checked_in_at)}</TableCell>
+                      <TableCell className="text-sm">
+                        <Badge variant={c.checkout_type === "other" ? "secondary" : "default"}>
+                          {c.checkout_type === "other" ? "Other" : "Delivery run"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{c.purpose || "-"}</TableCell>
+                      <TableCell className="text-sm">{c.checked_out_by}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
         )}
       </div>
@@ -143,7 +160,9 @@ export default function DeliveryFleetHistoryPage() {
                       {run.status}
                     </Badge>
                     <Button asChild variant="outline" size="sm">
-                      <Link to={`/delivery/runs/${run.id}`}>View Details</Link>
+                      <Link to={`/delivery/runs/${run.id}`} state={{ from: `/delivery/fleet/${validVehicle}/history` }}>
+                        View Details
+                      </Link>
                     </Button>
                   </div>
                 </div>

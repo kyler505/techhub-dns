@@ -134,7 +134,10 @@ export default function VehicleCheckoutPanel({
     <Card>
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold">Vehicles</div>
+          <div>
+            <div className="text-sm font-semibold">Vehicles</div>
+            <div className="text-xs text-muted-foreground">Delivery-run checkout is controlled from Dispatch.</div>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -171,8 +174,9 @@ export default function VehicleCheckoutPanel({
                       size="sm"
                       onClick={() => openCheckout(vehicle)}
                       disabled={disableActions}
+                      className="min-w-24"
                     >
-                      Check Out
+                      Check Out (Other)
                     </Button>
                   ) : (
                     <Button
@@ -180,10 +184,15 @@ export default function VehicleCheckoutPanel({
                       variant="outline"
                       onClick={() => openCheckin(vehicle)}
                       disabled={disableActions}
+                      className="min-w-24"
                     >
                       Check In
                     </Button>
                   )}
+
+                  {runActive ? (
+                    <span className="text-xs text-muted-foreground">Active delivery run</span>
+                  ) : null}
 
                   <Button asChild size="sm" variant="ghost" disabled={isLoading || isSubmitting}>
                     <Link to={`/delivery/fleet/${vehicle}/history`}>History</Link>

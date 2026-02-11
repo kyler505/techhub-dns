@@ -98,8 +98,8 @@ function AppContent() {
                                             <Route path="dispatch" element={<DeliveryDispatchPage />} />
                                             <Route path="fleet" element={<DeliveryFleetPage />} />
                                             <Route path="fleet/:vehicle/history" element={<DeliveryFleetHistoryPage />} />
+                                            <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
                                         </Route>
-                                        <Route path="/delivery/runs/:runId" element={<ProtectedRoute><DeliveryRunDetailPage /></ProtectedRoute>} />
                                         <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
                                         <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
                                         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
