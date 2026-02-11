@@ -30,6 +30,7 @@ import { useVehicleStatuses } from "../../hooks/useVehicleStatuses";
 import type { User } from "../../contexts/AuthContext";
 import type { Order } from "../../types/order";
 import { OrderStatus } from "../../types/order";
+import type { DeliveryRunPriorityPurpose } from "../../components/delivery/vehiclePriority";
 import { formatDeliveryLocation } from "../../utils/location";
 
 type VehicleDescriptor = {
@@ -87,6 +88,7 @@ export default function DeliveryDispatchPage() {
   const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
   const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
   const [pendingStartVehicle, setPendingStartVehicle] = useState<Vehicle | null>(null);
+  const [pendingStartPriority, setPendingStartPriority] = useState<DeliveryRunPriorityPurpose | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -203,6 +205,7 @@ export default function DeliveryDispatchPage() {
 
   const doStartRun = async (
     vehicle: Vehicle,
+    checkoutPurpose: DeliveryRunPriorityPurpose,
     options?: {
       skipPartialPickConfirm?: boolean;
     }
@@ -219,6 +222,7 @@ export default function DeliveryDispatchPage() {
       if (partialPicks.length > 0) {
         setPartialPickOrders(partialPicks);
         setPendingStartVehicle(vehicle);
+        setPendingStartPriority(checkoutPurpose);
         setPartialPickDialogOpen(true);
         return;
       }
@@ -257,7 +261,11 @@ export default function DeliveryDispatchPage() {
           return;
         }
       } else {
-        await vehicleCheckoutsApi.checkout({ vehicle, checkout_type: "delivery_run" });
+        await vehicleCheckoutsApi.checkout({
+          vehicle,
+          checkout_type: "delivery_run",
+          purpose: checkoutPurpose,
+        });
       }
 
       await deliveryRunsApi.createRun({
@@ -274,13 +282,18 @@ export default function DeliveryDispatchPage() {
   };
 
   const handleStartRun = useCallback(
-    async (vehicle: Vehicle): Promise<void> => {
+    async (vehicle: Vehicle, checkoutPurpose: DeliveryRunPriorityPurpose): Promise<void> => {
+      if (!checkoutPurpose.trim()) {
+        toast.error("Select a run priority before starting");
+        return;
+      }
+
       const disabledReason = getStartDisabledReason(vehicle);
       if (disabledReason) return;
 
       setActiveVehicleAction(vehicle);
       try {
-        await doStartRun(vehicle);
+        await doStartRun(vehicle, checkoutPurpose);
       } finally {
         setActiveVehicleAction((current) => (current === vehicle ? null : current));
       }
@@ -331,9 +344,18 @@ export default function DeliveryDispatchPage() {
   const handlePartialPickConfirm = async () => {
     setPartialPickDialogOpen(false);
     const vehicle = pendingStartVehicle;
+    const checkoutPurpose = pendingStartPriority;
     setPendingStartVehicle(null);
-    if (!vehicle) return;
-    await doStartRun(vehicle, { skipPartialPickConfirm: true });
+    setPendingStartPriority(null);
+    if (!vehicle || !checkoutPurpose) return;
+    await doStartRun(vehicle, checkoutPurpose, { skipPartialPickConfirm: true });
+  };
+
+  const handlePartialPickDialogOpenChange = (open: boolean) => {
+    setPartialPickDialogOpen(open);
+    if (open) return;
+    setPendingStartVehicle(null);
+    setPendingStartPriority(null);
   };
 
   const handleViewDetail = (orderId: string) => {
@@ -503,7 +525,7 @@ export default function DeliveryDispatchPage() {
                       isActionLoading={isActionLoading}
                       onCheckoutOther={(purpose) => handleCheckoutOther(vehicle.id, purpose)}
                       onCheckin={() => handleCheckin(vehicle.id)}
-                      onStartRun={() => handleStartRun(vehicle.id)}
+                      onStartRun={(priorityPurpose) => handleStartRun(vehicle.id, priorityPurpose)}
                       startRunDisabledReason={getStartDisabledReason(vehicle.id)}
                     />
                   );
@@ -514,7 +536,7 @@ export default function DeliveryDispatchPage() {
         </section>
       </div>
 
-      <Dialog open={partialPickDialogOpen} onOpenChange={setPartialPickDialogOpen}>
+      <Dialog open={partialPickDialogOpen} onOpenChange={handlePartialPickDialogOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -539,7 +561,7 @@ export default function DeliveryDispatchPage() {
             </ul>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPartialPickDialogOpen(false)}>
+            <Button variant="outline" onClick={() => handlePartialPickDialogOpenChange(false)}>
               Cancel
             </Button>
             <Button onClick={handlePartialPickConfirm} className="bg-amber-500 hover:bg-amber-600">
