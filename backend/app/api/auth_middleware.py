@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import get_db, get_db_session
 from app.services.saml_auth_service import saml_auth_service
 from app.services.system_setting_service import SystemSettingService, SETTING_ADMIN_EMAILS
+from app.services.maintenance_tick_service import schedule_maintenance_tick_if_needed
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,10 @@ def init_auth_middleware(app):
             if path.startswith("/api/"):
                 return jsonify({"error": "Authentication required"}), 401
             return None
+
+        # Schedule background maintenance tick ONLY for authenticated API traffic.
+        if path.startswith("/api/") and getattr(g, "user_id", None):
+            schedule_maintenance_tick_if_needed()
 
         return None
 

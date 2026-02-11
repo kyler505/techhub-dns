@@ -89,14 +89,19 @@ class Settings(BaseSettings):
     session_cookie_name: str = "techhub_session"
     session_max_age_hours: int = 168  # 7 days
 
-    # Maintenance jobs
-    session_purge_enabled: bool = True
-    session_purge_interval_hours: int = 24
+    # Traffic-driven maintenance tick (runs only on authenticated /api traffic)
+    maintenance_tick_enabled: bool = True
+    maintenance_tick_min_interval_seconds: int = 60
 
-    system_audit_archive_enabled: bool = True
+    maintenance_sessions_purge_interval_hours: int = 24
+    maintenance_sessions_purge_batch_size: int = 5000
+
+    maintenance_audit_archive_interval_hours: int = 24
+    maintenance_audit_archive_max_batches_per_tick: int = 3
+
+    # System audit archive (used by maintenance_service; optionally env-configured)
     system_audit_archive_days: int = 90
     system_audit_archive_batch_size: int = 1000
-    system_audit_archive_interval_hours: int = 24
 
     # Flask environment
     flask_env: str = "development"
