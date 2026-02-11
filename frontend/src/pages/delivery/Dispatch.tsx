@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
-import { deliveryRunsApi } from "../../api/deliveryRuns";
+import { deliveryRunsApi, type DeliveryRunResponse } from "../../api/deliveryRuns";
 import { ordersApi } from "../../api/orders";
-import { type Vehicle, type VehicleStatusItem, vehicleCheckoutsApi } from "../../api/vehicleCheckouts";
+import {
+  type ListVehicleCheckoutsResponse,
+  type Vehicle,
+  type VehicleStatusItem,
+  vehicleCheckoutsApi,
+} from "../../api/vehicleCheckouts";
 import VehicleCommandCard from "../../components/delivery/VehicleCommandCard";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -32,6 +37,23 @@ type VehicleDescriptor = {
   id: Vehicle;
   label: string;
 };
+
+type VehicleHistoryData = {
+  checkouts: ListVehicleCheckoutsResponse["items"];
+  runs: DeliveryRunResponse[];
+};
+
+type BooleanByVehicle = Record<Vehicle, boolean>;
+
+type HistoryByVehicle = Record<Vehicle, VehicleHistoryData | null>;
+
+function createVehicleBooleanMap(defaultValue: boolean): BooleanByVehicle {
+  return { van: defaultValue, golf_cart: defaultValue };
+}
+
+function createVehicleHistoryMap(): HistoryByVehicle {
+  return { van: null, golf_cart: null };
+}
 
 const VEHICLES: VehicleDescriptor[] = [
   { id: "van", label: "Van" },
@@ -68,14 +90,6 @@ function formatRunLabel(deliveryRunId: string | undefined): string {
   return `Run ${deliveryRunId.slice(0, 8)}`;
 }
 
-function formatRunTime(run: { start_time: string | null; end_time?: string | null }): string {
-  const timestamp = run.end_time ?? run.start_time;
-  if (!timestamp) return "No timestamp";
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) return "No timestamp";
-  return parsed.toLocaleString();
-}
-
 export default function DeliveryDispatchPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -86,11 +100,18 @@ export default function DeliveryDispatchPage() {
   const [inDeliveryOrders, setInDeliveryOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [stagingVehicle, setStagingVehicle] = useState<Vehicle>("van");
-  const [isStarting, setIsStarting] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyRuns, setHistoryRuns] = useState<Array<{ id: string; name: string; status: string; vehicle: string; start_time: string | null; end_time?: string | null }>>([]);
+  const [actionLoadingByVehicle, setActionLoadingByVehicle] = useState<BooleanByVehicle>(() =>
+    createVehicleBooleanMap(false)
+  );
+  const [historyOpenByVehicle, setHistoryOpenByVehicle] = useState<BooleanByVehicle>(() =>
+    createVehicleBooleanMap(false)
+  );
+  const [historyLoadingByVehicle, setHistoryLoadingByVehicle] = useState<BooleanByVehicle>(() =>
+    createVehicleBooleanMap(false)
+  );
+  const [historyDataByVehicle, setHistoryDataByVehicle] = useState<HistoryByVehicle>(() =>
+    createVehicleHistoryMap()
+  );
 
   const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
   const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
@@ -141,30 +162,33 @@ export default function DeliveryDispatchPage() {
     [selectedOrdersList]
   );
 
-  const stagingVehicleStatus = statusByVehicle[stagingVehicle];
-  const startDisabledReason = useMemo((): string | null => {
-    if (selectedOrders.size === 0) return "Select pre-delivery orders";
-    if (statusesLoading) return "Vehicle status is loading";
+  const getStartDisabledReason = useCallback(
+    (vehicle: Vehicle): string | null => {
+      const status = statusByVehicle[vehicle];
+      if (selectedOrders.size === 0) return "Select pre-delivery orders";
+      if (statusesLoading) return "Vehicle status is loading";
 
-    if (stagingVehicleStatus.delivery_run_active) {
-      return "Vehicle already has an active run";
-    }
-
-    if (stagingVehicleStatus.checked_out) {
-      if (stagingVehicleStatus.checkout_type === "other") {
-        const purpose = stagingVehicleStatus.purpose?.trim();
-        const suffix = purpose ? ` (purpose: ${purpose})` : "";
-        return `Checked out for Other${suffix}. Check in, then check out again for a Delivery run.`;
+      if (status.delivery_run_active) {
+        return "Vehicle already has an active run";
       }
 
-      if (!checkedOutByCurrentUser(stagingVehicleStatus, user)) {
-        const who = stagingVehicleStatus.checked_out_by;
-        return who ? `Checked out by ${who}` : "Checked out by another user";
-      }
-    }
+      if (status.checked_out) {
+        if (status.checkout_type === "other") {
+          const purpose = status.purpose?.trim();
+          const suffix = purpose ? ` (purpose: ${purpose})` : "";
+          return `Checked out for Other${suffix}. Check in, then check out again for a Delivery run.`;
+        }
 
-    return null;
-  }, [selectedOrders.size, stagingVehicleStatus, statusesLoading, user]);
+        if (!checkedOutByCurrentUser(status, user)) {
+          const who = status.checked_out_by;
+          return who ? `Checked out by ${who}` : "Checked out by another user";
+        }
+      }
+
+      return null;
+    },
+    [selectedOrders.size, statusByVehicle, statusesLoading, user]
+  );
 
   const handleToggleVisible = () => {
     if (allVisibleSelected) {
@@ -187,32 +211,59 @@ export default function DeliveryDispatchPage() {
     });
   };
 
-  const loadHistoryRuns = useCallback(async () => {
-    setHistoryLoading(true);
+  const loadVehicleHistory = useCallback(async (vehicle: Vehicle) => {
+    setHistoryLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
     try {
-      const runs = await deliveryRunsApi.getRuns();
-      const sortedRuns = [...runs].sort((left, right) => {
+      const [checkoutsResponse, runsResponse] = await Promise.all([
+        vehicleCheckoutsApi.listCheckouts({ vehicle, page: 1, page_size: 5 }),
+        deliveryRunsApi.getRuns({ vehicle }),
+      ]);
+
+      const sortedRuns = [...runsResponse].sort((left, right) => {
         const leftTime = Date.parse(left.end_time ?? left.start_time ?? "");
         const rightTime = Date.parse(right.end_time ?? right.start_time ?? "");
         const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
         const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
         return safeRightTime - safeLeftTime;
       });
-      setHistoryRuns(sortedRuns.slice(0, 8));
+
+      const sortedCheckouts = [...checkoutsResponse.items].sort((left, right) => {
+        const leftTime = Date.parse(left.checked_out_at ?? "");
+        const rightTime = Date.parse(right.checked_out_at ?? "");
+        const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
+        const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
+        return safeRightTime - safeLeftTime;
+      });
+
+      setHistoryDataByVehicle((previous) => ({
+        ...previous,
+        [vehicle]: {
+          checkouts: sortedCheckouts.slice(0, 5),
+          runs: sortedRuns.slice(0, 5),
+        },
+      }));
     } catch {
-      toast.error("Failed to load delivery run history");
+      toast.error("Failed to load vehicle history");
     } finally {
-      setHistoryLoading(false);
+      setHistoryLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
     }
   }, []);
 
-  const handleHistoryToggle = async () => {
-    const nextOpen = !historyOpen;
-    setHistoryOpen(nextOpen);
-    if (nextOpen && historyRuns.length === 0 && !historyLoading) {
-      await loadHistoryRuns();
-    }
-  };
+  const handleToggleVehicleHistory = useCallback(
+    async (vehicle: Vehicle) => {
+      const nextOpen = !historyOpenByVehicle[vehicle];
+      setHistoryOpenByVehicle((previous) => ({ ...previous, [vehicle]: nextOpen }));
+      if (!nextOpen || historyLoadingByVehicle[vehicle] || historyDataByVehicle[vehicle]) {
+        return;
+      }
+      await loadVehicleHistory(vehicle);
+    },
+    [historyDataByVehicle, historyLoadingByVehicle, historyOpenByVehicle, loadVehicleHistory]
+  );
+
+  const invalidateVehicleHistory = useCallback((vehicle: Vehicle) => {
+    setHistoryDataByVehicle((previous) => ({ ...previous, [vehicle]: null }));
+  }, []);
 
   const handleSelectOrder = (orderId: string) => {
     setSelectedOrders((previous) => {
@@ -295,15 +346,66 @@ export default function DeliveryDispatchPage() {
     }
   };
 
-  const handleStartRun = async () => {
-    if (startDisabledReason) return;
-    setIsStarting(true);
+  const handleStartRunForVehicle = async (vehicle: Vehicle) => {
+    const disabledReason = getStartDisabledReason(vehicle);
+    if (disabledReason) return;
+
+    setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
     try {
-      await doStartRun(stagingVehicle);
+      await doStartRun(vehicle);
+      invalidateVehicleHistory(vehicle);
     } finally {
-      setIsStarting(false);
+      setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
     }
   };
+
+  const handleCheckoutOther = useCallback(
+    async (vehicle: Vehicle, purpose: string): Promise<boolean> => {
+      const trimmedPurpose = purpose.trim();
+      if (!trimmedPurpose) {
+        toast.error("Purpose is required");
+        return false;
+      }
+
+      setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
+      try {
+        await vehicleCheckoutsApi.checkout({
+          vehicle,
+          checkout_type: "other",
+          purpose: trimmedPurpose,
+        });
+        toast.success("Vehicle checked out");
+        invalidateVehicleHistory(vehicle);
+        await refreshStatuses();
+        return true;
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+        await refreshStatuses();
+        return false;
+      } finally {
+        setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
+      }
+    },
+    [invalidateVehicleHistory, refreshStatuses]
+  );
+
+  const handleCheckin = useCallback(
+    async (vehicle: Vehicle): Promise<void> => {
+      setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: true }));
+      try {
+        await vehicleCheckoutsApi.checkin({ vehicle });
+        toast.success("Vehicle checked in");
+        invalidateVehicleHistory(vehicle);
+        await refreshStatuses();
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+        await refreshStatuses();
+      } finally {
+        setActionLoadingByVehicle((previous) => ({ ...previous, [vehicle]: false }));
+      }
+    },
+    [invalidateVehicleHistory, refreshStatuses]
+  );
 
   const handlePartialPickConfirm = async () => {
     setPartialPickDialogOpen(false);
@@ -414,29 +516,6 @@ export default function DeliveryDispatchPage() {
                   <div className="text-lg font-semibold">{selectedPartialPickCount}</div>
                 </div>
               </div>
-
-              <div className="grid gap-2">
-                <label htmlFor="dispatch-staging-vehicle" className="text-sm font-medium">
-                  Vehicle for next run
-                </label>
-                <select
-                  id="dispatch-staging-vehicle"
-                  value={stagingVehicle}
-                  onChange={(event) => setStagingVehicle(event.target.value as Vehicle)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  disabled={isStarting}
-                >
-                  <option value="van">Van</option>
-                  <option value="golf_cart">Golf Cart</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Button onClick={handleStartRun} disabled={Boolean(startDisabledReason) || isStarting} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-                  {isStarting ? "Starting..." : `Start Run (${selectedOrders.size})`}
-                </Button>
-                {startDisabledReason ? <div className="text-xs text-muted-foreground">{startDisabledReason}</div> : null}
-              </div>
             </CardContent>
           </Card>
         </section>
@@ -495,58 +574,19 @@ export default function DeliveryDispatchPage() {
                 label={vehicle.label}
                 status={statusByVehicle[vehicle.id]}
                 isLoading={statusesLoading}
+                isActionLoading={actionLoadingByVehicle[vehicle.id]}
+                onCheckoutOther={(purpose) => handleCheckoutOther(vehicle.id, purpose)}
+                onCheckin={() => handleCheckin(vehicle.id)}
+                onStartRun={() => handleStartRunForVehicle(vehicle.id)}
+                startRunDisabledReason={getStartDisabledReason(vehicle.id)}
+                historyOpen={historyOpenByVehicle[vehicle.id]}
+                historyLoading={historyLoadingByVehicle[vehicle.id]}
+                historyCheckouts={historyDataByVehicle[vehicle.id]?.checkouts ?? []}
+                historyRuns={historyDataByVehicle[vehicle.id]?.runs ?? []}
+                onToggleHistory={() => void handleToggleVehicleHistory(vehicle.id)}
               />
             ))}
           </div>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-sm">History</CardTitle>
-                  <CardDescription>Recent delivery runs</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => void handleHistoryToggle()}>
-                  {historyOpen ? "Hide" : "Show"}
-                </Button>
-              </div>
-            </CardHeader>
-            {historyOpen ? (
-              <CardContent className="space-y-2 p-4 pt-0">
-                {historyLoading ? (
-                  <div className="rounded border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-                    Loading recent runs...
-                  </div>
-                ) : historyRuns.length === 0 ? (
-                  <div className="rounded border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-                    No recent runs available
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {historyRuns.map((run) => (
-                      <div key={run.id} className="rounded border border-border p-2 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="font-medium text-foreground">{run.name || formatRunLabel(run.id)}</div>
-                          <Badge variant="secondary">{run.status}</Badge>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-2 text-muted-foreground">
-                          <span>{run.vehicle || "Unknown vehicle"}</span>
-                          <span>{formatRunTime(run)}</span>
-                        </div>
-                        <Link
-                          className="mt-2 inline-flex text-xs font-medium text-foreground hover:underline"
-                          to={`/delivery/runs/${run.id}`}
-                          state={{ from: "/delivery/dispatch" }}
-                        >
-                          View run
-                        </Link>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            ) : null}
-          </Card>
         </section>
       </div>
 
