@@ -122,15 +122,6 @@ export default function DeliveryDispatchPage() {
     [preDeliveryOrders, selectedOrders]
   );
 
-  const activeRunCount = useMemo(() => {
-    const runIds = new Set<string>();
-    for (const order of inDeliveryOrders) {
-      const runId = order.delivery_run_id?.trim();
-      if (runId) runIds.add(runId);
-    }
-    return runIds.size;
-  }, [inDeliveryOrders]);
-
   const activeDeliveryPreview = useMemo(() => {
     const sorted = [...inDeliveryOrders].sort((left, right) => {
       const leftTime = Date.parse(left.updated_at);
@@ -332,30 +323,6 @@ export default function DeliveryDispatchPage() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Backlog</CardDescription>
-            <CardTitle className="text-xl">{preDeliveryOrders.length}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">Prep plus queue orders ready for dispatch</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Staging</CardDescription>
-            <CardTitle className="text-xl">{selectedOrders.size}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">Orders selected for next run</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Active Runs</CardDescription>
-            <CardTitle className="text-xl">{activeRunCount}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">{inDeliveryOrders.length} orders currently in delivery</CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 xl:grid-cols-3">
         <section className="space-y-3">
           <div className="space-y-1">
