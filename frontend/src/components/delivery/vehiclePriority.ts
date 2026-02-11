@@ -2,9 +2,18 @@ import type { VehicleStatusItem } from "../../api/vehicleCheckouts";
 
 type PriorityTier = "P1" | "P2" | "P3";
 
-export const VEHICLE_CHECKOUT_PURPOSE_LABELS = ["Delivery", "Tech Duty", "Administrative"] as const;
+export const DELIVERY_RUN_PRIORITY_OPTIONS = [
+  { tier: "P1", purpose: "Delivery", label: "P1 - Delivery" },
+  { tier: "P2", purpose: "Tech Duty", label: "P2 - Tech Duty" },
+  { tier: "P3", purpose: "Administrative", label: "P3 - Administrative" },
+] as const;
 
-export type VehicleCheckoutPurposeLabel = (typeof VEHICLE_CHECKOUT_PURPOSE_LABELS)[number];
+export const VEHICLE_CHECKOUT_PURPOSE_LABELS = DELIVERY_RUN_PRIORITY_OPTIONS.map(
+  (option) => option.purpose
+);
+
+export type DeliveryRunPriorityPurpose = (typeof DELIVERY_RUN_PRIORITY_OPTIONS)[number]["purpose"];
+export type VehicleCheckoutPurposeLabel = DeliveryRunPriorityPurpose;
 
 export type PrioritySemantics = {
   tier: PriorityTier;
