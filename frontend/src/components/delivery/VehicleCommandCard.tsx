@@ -91,6 +91,7 @@ export default function VehicleCommandCard({
 
   const canCheckoutOther = !status.checked_out && !status.delivery_run_active;
   const canCheckin = status.checked_out;
+  const isCheckedOutByAnotherUser = status.checked_out && !isOwnedByCurrentUser;
   const hasActions = Boolean(onCheckoutOther && onCheckin && onStartRun);
   const hasHistory = Boolean(onToggleHistory);
   const resolvedHistoryOpen = historyOpen ?? false;
@@ -188,7 +189,7 @@ export default function VehicleCommandCard({
               {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
                 const action = getPriorityActionSelection(option.purpose);
                 const isCheckoutAction = !action.createsRun;
-                const isDisabled = isLoading || isActionLoading || (isCheckoutAction && !isOwnedByCurrentUser);
+                const isDisabled = isLoading || isActionLoading || (isCheckoutAction && isCheckedOutByAnotherUser);
                 return (
                   <Button
                     key={option.purpose}
