@@ -533,6 +533,7 @@ export default function DeliveryDispatchPage() {
                 {VEHICLES.map((vehicle) => {
                   const status = statusByVehicle[vehicle.id];
                   const isActionLoading = activeVehicleAction === vehicle.id;
+                  const isOwnedByCurrentUser = checkedOutByCurrentUser(status, user);
 
                   return (
                     <VehicleCommandCard
@@ -545,6 +546,7 @@ export default function DeliveryDispatchPage() {
                       onCheckin={() => handleCheckin(vehicle.id)}
                       onStartRun={(priorityPurpose) => handleStartRun(vehicle.id, priorityPurpose)}
                       startRunDisabledReason={getStartDisabledReason(vehicle.id)}
+                      isOwnedByCurrentUser={isOwnedByCurrentUser}
                     />
                   );
                 })}

@@ -29,6 +29,7 @@ type Props = {
   historyCheckouts?: VehicleCheckoutHistoryItem[];
   historyRuns?: DeliveryRunResponse[];
   onToggleHistory?: () => void;
+  isOwnedByCurrentUser?: boolean;
   children?: ReactNode;
 };
 
@@ -78,6 +79,7 @@ export default function VehicleCommandCard({
   historyCheckouts,
   historyRuns,
   onToggleHistory,
+  isOwnedByCurrentUser,
   children,
 }: Props) {
   const priority = derivePrioritySemantics(status);
@@ -181,20 +183,25 @@ export default function VehicleCommandCard({
           <div className="mt-2 space-y-2">
             <div className="text-xs font-medium text-foreground">Priority (required)</div>
             <div className="flex flex-wrap gap-2">
-              {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => (
-                <Button
-                  key={option.purpose}
-                  size="sm"
-                  variant={selectedPriority === option.purpose ? "default" : "outline"}
-                  onClick={() => {
-                    setSelectedPriority(option.purpose);
-                    setPriorityError(null);
-                  }}
-                  disabled={isLoading || isActionLoading}
-                >
-                  {option.label}
-                </Button>
-              ))}
+              {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
+                const action = getPriorityActionSelection(option.purpose);
+                const isCheckoutAction = !action.createsRun;
+                const isDisabled = isLoading || isActionLoading || (isCheckoutAction && !isOwnedByCurrentUser);
+                return (
+                  <Button
+                    key={option.purpose}
+                    size="sm"
+                    variant={selectedPriority === option.purpose ? "default" : "outline"}
+                    onClick={() => {
+                      setSelectedPriority(option.purpose);
+                      setPriorityError(null);
+                    }}
+                    disabled={isDisabled}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
             </div>
             {priorityError ? <div className="text-xs text-destructive">{priorityError}</div> : null}
           </div>
