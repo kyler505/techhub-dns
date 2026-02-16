@@ -162,14 +162,16 @@ export default function VehicleCommandCard({
       {hasActions ? (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void onCheckin?.()}
-              disabled={isLoading || isActionLoading || !canCheckin}
-            >
-              Check in
-            </Button>
+            {isOwnedByCurrentUser ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void onCheckin?.()}
+                disabled={isLoading || isActionLoading || !canCheckin}
+              >
+                Check in
+              </Button>
+            ) : null}
             <Button
               size="sm"
               onClick={() => void handlePrimaryAction()}
