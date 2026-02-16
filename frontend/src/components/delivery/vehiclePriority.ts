@@ -15,6 +15,38 @@ export const VEHICLE_CHECKOUT_PURPOSE_LABELS = DELIVERY_RUN_PRIORITY_OPTIONS.map
 export type DeliveryRunPriorityPurpose = (typeof DELIVERY_RUN_PRIORITY_OPTIONS)[number]["purpose"];
 export type VehicleCheckoutPurposeLabel = DeliveryRunPriorityPurpose;
 
+export type PriorityActionSelection = {
+  buttonLabel: "Start Run" | "Check Out";
+  checkoutType: "delivery_run" | "other";
+  purpose: DeliveryRunPriorityPurpose;
+  createsRun: boolean;
+};
+
+const PRIORITY_ACTION_BY_PURPOSE: Record<DeliveryRunPriorityPurpose, PriorityActionSelection> = {
+  Delivery: {
+    buttonLabel: "Start Run",
+    checkoutType: "delivery_run",
+    purpose: "Delivery",
+    createsRun: true,
+  },
+  "Tech Duty": {
+    buttonLabel: "Check Out",
+    checkoutType: "other",
+    purpose: "Tech Duty",
+    createsRun: false,
+  },
+  Administrative: {
+    buttonLabel: "Check Out",
+    checkoutType: "other",
+    purpose: "Administrative",
+    createsRun: false,
+  },
+};
+
+export function getPriorityActionSelection(priority: DeliveryRunPriorityPurpose): PriorityActionSelection {
+  return PRIORITY_ACTION_BY_PURPOSE[priority];
+}
+
 export type PrioritySemantics = {
   tier: PriorityTier;
   label: string;
