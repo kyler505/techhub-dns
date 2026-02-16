@@ -5,11 +5,11 @@ import type { DeliveryRunResponse } from "../../api/deliveryRuns";
 import type { ListVehicleCheckoutsResponse, VehicleStatusItem } from "../../api/vehicleCheckouts";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import {
   DELIVERY_RUN_PRIORITY_OPTIONS,
   derivePrioritySemantics,
   formatTimeSince,
+  getPriorityActionSelection,
   type DeliveryRunPriorityPurpose,
 } from "./vehiclePriority";
 
@@ -20,7 +20,7 @@ type Props = {
   status: VehicleStatusItem;
   isLoading?: boolean;
   isActionLoading?: boolean;
-  onCheckoutOther?: (purpose: string) => Promise<boolean>;
+  onCheckoutOther?: (priorityPurpose: DeliveryRunPriorityPurpose) => Promise<void>;
   onCheckin?: () => Promise<void>;
   onStartRun?: (priorityPurpose: DeliveryRunPriorityPurpose) => Promise<void>;
   startRunDisabledReason?: string | null;
@@ -84,10 +84,8 @@ export default function VehicleCommandCard({
   const checkedOutBy = status.checked_out_by?.trim() || "None";
   const purpose = status.purpose?.trim() || null;
   const since = formatTimeSince(status.checked_out_at);
-  const [checkoutPurpose, setCheckoutPurpose] = useState("");
-  const [checkoutFormOpen, setCheckoutFormOpen] = useState(false);
-  const [runPriority, setRunPriority] = useState<DeliveryRunPriorityPurpose | null>(null);
-  const [runPriorityError, setRunPriorityError] = useState<string | null>(null);
+  const [selectedPriority, setSelectedPriority] = useState<DeliveryRunPriorityPurpose | null>(null);
+  const [priorityError, setPriorityError] = useState<string | null>(null);
 
   const canCheckoutOther = !status.checked_out && !status.delivery_run_active;
   const canCheckin = status.checked_out;
@@ -99,25 +97,36 @@ export default function VehicleCommandCard({
   const resolvedHistoryRuns = historyRuns ?? [];
   const resolvedStartDisabledReason = startRunDisabledReason ?? null;
 
-  const handleCheckoutOther = async () => {
-    const trimmedPurpose = checkoutPurpose.trim();
-    if (!trimmedPurpose) return;
-    if (!onCheckoutOther) return;
-    const success = await onCheckoutOther(trimmedPurpose);
-    if (!success) return;
-    setCheckoutPurpose("");
-    setCheckoutFormOpen(false);
-  };
+  const selectedAction = selectedPriority ? getPriorityActionSelection(selectedPriority) : null;
+  const isPriorityForStartRun = selectedAction?.createsRun ?? false;
+  const isActionDisabled = selectedAction
+    ? isPriorityForStartRun
+      ? isLoading || isActionLoading || Boolean(resolvedStartDisabledReason)
+      : isLoading || isActionLoading || !canCheckoutOther
+    : true;
 
-  const handleStartRun = async () => {
-    if (!onStartRun) return;
-    if (!runPriority) {
-      setRunPriorityError("Select a run priority before starting.");
+  const actionDisabledReason = selectedAction
+    ? isPriorityForStartRun
+      ? resolvedStartDisabledReason
+      : status.delivery_run_active
+        ? "Vehicle already has an active run"
+        : status.checked_out
+          ? "Vehicle is already checked out. Check in before checking out again."
+          : null
+    : null;
+
+  const handlePrimaryAction = async () => {
+    if (!selectedPriority) {
+      setPriorityError("Select a priority before continuing.");
       return;
     }
 
-    setRunPriorityError(null);
-    await onStartRun(runPriority);
+    setPriorityError(null);
+    if (getPriorityActionSelection(selectedPriority).createsRun) {
+      await onStartRun?.(selectedPriority);
+      return;
+    }
+    await onCheckoutOther?.(selectedPriority);
   };
 
   return (
@@ -154,14 +163,6 @@ export default function VehicleCommandCard({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setCheckoutFormOpen((previous) => !previous)}
-              disabled={isLoading || isActionLoading || !canCheckoutOther}
-            >
-              Check out (Other)
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
               onClick={() => void onCheckin?.()}
               disabled={isLoading || isActionLoading || !canCheckin}
             >
@@ -169,65 +170,37 @@ export default function VehicleCommandCard({
             </Button>
             <Button
               size="sm"
-              onClick={() => void handleStartRun()}
-              disabled={isLoading || isActionLoading || Boolean(resolvedStartDisabledReason)}
+              onClick={() => void handlePrimaryAction()}
+              disabled={isActionDisabled}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              Start Run
+              {selectedAction?.buttonLabel ?? "Select Priority"}
             </Button>
           </div>
 
           <div className="mt-2 space-y-2">
-            <div className="text-xs font-medium text-foreground">Run priority (required)</div>
+            <div className="text-xs font-medium text-foreground">Priority (required)</div>
             <div className="flex flex-wrap gap-2">
               {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => (
                 <Button
                   key={option.purpose}
                   size="sm"
-                  variant={runPriority === option.purpose ? "default" : "outline"}
+                  variant={selectedPriority === option.purpose ? "default" : "outline"}
                   onClick={() => {
-                    setRunPriority(option.purpose);
-                    setRunPriorityError(null);
+                    setSelectedPriority(option.purpose);
+                    setPriorityError(null);
                   }}
-                  disabled={isLoading || isActionLoading || Boolean(resolvedStartDisabledReason)}
+                  disabled={isLoading || isActionLoading}
                 >
                   {option.label}
                 </Button>
               ))}
             </div>
-            {runPriorityError ? <div className="text-xs text-destructive">{runPriorityError}</div> : null}
+            {priorityError ? <div className="text-xs text-destructive">{priorityError}</div> : null}
           </div>
 
-          {resolvedStartDisabledReason ? (
-            <div className="mt-2 text-xs text-muted-foreground">{resolvedStartDisabledReason}</div>
-          ) : null}
-
-          {checkoutFormOpen ? (
-            <div className="mt-3 rounded border border-border p-2">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-                <Input
-                  value={checkoutPurpose}
-                  onChange={(event) => setCheckoutPurpose(event.target.value)}
-                  placeholder="Purpose (required)"
-                  disabled={isLoading || isActionLoading}
-                />
-                <Button
-                  size="sm"
-                  onClick={() => void handleCheckoutOther()}
-                  disabled={isLoading || isActionLoading || !checkoutPurpose.trim()}
-                >
-                  Confirm
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setCheckoutFormOpen(false)}
-                  disabled={isLoading || isActionLoading}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
+          {actionDisabledReason ? (
+            <div className="mt-2 text-xs text-muted-foreground">{actionDisabledReason}</div>
           ) : null}
         </>
       ) : null}

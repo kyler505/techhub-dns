@@ -30,7 +30,10 @@ import { useVehicleStatuses } from "../../hooks/useVehicleStatuses";
 import type { User } from "../../contexts/AuthContext";
 import type { Order } from "../../types/order";
 import { OrderStatus } from "../../types/order";
-import type { DeliveryRunPriorityPurpose } from "../../components/delivery/vehiclePriority";
+import {
+  getPriorityActionSelection,
+  type DeliveryRunPriorityPurpose,
+} from "../../components/delivery/vehiclePriority";
 import { formatDeliveryLocation } from "../../utils/location";
 
 type VehicleDescriptor = {
@@ -301,31 +304,46 @@ export default function DeliveryDispatchPage() {
     [doStartRun, getStartDisabledReason]
   );
 
-  const handleCheckoutOther = useCallback(async (vehicle: Vehicle, purpose: string): Promise<boolean> => {
-    const trimmedPurpose = purpose.trim();
-    if (!trimmedPurpose) {
-      toast.error("Purpose is required");
-      return false;
-    }
+  const handleCheckoutOther = useCallback(
+    async (vehicle: Vehicle, selectedPriority: DeliveryRunPriorityPurpose): Promise<void> => {
+      const selectedAction = getPriorityActionSelection(selectedPriority);
+      if (selectedAction.createsRun) {
+        toast.error("Select Tech Duty or Administrative to check out without starting a run");
+        return;
+      }
 
-    setActiveVehicleAction(vehicle);
-    try {
-      await vehicleCheckoutsApi.checkout({
-        vehicle,
-        checkout_type: "other",
-        purpose: trimmedPurpose,
-      });
-      toast.success("Vehicle checked out");
-      await refreshStatuses();
-      return true;
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-      await refreshStatuses();
-      return false;
-    } finally {
-      setActiveVehicleAction((current) => (current === vehicle ? null : current));
-    }
-  }, [refreshStatuses]);
+      setActiveVehicleAction(vehicle);
+      try {
+        const status = statusByVehicle[vehicle];
+        if (status.delivery_run_active) {
+          toast.error("Vehicle already has an active run");
+          await refreshStatuses();
+          return;
+        }
+
+        if (status.checked_out) {
+          const checkedOutBy = status.checked_out_by?.trim();
+          toast.error(checkedOutBy ? `Checked out by ${checkedOutBy}` : "Vehicle is already checked out");
+          await refreshStatuses();
+          return;
+        }
+
+        await vehicleCheckoutsApi.checkout({
+          vehicle,
+          checkout_type: selectedAction.checkoutType,
+          purpose: selectedAction.purpose,
+        });
+        toast.success(`Vehicle checked out for ${selectedAction.purpose}`);
+        await refreshStatuses();
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+        await refreshStatuses();
+      } finally {
+        setActiveVehicleAction((current) => (current === vehicle ? null : current));
+      }
+    },
+    [refreshStatuses, statusByVehicle]
+  );
 
   const handleCheckin = useCallback(async (vehicle: Vehicle): Promise<void> => {
     setActiveVehicleAction(vehicle);
