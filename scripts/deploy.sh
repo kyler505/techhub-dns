@@ -14,6 +14,7 @@ set -e  # Exit on error
 # Configuration
 PROJECT_ROOT="${PROJECT_ROOT:-/home/techhub/techhub-dns}"
 WSGI_FILE="${WSGI_FILE:-/var/www/techhub_pythonanywhere_com_wsgi.py}"
+WEBAPP_DOMAIN="${WEBAPP_DOMAIN:-}"
 BRANCH="${BRANCH:-main}"
 LOG_FILE="${LOG_FILE:-${PROJECT_ROOT}/deploy.log}"
 RUNNING_FILE="${RUNNING_FILE:-${PROJECT_ROOT}/.deploy.running}"
@@ -22,6 +23,15 @@ LOCKFILE="${LOCKFILE:-${PROJECT_ROOT}/frontend/package-lock.json}"
 # Log function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+reload_with_wsgi_touch() {
+    if [ -f "$WSGI_FILE" ]; then
+        touch "$WSGI_FILE"
+        log "Touched WSGI file - app will reload"
+    else
+        log "WARNING: WSGI file not found at $WSGI_FILE"
+    fi
 }
 
 install_frontend_deps() {
@@ -118,12 +128,21 @@ fi
 log "Recent commits:"
 git log --oneline -3
 
-# Touch WSGI file to trigger reload
-if [ -f "$WSGI_FILE" ]; then
-    touch "$WSGI_FILE"
-    log "Touched WSGI file - app will reload"
+# Reload web app (prefer PythonAnywhere CLI when available)
+if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
+    if pa website reload --domain "$WEBAPP_DOMAIN"; then
+        log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
+    else
+        log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; falling back to WSGI touch"
+        reload_with_wsgi_touch
+    fi
 else
-    log "WARNING: WSGI file not found at $WSGI_FILE"
+    if [ -z "$WEBAPP_DOMAIN" ]; then
+        log "WEBAPP_DOMAIN not set; using WSGI touch fallback"
+    else
+        log "PythonAnywhere CLI (pa) not found; using WSGI touch fallback"
+    fi
+    reload_with_wsgi_touch
 fi
 
 log "=========================================="
