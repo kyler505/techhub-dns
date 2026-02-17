@@ -178,7 +178,7 @@ export default function VehicleCommandCard({
                     className={
                       isSelected
                         ? "border-accent bg-accent text-accent-foreground hover:bg-accent/90 hover:text-accent-foreground"
-                        : "border-border bg-background text-foreground hover:border-accent/40 hover:bg-accent/10"
+                        : "border-border bg-background text-foreground"
                     }
                     onClick={() => {
                       setSelectedPriority(option.purpose);
