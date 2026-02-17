@@ -293,7 +293,7 @@ export default function DeliveryDispatchPage() {
   const handleStartRun = useCallback(
     async (vehicle: Vehicle, checkoutPurpose: DeliveryRunPriorityPurpose): Promise<void> => {
       if (!checkoutPurpose.trim()) {
-        toast.error("Select a run priority before starting");
+        toast.error("Select a run purpose before starting");
         return;
       }
 

@@ -3,9 +3,9 @@ import type { VehicleStatusItem } from "../../api/vehicleCheckouts";
 type PriorityTier = "P1" | "P2" | "P3";
 
 export const DELIVERY_RUN_PRIORITY_OPTIONS = [
-  { tier: "P1", purpose: "Delivery", label: "P1 - Delivery" },
-  { tier: "P2", purpose: "Tech Duty", label: "P2 - Tech Duty" },
-  { tier: "P3", purpose: "Administrative", label: "P3 - Administrative" },
+  { tier: "P1", purpose: "Delivery", label: "Delivery" },
+  { tier: "P2", purpose: "Tech Duty", label: "Tech Duty" },
+  { tier: "P3", purpose: "Administrative", label: "Administrative" },
 ] as const;
 
 export const VEHICLE_CHECKOUT_PURPOSE_LABELS = DELIVERY_RUN_PRIORITY_OPTIONS.map(
