@@ -30,7 +30,7 @@ const prefetchRoutes = () => {
 };
 
 function AppContent() {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, isLoading } = useAuth();
     const location = useLocation();
 
     useEffect(() => {
@@ -43,13 +43,21 @@ function AppContent() {
         return () => idleCancel(id as number);
     }, []);
 
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <Skeleton className="w-96 h-96 rounded-lg" />
+            </div>
+        );
+    }
+
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
                 <Suspense fallback={<Skeleton className="w-96 h-96 rounded-lg" />}>
                     <Routes>
                         <Route path="/login" element={<Login />} />
-                        <Route path="*" element={<Navigate to="/login" replace />} />
+                        <Route path="*" element={<Navigate to="/login" state={{ from: location }} replace />} />
                     </Routes>
                 </Suspense>
             </div>
