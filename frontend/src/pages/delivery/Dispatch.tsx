@@ -14,7 +14,7 @@ import {
 import VehicleCommandCard from "../../components/delivery/VehicleCommandCard";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Card, CardContent } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
@@ -391,32 +391,24 @@ export default function DeliveryDispatchPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+    <div className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Pre-Delivery Orders</h2>
             <p className="text-xs text-muted-foreground">Select orders and review dispatch readiness.</p>
           </div>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Selected orders</div>
-                  <div className="text-lg font-semibold">{selectedOrders.size}</div>
-                </div>
-                <div className="rounded border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Unique locations</div>
-                  <div className="text-lg font-semibold">{selectedLocationCount}</div>
-                </div>
-                <div className="rounded border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Partial picks</div>
-                  <div className="text-lg font-semibold">{selectedPartialPickCount}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">Selected</span>
+            <span className="font-semibold text-foreground">{selectedOrders.size}</span>
+            <span className="text-border">|</span>
+            <span className="text-muted-foreground">Locations</span>
+            <span className="font-semibold text-foreground">{selectedLocationCount}</span>
+            <span className="text-border">|</span>
+            <span className="text-muted-foreground">Partial picks</span>
+            <span className="font-semibold text-foreground">{selectedPartialPickCount}</span>
+          </div>
 
           <Card>
             <CardContent className="space-y-3 p-4">
@@ -433,16 +425,14 @@ export default function DeliveryDispatchPage() {
               </div>
 
               {preDeliveryOrders.length === 0 ? (
-                <div className="rounded border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-                  No pre-delivery orders
-                </div>
+                <div className="py-8 text-center text-sm text-muted-foreground">No pre-delivery orders</div>
               ) : (
-                <div className="space-y-2 xl:max-h-[620px] xl:overflow-y-auto xl:pr-1">
+                <div className="divide-y divide-border/60 xl:max-h-[620px] xl:overflow-y-auto xl:pr-1">
                   {preDeliveryOrders.map((order) => {
                     const isSelected = selectedOrders.has(order.id);
 
                     return (
-                      <div key={order.id} className="rounded border border-border p-3">
+                      <div key={order.id} className="py-3 first:pt-0 last:pb-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="space-y-1">
                             <button
@@ -484,19 +474,17 @@ export default function DeliveryDispatchPage() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Active Delivery Orders</CardTitle>
-              <CardDescription>Current run and in-delivery visibility</CardDescription>
-            </CardHeader>
+            <div className="px-4 pt-4">
+              <h3 className="text-sm font-semibold">Active Delivery Orders</h3>
+              <p className="text-xs text-muted-foreground">Current run and in-delivery visibility</p>
+            </div>
             <CardContent className="space-y-2 p-4">
               {activeDeliveryPreview.length === 0 ? (
-                <div className="rounded border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-                  No orders are currently in delivery
-                </div>
+                <div className="py-6 text-center text-xs text-muted-foreground">No orders are currently in delivery</div>
               ) : (
-                <div className="space-y-2">
+                <div className="divide-y divide-border/60">
                   {activeDeliveryPreview.map((order) => (
-                    <div key={order.id} className="rounded border border-border p-2">
+                    <div key={order.id} className="py-2 first:pt-0 last:pb-0">
                       <div className="flex items-start justify-between gap-2">
                         <button
                           type="button"
@@ -528,64 +516,54 @@ export default function DeliveryDispatchPage() {
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Fleet Command</h2>
-              <p className="text-xs text-muted-foreground">
-                Check out, check in, and start delivery runs directly from each vehicle.
-              </p>
+            <p className="text-xs text-muted-foreground">
+              Check out, check in, and start delivery runs directly from each vehicle.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-border bg-muted/30 p-1">
+            <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Select vehicle">
+              {VEHICLES.map((vehicle) => {
+                const isActive = vehicle.id === selectedVehicleId;
+
+                return (
+                  <button
+                    key={vehicle.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`min-h-9 rounded-md px-3 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                    }`}
+                    onClick={() => setSelectedVehicleId(vehicle.id)}
+                  >
+                    {vehicle.label}
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            <div className="rounded-lg border border-border bg-muted/30 p-1">
-              <div
-                className="grid grid-cols-2 gap-1"
-                role="tablist"
-                aria-label="Select vehicle"
-              >
-                {VEHICLES.map((vehicle) => {
-                  const isActive = vehicle.id === selectedVehicleId;
-
-                  return (
-                    <button
-                      key={vehicle.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      className={`min-h-9 rounded-md px-3 text-sm font-medium transition-colors ${
-                        isActive
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
-                      }`}
-                      onClick={() => setSelectedVehicleId(vehicle.id)}
-                    >
-                      {vehicle.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <Card>
-              <CardContent className="space-y-3 p-4">
-                <div className="grid gap-3">
-                  {selectedVehicle ? (
-                    <VehicleCommandCard
-                      key={selectedVehicle.id}
-                      label={selectedVehicle.label}
-                      status={statusByVehicle[selectedVehicle.id]}
-                      isLoading={statusesLoading}
-                      isActionLoading={activeVehicleAction === selectedVehicle.id}
-                      onCheckoutOther={(purpose) => handleCheckoutOther(selectedVehicle.id, purpose)}
-                      onCheckin={() => handleCheckin(selectedVehicle.id)}
-                      onStartRun={(priorityPurpose) => handleStartRun(selectedVehicle.id, priorityPurpose)}
-                      startRunDisabledReason={getStartDisabledReason(selectedVehicle.id)}
-                      isOwnedByCurrentUser={checkedOutByCurrentUser(statusByVehicle[selectedVehicle.id], user)}
-                    />
-                  ) : (
-                    <div className="rounded border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
-                      No vehicles available
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid gap-3">
+            {selectedVehicle ? (
+              <VehicleCommandCard
+                key={selectedVehicle.id}
+                label={selectedVehicle.label}
+                status={statusByVehicle[selectedVehicle.id]}
+                isLoading={statusesLoading}
+                isActionLoading={activeVehicleAction === selectedVehicle.id}
+                onCheckoutOther={(purpose) => handleCheckoutOther(selectedVehicle.id, purpose)}
+                onCheckin={() => handleCheckin(selectedVehicle.id)}
+                onStartRun={(priorityPurpose) => handleStartRun(selectedVehicle.id, priorityPurpose)}
+                startRunDisabledReason={getStartDisabledReason(selectedVehicle.id)}
+                isOwnedByCurrentUser={checkedOutByCurrentUser(statusByVehicle[selectedVehicle.id], user)}
+              />
+            ) : (
+              <div className="py-6 text-center text-sm text-muted-foreground">No vehicles available</div>
+            )}
+          </div>
         </section>
       </div>
 
