@@ -160,8 +160,40 @@ export default function VehicleCommandCard({
         )}
       </div>
 
-      {hasActions ? (
-        <>
+        {hasActions ? (
+          <>
+          <div className="mt-3 space-y-2">
+            <div className="text-xs font-medium text-foreground">Purpose (required)</div>
+            <div className="flex flex-wrap gap-2">
+              {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
+                const action = getPriorityActionSelection(option.purpose);
+                const isCheckoutAction = !action.createsRun;
+                const isDisabled = isLoading || isActionLoading || (isCheckoutAction && isCheckedOutByAnotherUser);
+                const isSelected = selectedPriority === option.purpose;
+                return (
+                  <Button
+                    key={option.purpose}
+                    size="sm"
+                    variant="outline"
+                    className={
+                      isSelected
+                        ? "border-accent bg-accent text-accent-foreground hover:bg-accent/90 hover:text-accent-foreground"
+                        : "border-border bg-background text-foreground hover:border-accent/40 hover:bg-accent/10"
+                    }
+                    onClick={() => {
+                      setSelectedPriority(option.purpose);
+                      setPriorityError(null);
+                    }}
+                    disabled={isDisabled}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </div>
+            {priorityError ? <div className="text-xs text-destructive">{priorityError}</div> : null}
+          </div>
+
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {isOwnedByCurrentUser ? (
               <Button
@@ -181,32 +213,6 @@ export default function VehicleCommandCard({
             >
               {selectedAction?.buttonLabel ?? "Select Purpose"}
             </Button>
-          </div>
-
-          <div className="mt-2 space-y-2">
-            <div className="text-xs font-medium text-foreground">Purpose (required)</div>
-            <div className="flex flex-wrap gap-2">
-              {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
-                const action = getPriorityActionSelection(option.purpose);
-                const isCheckoutAction = !action.createsRun;
-                const isDisabled = isLoading || isActionLoading || (isCheckoutAction && isCheckedOutByAnotherUser);
-                return (
-                  <Button
-                    key={option.purpose}
-                    size="sm"
-                    variant={selectedPriority === option.purpose ? "default" : "outline"}
-                    onClick={() => {
-                      setSelectedPriority(option.purpose);
-                      setPriorityError(null);
-                    }}
-                    disabled={isDisabled}
-                  >
-                    {option.label}
-                  </Button>
-                );
-              })}
-            </div>
-            {priorityError ? <div className="text-xs text-destructive">{priorityError}</div> : null}
           </div>
 
           {actionDisabledReason ? (
