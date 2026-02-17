@@ -396,7 +396,6 @@ export default function DeliveryDispatchPage() {
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Pre-Delivery Orders</h2>
-            <p className="text-xs text-muted-foreground">Select orders and review dispatch readiness.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs">
@@ -476,7 +475,6 @@ export default function DeliveryDispatchPage() {
           <Card>
             <div className="px-4 pt-4">
               <h3 className="text-sm font-semibold">Active Delivery Orders</h3>
-              <p className="text-xs text-muted-foreground">Current run and in-delivery visibility</p>
             </div>
             <CardContent className="space-y-2 p-4">
               {activeDeliveryPreview.length === 0 ? (
@@ -516,9 +514,6 @@ export default function DeliveryDispatchPage() {
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Fleet Command</h2>
-            <p className="text-xs text-muted-foreground">
-              Check out, check in, and start delivery runs directly from each vehicle.
-            </p>
           </div>
 
           <div className="rounded-lg border border-border bg-muted/30 p-1">
