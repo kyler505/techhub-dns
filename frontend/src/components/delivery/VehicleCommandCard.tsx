@@ -120,7 +120,7 @@ export default function VehicleCommandCard({
 
   const handlePrimaryAction = async () => {
     if (!selectedPriority) {
-      setPriorityError("Select a priority before continuing.");
+      setPriorityError("Select a purpose before continuing.");
       return;
     }
 
@@ -179,12 +179,12 @@ export default function VehicleCommandCard({
               disabled={isActionDisabled}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              {selectedAction?.buttonLabel ?? "Select Priority"}
+              {selectedAction?.buttonLabel ?? "Select Purpose"}
             </Button>
           </div>
 
           <div className="mt-2 space-y-2">
-            <div className="text-xs font-medium text-foreground">Priority (required)</div>
+            <div className="text-xs font-medium text-foreground">Purpose (required)</div>
             <div className="flex flex-wrap gap-2">
               {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
                 const action = getPriorityActionSelection(option.purpose);
