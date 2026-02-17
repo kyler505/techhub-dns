@@ -12,12 +12,12 @@
 set -e  # Exit on error
 
 # Configuration
-PROJECT_ROOT="/home/techhub/techhub-dns"
-WSGI_FILE="/var/www/techhub_pythonanywhere_com_wsgi.py"
-LOG_FILE="${PROJECT_ROOT}/deploy.log"
-BRANCH="main"
-RUNNING_FILE="${PROJECT_ROOT}/.deploy.running"
-LOCKFILE="${PROJECT_ROOT}/frontend/package-lock.json"
+PROJECT_ROOT="${PROJECT_ROOT:-/home/techhub/techhub-dns}"
+WSGI_FILE="${WSGI_FILE:-/var/www/techhub_pythonanywhere_com_wsgi.py}"
+BRANCH="${BRANCH:-main}"
+LOG_FILE="${LOG_FILE:-${PROJECT_ROOT}/deploy.log}"
+RUNNING_FILE="${RUNNING_FILE:-${PROJECT_ROOT}/.deploy.running}"
+LOCKFILE="${LOCKFILE:-${PROJECT_ROOT}/frontend/package-lock.json}"
 
 # Log function
 log() {
