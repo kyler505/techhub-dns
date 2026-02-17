@@ -529,7 +529,7 @@ export default function DeliveryDispatchPage() {
                     aria-selected={isActive}
                     className={`min-h-9 rounded-md px-3 text-sm font-medium transition-colors ${
                       isActive
-                        ? "bg-background text-foreground shadow-sm"
+                        ? "bg-[hsl(0,72%,35%)] text-white shadow-sm"
                         : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
                     }`}
                     onClick={() => setSelectedVehicleId(vehicle.id)}
