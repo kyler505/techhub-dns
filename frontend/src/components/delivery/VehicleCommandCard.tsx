@@ -205,14 +205,16 @@ export default function VehicleCommandCard({
                 Check in
               </Button>
             ) : null}
-            <Button
-              size="sm"
-              onClick={() => void handlePrimaryAction()}
-              disabled={isActionDisabled}
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
-            >
-              {selectedAction?.buttonLabel ?? "Select Purpose"}
-            </Button>
+            {!isOwnedByCurrentUser ? (
+              <Button
+                size="sm"
+                onClick={() => void handlePrimaryAction()}
+                disabled={isActionDisabled}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {selectedAction?.buttonLabel ?? "Select Purpose"}
+              </Button>
+            ) : null}
           </div>
 
           {actionDisabledReason ? (
