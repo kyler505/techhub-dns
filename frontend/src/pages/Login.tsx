@@ -17,8 +17,32 @@ export default function Login() {
     // Redirect if already authenticated
     useEffect(() => {
         if (!isLoading && isAuthenticated) {
-            const from = (location.state as any)?.from?.pathname || '/';
-            navigate(from, { replace: true });
+            const state = location.state as
+                | {
+                      from?: {
+                          pathname?: string;
+                          search?: string;
+                          hash?: string;
+                      };
+                  }
+                | null;
+
+            const stateDestination = state?.from
+                ? `${state.from.pathname ?? ''}${state.from.search ?? ''}${state.from.hash ?? ''}`
+                : '';
+
+            let storedDestination = '';
+            if (typeof window !== 'undefined') {
+                try {
+                    storedDestination = window.sessionStorage.getItem('auth:returnTo') ?? '';
+                    window.sessionStorage.removeItem('auth:returnTo');
+                } catch (_error) {
+                    storedDestination = '';
+                }
+            }
+
+            const destination = stateDestination || storedDestination || '/';
+            navigate(destination.startsWith('/') ? destination : '/', { replace: true });
         }
     }, [isAuthenticated, isLoading, navigate, location]);
 
