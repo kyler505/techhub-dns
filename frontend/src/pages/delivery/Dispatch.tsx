@@ -87,6 +87,7 @@ export default function DeliveryDispatchPage() {
   const [loading, setLoading] = useState(true);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [activeVehicleAction, setActiveVehicleAction] = useState<Vehicle | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<Vehicle | null>(VEHICLES[0]?.id ?? null);
 
   const [partialPickDialogOpen, setPartialPickDialogOpen] = useState(false);
   const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
@@ -136,6 +137,11 @@ export default function DeliveryDispatchPage() {
   const selectedPartialPickCount = useMemo(
     () => selectedOrdersList.filter((order) => order.pick_status && !order.pick_status.is_fully_picked).length,
     [selectedOrdersList]
+  );
+
+  const selectedVehicle = useMemo(
+    () => VEHICLES.find((vehicle) => vehicle.id === selectedVehicleId) ?? null,
+    [selectedVehicleId]
   );
 
   const selectedLocationCount = useMemo(() => {
@@ -522,37 +528,64 @@ export default function DeliveryDispatchPage() {
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Fleet Command</h2>
-            <p className="text-xs text-muted-foreground">
-              Check out, check in, and start delivery runs directly from each vehicle.
-            </p>
-          </div>
+              <p className="text-xs text-muted-foreground">
+                Check out, check in, and start delivery runs directly from each vehicle.
+              </p>
+            </div>
 
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <div className="grid gap-3">
+            <div className="rounded-lg border border-border bg-muted/30 p-1">
+              <div
+                className="grid grid-cols-2 gap-1"
+                role="tablist"
+                aria-label="Select vehicle"
+              >
                 {VEHICLES.map((vehicle) => {
-                  const status = statusByVehicle[vehicle.id];
-                  const isActionLoading = activeVehicleAction === vehicle.id;
-                  const isOwnedByCurrentUser = checkedOutByCurrentUser(status, user);
+                  const isActive = vehicle.id === selectedVehicleId;
 
                   return (
-                    <VehicleCommandCard
+                    <button
                       key={vehicle.id}
-                      label={vehicle.label}
-                      status={status}
-                      isLoading={statusesLoading}
-                      isActionLoading={isActionLoading}
-                      onCheckoutOther={(purpose) => handleCheckoutOther(vehicle.id, purpose)}
-                      onCheckin={() => handleCheckin(vehicle.id)}
-                      onStartRun={(priorityPurpose) => handleStartRun(vehicle.id, priorityPurpose)}
-                      startRunDisabledReason={getStartDisabledReason(vehicle.id)}
-                      isOwnedByCurrentUser={isOwnedByCurrentUser}
-                    />
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`min-h-9 rounded-md px-3 text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                      }`}
+                      onClick={() => setSelectedVehicleId(vehicle.id)}
+                    >
+                      {vehicle.label}
+                    </button>
                   );
                 })}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <div className="grid gap-3">
+                  {selectedVehicle ? (
+                    <VehicleCommandCard
+                      key={selectedVehicle.id}
+                      label={selectedVehicle.label}
+                      status={statusByVehicle[selectedVehicle.id]}
+                      isLoading={statusesLoading}
+                      isActionLoading={activeVehicleAction === selectedVehicle.id}
+                      onCheckoutOther={(purpose) => handleCheckoutOther(selectedVehicle.id, purpose)}
+                      onCheckin={() => handleCheckin(selectedVehicle.id)}
+                      onStartRun={(priorityPurpose) => handleStartRun(selectedVehicle.id, priorityPurpose)}
+                      startRunDisabledReason={getStartDisabledReason(selectedVehicle.id)}
+                      isOwnedByCurrentUser={checkedOutByCurrentUser(statusByVehicle[selectedVehicle.id], user)}
+                    />
+                  ) : (
+                    <div className="rounded border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
+                      No vehicles available
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
         </section>
       </div>
 
