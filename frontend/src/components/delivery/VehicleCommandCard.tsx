@@ -92,6 +92,7 @@ export default function VehicleCommandCard({
   const canCheckoutOther = !status.checked_out && !status.delivery_run_active;
   const canCheckin = status.checked_out;
   const isCheckedOutByAnotherUser = status.checked_out && !isOwnedByCurrentUser;
+  const showPurposeSelector = !isOwnedByCurrentUser && canCheckoutOther;
   const hasActions = Boolean(onCheckoutOther && onCheckin && onStartRun);
   const hasHistory = Boolean(onToggleHistory);
   const resolvedHistoryOpen = historyOpen ?? false;
@@ -162,7 +163,7 @@ export default function VehicleCommandCard({
 
         {hasActions ? (
           <>
-          {!isOwnedByCurrentUser ? (
+          {showPurposeSelector ? (
             <div className="mt-3 space-y-2">
               <div className="text-xs font-medium text-foreground">Purpose (required)</div>
               <div className="flex flex-wrap gap-2">
