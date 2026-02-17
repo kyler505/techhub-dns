@@ -210,7 +210,7 @@ export default function VehicleCommandCard({
                 Check in
               </Button>
             ) : null}
-            {!isOwnedByCurrentUser ? (
+            {!isOwnedByCurrentUser && !status.checked_out ? (
               <Button
                 size="sm"
                 onClick={() => void handlePrimaryAction()}
