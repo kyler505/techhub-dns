@@ -27,6 +27,15 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
 
     if (!isAuthenticated) {
+        if (typeof window !== 'undefined') {
+            const destination = `${location.pathname}${location.search}${location.hash}`;
+            try {
+                window.sessionStorage.setItem('auth:returnTo', destination);
+            } catch (_error) {
+                // Ignore storage write failures and fall back to router state.
+            }
+        }
+
         // Redirect to login, preserving the intended destination
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
