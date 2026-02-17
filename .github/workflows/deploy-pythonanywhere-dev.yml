@@ -1,0 +1,78 @@
+name: Deploy Dev to PythonAnywhere
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pythonanywhere-deploy-dev
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PA_SSH_PRIVATE_KEY }}
+
+      - name: Add PythonAnywhere host key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -4 -H ssh.pythonanywhere.com >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run deploy script over SSH
+        shell: bash
+        env:
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+        run: |
+          set -euo pipefail
+          ssh -4 \
+            -o AddressFamily=inet \
+            -o StrictHostKeyChecking=yes \
+            "${PA_USERNAME}@ssh.pythonanywhere.com" \
+            'PROJECT_ROOT=/home/techhub/techhub-dns-dev BRANCH=dev WSGI_FILE=/var/www/dev-techhub_pythonanywhere_com_wsgi.py bash ~/techhub-dns-dev/scripts/deploy.sh'
+
+      - name: Tail deploy.log on failure
+        if: failure()
+        shell: bash
+        env:
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+        run: |
+          set +e
+          ssh -4 \
+            -o AddressFamily=inet \
+            -o StrictHostKeyChecking=yes \
+            "${PA_USERNAME}@ssh.pythonanywhere.com" \
+            'tail -n 300 ~/techhub-dns-dev/deploy.log || true'
+
+      - name: Download deploy.log artifact on failure
+        if: failure()
+        shell: bash
+        env:
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+        run: |
+          set +e
+          scp -4 \
+            -o AddressFamily=inet \
+            -o StrictHostKeyChecking=yes \
+            "${PA_USERNAME}@ssh.pythonanywhere.com:~/techhub-dns-dev/deploy.log" \
+            ./deploy.log
+          ls -la ./deploy.log || true
+
+      - name: Upload deploy.log artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pythonanywhere-dev-deploy-log
+          path: deploy.log
+          if-no-files-found: ignore
