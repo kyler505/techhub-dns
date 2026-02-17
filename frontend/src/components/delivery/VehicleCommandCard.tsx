@@ -142,12 +142,14 @@ export default function VehicleCommandCard({
         </Badge>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <Badge variant={getPriorityBadgeVariant(priority.tier)}>{priority.label}</Badge>
-        {priority.isRecallable ? (
-          <span className="rounded border border-dashed border-border px-2 py-0.5 text-muted-foreground">Recallable</span>
-        ) : null}
-      </div>
+      {status.checked_out ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <Badge variant={getPriorityBadgeVariant(priority.tier)}>{priority.label}</Badge>
+          {priority.isRecallable ? (
+            <span className="rounded border border-dashed border-border px-2 py-0.5 text-muted-foreground">Recallable</span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-3 space-y-1 text-xs text-muted-foreground">
         {isLoading ? (
