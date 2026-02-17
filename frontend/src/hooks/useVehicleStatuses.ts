@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { toast } from "sonner";
 
 import {
   vehicleCheckoutsApi,
   type Vehicle,
   type VehicleStatusItem,
 } from "../api/vehicleCheckouts";
+import { useAuth } from "../contexts/AuthContext";
 
 export type VehicleStatus = VehicleStatusItem;
 
@@ -13,6 +15,26 @@ const VEHICLES: Vehicle[] = ["van", "golf_cart"];
 
 type StatusByVehicle = Record<Vehicle, VehicleStatus>;
 type VehicleStatusUpdatePayload = { vehicles: VehicleStatusItem[] };
+
+function getVehicleLabel(vehicle: Vehicle): string {
+  if (vehicle === "van") return "Van";
+  return "Golf Cart";
+}
+
+function isCheckedOutByCurrentUser(status: VehicleStatusItem, user: ReturnType<typeof useAuth>["user"]): boolean {
+  const checkedOutByUserId = status.checked_out_by_user_id;
+  if (checkedOutByUserId && user?.id) {
+    return checkedOutByUserId === user.id;
+  }
+
+  const checkedOutBy = status.checked_out_by;
+  if (!checkedOutBy) return false;
+
+  const candidates = [user?.display_name, user?.email].filter(
+    (value): value is string => typeof value === "string" && Boolean(value.trim())
+  );
+  return candidates.some((candidate) => candidate === checkedOutBy);
+}
 
 function buildStatusByVehicle(statuses: VehicleStatusItem[]): StatusByVehicle {
   const base: StatusByVehicle = {
@@ -54,6 +76,7 @@ export function useVehicleStatuses(): {
   error: string | null;
   refresh: () => Promise<void>;
 } {
+  const { user } = useAuth();
   const [statuses, setStatuses] = useState<VehicleStatusItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +122,31 @@ export function useVehicleStatuses(): {
 
     socket.on("vehicle_status_update", (payload: VehicleStatusUpdatePayload) => {
       if (!payload || !Array.isArray(payload.vehicles)) return;
-      setStatuses(payload.vehicles);
+
+      setStatuses((previousStatuses) => {
+        if (previousStatuses.length > 0) {
+          const previousByVehicle = buildStatusByVehicle(previousStatuses);
+
+          for (const nextStatus of payload.vehicles) {
+            const previousStatus = previousByVehicle[nextStatus.vehicle];
+            const transitionedToCheckedOutByAnotherUser =
+              !previousStatus.checked_out &&
+              nextStatus.checked_out &&
+              !isCheckedOutByCurrentUser(nextStatus, user);
+
+            if (!transitionedToCheckedOutByAnotherUser) continue;
+
+            const checkedOutBy = nextStatus.checked_out_by?.trim();
+            const vehicleLabel = getVehicleLabel(nextStatus.vehicle);
+            const message = checkedOutBy
+              ? `${vehicleLabel} was checked out by ${checkedOutBy}.`
+              : `${vehicleLabel} was checked out.`;
+            toast(message);
+          }
+        }
+
+        return payload.vehicles;
+      });
       setIsLoading(false);
       setError(null);
     });
@@ -111,7 +158,7 @@ export function useVehicleStatuses(): {
     return () => {
       socket.disconnect();
     };
-  }, [refresh]);
+  }, [refresh, user]);
 
   const statusByVehicle = useMemo(() => buildStatusByVehicle(statuses), [statuses]);
 
