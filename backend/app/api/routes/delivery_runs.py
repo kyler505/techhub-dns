@@ -7,6 +7,7 @@ import threading
 
 from app.database import get_db, get_db_session
 from app.api.auth_middleware import require_auth
+from app.api.vehicle_status_events import broadcast_vehicle_status_update_sync
 from app.services.delivery_run_service import DeliveryRunService
 from app.schemas.delivery_run import CreateDeliveryRunRequest, DeliveryRunResponse
 from app.models.delivery_run import VehicleEnum
@@ -68,6 +69,7 @@ def create_run():
 
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()
+            threading.Thread(target=broadcast_vehicle_status_update_sync).start()
 
             # Trigger Teams notifications for orders in delivery
             try:
@@ -195,6 +197,7 @@ def finish_run(run_id):
 
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()
+            threading.Thread(target=broadcast_vehicle_status_update_sync).start()
 
             response = DeliveryRunResponse(
                 id=run.id,

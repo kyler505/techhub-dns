@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 
 import {
   vehicleCheckoutsApi,
@@ -11,6 +12,7 @@ export type VehicleStatus = VehicleStatusItem;
 const VEHICLES: Vehicle[] = ["van", "golf_cart"];
 
 type StatusByVehicle = Record<Vehicle, VehicleStatus>;
+type VehicleStatusUpdatePayload = { vehicles: VehicleStatusItem[] };
 
 function buildStatusByVehicle(statuses: VehicleStatusItem[]): StatusByVehicle {
   const base: StatusByVehicle = {
@@ -71,6 +73,44 @@ export function useVehicleStatuses(): {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
+    let socket: Socket;
+
+    try {
+      socket = io(baseUrl, {
+        path: "/socket.io",
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
+    } catch {
+      return;
+    }
+
+    socket.on("connect", () => {
+      setError(null);
+      socket.emit("join", { room: "fleet" });
+      void refresh();
+    });
+
+    socket.on("vehicle_status_update", (payload: VehicleStatusUpdatePayload) => {
+      if (!payload || !Array.isArray(payload.vehicles)) return;
+      setStatuses(payload.vehicles);
+      setIsLoading(false);
+      setError(null);
+    });
+
+    socket.on("connect_error", () => {
+      setError("Socket.IO connection failed - using cached data");
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [refresh]);
 
   const statusByVehicle = useMemo(() => buildStatusByVehicle(statuses), [statuses]);
