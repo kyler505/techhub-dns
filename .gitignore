@@ -6,6 +6,7 @@ backend/venv/
 backend/.venv/
 backend/env/
 backend/storage/
+backend/certs/
 
 # Frontend
 frontend/node_modules/
