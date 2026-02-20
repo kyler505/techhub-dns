@@ -23,6 +23,28 @@ PUBLIC_ROUTES = [
     "/api/inflow/webhook",  # Inflow webhook callbacks
 ]
 
+STATIC_ROUTE_PREFIXES = (
+    "/assets/",
+    "/static/",
+)
+
+STATIC_ROUTE_EXACT = {
+    "/favicon.ico",
+    "/manifest.webmanifest",
+    "/site.webmanifest",
+    "/sw.js",
+    "/robots.txt",
+    "/apple-touch-icon.png",
+}
+
+
+def _is_static_asset_request(path: str) -> bool:
+    if path.startswith("/api/"):
+        return False
+    if path in STATIC_ROUTE_EXACT:
+        return True
+    return path.startswith(STATIC_ROUTE_PREFIXES)
+
 
 def init_auth_middleware(app):
     """
@@ -53,7 +75,11 @@ def init_auth_middleware(app):
         g.session = None
         g._auth_session = None
 
-        g._auth_session = None
+        path = request.path
+
+        # Skip auth session checks for static assets served by Flask SPA host.
+        if _is_static_asset_request(path):
+            return None
 
         # Check if SAML is configured
         if not saml_auth_service.is_configured():
@@ -90,7 +116,6 @@ def init_auth_middleware(app):
         # Check strict auth requirements (Authorization Phase)
         # We do this AFTER attempting to load the session so that public routes
         # (like /auth/me) can still access user info if logged in.
-        path = request.path
         if any(path.startswith(r) for r in PUBLIC_ROUTES):
             return None
 
