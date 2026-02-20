@@ -34,6 +34,26 @@ reload_with_wsgi_touch() {
     fi
 }
 
+remove_node_modules_with_retries() {
+    local max_attempts=5
+    local attempt=1
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        rm -rf node_modules 2>/dev/null || true
+
+        if [ ! -d node_modules ]; then
+            return 0
+        fi
+
+        log "WARNING: node_modules cleanup attempt ${attempt}/${max_attempts} did not fully remove directory"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    log "ERROR: Unable to remove node_modules after ${max_attempts} attempts"
+    return 1
+}
+
 install_frontend_deps() {
     local -a install_cmd
 
@@ -54,10 +74,18 @@ install_frontend_deps() {
         return 0
     fi
 
-    log "WARNING: Frontend dependency install failed; removing node_modules and retrying once"
-    rm -rf node_modules
+    log "WARNING: Frontend dependency install failed; cleaning node_modules and retrying once"
+    remove_node_modules_with_retries
     log "Retrying frontend dependency install..."
+    set +e
     "${install_cmd[@]}"
+    local second_attempt_status=$?
+    set -e
+
+    if [ "$second_attempt_status" -ne 0 ]; then
+        log "ERROR: Frontend dependency install failed after cleanup retry"
+        return 1
+    fi
 }
 
 # Deploy lock (prevents concurrent deploys)
