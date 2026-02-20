@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.config import settings
 from app.models.user import User
 from app.models.session import Session
+from app.utils.exceptions import DNSApiError
 
 logger = logging.getLogger(__name__)
 
@@ -45,25 +46,46 @@ class SamlAuthService:
         if self._settings_cache:
             return self._settings_cache
 
+        if not self.is_configured():
+            raise DNSApiError(
+                code="SAML_CONFIG_ERROR",
+                message="SAML is not fully configured",
+                status_code=503,
+                details={"reason": "missing_required_settings"},
+            )
+
         # Read IdP certificate
-        idp_cert = ""
-        if settings.saml_idp_cert_path:
-            cert_path = settings.saml_idp_cert_path
+        cert_path = self._resolve_cert_path(settings.saml_idp_cert_path)
+        if not cert_path:
+            raise DNSApiError(
+                code="SAML_CONFIG_ERROR",
+                message="SAML IdP certificate file not found",
+                status_code=503,
+                details={
+                    "reason": "cert_not_found",
+                    "cert_path": settings.saml_idp_cert_path,
+                },
+            )
 
-            # If default path doesn't exist, try resolving relative to project root
-            if not os.path.exists(cert_path):
-                # backend/app/services/saml_auth_service.py -> backend/
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                abs_path = os.path.join(project_root, cert_path)
-                if os.path.exists(abs_path):
-                    cert_path = abs_path
-                    logger.info(f"Resolved SAML cert path to: {cert_path}")
+        try:
+            with open(cert_path, "r", encoding="utf-8") as cert_file:
+                idp_cert = cert_file.read().strip()
+        except OSError as error:
+            logger.error("Failed reading SAML certificate at %s: %s", cert_path, error)
+            raise DNSApiError(
+                code="SAML_CONFIG_ERROR",
+                message="SAML IdP certificate file is unreadable",
+                status_code=503,
+                details={"reason": "cert_unreadable", "cert_path": cert_path},
+            ) from error
 
-            try:
-                with open(cert_path, 'r') as f:
-                    idp_cert = f.read()
-            except FileNotFoundError:
-                logger.error(f"SAML certificate not found: {cert_path} (cwd: {os.getcwd()})")
+        if not self._is_valid_pem_certificate(idp_cert):
+            raise DNSApiError(
+                code="SAML_CONFIG_ERROR",
+                message="SAML IdP certificate file is invalid",
+                status_code=503,
+                details={"reason": "cert_invalid_pem", "cert_path": cert_path},
+            )
 
         # Parse ACS URL for SP settings
         acs_parsed = urlparse(settings.saml_acs_url)
@@ -95,6 +117,45 @@ class SamlAuthService:
             }
         }
         return self._settings_cache
+
+    def _resolve_cert_path(self, configured_path: Optional[str]) -> Optional[str]:
+        if not configured_path:
+            return None
+
+        candidate_paths = []
+        if os.path.isabs(configured_path):
+            candidate_paths.append(configured_path)
+        else:
+            backend_root = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            repo_root = os.path.dirname(backend_root)
+            candidate_paths.extend(
+                [
+                    configured_path,
+                    os.path.join(backend_root, configured_path),
+                    os.path.join(repo_root, configured_path),
+                ]
+            )
+
+        for path in candidate_paths:
+            if os.path.exists(path):
+                if path != configured_path:
+                    logger.info("Resolved SAML cert path to: %s", path)
+                return path
+
+        logger.error(
+            "SAML certificate not found at configured path '%s' (cwd: %s)",
+            configured_path,
+            os.getcwd(),
+        )
+        return None
+
+    def _is_valid_pem_certificate(self, certificate_contents: str) -> bool:
+        return (
+            "-----BEGIN CERTIFICATE-----" in certificate_contents
+            and "-----END CERTIFICATE-----" in certificate_contents
+        )
 
     def get_or_create_user(
         self,
