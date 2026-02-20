@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
 from app.api.auth_middleware import is_current_user_admin
+from app.utils.exceptions import DNSApiError
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ def saml_login():
         redirect_url = auth.login(return_to=relay_state)
 
         return redirect(redirect_url)
+    except DNSApiError:
+        raise
     except Exception as e:
         logger.exception(f"SAML login error: {e}")
         return jsonify({"error": "Failed to initiate login"}), 500
@@ -128,6 +131,8 @@ def saml_callback():
 
         return response
 
+    except DNSApiError:
+        raise
     except Exception as e:
         logger.exception(f"SAML callback error: {e}")
         return jsonify({"error": "Authentication processing failed"}), 500
