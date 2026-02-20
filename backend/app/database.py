@@ -26,8 +26,10 @@ if str(database_url).strip().lower().startswith("sqlite"):
         connect_args={"check_same_thread": False},
     )
 else:
-    pool_size = _get_env_int("DB_POOL_SIZE", 3)
-    max_overflow = _get_env_int("DB_MAX_OVERFLOW", 2)
+    # SQLAlchemy pools are per-process. Keep defaults conservative for shared
+    # MySQL users (e.g., dev + prod on PythonAnywhere).
+    pool_size = _get_env_int("DB_POOL_SIZE", 1)
+    max_overflow = _get_env_int("DB_MAX_OVERFLOW", 0)
     pool_recycle = _get_env_int("DB_POOL_RECYCLE", 3600)
     pool_timeout = _get_env_int("DB_POOL_TIMEOUT", 10)
 

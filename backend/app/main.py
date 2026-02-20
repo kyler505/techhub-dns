@@ -88,6 +88,9 @@ def init_scheduler():
     global _scheduler, _initialized
     if not _initialized:
         _initialized = True
+        if not settings.scheduler_enabled:
+            logger.info("Background scheduler disabled via SCHEDULER_ENABLED")
+            return
         try:
             _scheduler = start_scheduler()
             # Auto-register Inflow webhook if enabled

@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     maintenance_tick_enabled: bool = True
     maintenance_tick_min_interval_seconds: int = 60
 
+    # APScheduler background jobs (disabled by default for shared DB users)
+    scheduler_enabled: bool = False
+
     maintenance_sessions_purge_interval_hours: int = 24
     maintenance_sessions_purge_batch_size: int = 5000
 
