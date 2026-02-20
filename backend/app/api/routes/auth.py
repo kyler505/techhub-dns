@@ -140,8 +140,7 @@ def get_current_user():
 
     Returns user info if authenticated, 401 otherwise.
 
-    REFACTORED: Query fresh from database using properly scoped session.
-    Middleware now stores only IDs, avoiding DetachedInstanceError.
+    Uses middleware-populated request context when available to reduce DB load.
     """
     # Check if user is authenticated (middleware sets g.user_id)
     user_id = getattr(g, 'user_id', None)
@@ -151,12 +150,12 @@ def get_current_user():
         # Not authenticated - return null (not 401, let frontend handle redirect)
         return jsonify({"user": None, "session": None, "is_admin": False})
 
-    middleware_user = getattr(g, "user", None)
-    middleware_session = getattr(g, "session", None)
-    if middleware_user is not None:
+    middleware_user_data = getattr(g, "user_data", None)
+    middleware_session_data = getattr(g, "session_data", None)
+    if middleware_user_data is not None:
         return jsonify({
-            "user": middleware_user.to_dict(),
-            "session": middleware_session.to_dict() if middleware_session is not None else None,
+            "user": middleware_user_data,
+            "session": middleware_session_data,
             "is_admin": is_current_user_admin(),
         })
 

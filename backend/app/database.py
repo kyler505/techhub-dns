@@ -29,7 +29,7 @@ else:
     # SQLAlchemy pools are per-process. Keep defaults conservative for shared
     # MySQL users (e.g., dev + prod on PythonAnywhere).
     pool_size = _get_env_int("DB_POOL_SIZE", 2)
-    max_overflow = _get_env_int("DB_MAX_OVERFLOW", 0)
+    max_overflow = _get_env_int("DB_MAX_OVERFLOW", 1)
     pool_recycle = _get_env_int("DB_POOL_RECYCLE", 3600)
     pool_timeout = _get_env_int("DB_POOL_TIMEOUT", 5)
 

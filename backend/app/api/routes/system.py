@@ -67,12 +67,10 @@ def _parse_allowlist_string(raw_value: Optional[str]) -> list[str]:
 
 
 def _get_request_user_email_normalized() -> str:
-    # Prefer request-scoped g.user (if attached) to avoid extra DB query.
+    # Prefer middleware-populated email to avoid extra DB query.
     from flask import g
 
-    user = getattr(g, "user", None)
-    user_email = getattr(user, "email", None) if user is not None else None
-    email = (user_email or get_current_user_email() or "").strip().lower()
+    email = (getattr(g, "user_email", None) or get_current_user_email() or "").strip().lower()
     return email
 
 
