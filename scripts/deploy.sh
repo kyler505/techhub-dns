@@ -19,6 +19,7 @@ BRANCH="${BRANCH:-main}"
 LOG_FILE="${LOG_FILE:-${PROJECT_ROOT}/deploy.log}"
 RUNNING_FILE="${RUNNING_FILE:-${PROJECT_ROOT}/.deploy.running}"
 LOCKFILE="${LOCKFILE:-${PROJECT_ROOT}/frontend/package-lock.json}"
+DEPLOY_PREFLIGHT="${DEPLOY_PREFLIGHT:-1}"
 
 # Log function
 log() {
@@ -32,6 +33,45 @@ reload_with_wsgi_touch() {
     else
         log "WARNING: WSGI file not found at $WSGI_FILE"
     fi
+}
+
+run_non_blocking_preflight() {
+    if [ "$DEPLOY_PREFLIGHT" = "0" ]; then
+        log "Post-deploy preflight skipped (DEPLOY_PREFLIGHT=0)"
+        return 0
+    fi
+
+    set +e
+    log "Post-deploy preflight (non-blocking)"
+
+    local current_branch current_commit frontend_dist env_file
+    current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    current_commit="$(git rev-parse --short HEAD 2>/dev/null)"
+    log "- git_branch=${current_branch:-unknown} git_commit=${current_commit:-unknown}"
+    log "- expected_project_root=$PROJECT_ROOT"
+
+    frontend_dist="$PROJECT_ROOT/frontend/dist"
+    if [ -d "$frontend_dist" ]; then
+        log "- frontend_dist_exists=yes path=$frontend_dist"
+    else
+        log "- frontend_dist_exists=no path=$frontend_dist"
+    fi
+
+    env_file="$PROJECT_ROOT/backend/.env"
+    if [ -f "$env_file" ]; then
+        local key
+        for key in DB_POOL_SIZE DB_MAX_OVERFLOW DB_POOL_TIMEOUT DB_POOL_RECYCLE SCHEDULER_ENABLED; do
+            if grep -q "^${key}=" "$env_file"; then
+                log "- env_key_present ${key}=yes"
+            else
+                log "- env_key_present ${key}=no"
+            fi
+        done
+    else
+        log "- backend_env_file_present=no path=$env_file"
+    fi
+
+    set -e
 }
 
 remove_node_modules_with_retries() {
@@ -176,3 +216,5 @@ fi
 log "=========================================="
 log "Deployment complete!"
 log "=========================================="
+
+run_non_blocking_preflight
