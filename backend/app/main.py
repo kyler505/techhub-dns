@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import settings
+from app.database import get_runtime_db_pool_settings
 from app.api.routes import orders, inflow, audit, delivery_runs, sharepoint, auth, system, analytics, observability, vehicle_checkouts
 from app.api.middleware import register_error_handlers
 from app.api.auth_middleware import init_auth_middleware
@@ -56,6 +57,7 @@ init_auth_middleware(app)
 # Global scheduler reference
 _scheduler = None
 _initialized = False
+_startup_settings_logged = False
 
 # Frontend static files path (for production deployment)
 # Check multiple possible locations for the dist folder
@@ -87,6 +89,7 @@ def _is_static_asset_request(path: str) -> bool:
 def init_scheduler():
     """Initialize the scheduler on first request"""
     global _scheduler, _initialized
+    _log_runtime_startup_settings()
     if not _initialized:
         _initialized = True
         if not settings.scheduler_enabled:
@@ -213,6 +216,24 @@ def shutdown_scheduler():
             logger.info("Application shutdown")
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
+
+
+def _log_runtime_startup_settings() -> None:
+    global _startup_settings_logged
+    if _startup_settings_logged:
+        return
+
+    _startup_settings_logged = True
+    pool_settings = get_runtime_db_pool_settings()
+    logger.info(
+        "Runtime settings: scheduler_enabled=%s db_backend=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s",
+        settings.scheduler_enabled,
+        pool_settings.get("database_backend"),
+        pool_settings.get("pool_size"),
+        pool_settings.get("max_overflow"),
+        pool_settings.get("pool_timeout"),
+        pool_settings.get("pool_recycle"),
+    )
 
 
 # Register shutdown handler
