@@ -151,6 +151,15 @@ def get_current_user():
         # Not authenticated - return null (not 401, let frontend handle redirect)
         return jsonify({"user": None, "session": None, "is_admin": False})
 
+    middleware_user = getattr(g, "user", None)
+    middleware_session = getattr(g, "session", None)
+    if middleware_user is not None:
+        return jsonify({
+            "user": middleware_user.to_dict(),
+            "session": middleware_session.to_dict() if middleware_session is not None else None,
+            "is_admin": is_current_user_admin(),
+        })
+
     # Query fresh from database using properly scoped session
     from app.models.user import User
     from app.models.session import Session
@@ -158,7 +167,7 @@ def get_current_user():
     with get_db() as db:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            return jsonify({"user": None, "session": None})
+            return jsonify({"user": None, "session": None, "is_admin": False})
 
         # Build user dict while session is open - no detached instance issues
         user_dict = user.to_dict()

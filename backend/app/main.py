@@ -33,6 +33,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 # Define allowed origins for security
 ALLOWED_ORIGINS = [
     "https://techhub.pythonanywhere.com",  # Production
+    "https://dev-techhub.pythonanywhere.com",  # Development
     "http://localhost:5173",               # Local development
 ]
 
