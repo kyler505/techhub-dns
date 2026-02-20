@@ -40,7 +40,7 @@ jobs:
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            'PROJECT_ROOT=/home/techhub/techhub-dns-dev BRANCH=dev WSGI_FILE=/var/www/dev-techhub_pythonanywhere_com_wsgi.py WEBAPP_DOMAIN=dev-techhub.pythonanywhere.com bash ~/techhub-dns-dev/scripts/deploy.sh'
+            'PROJECT_ROOT=/home/techhub/techhub-dns-dev BRANCH=dev WSGI_FILE=/var/www/techhub_pythonanywhere_com_wsgi.py WEBAPP_DOMAIN=dev-techhub.pythonanywhere.com bash ~/techhub-dns-dev/scripts/deploy.sh'
 
       - name: Tail deploy.log on failure
         if: failure()
