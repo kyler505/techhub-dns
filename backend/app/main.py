@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -59,13 +59,13 @@ _initialized = False
 # Frontend static files path (for production deployment)
 # Check multiple possible locations for the dist folder
 def get_frontend_dist_path():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     possible_paths = [
-        # PythonAnywhere path
+        # Current checkout path (works for local, prod, and dev repos)
+        os.path.join(repo_root, 'frontend', 'dist'),
+        # PythonAnywhere explicit paths
+        '/home/techhub/techhub-dns-dev/frontend/dist',
         '/home/techhub/techhub-dns/frontend/dist',
-        # Relative from backend (local dev)
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist'),
-        # Resolved absolute path
-        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'dist')),
     ]
     for path in possible_paths:
         if os.path.exists(path) and os.path.isdir(path):
@@ -73,6 +73,14 @@ def get_frontend_dist_path():
     return possible_paths[0]  # Fallback to PythonAnywhere path
 
 FRONTEND_DIST_PATH = get_frontend_dist_path()
+
+
+def _is_static_asset_request(path: str) -> bool:
+    if path.startswith('/api/'):
+        return False
+    if path in {'/favicon.ico', '/manifest.webmanifest', '/site.webmanifest', '/sw.js', '/robots.txt', '/apple-touch-icon.png'}:
+        return True
+    return path.startswith(('/assets/', '/static/'))
 
 
 def init_scheduler():
@@ -266,7 +274,13 @@ def serve_frontend(path):
 @app.before_request
 def before_request():
     """Initialize scheduler before first request"""
-    init_scheduler()
+    try:
+        init_scheduler()
+    except Exception:
+        if _is_static_asset_request(request.path):
+            logger.exception("Scheduler initialization failed for static request path=%s", request.path)
+            return None
+        raise
 
 
 if __name__ == "__main__":
