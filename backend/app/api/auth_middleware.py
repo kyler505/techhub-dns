@@ -9,7 +9,7 @@ from functools import wraps
 from flask import request, g, jsonify
 
 from app.config import settings
-from app.database import get_db, get_db_session
+from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
 from app.services.system_setting_service import SystemSettingService, SETTING_ADMIN_EMAILS
 from app.services.maintenance_tick_service import schedule_maintenance_tick_if_needed
@@ -50,30 +50,21 @@ def init_auth_middleware(app):
     """
     Initialize authentication middleware for the Flask app.
 
-    This runs before every request to validate session and attach user ID.
-    REFACTORED: Request-Scoped Session Pattern.
-    Keeps DB session open request-wide to prevent DetachedInstanceError.
+    This runs before every request to validate session and attach auth context.
+    Uses short-lived DB sessions to avoid request-wide connection retention.
     """
-
-    @app.teardown_appcontext
-    def shutdown_session(exception=None):
-        """Close the auth session at the end of the request."""
-        db = getattr(g, '_auth_session', None)
-        if db is not None:
-            db.close()
 
     @app.before_request
     def authenticate_request():
         """
-        Validate session and attach user ID into request context.
-        Uses a persistent session (g._auth_session) to keep objects attached.
+        Validate session and attach lightweight auth context into request scope.
         """
         # Initialize defaults
         g.user_id = None
         g.session_id = None
-        g.user = None
-        g.session = None
-        g._auth_session = None
+        g.user_email = None
+        g.user_data = None
+        g.session_data = None
 
         path = request.path
 
@@ -91,27 +82,17 @@ def init_auth_middleware(app):
             # No session cookie - check auth requirements below
             pass
         else:
-            # Create a dedicated session for auth that lives for the request
-            db = get_db_session()
-            g._auth_session = db
-
-            try:
+            with get_db() as db:
                 result = saml_auth_service.validate_session(db, session_id_cookie)
                 if result:
                     user, session = result
-                    # User remains attached to g._auth_session for duration of request
-                    g.user = user
-                    g.session = session
                     g.user_id = str(user.id)
                     g.session_id = str(session.id)
+                    g.user_email = str(user.email) if user.email else None
+                    g.user_data = user.to_dict()
+                    g.session_data = session.to_dict()
                 else:
                     logger.debug(f"Invalid session: {session_id_cookie[:8]}...")
-            except Exception:
-                # If validation fails, ensure we don't hold a bad session
-                if g._auth_session:
-                    g._auth_session.close()
-                    g._auth_session = None
-                raise
 
         # Check strict auth requirements (Authorization Phase)
         # We do this AFTER attempting to load the session so that public routes
@@ -165,9 +146,7 @@ def is_current_user_admin() -> bool:
     if not getattr(g, "user_id", None):
         return False
 
-    user = getattr(g, "user", None)
-    user_email = getattr(user, "email", None) if user is not None else None
-    email = (user_email or get_current_user_email() or "").strip().lower()
+    email = (getattr(g, "user_email", None) or get_current_user_email() or "").strip().lower()
     if not email:
         return False
 
@@ -176,16 +155,11 @@ def is_current_user_admin() -> bool:
         return email in env_allowlist
 
     # No env override: consult DB allowlist (if configured).
-    db = getattr(g, "_auth_session", None) or get_db_session()
-    close_db = not hasattr(g, "_auth_session") or getattr(g, "_auth_session", None) is None
-    try:
+    with get_db() as db:
         raw = SystemSettingService.get_setting(db, SETTING_ADMIN_EMAILS)
         db_allowlist = settings._parse_admin_emails(raw)
         if db_allowlist:
             return email in db_allowlist
-    finally:
-        if close_db:
-            db.close()
 
     # Default behavior when no allowlist is configured.
     if settings.is_dev():
@@ -215,10 +189,13 @@ def get_current_user_email() -> str:
 
     Returns "system" if no user is authenticated (e.g., background jobs).
 
-    NOTE: This queries the database to get the email since we only store ID in g.
+    Prefers middleware-provided email and falls back to a short DB lookup.
     """
-    from app.database import get_db
     from app.models.user import User
+
+    user_email = getattr(g, "user_email", None)
+    if user_email:
+        return str(user_email)
 
     user_id = getattr(g, "user_id", None)
     if user_id:
