@@ -96,10 +96,12 @@ remove_node_modules_with_retries() {
 
 install_frontend_deps() {
     local -a install_cmd
+    local -a fallback_cmd
 
     if [ -f "$LOCKFILE" ]; then
         log "Installing frontend dependencies (npm ci)..."
         install_cmd=(npm ci --include=dev)
+        fallback_cmd=(npm install --include=dev)
     else
         log "WARNING: package-lock.json not found; running npm install"
         install_cmd=(npm install --include=dev)
@@ -114,8 +116,44 @@ install_frontend_deps() {
         return 0
     fi
 
+    if [ "${#fallback_cmd[@]}" -gt 0 ]; then
+        log "WARNING: npm ci failed; attempting npm install without cleanup"
+        set +e
+        "${fallback_cmd[@]}"
+        local fallback_status=$?
+        set -e
+
+        if [ "$fallback_status" -eq 0 ]; then
+            log "npm install succeeded after npm ci failure"
+            return 0
+        fi
+
+        log "WARNING: npm install failed after npm ci failure; attempting cleanup"
+        if ! remove_node_modules_with_retries; then
+            log "ERROR: Cleanup failed after npm ci/npm install failures; aborting deploy"
+            return 1
+        fi
+
+        log "Retrying npm install after cleanup..."
+        set +e
+        "${fallback_cmd[@]}"
+        local retry_status=$?
+        set -e
+
+        if [ "$retry_status" -ne 0 ]; then
+            log "ERROR: Frontend dependency install failed after cleanup retry"
+            return 1
+        fi
+
+        return 0
+    fi
+
     log "WARNING: Frontend dependency install failed; cleaning node_modules and retrying once"
-    remove_node_modules_with_retries
+    if ! remove_node_modules_with_retries; then
+        log "ERROR: Cleanup failed after npm install failure; aborting deploy"
+        return 1
+    fi
+
     log "Retrying frontend dependency install..."
     set +e
     "${install_cmd[@]}"
