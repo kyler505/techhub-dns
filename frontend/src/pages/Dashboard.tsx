@@ -110,20 +110,26 @@ export default function Dashboard() {
   const [perfLoading, setPerfLoading] = useState(true);
   const [trendsLoading, setTrendsLoading] = useState(true);
   const [completedLoading, setCompletedLoading] = useState(true);
+  const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   // Error states
   const [error, setError] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
+  const socketReconnectTimeoutRef = useRef<number | null>(null);
+  const lastSocketRefreshRef = useRef(0);
+  const socketRefreshInFlightRef = useRef(false);
 
   // Fetch all analytics data
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (silent: boolean = false) => {
     try {
       setError(null);
-      setStatusLoading(true);
-      setPerfLoading(true);
-      setTrendsLoading(true);
-      setCompletedLoading(true);
+      if (!silent) {
+        setStatusLoading(true);
+        setPerfLoading(true);
+        setTrendsLoading(true);
+        setCompletedLoading(true);
+      }
 
       // Fetch all data in parallel
       const [counts, perf, trends, deliveredOrders] = await Promise.all([
@@ -160,12 +166,37 @@ export default function Dashboard() {
       console.error("Failed to fetch analytics:", err);
       setError("Failed to load dashboard data");
     } finally {
-      setStatusLoading(false);
-      setPerfLoading(false);
-      setTrendsLoading(false);
-      setCompletedLoading(false);
+      if (!silent) {
+        setStatusLoading(false);
+        setPerfLoading(false);
+        setTrendsLoading(false);
+        setCompletedLoading(false);
+      }
     }
   };
+
+  const refreshFromSocket = () => {
+    const now = Date.now();
+    if (socketRefreshInFlightRef.current || now - lastSocketRefreshRef.current < 2000) {
+      return;
+    }
+    socketRefreshInFlightRef.current = true;
+    lastSocketRefreshRef.current = now;
+    fetchAnalytics(true).finally(() => {
+      socketRefreshInFlightRef.current = false;
+    });
+  };
+
+  useEffect(() => {
+    const intervalMs = socketStatus === "connected" ? 15 * 60 * 1000 : 60 * 1000;
+    const interval = window.setInterval(() => {
+      fetchAnalytics(true);
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [socketStatus]);
 
   // Setup Socket.IO for real-time updates
   useEffect(() => {
@@ -175,7 +206,7 @@ export default function Dashboard() {
     // Build Socket.IO URL
     const baseUrl = `${window.location.protocol}//${window.location.host}`;
 
-    let socket: Socket;
+    let socket: Socket | null = null;
     try {
       socket = io(baseUrl, {
         path: "/socket.io",
@@ -187,40 +218,72 @@ export default function Dashboard() {
       socketRef.current = socket;
     } catch (e) {
       console.debug("Socket.IO connection failed (expected if backend not running)", e);
-      return;
+    }
+
+    if (!socket) {
+      setSocketStatus("disconnected");
+      return () => {
+        if (socketReconnectTimeoutRef.current) {
+          window.clearTimeout(socketReconnectTimeoutRef.current);
+        }
+        const currentSocket = socketRef.current;
+        if (currentSocket) {
+          currentSocket.disconnect();
+          socketRef.current = null;
+        }
+      };
     }
 
     socket.on("connect", () => {
       console.debug("Dashboard Socket.IO connected");
+      setSocketStatus("connected");
+      if (socketReconnectTimeoutRef.current) {
+        window.clearTimeout(socketReconnectTimeoutRef.current);
+        socketReconnectTimeoutRef.current = null;
+      }
       socket.emit("join", { room: "orders" });
     });
 
     // Listen for orders_update and active_runs events - refetch all metrics
     socket.on("orders_update", () => {
       console.debug("Orders updated, refetching analytics");
-      fetchAnalytics();
+      refreshFromSocket();
     });
 
     socket.on("active_runs", () => {
       console.debug("Active runs updated, refetching analytics");
-      fetchAnalytics();
+      refreshFromSocket();
     });
 
     socket.on("disconnect", () => {
       console.debug("Dashboard Socket.IO disconnected");
+      setSocketStatus("disconnected");
     });
 
     socket.on("connect_error", (err) => {
       console.debug("Dashboard Socket.IO error (expected if backend not running)", err);
+      setSocketStatus("connecting");
+      if (socketReconnectTimeoutRef.current) {
+        window.clearTimeout(socketReconnectTimeoutRef.current);
+        socketReconnectTimeoutRef.current = null;
+      }
+      socketReconnectTimeoutRef.current = window.setTimeout(() => {
+        if (!socketRef.current?.connected) {
+          setSocketStatus("disconnected");
+        }
+      }, 6000);
     });
 
-    // Refresh every 60 seconds as backup
-    const interval = setInterval(fetchAnalytics, 60000);
-
     return () => {
-      clearInterval(interval);
+      if (socketReconnectTimeoutRef.current) {
+        window.clearTimeout(socketReconnectTimeoutRef.current);
+      }
       try {
-        socket?.disconnect();
+        const currentSocket = socketRef.current;
+        if (currentSocket) {
+          currentSocket.disconnect();
+          socketRef.current = null;
+        }
       } catch (e) {}
     };
   }, []);
@@ -258,7 +321,13 @@ export default function Dashboard() {
         <Card className="xl:col-span-2 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
-            <span className="status-live text-xs text-muted-foreground">Connected</span>
+            <span
+              className={`text-xs text-muted-foreground${socketStatus === "connected" ? " status-live" : ""}`}
+            >
+              {socketStatus === "connecting" && "Connecting"}
+              {socketStatus === "connected" && "Connected"}
+              {socketStatus === "disconnected" && "Disconnected"}
+            </span>
           </CardHeader>
           <CardContent>
             <LiveDeliveryDashboard />

@@ -37,7 +37,7 @@ export function useOrdersWebSocket(socketUrl?: string) {
     // Build Socket.IO URL from current host
     const baseUrl = socketUrl || `${window.location.protocol}//${window.location.host}`;
 
-    let socket: Socket;
+    let socket: Socket | null = null;
 
     try {
       socket = io(baseUrl, {
@@ -50,7 +50,16 @@ export function useOrdersWebSocket(socketUrl?: string) {
       socketRef.current = socket;
     } catch (e) {
       console.debug("Socket.IO connection failed (expected if backend not running)", e);
-      return;
+    }
+
+    if (!socket) {
+      return () => {
+        const currentSocket = socketRef.current;
+        if (currentSocket) {
+          currentSocket.disconnect();
+          socketRef.current = null;
+        }
+      };
     }
 
     socket.on("connect", () => {
@@ -77,13 +86,14 @@ export function useOrdersWebSocket(socketUrl?: string) {
 
     socket.on("connect_error", (err) => {
       console.debug("Orders Socket.IO error (expected if backend not running)", err);
-      setError("Socket.IO connection failed - using cached data");
     });
 
     return () => {
-      try {
-        socket.disconnect();
-      } catch (e) {}
+      const currentSocket = socketRef.current;
+      if (currentSocket) {
+        currentSocket.disconnect();
+        socketRef.current = null;
+      }
     };
   }, [socketUrl]);
 
