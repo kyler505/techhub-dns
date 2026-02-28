@@ -320,7 +320,7 @@ git log --oneline -3
             log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
         else
             log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; attempting WSGI touch fallback"
-            reload_with_domain_fallbacks "$WEBAPP_DOMAIN"
+            reload_with_domain_fallbacks "$WEBAPP_DOMAIN" || log "WARNING: WSGI reload failed; deploy continuing"
         fi
     else
         if [ -z "$WEBAPP_DOMAIN" ]; then
@@ -328,7 +328,7 @@ git log --oneline -3
             reload_with_wsgi_touch
         else
             log "WARNING: WEBAPP_DOMAIN set to $WEBAPP_DOMAIN but PythonAnywhere CLI (pa) not found; attempting WSGI touch fallback"
-            reload_with_domain_fallbacks "$WEBAPP_DOMAIN"
+            reload_with_domain_fallbacks "$WEBAPP_DOMAIN" || log "WARNING: WSGI reload failed; deploy continuing"
         fi
     fi
 
