@@ -20,10 +20,22 @@ LOG_FILE="${LOG_FILE:-${PROJECT_ROOT}/deploy.log}"
 RUNNING_FILE="${RUNNING_FILE:-${PROJECT_ROOT}/.deploy.running}"
 LOCKFILE="${LOCKFILE:-${PROJECT_ROOT}/frontend/package-lock.json}"
 DEPLOY_PREFLIGHT="${DEPLOY_PREFLIGHT:-1}"
+RELOAD_STRICT="${RELOAD_STRICT:-1}"
 
 # Log function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+handle_reload_failure() {
+    local context="$1"
+
+    if [ "$RELOAD_STRICT" = "1" ]; then
+        log "ERROR: ${context}; RELOAD_STRICT=1 so failing deploy"
+        exit 1
+    fi
+
+    log "WARNING: ${context}; RELOAD_STRICT=0 so deploy continuing"
 }
 
 reload_with_wsgi_touch() {
@@ -284,6 +296,7 @@ fi
 log "=========================================="
 log "Starting deployment..."
 log "=========================================="
+log "Reload strictness: RELOAD_STRICT=${RELOAD_STRICT}"
 
 # Navigate to project directory
 cd "$PROJECT_ROOT"
@@ -320,7 +333,9 @@ git log --oneline -3
             log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
         else
             log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; attempting WSGI touch fallback"
-            reload_with_domain_fallbacks "$WEBAPP_DOMAIN" || log "WARNING: WSGI reload failed; deploy continuing"
+            if ! reload_with_domain_fallbacks "$WEBAPP_DOMAIN"; then
+                handle_reload_failure "WSGI reload failed after PythonAnywhere CLI reload failure (domain=$WEBAPP_DOMAIN)"
+            fi
         fi
     else
         if [ -z "$WEBAPP_DOMAIN" ]; then
@@ -328,7 +343,9 @@ git log --oneline -3
             reload_with_wsgi_touch
         else
             log "WARNING: WEBAPP_DOMAIN set to $WEBAPP_DOMAIN but PythonAnywhere CLI (pa) not found; attempting WSGI touch fallback"
-            reload_with_domain_fallbacks "$WEBAPP_DOMAIN" || log "WARNING: WSGI reload failed; deploy continuing"
+            if ! reload_with_domain_fallbacks "$WEBAPP_DOMAIN"; then
+                handle_reload_failure "WSGI reload failed without PythonAnywhere CLI (domain=$WEBAPP_DOMAIN)"
+            fi
         fi
     fi
 
