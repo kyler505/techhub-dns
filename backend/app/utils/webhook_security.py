@@ -31,13 +31,6 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
         if secret.startswith("whsec_"):
             secret = secret[6:]  # Remove "whsec_" prefix
 
-        # If secret is base64 encoded, decode it
-        try:
-            secret_bytes = base64.b64decode(secret, validate=False)
-        except Exception:
-            # If not base64, treat as raw string
-            secret_bytes = secret.encode("utf-8")
-
         # Common signature formats:
         # - "sha256=hexdigest"
         # - "sha256 hexdigest"
@@ -49,29 +42,44 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
         elif normalized.lower().startswith("sha256 "):
             normalized = normalized.split(" ", 1)[1].strip()
 
-        logger.debug(f"Verifying signature: received='{signature}', normalized='{normalized}', secret_length={len(secret_bytes)}")
+        def matches_signature(secret_bytes: bytes) -> bool:
+            logger.debug(
+                "Verifying signature with secret length %s",
+                len(secret_bytes)
+            )
+            digest = hmac.new(
+                secret_bytes,
+                payload,
+                hashlib.sha256
+            ).digest()
+            computed_hex = digest.hex()
+            computed_b64 = base64.b64encode(digest).decode("ascii")
 
-        digest = hmac.new(
-            secret_bytes,
-            payload,
-            hashlib.sha256
-        ).digest()
-        computed_hex = digest.hex()
-        computed_b64 = base64.b64encode(digest).decode("ascii")
+            if hmac.compare_digest(normalized, computed_hex) or hmac.compare_digest(normalized, computed_b64):
+                return True
 
-        logger.debug(f"Computed signatures: hex='{computed_hex}', b64='{computed_b64}'")
+            # Try base64 decoding for signatures without padding or with mixed casing.
+            padded = normalized + "=" * (-len(normalized) % 4)
+            try:
+                decoded = base64.b64decode(padded, validate=False)
+                return hmac.compare_digest(decoded, digest)
+            except Exception:
+                return False
 
-        if hmac.compare_digest(normalized, computed_hex) or hmac.compare_digest(normalized, computed_b64):
+        # Prefer raw secret bytes; optionally fall back to base64-decoded secrets
+        raw_secret_bytes = secret.encode("utf-8")
+        if matches_signature(raw_secret_bytes):
             return True
 
-        # Try base64 decoding for signatures without padding or with mixed casing.
-        padded = normalized + "=" * (-len(normalized) % 4)
-        try:
-            decoded = base64.b64decode(padded, validate=False)
-            if hmac.compare_digest(decoded, digest):
-                return True
-        except Exception:
-            pass
+        secret_has_b64_markers = any(ch in secret for ch in "+/=")
+        if secret_has_b64_markers:
+            padded_secret = secret + "=" * (-len(secret) % 4)
+            try:
+                decoded_secret = base64.b64decode(padded_secret, validate=True)
+                if matches_signature(decoded_secret):
+                    return True
+            except Exception:
+                pass
 
         logger.warning("Webhook signature verification failed")
         return False

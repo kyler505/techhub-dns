@@ -124,13 +124,20 @@ def inflow_webhook():
                 secrets = [settings.inflow_webhook_secret]
 
             if signature and secrets:
-                logger.info(f"Verifying webhook signature: header='{signature}', secrets_count={len(secrets)}")
+                logger.info(
+                    "Verifying webhook signature: secrets_count=%s",
+                    len(secrets)
+                )
                 inflow_service = InflowService()
                 if not any(
                     inflow_service.verify_webhook_signature(body, signature, secret)
                     for secret in secrets
                 ):
-                    logger.warning(f"Webhook signature verification failed - allowing webhook to proceed for now")
+                    logger.warning("Webhook signature verification failed")
+                    return jsonify({"status": "unauthorized", "message": "Invalid webhook signature"}), 401
+            elif secrets and not signature:
+                logger.warning("Webhook signature missing")
+                return jsonify({"status": "unauthorized", "message": "Missing webhook signature"}), 401
 
             payload = json.loads(body.decode("utf-8"))
             logger.info(f"Webhook payload received: {json.dumps(payload, indent=2)}")
