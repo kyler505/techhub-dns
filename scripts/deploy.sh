@@ -35,6 +35,81 @@ reload_with_wsgi_touch() {
     fi
 }
 
+reload_with_domain_wsgi_touch() {
+    local domain="$1"
+    local hyphen_preserving
+    local hyphen_normalized
+    local wsgi_candidate_primary
+    local wsgi_candidate_fallback
+
+    hyphen_preserving="${domain//./_}"
+    hyphen_normalized="${hyphen_preserving//-/_}"
+    wsgi_candidate_primary="/var/www/${hyphen_preserving}_wsgi.py"
+    wsgi_candidate_fallback="/var/www/${hyphen_normalized}_wsgi.py"
+
+    if [ -f "$wsgi_candidate_primary" ]; then
+        touch "$wsgi_candidate_primary"
+        log "Touched WSGI file - app will reload (domain=$domain)"
+        return 0
+    fi
+
+    if [ "$wsgi_candidate_fallback" != "$wsgi_candidate_primary" ] && [ -f "$wsgi_candidate_fallback" ]; then
+        touch "$wsgi_candidate_fallback"
+        log "Touched WSGI file - app will reload (domain=$domain)"
+        return 0
+    fi
+
+    if [ "$wsgi_candidate_fallback" = "$wsgi_candidate_primary" ]; then
+        log "WARNING: WSGI file not found for domain=$domain at $wsgi_candidate_primary; skipping WSGI touch"
+    else
+        log "WARNING: WSGI file not found for domain=$domain at $wsgi_candidate_primary or $wsgi_candidate_fallback; skipping WSGI touch"
+    fi
+
+    return 1
+}
+
+reload_with_domain_fallbacks() {
+    local domain="$1"
+    local wsgi_default="/var/www/techhub_pythonanywhere_com_wsgi.py"
+    local should_ignore_wsgi_file=0
+
+    if [ -n "$domain" ] && [ "$WSGI_FILE" = "$wsgi_default" ]; then
+        should_ignore_wsgi_file=1
+    fi
+
+    if [ "$should_ignore_wsgi_file" -eq 0 ] && [ -n "$WSGI_FILE" ] && [ -f "$WSGI_FILE" ]; then
+        touch "$WSGI_FILE"
+        log "Touched WSGI file - app will reload"
+        return 0
+    fi
+
+    if [ -n "$WSGI_FILE" ] && [ "$should_ignore_wsgi_file" -eq 1 ]; then
+        log "WARNING: WSGI_FILE ignored for domain=$domain (default path); attempting domain-specific WSGI touch"
+    elif [ -n "$WSGI_FILE" ]; then
+        log "WARNING: WSGI_FILE set but not found at $WSGI_FILE; attempting domain-specific WSGI touch"
+    else
+        log "WARNING: WSGI_FILE not set; attempting domain-specific WSGI touch"
+    fi
+
+    if [ -n "$domain" ] && reload_with_domain_wsgi_touch "$domain"; then
+        return 0
+    fi
+
+    if [ -n "$WSGI_FILE" ] && [ -f "$WSGI_FILE" ]; then
+        touch "$WSGI_FILE"
+        log "Touched WSGI file - app will reload (fallback)"
+        return 0
+    fi
+
+    if [ -n "$WSGI_FILE" ]; then
+        log "WARNING: WSGI_FILE not found at $WSGI_FILE; no WSGI touch performed"
+    else
+        log "WARNING: No WSGI file available for reload"
+    fi
+
+    return 1
+}
+
 run_non_blocking_preflight() {
     if [ "$DEPLOY_PREFLIGHT" = "0" ]; then
         log "Post-deploy preflight skipped (DEPLOY_PREFLIGHT=0)"
@@ -235,21 +310,22 @@ log "Recent commits:"
 git log --oneline -3
 
 # Reload web app (prefer PythonAnywhere CLI when available)
-if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
-    if pa website reload --domain "$WEBAPP_DOMAIN"; then
-        log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
+    if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
+        if pa website reload --domain "$WEBAPP_DOMAIN"; then
+            log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
+        else
+            log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; attempting WSGI touch fallback"
+            reload_with_domain_fallbacks "$WEBAPP_DOMAIN"
+        fi
     else
-        log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; falling back to WSGI touch"
-        reload_with_wsgi_touch
+        if [ -z "$WEBAPP_DOMAIN" ]; then
+            log "WEBAPP_DOMAIN not set; using WSGI touch fallback"
+            reload_with_wsgi_touch
+        else
+            log "WARNING: WEBAPP_DOMAIN set to $WEBAPP_DOMAIN but PythonAnywhere CLI (pa) not found; attempting WSGI touch fallback"
+            reload_with_domain_fallbacks "$WEBAPP_DOMAIN"
+        fi
     fi
-else
-    if [ -z "$WEBAPP_DOMAIN" ]; then
-        log "WEBAPP_DOMAIN not set; using WSGI touch fallback"
-    else
-        log "PythonAnywhere CLI (pa) not found; using WSGI touch fallback"
-    fi
-    reload_with_wsgi_touch
-fi
 
 log "=========================================="
 log "Deployment complete!"
