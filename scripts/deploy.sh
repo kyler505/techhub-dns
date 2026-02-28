@@ -95,6 +95,11 @@ reload_with_domain_fallbacks() {
         return 0
     fi
 
+    if [ "$should_ignore_wsgi_file" -eq 1 ]; then
+        log "WARNING: WSGI_FILE ignored for domain=$domain (default path); no WSGI touch performed"
+        return 1
+    fi
+
     if [ -n "$WSGI_FILE" ] && [ -f "$WSGI_FILE" ]; then
         touch "$WSGI_FILE"
         log "Touched WSGI file - app will reload (fallback)"
