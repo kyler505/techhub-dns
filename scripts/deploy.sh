@@ -20,10 +20,22 @@ LOG_FILE="${LOG_FILE:-${PROJECT_ROOT}/deploy.log}"
 RUNNING_FILE="${RUNNING_FILE:-${PROJECT_ROOT}/.deploy.running}"
 LOCKFILE="${LOCKFILE:-${PROJECT_ROOT}/frontend/package-lock.json}"
 DEPLOY_PREFLIGHT="${DEPLOY_PREFLIGHT:-1}"
+RELOAD_STRICT="${RELOAD_STRICT:-1}"
 
 # Log function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+handle_reload_failure() {
+    local context="$1"
+
+    if [ "$RELOAD_STRICT" = "1" ]; then
+        log "ERROR: ${context}; RELOAD_STRICT=1 so failing deploy"
+        exit 1
+    fi
+
+    log "WARNING: ${context}; RELOAD_STRICT=0 so deploy continuing"
 }
 
 reload_with_wsgi_touch() {
@@ -33,6 +45,86 @@ reload_with_wsgi_touch() {
     else
         log "WARNING: WSGI file not found at $WSGI_FILE"
     fi
+}
+
+reload_with_domain_wsgi_touch() {
+    local domain="$1"
+    local hyphen_preserving
+    local hyphen_normalized
+    local wsgi_candidate_primary
+    local wsgi_candidate_fallback
+
+    hyphen_preserving="${domain//./_}"
+    hyphen_normalized="${hyphen_preserving//-/_}"
+    wsgi_candidate_primary="/var/www/${hyphen_preserving}_wsgi.py"
+    wsgi_candidate_fallback="/var/www/${hyphen_normalized}_wsgi.py"
+
+    if [ -f "$wsgi_candidate_primary" ]; then
+        touch "$wsgi_candidate_primary"
+        log "Touched WSGI file - app will reload (domain=$domain)"
+        return 0
+    fi
+
+    if [ "$wsgi_candidate_fallback" != "$wsgi_candidate_primary" ] && [ -f "$wsgi_candidate_fallback" ]; then
+        touch "$wsgi_candidate_fallback"
+        log "Touched WSGI file - app will reload (domain=$domain)"
+        return 0
+    fi
+
+    if [ "$wsgi_candidate_fallback" = "$wsgi_candidate_primary" ]; then
+        log "WARNING: WSGI file not found for domain=$domain at $wsgi_candidate_primary; skipping WSGI touch"
+    else
+        log "WARNING: WSGI file not found for domain=$domain at $wsgi_candidate_primary or $wsgi_candidate_fallback; skipping WSGI touch"
+    fi
+
+    return 1
+}
+
+reload_with_domain_fallbacks() {
+    local domain="$1"
+    local wsgi_default="/var/www/techhub_pythonanywhere_com_wsgi.py"
+    local should_ignore_wsgi_file=0
+
+    if [ -n "$domain" ] && [ "$WSGI_FILE" = "$wsgi_default" ]; then
+        should_ignore_wsgi_file=1
+    fi
+
+    if [ "$should_ignore_wsgi_file" -eq 0 ] && [ -n "$WSGI_FILE" ] && [ -f "$WSGI_FILE" ]; then
+        touch "$WSGI_FILE"
+        log "Touched WSGI file - app will reload"
+        return 0
+    fi
+
+    if [ -n "$WSGI_FILE" ] && [ "$should_ignore_wsgi_file" -eq 1 ]; then
+        log "WARNING: WSGI_FILE ignored for domain=$domain (default path); attempting domain-specific WSGI touch"
+    elif [ -n "$WSGI_FILE" ]; then
+        log "WARNING: WSGI_FILE set but not found at $WSGI_FILE; attempting domain-specific WSGI touch"
+    else
+        log "WARNING: WSGI_FILE not set; attempting domain-specific WSGI touch"
+    fi
+
+    if [ -n "$domain" ] && reload_with_domain_wsgi_touch "$domain"; then
+        return 0
+    fi
+
+    if [ "$should_ignore_wsgi_file" -eq 1 ]; then
+        log "WARNING: WSGI_FILE ignored for domain=$domain (default path); no WSGI touch performed"
+        return 1
+    fi
+
+    if [ -n "$WSGI_FILE" ] && [ -f "$WSGI_FILE" ]; then
+        touch "$WSGI_FILE"
+        log "Touched WSGI file - app will reload (fallback)"
+        return 0
+    fi
+
+    if [ -n "$WSGI_FILE" ]; then
+        log "WARNING: WSGI_FILE not found at $WSGI_FILE; no WSGI touch performed"
+    else
+        log "WARNING: No WSGI file available for reload"
+    fi
+
+    return 1
 }
 
 run_non_blocking_preflight() {
@@ -96,10 +188,12 @@ remove_node_modules_with_retries() {
 
 install_frontend_deps() {
     local -a install_cmd
+    local -a fallback_cmd
 
     if [ -f "$LOCKFILE" ]; then
         log "Installing frontend dependencies (npm ci)..."
         install_cmd=(npm ci --include=dev)
+        fallback_cmd=(npm install --include=dev)
     else
         log "WARNING: package-lock.json not found; running npm install"
         install_cmd=(npm install --include=dev)
@@ -114,8 +208,44 @@ install_frontend_deps() {
         return 0
     fi
 
+    if [ "${#fallback_cmd[@]}" -gt 0 ]; then
+        log "WARNING: npm ci failed; attempting npm install without cleanup"
+        set +e
+        "${fallback_cmd[@]}"
+        local fallback_status=$?
+        set -e
+
+        if [ "$fallback_status" -eq 0 ]; then
+            log "npm install succeeded after npm ci failure"
+            return 0
+        fi
+
+        log "WARNING: npm install failed after npm ci failure; attempting cleanup"
+        if ! remove_node_modules_with_retries; then
+            log "ERROR: Cleanup failed after npm ci/npm install failures; aborting deploy"
+            return 1
+        fi
+
+        log "Retrying npm install after cleanup..."
+        set +e
+        "${fallback_cmd[@]}"
+        local retry_status=$?
+        set -e
+
+        if [ "$retry_status" -ne 0 ]; then
+            log "ERROR: Frontend dependency install failed after cleanup retry"
+            return 1
+        fi
+
+        return 0
+    fi
+
     log "WARNING: Frontend dependency install failed; cleaning node_modules and retrying once"
-    remove_node_modules_with_retries
+    if ! remove_node_modules_with_retries; then
+        log "ERROR: Cleanup failed after npm install failure; aborting deploy"
+        return 1
+    fi
+
     log "Retrying frontend dependency install..."
     set +e
     "${install_cmd[@]}"
@@ -166,6 +296,7 @@ fi
 log "=========================================="
 log "Starting deployment..."
 log "=========================================="
+log "Reload strictness: RELOAD_STRICT=${RELOAD_STRICT}"
 
 # Navigate to project directory
 cd "$PROJECT_ROOT"
@@ -197,21 +328,26 @@ log "Recent commits:"
 git log --oneline -3
 
 # Reload web app (prefer PythonAnywhere CLI when available)
-if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
-    if pa website reload --domain "$WEBAPP_DOMAIN"; then
-        log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
+    if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
+        if pa website reload --domain "$WEBAPP_DOMAIN"; then
+            log "Reloaded app via PythonAnywhere CLI for domain: $WEBAPP_DOMAIN"
+        else
+            log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; attempting WSGI touch fallback"
+            if ! reload_with_domain_fallbacks "$WEBAPP_DOMAIN"; then
+                handle_reload_failure "WSGI reload failed after PythonAnywhere CLI reload failure (domain=$WEBAPP_DOMAIN)"
+            fi
+        fi
     else
-        log "WARNING: PythonAnywhere CLI reload failed for domain: $WEBAPP_DOMAIN; falling back to WSGI touch"
-        reload_with_wsgi_touch
+        if [ -z "$WEBAPP_DOMAIN" ]; then
+            log "WEBAPP_DOMAIN not set; using WSGI touch fallback"
+            reload_with_wsgi_touch
+        else
+            log "WARNING: WEBAPP_DOMAIN set to $WEBAPP_DOMAIN but PythonAnywhere CLI (pa) not found; attempting WSGI touch fallback"
+            if ! reload_with_domain_fallbacks "$WEBAPP_DOMAIN"; then
+                handle_reload_failure "WSGI reload failed without PythonAnywhere CLI (domain=$WEBAPP_DOMAIN)"
+            fi
+        fi
     fi
-else
-    if [ -z "$WEBAPP_DOMAIN" ]; then
-        log "WEBAPP_DOMAIN not set; using WSGI touch fallback"
-    else
-        log "PythonAnywhere CLI (pa) not found; using WSGI touch fallback"
-    fi
-    reload_with_wsgi_touch
-fi
 
 log "=========================================="
 log "Deployment complete!"
