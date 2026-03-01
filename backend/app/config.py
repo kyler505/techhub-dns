@@ -105,6 +105,7 @@ class Settings(BaseSettings):
     # System audit archive (used by maintenance_service; optionally env-configured)
     system_audit_archive_days: int = 90
     system_audit_archive_batch_size: int = 1000
+    system_audit_archive_retention_days: int = 365
 
     # Flask environment
     flask_env: str = "development"

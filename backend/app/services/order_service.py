@@ -15,6 +15,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 
 from app.models.order import Order, OrderStatus, ShippingWorkflowStatus
+from app.models.order_status_history import OrderStatusHistory
+from app.models.user import User
 from app.utils.pdf_helpers import wrap_text, check_page_break, filter_picklines
 from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
@@ -29,6 +31,40 @@ logger = logging.getLogger(__name__)
 class OrderService:
     def __init__(self, db: Session):
         self.db = db
+
+    def _resolve_actor_user_id(self, actor_identifier: Optional[str]) -> Optional[str]:
+        if not actor_identifier:
+            return None
+
+        identifier = actor_identifier.strip()
+        if not identifier or identifier.lower() == "system":
+            return None
+
+        user = self.db.query(User).filter(
+            or_(User.id == identifier, User.email == identifier)
+        ).first()
+        return user.id if user else None
+
+    def _record_status_history(
+        self,
+        *,
+        order: Order,
+        from_status: Optional[str],
+        to_status: str,
+        actor_identifier: Optional[str],
+        metadata: Optional[Dict[str, Any]] = None,
+        changed_at: Optional[datetime] = None,
+    ) -> None:
+        actor_user_id = self._resolve_actor_user_id(actor_identifier)
+        history_entry = OrderStatusHistory(
+            order_id=order.id,
+            from_status=from_status,
+            to_status=to_status,
+            changed_at=changed_at or datetime.utcnow(),
+            actor_user_id=actor_user_id,
+            status_metadata=metadata,
+        )
+        self.db.add(history_entry)
 
 
     def _prep_steps_complete(self, order: Order) -> bool:
@@ -184,6 +220,13 @@ class OrderService:
                 timestamp=datetime.utcnow()
             )
             self.db.add(audit_log)
+            self._record_status_history(
+                order=order,
+                from_status=old_status,
+                to_status=OrderStatus.QA.value,
+                actor_identifier=generated_by,
+                metadata={"reason": "Picklist generated - moved to QA queue"},
+            )
             self.db.commit()
             self.db.refresh(order)
 
@@ -468,6 +511,13 @@ class OrderService:
             timestamp=datetime.utcnow()
         )
         self.db.add(audit_log)
+        self._record_status_history(
+            order=order,
+            from_status=old_status,
+            to_status=new_status.value,
+            actor_identifier=changed_by,
+            metadata={"reason": reason} if reason else None,
+        )
 
         # Note: Teams notification should be sent via BackgroundTasks in the route handler
         # This service method doesn't send notifications directly to avoid blocking
@@ -1040,6 +1090,13 @@ class OrderService:
                 timestamp=datetime.utcnow()  # Use ingestion time (not orderDate) for audit trail
             )
             self.db.add(audit_log)
+            self._record_status_history(
+                order=order,
+                from_status=None,
+                to_status=OrderStatus.PICKED.value,
+                actor_identifier="system",
+                metadata={"reason": "Order ingested from inFlow"},
+            )
             self.db.commit()
 
             # Also log to system audit log for full traceability
@@ -1232,6 +1289,17 @@ class OrderService:
                 timestamp=datetime.utcnow()
             )
             self.db.add(audit_log)
+            self._record_status_history(
+                order=order,
+                from_status=old_status,
+                to_status=OrderStatus.DELIVERED.value,
+                actor_identifier=updated_by,
+                metadata={
+                    "reason": f"Shipped via {carrier_name or 'carrier'}" + (
+                        f" (Tracking: {tracking_number})" if tracking_number else ""
+                    ),
+                },
+            )
 
         self.db.commit()
         self.db.refresh(order)

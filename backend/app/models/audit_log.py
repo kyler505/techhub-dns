@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -26,6 +26,9 @@ class AuditLog(Base):
 class SystemAuditLog(Base):
     """Comprehensive audit log for all system operations"""
     __tablename__ = "system_audit_logs"
+    __table_args__ = (
+        Index("ix_system_audit_logs_timestamp_id", "timestamp", "id"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
@@ -56,9 +59,12 @@ class SystemAuditLog(Base):
 
 
 class SystemAuditLogArchive(Base):
-    """Archive table for historical system audit logs (kept forever)."""
+    """Archive table for historical system audit logs."""
 
     __tablename__ = "system_audit_logs_archive"
+    __table_args__ = (
+        Index("ix_system_audit_logs_archive_timestamp_id", "timestamp", "id"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
