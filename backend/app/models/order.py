@@ -1,10 +1,16 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Enum as SQLEnum, JSON, ForeignKey
-from sqlalchemy.orm import relationship
 import enum
 
+import sqlalchemy as sa
+from sqlalchemy import Column, String, Text, DateTime, Enum as SQLEnum, JSON, ForeignKey, Index, func
+from sqlalchemy.orm import relationship, column_property
+
+from app.config import settings
 from app.database import Base
+
+_DATABASE_URL = str(settings.database_url).strip().lower()
+_IS_MYSQL = _DATABASE_URL.startswith("mysql")
 
 
 class OrderStatus(str, enum.Enum):
@@ -46,8 +52,24 @@ class ShippingWorkflowStatus(str, enum.Enum):
 class Order(Base):
     __tablename__ = "orders"
 
+    __table_args__ = (
+        Index("ix_orders_created_at", "created_at"),
+        Index("ix_orders_updated_at", "updated_at"),
+        Index("ix_orders_signature_captured_at", "signature_captured_at"),
+        Index("ix_orders_status_updated_at", "status", "updated_at"),
+        Index("ix_orders_status_tagged_at_updated_at", "status", "tagged_at", "updated_at"),
+    )
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     inflow_order_id = Column(String(255), unique=True, nullable=False, index=True)  # e.g., "TH3270"
+    if _IS_MYSQL:
+        inflow_order_id_lower = Column(
+            String(255),
+            sa.Computed("lower(inflow_order_id)", persisted=True),
+            index=True,
+        )
+    else:
+        inflow_order_id_lower = column_property(func.lower(inflow_order_id))
     inflow_sales_order_id = Column(String(255), nullable=True)  # UUID from Inflow
     recipient_name = Column(String(255), nullable=True)
     recipient_contact = Column(String(255), nullable=True)  # email
@@ -83,13 +105,23 @@ class Order(Base):
     tracking_number = Column(String(255), nullable=True)
     inflow_data = Column(JSON, nullable=True)  # Full Inflow payload
     # Remainder order tracking
-    parent_order_id = Column(String(36), nullable=True, index=True)  # If this is a remainder, points to parent
+    parent_order_id = Column(
+        String(36),
+        ForeignKey("orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )  # If this is a remainder, points to parent
     has_remainder = Column(String(1), nullable=True, default=None)  # 'Y' if this order has a remainder
-    remainder_order_id = Column(String(36), nullable=True)  # Points to the remainder order
+    remainder_order_id = Column(
+        String(36),
+        ForeignKey("orders.id", ondelete="SET NULL"),
+        nullable=True,
+    )  # Points to the remainder order
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     audit_logs = relationship("AuditLog", back_populates="order", cascade="all, delete-orphan")
+    status_history = relationship("OrderStatusHistory", back_populates="order", cascade="all, delete-orphan")
 
     delivery_run = relationship("DeliveryRun", back_populates="orders")

@@ -1,19 +1,31 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, String, Text
+from sqlalchemy import Column, DateTime, String, Text, Index, ForeignKey
 
 from app.database import Base
 
 
 class VehicleCheckout(Base):
+    """Vehicle checkout record with non-authoritative snapshot fields."""
     __tablename__ = "vehicle_checkouts"
+
+    __table_args__ = (
+        Index("ix_vehicle_checkouts_vehicle_checked_in_at", "vehicle", "checked_in_at"),
+        Index("ix_vehicle_checkouts_checked_out_at", "checked_out_at"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     vehicle = Column(String(50), nullable=False, index=True)
 
+    # Snapshot fields below are non-authoritative (audit trail only).
     checked_out_by = Column(String(255), nullable=False)
-    checked_out_by_user_id = Column(String(36), nullable=True, index=True)
+    checked_out_by_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     checked_out_by_email = Column(String(255), nullable=True)
     checked_out_by_display_name = Column(String(255), nullable=True)
 
@@ -25,7 +37,12 @@ class VehicleCheckout(Base):
     checked_out_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     checked_in_at = Column(DateTime, nullable=True, index=True)
     checked_in_by = Column(String(255), nullable=True)
-    checked_in_by_user_id = Column(String(36), nullable=True)
+    checked_in_by_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     checked_in_by_email = Column(String(255), nullable=True)
     checked_in_by_display_name = Column(String(255), nullable=True)
 

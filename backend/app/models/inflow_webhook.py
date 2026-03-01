@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum as SQLEnum, Integer, JSON
+from sqlalchemy import Column, String, DateTime, Enum as SQLEnum, Integer, JSON, Index
 import enum
 
 from app.database import Base
@@ -14,6 +14,10 @@ class WebhookStatus(str, enum.Enum):
 
 class InflowWebhook(Base):
     __tablename__ = "inflow_webhooks"
+
+    __table_args__ = (
+        Index("ix_inflow_webhooks_status_updated_at", "status", "updated_at"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     webhook_id = Column(String(255), unique=True, nullable=False, index=True)  # Inflow's webhook ID
