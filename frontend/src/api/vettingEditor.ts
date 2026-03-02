@@ -18,6 +18,15 @@ export const VETTING_EDITOR_CATEGORIES = [
 export type VettingEditorSection = (typeof VETTING_EDITOR_SECTIONS)[number];
 export type VettingEditorCategory = (typeof VETTING_EDITOR_CATEGORIES)[number];
 
+const VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME: Record<string, VettingEditorSection> = Object.fromEntries(
+  VETTING_EDITOR_SECTIONS.map((section) => [section.trim().toLowerCase(), section])
+) as Record<string, VettingEditorSection>;
+
+export const normalizeVettingEditorSection = (section: string): VettingEditorSection | null => {
+  const canonical = VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME[section.trim().toLowerCase()];
+  return canonical ?? null;
+};
+
 export interface VettingEditorItem {
   name: string;
   category: VettingEditorCategory;

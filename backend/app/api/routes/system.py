@@ -65,6 +65,15 @@ _VETTING_EDITOR_DOWNLOAD_HEADERS = {
 }
 
 
+def _normalize_vetting_editor_section_name(section_name: str) -> str:
+    return section_name.strip().lower()
+
+
+_VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME = {
+    _normalize_vetting_editor_section_name(section): section for section in VETTING_EDITOR_ALLOWED_SECTIONS
+}
+
+
 def _get_vetting_editor_auth() -> tuple[str, str]:
     username = (settings.vetting_editor_webdav_username or "").strip()
     password = settings.vetting_editor_webdav_password
@@ -79,20 +88,41 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
     if not isinstance(payload, dict):
         raise ValueError("Payload must be a JSON object keyed by section.")
 
-    allowed_sections = set(VETTING_EDITOR_ALLOWED_SECTIONS)
     allowed_categories = set(VETTING_EDITOR_ALLOWED_CATEGORIES)
-    unknown_sections = sorted(key for key in payload.keys() if key not in allowed_sections)
+    unknown_sections: list[str] = []
+    section_rows_by_canonical_name: dict[str, Any] = {}
+
+    for raw_section_name, section_rows in payload.items():
+        if not isinstance(raw_section_name, str):
+            unknown_sections.append(str(raw_section_name))
+            continue
+
+        canonical_section_name = _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.get(
+            _normalize_vetting_editor_section_name(raw_section_name)
+        )
+        if canonical_section_name is None:
+            unknown_sections.append(raw_section_name)
+            continue
+
+        if canonical_section_name in section_rows_by_canonical_name:
+            raise ValueError(
+                f"Duplicate section alias for '{canonical_section_name}': '{raw_section_name}'."
+            )
+
+        section_rows_by_canonical_name[canonical_section_name] = section_rows
+
     if unknown_sections:
-        raise ValueError(f"Unsupported sections: {', '.join(unknown_sections)}")
+        unknown_sections_sorted = sorted(unknown_sections, key=lambda section: section.lower())
+        raise ValueError(f"Unsupported sections: {', '.join(unknown_sections_sorted)}")
 
     vetting_url_sections = set(VETTING_EDITOR_VETTING_URL_SECTIONS)
     normalized: dict[str, list[dict[str, str]]] = {}
 
     for section in VETTING_EDITOR_ALLOWED_SECTIONS:
-        if section not in payload:
+        if section not in section_rows_by_canonical_name:
             continue
 
-        section_rows = payload[section]
+        section_rows = section_rows_by_canonical_name[section]
         if not isinstance(section_rows, list):
             raise ValueError(f"Section '{section}' must be an array of rows.")
 
