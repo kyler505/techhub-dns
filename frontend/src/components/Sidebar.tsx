@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Send,
   Users,
+  FilePenLine,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -34,6 +35,8 @@ const navItems: LeafNavItem[] = [
   { path: "/shipping", label: "Shipping", icon: Send },
 ];
 
+const vettingEditorItem: LeafNavItem = { path: "/vetting-editor", label: "Vetting Editor", icon: FilePenLine };
+
 const adminItems = [
   { path: "/admin", label: "Admin", icon: Settings },
   { path: "/sessions", label: "Sessions", icon: Users },
@@ -43,6 +46,7 @@ export function Sidebar({ className }: { className?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { isAdmin } = useAuth();
+  const VettingEditorIcon = vettingEditorItem.icon;
 
   const visibleAdminItems = isAdmin ? adminItems : adminItems.filter((item) => item.path !== "/admin");
 
@@ -106,6 +110,33 @@ export function Sidebar({ className }: { className?: string }) {
       </div>
 
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+        {isAdmin ? (
+          <NavLink
+            to={vettingEditorItem.path}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+              isActive(vettingEditorItem.path)
+                ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            )}
+          >
+            <VettingEditorIcon className="w-5 h-5 flex-shrink-0" />
+            <AnimatePresence mode="wait">
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="whitespace-nowrap overflow-hidden"
+                >
+                  {vettingEditorItem.label}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </NavLink>
+        ) : null}
+
         {navItems.map((item) => {
           const active = isActive(item.path);
           const Icon = item.icon;

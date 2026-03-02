@@ -11,6 +11,7 @@ const LABELS: Record<string, string> = {
   van: "Van",
   golf_cart: "Golf Cart",
   shipping: "Shipping",
+  "vetting-editor": "Vetting Editor",
   admin: "Admin",
   sessions: "Sessions",
   runs: "Runs",
