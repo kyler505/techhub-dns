@@ -6,6 +6,7 @@ import {
   VETTING_EDITOR_CATEGORIES,
   VETTING_EDITOR_SECTIONS,
   VETTING_EDITOR_VETTING_URL_SECTIONS,
+  normalizeVettingEditorSection,
   type VettingEditorCategory,
   type VettingEditorItem,
   type VettingEditorPayload,
@@ -63,6 +64,11 @@ const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
   const payload: VettingEditorPayload = {};
 
   for (const row of rows) {
+    const canonicalSection = normalizeVettingEditorSection(row.section);
+    if (!canonicalSection) {
+      throw new Error(`Row has unsupported section '${row.section}'.`);
+    }
+
     const name = row.name.trim();
     const url = row.url.trim();
     if (!name || !url) {
@@ -76,13 +82,13 @@ const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
     };
 
     const vettingUrl = row.vettingUrl.trim();
-    if (sectionUsesVettingUrl(row.section) && vettingUrl) {
+    if (sectionUsesVettingUrl(canonicalSection) && vettingUrl) {
       item.vettingUrl = vettingUrl;
     }
 
-    const sectionItems = payload[row.section] ?? [];
+    const sectionItems = payload[canonicalSection] ?? [];
     sectionItems.push(item);
-    payload[row.section] = sectionItems;
+    payload[canonicalSection] = sectionItems;
   }
 
   return payload;
@@ -260,7 +266,10 @@ export default function VettingEditor() {
                         <select
                           value={row.section}
                           onChange={(event) => {
-                            const section = event.target.value as VettingEditorSection;
+                            const section = normalizeVettingEditorSection(event.target.value);
+                            if (!section) {
+                              return;
+                            }
                             updateRow(row.id, (current) => ({
                               ...current,
                               section,
