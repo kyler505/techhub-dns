@@ -42,7 +42,14 @@ from app.services.system_setting_service import (
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
 
-VETTING_EDITOR_ALLOWED_SECTIONS = ("AwaitingApproval", "Approved")
+VETTING_EDITOR_ALLOWED_SECTIONS = (
+    "ComingSoon",
+    "Underconsideration",
+    "Vetting",
+    "AwaitingApproval",
+    "Approved",
+)
+VETTING_EDITOR_VETTING_URL_SECTIONS = ("Vetting", "AwaitingApproval")
 VETTING_EDITOR_ALLOWED_CATEGORIES = (
     "ACCESSORIES",
     "MONITORS + DOCKS",
@@ -78,14 +85,18 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
     if unknown_sections:
         raise ValueError(f"Unsupported sections: {', '.join(unknown_sections)}")
 
-    normalized: dict[str, list[dict[str, str]]] = {
-        section: [] for section in VETTING_EDITOR_ALLOWED_SECTIONS
-    }
+    vetting_url_sections = set(VETTING_EDITOR_VETTING_URL_SECTIONS)
+    normalized: dict[str, list[dict[str, str]]] = {}
 
     for section in VETTING_EDITOR_ALLOWED_SECTIONS:
-        section_rows = payload.get(section, [])
+        if section not in payload:
+            continue
+
+        section_rows = payload[section]
         if not isinstance(section_rows, list):
             raise ValueError(f"Section '{section}' must be an array of rows.")
+
+        normalized_section_rows: list[dict[str, str]] = []
 
         for index, row in enumerate(section_rows):
             if not isinstance(row, dict):
@@ -116,7 +127,7 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
             }
 
             vetting_url = row.get("vettingUrl")
-            if section == "AwaitingApproval":
+            if section in vetting_url_sections:
                 if vetting_url is not None:
                     if not isinstance(vetting_url, str):
                         raise ValueError(f"Section '{section}' row {index + 1} has invalid 'vettingUrl'.")
@@ -124,9 +135,13 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
                     if trimmed_vetting_url:
                         normalized_row["vettingUrl"] = trimmed_vetting_url
             elif vetting_url not in (None, ""):
-                raise ValueError("'vettingUrl' is only allowed for AwaitingApproval rows.")
+                raise ValueError(
+                    f"'vettingUrl' is only allowed for sections: {', '.join(VETTING_EDITOR_VETTING_URL_SECTIONS)}."
+                )
 
-            normalized[section].append(normalized_row)
+            normalized_section_rows.append(normalized_row)
+
+        normalized[section] = normalized_section_rows
 
     return normalized
 

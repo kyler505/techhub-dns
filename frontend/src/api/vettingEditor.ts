@@ -1,6 +1,13 @@
 import { apiClient } from "./client";
 
-export const VETTING_EDITOR_SECTIONS = ["AwaitingApproval", "Approved"] as const;
+export const VETTING_EDITOR_SECTIONS = [
+  "ComingSoon",
+  "Underconsideration",
+  "Vetting",
+  "AwaitingApproval",
+  "Approved",
+] as const;
+export const VETTING_EDITOR_VETTING_URL_SECTIONS = ["Vetting", "AwaitingApproval"] as const;
 export const VETTING_EDITOR_CATEGORIES = [
   "ACCESSORIES",
   "MONITORS + DOCKS",
@@ -18,7 +25,7 @@ export interface VettingEditorItem {
   vettingUrl?: string;
 }
 
-export type VettingEditorPayload = Record<VettingEditorSection, VettingEditorItem[]>;
+export type VettingEditorPayload = Partial<Record<VettingEditorSection, VettingEditorItem[]>>;
 
 export const vettingEditorApi = {
   async getData(): Promise<VettingEditorPayload> {
