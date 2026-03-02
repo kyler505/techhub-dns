@@ -5,6 +5,7 @@ import {
   vettingEditorApi,
   VETTING_EDITOR_CATEGORIES,
   VETTING_EDITOR_SECTIONS,
+  VETTING_EDITOR_VETTING_URL_SECTIONS,
   type VettingEditorCategory,
   type VettingEditorItem,
   type VettingEditorPayload,
@@ -25,8 +26,11 @@ type VettingEditorRow = {
   vettingUrl: string;
 };
 
-const defaultSection: VettingEditorSection = "AwaitingApproval";
+const defaultSection: VettingEditorSection = VETTING_EDITOR_SECTIONS[0];
 const defaultCategory: VettingEditorCategory = "ACCESSORIES";
+const vettingUrlSections = new Set<VettingEditorSection>(VETTING_EDITOR_VETTING_URL_SECTIONS);
+
+const sectionUsesVettingUrl = (section: VettingEditorSection): boolean => vettingUrlSections.has(section);
 
 const createRow = (item?: Partial<VettingEditorRow>): VettingEditorRow => ({
   id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
@@ -56,10 +60,7 @@ const flattenPayload = (payload: VettingEditorPayload): VettingEditorRow[] => {
 };
 
 const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
-  const payload: VettingEditorPayload = {
-    AwaitingApproval: [],
-    Approved: [],
-  };
+  const payload: VettingEditorPayload = {};
 
   for (const row of rows) {
     const name = row.name.trim();
@@ -75,11 +76,13 @@ const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
     };
 
     const vettingUrl = row.vettingUrl.trim();
-    if (row.section === "AwaitingApproval" && vettingUrl) {
+    if (sectionUsesVettingUrl(row.section) && vettingUrl) {
       item.vettingUrl = vettingUrl;
     }
 
-    payload[row.section].push(item);
+    const sectionItems = payload[row.section] ?? [];
+    sectionItems.push(item);
+    payload[row.section] = sectionItems;
   }
 
   return payload;
@@ -94,13 +97,15 @@ export default function VettingEditor() {
   const rowCount = rows.length;
 
   const sectionCounts = useMemo(() => {
-    const counts: Record<VettingEditorSection, number> = {
-      AwaitingApproval: 0,
-      Approved: 0,
-    };
+    const counts = Object.fromEntries(VETTING_EDITOR_SECTIONS.map((section) => [section, 0])) as Record<VettingEditorSection, number>;
     for (const row of rows) counts[row.section] += 1;
     return counts;
   }, [rows]);
+
+  const sectionSummary = useMemo(
+    () => VETTING_EDITOR_SECTIONS.map((section) => `${section} ${sectionCounts[section]}`).join(" · "),
+    [sectionCounts]
+  );
 
   useEffect(() => {
     if (!isAdmin) {
@@ -210,7 +215,7 @@ export default function VettingEditor() {
         <CardHeader>
           <CardTitle className="text-base">Rows</CardTitle>
           <CardDescription>
-            {rowCount} total · AwaitingApproval {sectionCounts.AwaitingApproval} · Approved {sectionCounts.Approved}
+            {rowCount} total · {sectionSummary}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -259,7 +264,7 @@ export default function VettingEditor() {
                             updateRow(row.id, (current) => ({
                               ...current,
                               section,
-                              vettingUrl: section === "AwaitingApproval" ? current.vettingUrl : "",
+                              vettingUrl: sectionUsesVettingUrl(section) ? current.vettingUrl : "",
                             }));
                           }}
                           className="flex h-10 w-full min-w-[13rem] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -300,7 +305,7 @@ export default function VettingEditor() {
                         />
                       </TableCell>
                       <TableCell>
-                        {row.section === "AwaitingApproval" ? (
+                        {sectionUsesVettingUrl(row.section) ? (
                           <Input
                             value={row.vettingUrl}
                             onChange={(event) =>
@@ -312,7 +317,7 @@ export default function VettingEditor() {
                             placeholder="https://..."
                           />
                         ) : (
-                          <span className="text-xs text-muted-foreground">Not used for Approved</span>
+                          <span className="text-xs text-muted-foreground">Not used for {row.section}</span>
                         )}
                       </TableCell>
                     </TableRow>
