@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   vettingEditorApi,
   VETTING_EDITOR_CATEGORIES,
+  VETTING_EDITOR_LEGACY_SECTION_ORDER,
   VETTING_EDITOR_SECTIONS,
   VETTING_EDITOR_VETTING_URL_SECTIONS,
   normalizeVettingEditorSection,
@@ -61,7 +62,7 @@ const flattenPayload = (payload: VettingEditorPayload): VettingEditorRow[] => {
 };
 
 const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
-  const payload: VettingEditorPayload = {};
+  const sectionItemsByCanonicalSection: Partial<Record<VettingEditorSection, VettingEditorItem[]>> = {};
 
   for (const row of rows) {
     const canonicalSection = normalizeVettingEditorSection(row.section);
@@ -86,9 +87,18 @@ const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
       item.vettingUrl = vettingUrl;
     }
 
-    const sectionItems = payload[canonicalSection] ?? [];
+    const sectionItems = sectionItemsByCanonicalSection[canonicalSection] ?? [];
     sectionItems.push(item);
-    payload[canonicalSection] = sectionItems;
+    sectionItemsByCanonicalSection[canonicalSection] = sectionItems;
+  }
+
+  const payload: VettingEditorPayload = {};
+  for (const section of VETTING_EDITOR_LEGACY_SECTION_ORDER) {
+    const sectionItems = sectionItemsByCanonicalSection[section];
+    if (!sectionItems) {
+      continue;
+    }
+    payload[section] = sectionItems;
   }
 
   return payload;

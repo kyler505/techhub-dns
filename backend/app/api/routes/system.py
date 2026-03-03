@@ -43,10 +43,10 @@ from app.services.system_setting_service import (
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
 
 VETTING_EDITOR_ALLOWED_SECTIONS = (
-    "ComingSoon",
-    "Underconsideration",
+    "UnderConsideration",
     "Vetting",
     "AwaitingApproval",
+    "ComingSoon",
     "Approved",
 )
 VETTING_EDITOR_VETTING_URL_SECTIONS = ("Vetting", "AwaitingApproval")
@@ -72,6 +72,11 @@ def _normalize_vetting_editor_section_name(section_name: str) -> str:
 _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME = {
     _normalize_vetting_editor_section_name(section): section for section in VETTING_EDITOR_ALLOWED_SECTIONS
 }
+_VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.update(
+    {
+        "underconsideration": "UnderConsideration",
+    }
+)
 
 
 def _get_vetting_editor_auth() -> tuple[str, str]:

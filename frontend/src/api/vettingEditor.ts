@@ -1,12 +1,13 @@
 import { apiClient } from "./client";
 
 export const VETTING_EDITOR_SECTIONS = [
-  "ComingSoon",
-  "Underconsideration",
+  "UnderConsideration",
   "Vetting",
   "AwaitingApproval",
+  "ComingSoon",
   "Approved",
 ] as const;
+export const VETTING_EDITOR_LEGACY_SECTION_ORDER = [...VETTING_EDITOR_SECTIONS] as const;
 export const VETTING_EDITOR_VETTING_URL_SECTIONS = ["Vetting", "AwaitingApproval"] as const;
 export const VETTING_EDITOR_CATEGORIES = [
   "ACCESSORIES",
@@ -21,6 +22,7 @@ export type VettingEditorCategory = (typeof VETTING_EDITOR_CATEGORIES)[number];
 const VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME: Record<string, VettingEditorSection> = Object.fromEntries(
   VETTING_EDITOR_SECTIONS.map((section) => [section.trim().toLowerCase(), section])
 ) as Record<string, VettingEditorSection>;
+VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.underconsideration = "UnderConsideration";
 
 export const normalizeVettingEditorSection = (section: string): VettingEditorSection | null => {
   const canonical = VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME[section.trim().toLowerCase()];
