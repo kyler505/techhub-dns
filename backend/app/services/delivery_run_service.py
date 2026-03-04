@@ -15,7 +15,7 @@ from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
 from app.models.vehicle_checkout import VehicleCheckout
-from app.utils.exceptions import NotFoundError, ValidationError
+from app.utils.exceptions import ConflictError, NotFoundError, ValidationError
 
 
 class DeliveryRunService:
@@ -294,7 +294,13 @@ class DeliveryRunService:
 
         return asyncio.run(_fulfill())
 
-    def finish_run(self, run_id: Union[UUID, str], user_id: Optional[str] = None, create_remainders: bool = True) -> DeliveryRun:
+    def finish_run(
+        self,
+        run_id: Union[UUID, str],
+        user_id: Optional[str] = None,
+        create_remainders: bool = True,
+        expected_updated_at: Optional[datetime] = None,
+    ) -> DeliveryRun:
         """
         Finish a delivery run: fulfill orders in InFlow and optionally create remainder orders.
 
@@ -309,6 +315,31 @@ class DeliveryRunService:
         run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
         if not run:
             raise NotFoundError("DeliveryRun", str(run_id))
+
+        if run.status != DeliveryRunStatus.ACTIVE.value:
+            raise ValidationError(
+                "Cannot finish delivery run because it is not active",
+                details={"run_id": run_id_str, "current_status": run.status},
+            )
+
+        if expected_updated_at is not None and run.updated_at is not None:
+            expected_utc = expected_updated_at
+            if expected_utc.tzinfo is not None:
+                expected_utc = expected_utc.astimezone(timezone.utc).replace(tzinfo=None)
+
+            current_utc = run.updated_at
+            if current_utc.tzinfo is not None:
+                current_utc = current_utc.astimezone(timezone.utc).replace(tzinfo=None)
+
+            if expected_utc != current_utc:
+                raise ConflictError(
+                    "Delivery run has changed since it was loaded. Refresh and try again.",
+                    details={
+                        "run_id": run_id_str,
+                        "expected_updated_at": expected_utc.isoformat(),
+                        "current_updated_at": current_utc.isoformat(),
+                    },
+                )
 
         # Validate ALL orders are already delivered
         undelivered_orders = [o for o in run.orders if o.status != OrderStatus.DELIVERED.value]

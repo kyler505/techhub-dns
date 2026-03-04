@@ -168,6 +168,7 @@ def get_run(run_id):
             status=run.status,
             start_time=run.start_time,
             end_time=run.end_time,
+            updated_at=run.updated_at,
             orders=[
                 OrderSummary(
                     id=o.id,
