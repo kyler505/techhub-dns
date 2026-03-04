@@ -98,9 +98,9 @@ export default function OrderTable({
     return (
         <div className="rounded-lg border border-border bg-card shadow-premium overflow-hidden">
             <Table className="min-w-[720px]">
-                <TableHeader className="bg-muted/40">
+                <TableHeader className="sticky top-0 z-20 bg-muted/40">
                     <TableRow>
-                        <TableHead>
+                        <TableHead className="w-[260px]">
                             <button
                                 type="button"
                                 onClick={() => toggleSort("id")}

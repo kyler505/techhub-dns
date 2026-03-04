@@ -17,6 +17,7 @@ export default function Orders() {
     const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
     const [transitioningOrder, setTransitioningOrder] = useState<{
         orderId: string;
         newStatus: OrderStatus;
@@ -41,18 +42,30 @@ export default function Orders() {
     }, [websocketOrders]);
 
     useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setDebouncedSearch(search);
+        }, 300);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [search]);
+
+    useEffect(() => {
         loadOrders();
-    }, [statusFilter, search]);
+    }, [statusFilter, debouncedSearch]);
 
     const loadOrders = async () => {
         setLoading(true);
         try {
+            const searchQuery = debouncedSearch.trim();
+
             // Handle array of statuses by fetching each and combining
             if (Array.isArray(statusFilter)) {
                 const orderPromises = statusFilter.map(status =>
                     ordersApi.getOrders({
                         status,
-                        search: search || undefined,
+                        search: searchQuery || undefined,
                     })
                 );
                 const results = await Promise.all(orderPromises);
@@ -64,7 +77,7 @@ export default function Orders() {
             } else {
                 const data = await ordersApi.getOrders({
                     status: statusFilter || undefined,
-                    search: search || undefined,
+                    search: searchQuery || undefined,
                 });
                 setOrders(data);
             }

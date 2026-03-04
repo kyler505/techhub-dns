@@ -56,6 +56,11 @@ class ExternalServiceError(DNSApiError):
         )
 
 
+class ConflictError(DNSApiError):
+    def __init__(self, message: str, details: dict = None):
+        super().__init__("CONFLICT", message, 409, details=details)
+
+
 # Legacy exceptions for backward compatibility
 class OrderNotFoundError(NotFoundError):
     """Order not found"""

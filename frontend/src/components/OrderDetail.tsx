@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "./ui/table";
 import { toast } from "sonner";
+import StatusPathViz from "./audit/StatusPathViz";
 
 interface OrderDetailProps {
   order: OrderDetailType;
@@ -373,25 +374,35 @@ export default function OrderDetail({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Audit Timeline</CardTitle>
+          <CardTitle className="text-xl">Status Path</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {auditLogs.map((log) => (
-              <div key={log.id} className="border-l-2 border-border pl-4 py-2">
-                <p className="text-sm font-medium text-foreground">
-                  {log.from_status || "Created"} → {log.to_status}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {formatToCentralTime(log.timestamp)}
-                  {log.changed_by && ` by ${log.changed_by}`}
-                </p>
-                {log.reason && (
-                  <p className="mt-1 text-sm text-muted-foreground">{log.reason}</p>
-                )}
+        <CardContent className="space-y-3">
+          {auditLogs.length > 0 ? (
+            <>
+              <StatusPathViz auditLogs={auditLogs} title="Workflow path" />
+              <div className="max-h-[320px] space-y-2 overflow-auto pr-2">
+                {auditLogs
+                  .slice()
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map((log) => (
+                    <div key={log.id} className="rounded-lg border border-maroon-900/10 bg-card p-3">
+                      <p className="text-sm font-medium text-foreground">
+                        {log.from_status || "Created"} -&gt; {log.to_status}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatToCentralTime(log.timestamp)}
+                        {log.changed_by && ` by ${log.changed_by}`}
+                      </p>
+                      {log.reason ? <p className="mt-1 text-sm text-muted-foreground">{log.reason}</p> : null}
+                    </div>
+                  ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-sm text-muted-foreground">
+              No workflow audit history available.
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -18,7 +18,10 @@ WEBAPP_DOMAIN="${WEBAPP_DOMAIN:-}"
 BRANCH="${BRANCH:-main}"
 LOG_FILE="${LOG_FILE:-${PROJECT_ROOT}/deploy.log}"
 RUNNING_FILE="${RUNNING_FILE:-${PROJECT_ROOT}/.deploy.running}"
+FRONTEND_DIR="${FRONTEND_DIR:-${PROJECT_ROOT}/frontend}"
 LOCKFILE="${LOCKFILE:-${PROJECT_ROOT}/frontend/package-lock.json}"
+LOCKFILE_HASH_FILE="${LOCKFILE_HASH_FILE:-${FRONTEND_DIR}/.deploy-lockfile.sha256}"
+FRONTEND_DIST_DIR="${FRONTEND_DIST_DIR:-${FRONTEND_DIR}/dist}"
 DEPLOY_PREFLIGHT="${DEPLOY_PREFLIGHT:-1}"
 RELOAD_STRICT="${RELOAD_STRICT:-1}"
 
@@ -186,17 +189,94 @@ remove_node_modules_with_retries() {
     return 1
 }
 
+lockfile_checksum() {
+    local file_path="$1"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file_path" | awk '{print $1}'
+        return 0
+    fi
+
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file_path" | awk '{print $1}'
+        return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$file_path" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+print(hashlib.sha256(path.read_bytes()).hexdigest())
+PY
+        return 0
+    fi
+
+    return 1
+}
+
+should_install_frontend_deps() {
+    if [ ! -d node_modules ]; then
+        log "Frontend node_modules missing; installing dependencies"
+        return 0
+    fi
+
+    if [ ! -f "$LOCKFILE" ]; then
+        log "WARNING: package-lock.json not found; installing dependencies"
+        return 0
+    fi
+
+    if [ ! -f "$LOCKFILE_HASH_FILE" ]; then
+        log "Frontend lockfile fingerprint missing; installing dependencies"
+        return 0
+    fi
+
+    local current_lockfile_hash
+    local previous_lockfile_hash
+
+    current_lockfile_hash="$(lockfile_checksum "$LOCKFILE" 2>/dev/null || true)"
+    previous_lockfile_hash="$(cat "$LOCKFILE_HASH_FILE" 2>/dev/null || true)"
+
+    if [ -z "$current_lockfile_hash" ]; then
+        log "WARNING: Unable to compute lockfile checksum; installing dependencies"
+        return 0
+    fi
+
+    if [ "$current_lockfile_hash" != "$previous_lockfile_hash" ]; then
+        log "Frontend lockfile changed; installing dependencies"
+        return 0
+    fi
+
+    log "Frontend dependencies unchanged; skipping npm install"
+    return 1
+}
+
+save_lockfile_fingerprint() {
+    if [ ! -f "$LOCKFILE" ]; then
+        return 0
+    fi
+
+    local lockfile_hash
+    lockfile_hash="$(lockfile_checksum "$LOCKFILE" 2>/dev/null || true)"
+
+    if [ -n "$lockfile_hash" ]; then
+        printf '%s\n' "$lockfile_hash" > "$LOCKFILE_HASH_FILE"
+    fi
+}
+
 install_frontend_deps() {
     local -a install_cmd
     local -a fallback_cmd
 
     if [ -f "$LOCKFILE" ]; then
         log "Installing frontend dependencies (npm ci)..."
-        install_cmd=(npm ci --include=dev)
-        fallback_cmd=(npm install --include=dev)
+        install_cmd=(npm ci --include=dev --no-audit --fund=false)
+        fallback_cmd=(npm install --include=dev --no-audit --fund=false)
     else
         log "WARNING: package-lock.json not found; running npm install"
-        install_cmd=(npm install --include=dev)
+        install_cmd=(npm install --include=dev --no-audit --fund=false)
     fi
 
     set +e
@@ -205,6 +285,7 @@ install_frontend_deps() {
     set -e
 
     if [ "$first_attempt_status" -eq 0 ]; then
+        save_lockfile_fingerprint
         return 0
     fi
 
@@ -217,6 +298,7 @@ install_frontend_deps() {
 
         if [ "$fallback_status" -eq 0 ]; then
             log "npm install succeeded after npm ci failure"
+            save_lockfile_fingerprint
             return 0
         fi
 
@@ -237,6 +319,7 @@ install_frontend_deps() {
             return 1
         fi
 
+        save_lockfile_fingerprint
         return 0
     fi
 
@@ -256,6 +339,8 @@ install_frontend_deps() {
         log "ERROR: Frontend dependency install failed after cleanup retry"
         return 1
     fi
+
+    save_lockfile_fingerprint
 }
 
 # Deploy lock (prevents concurrent deploys)
@@ -304,23 +389,44 @@ log "Changed to $PROJECT_ROOT"
 
 # Fetch and pull latest changes
 log "Pulling latest changes from origin/$BRANCH..."
+previous_commit="$(git rev-parse HEAD 2>/dev/null || true)"
 git fetch origin "$BRANCH"
+target_commit="$(git rev-parse "origin/$BRANCH" 2>/dev/null || true)"
+
+frontend_changed=1
+if [ -n "$previous_commit" ] && [ -n "$target_commit" ] && [ "$previous_commit" != "$target_commit" ]; then
+    if git diff --quiet "$previous_commit" "$target_commit" -- frontend; then
+        frontend_changed=0
+    fi
+fi
+
 git reset --hard "origin/$BRANCH"
 log "Git pull complete"
 
 # Build frontend on PythonAnywhere
-if [ -d "$PROJECT_ROOT/frontend" ]; then
-    log "Building frontend..."
-    cd "$PROJECT_ROOT/frontend"
+if [ -d "$FRONTEND_DIR" ]; then
+    should_build_frontend=1
+    if [ "$frontend_changed" -eq 0 ] && [ -d "$FRONTEND_DIST_DIR" ]; then
+        should_build_frontend=0
+    fi
 
-    # Reliability > speed: always reinstall deps before building.
-    install_frontend_deps
-    log "Running frontend build..."
-    npm run build
-    log "Frontend build complete"
-    cd "$PROJECT_ROOT"
+    if [ "$should_build_frontend" -eq 1 ]; then
+        log "Building frontend..."
+        cd "$FRONTEND_DIR"
+
+        if should_install_frontend_deps; then
+            install_frontend_deps
+        fi
+
+        log "Running frontend build..."
+        npm run build
+        log "Frontend build complete"
+        cd "$PROJECT_ROOT"
+    else
+        log "No frontend changes detected and dist exists; skipping frontend build"
+    fi
 else
-    log "WARNING: Frontend directory not found at $PROJECT_ROOT/frontend"
+    log "WARNING: Frontend directory not found at $FRONTEND_DIR"
 fi
 
 # Show what changed
