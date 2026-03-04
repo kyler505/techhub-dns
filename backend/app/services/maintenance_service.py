@@ -104,6 +104,89 @@ def archive_system_audit_logs(
     return int(result.moved)
 
 
+@dataclass(frozen=True)
+class AuditRetentionRunResult:
+    moved: int
+    deleted: int
+
+
+def apply_system_audit_retention(
+    db: DbSession,
+    *,
+    archive_cutoff: Optional[datetime] = None,
+    archive_retention_days: Optional[int] = None,
+    batch_size: Optional[int] = None,
+) -> AuditRetentionRunResult:
+    """Move old audit logs to archive and prune archived rows beyond retention."""
+
+    effective_batch_size = batch_size or int(getattr(settings, "system_audit_archive_batch_size", 1000) or 1000)
+    effective_batch_size = max(1, min(effective_batch_size, 10_000))
+
+    now = datetime.utcnow()
+
+    if archive_cutoff is None:
+        archive_days = int(getattr(settings, "system_audit_archive_days", 90) or 90)
+        archive_cutoff = now - timedelta(days=max(1, archive_days))
+
+    retention_days = archive_retention_days
+    if retention_days is None:
+        retention_days = int(getattr(settings, "system_audit_archive_retention_days", 365) or 365)
+    retention_days = max(1, int(retention_days))
+    archive_purge_cutoff = now - timedelta(days=retention_days)
+
+    moved = archive_system_audit_logs_bounded(
+        db,
+        cutoff=archive_cutoff,
+        batch_size=effective_batch_size,
+        max_batches=None,
+    ).moved
+    deleted = purge_system_audit_archive(
+        db,
+        cutoff=archive_purge_cutoff,
+        batch_size=effective_batch_size,
+    )
+    return AuditRetentionRunResult(moved=int(moved), deleted=int(deleted))
+
+
+def purge_system_audit_archive(
+    db: DbSession,
+    *,
+    cutoff: datetime,
+    batch_size: Optional[int] = None,
+) -> int:
+    """Delete archived audit logs older than the provided cutoff."""
+
+    effective_batch_size = batch_size or int(getattr(settings, "system_audit_archive_batch_size", 1000) or 1000)
+    effective_batch_size = max(1, min(effective_batch_size, 10_000))
+
+    if cutoff is None:
+        raise ValueError("Archive purge cutoff must be provided.")
+
+    total_deleted = 0
+
+    while True:
+        ids = (
+            db.query(SystemAuditLogArchive.id)
+            .filter(SystemAuditLogArchive.timestamp < cutoff)
+            .order_by(SystemAuditLogArchive.timestamp.asc(), SystemAuditLogArchive.id.asc())
+            .limit(effective_batch_size)
+            .all()
+        )
+        id_values = [row[0] for row in ids if row and row[0]]
+        if not id_values:
+            break
+
+        deleted = (
+            db.query(SystemAuditLogArchive)
+            .filter(SystemAuditLogArchive.id.in_(id_values))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        total_deleted += int(deleted or 0)
+
+    return int(total_deleted)
+
+
 def archive_system_audit_logs_bounded(
     db: DbSession,
     *,
@@ -146,17 +229,23 @@ def archive_system_audit_logs_bounded(
             break
 
         values = [_system_audit_log_values(r) for r in rows]
-        _insert_archive_rows(db, values, dialect=dialect)
+        archived_ids = _insert_archive_rows(db, values, dialect=dialect)
 
-        deleted = (
-            db.query(SystemAuditLog)
-            .filter(SystemAuditLog.id.in_(ids))
-            .delete(synchronize_session=False)
-        )
+        delete_ids = [log_id for log_id in ids if log_id in archived_ids]
+        if delete_ids:
+            deleted = (
+                db.query(SystemAuditLog)
+                .filter(SystemAuditLog.id.in_(delete_ids))
+                .delete(synchronize_session=False)
+            )
+        else:
+            deleted = 0
 
         db.commit()
         total_moved += int(deleted or 0)
         batches_run += 1
+        if not delete_ids:
+            break
 
     has_more = _has_old_system_audit_logs(db, cutoff=cutoff)
     return AuditArchiveRunResult(moved=int(total_moved), has_more=bool(has_more))
@@ -205,9 +294,11 @@ def _system_audit_log_values(row: SystemAuditLog) -> dict[str, Any]:
     }
 
 
-def _insert_archive_rows(db: DbSession, values: list[dict[str, Any]], *, dialect: str) -> None:
+def _insert_archive_rows(db: DbSession, values: list[dict[str, Any]], *, dialect: str) -> set[str]:
     if not values:
-        return
+        return set()
+
+    candidate_ids = {str(value["id"]) for value in values if value.get("id")}
 
     stmt = insert(SystemAuditLogArchive.__table__).values(values)
 
@@ -218,19 +309,27 @@ def _insert_archive_rows(db: DbSession, values: list[dict[str, Any]], *, dialect
 
     try:
         db.execute(stmt)
-        return
+        return candidate_ids
     except IntegrityError:
         db.rollback()
 
     # Fallback: best-effort per-row insert ignoring duplicates.
+    inserted_ids: set[str] = set()
     for value in values:
+        value_id = value.get("id")
+        if not value_id:
+            continue
         try:
             single = insert(SystemAuditLogArchive.__table__).values(value)
             if dialect == "mysql":
                 single = single.prefix_with("IGNORE")
             elif dialect == "sqlite":
                 single = single.prefix_with("OR IGNORE")
+            savepoint = db.begin_nested()
             db.execute(single)
+            savepoint.commit()
+            inserted_ids.add(str(value_id))
         except IntegrityError:
-            db.rollback()
+            savepoint.rollback()
             continue
+    return inserted_ids

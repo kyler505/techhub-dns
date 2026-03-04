@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Send,
   Users,
+  FilePenLine,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -36,6 +37,7 @@ const navItems: LeafNavItem[] = [
 
 const adminItems = [
   { path: "/admin", label: "Admin", icon: Settings },
+  { path: "/vetting-editor", label: "Vetting Editor", icon: FilePenLine },
   { path: "/sessions", label: "Sessions", icon: Users },
 ];
 
@@ -43,8 +45,9 @@ export function Sidebar({ className }: { className?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { isAdmin } = useAuth();
-
-  const visibleAdminItems = isAdmin ? adminItems : adminItems.filter((item) => item.path !== "/admin");
+  const visibleAdminItems = isAdmin
+    ? adminItems
+    : adminItems.filter((item) => item.path !== "/admin" && item.path !== "/vetting-editor");
 
   useEffect(() => {
     if (typeof document === "undefined") return;

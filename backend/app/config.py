@@ -105,6 +105,7 @@ class Settings(BaseSettings):
     # System audit archive (used by maintenance_service; optionally env-configured)
     system_audit_archive_days: int = 90
     system_audit_archive_batch_size: int = 1000
+    system_audit_archive_retention_days: int = 365
 
     # Flask environment
     flask_env: str = "development"
@@ -173,6 +174,12 @@ class Settings(BaseSettings):
     canopyorders_user_agent: str = "Cyberduck/9.0.0 (Windows 10/10.0) (x86_64) (WebDAV)"
     canopyorders_teams_workflow_url: Optional[str] = None
     canopyorders_teams_shared_secret: Optional[str] = None
+
+    # Vetting Editor (env-only, no Key Vault integration)
+    vetting_editor_download_url: Optional[str] = None
+    vetting_editor_upload_url: Optional[str] = None
+    vetting_editor_webdav_username: Optional[str] = None
+    vetting_editor_webdav_password: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

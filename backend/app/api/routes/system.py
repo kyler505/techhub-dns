@@ -6,10 +6,13 @@ Provides endpoints for checking backend feature statuses.
 
 import json
 import re
+from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 from typing import Dict, Any, cast, Optional
 from datetime import datetime, timezone
+import requests
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 from app.config import settings
 from app.services.saml_auth_service import saml_auth_service
@@ -38,6 +41,237 @@ from app.services.system_setting_service import (
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
+
+VETTING_EDITOR_ALLOWED_SECTIONS = (
+    "UnderConsideration",
+    "Vetting",
+    "AwaitingApproval",
+    "ComingSoon",
+    "Approved",
+)
+VETTING_EDITOR_VETTING_URL_SECTIONS = ("Vetting", "AwaitingApproval")
+VETTING_EDITOR_ALLOWED_CATEGORIES = (
+    "ACCESSORIES",
+    "MONITORS + DOCKS",
+    "LAPTOPS + TABLETS",
+    "DESKTOPS",
+)
+
+_VETTING_EDITOR_TIMEOUT = (15, 60)
+_VETTING_EDITOR_DOWNLOAD_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+}
+
+
+def _normalize_vetting_editor_section_name(section_name: str) -> str:
+    return section_name.strip().lower()
+
+
+_VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME = {
+    _normalize_vetting_editor_section_name(section): section for section in VETTING_EDITOR_ALLOWED_SECTIONS
+}
+_VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.update(
+    {
+        "underconsideration": "UnderConsideration",
+    }
+)
+
+
+def _get_vetting_editor_auth() -> tuple[str, str]:
+    username = (settings.vetting_editor_webdav_username or "").strip()
+    password = settings.vetting_editor_webdav_password
+    if not username or not password:
+        raise RuntimeError(
+            "Vetting editor credentials are not configured (VETTING_EDITOR_WEBDAV_USERNAME and VETTING_EDITOR_WEBDAV_PASSWORD)."
+        )
+    return username, password
+
+
+def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, str]]]:
+    if not isinstance(payload, dict):
+        raise ValueError("Payload must be a JSON object keyed by section.")
+
+    allowed_categories = set(VETTING_EDITOR_ALLOWED_CATEGORIES)
+    unknown_sections: list[str] = []
+    section_rows_by_canonical_name: dict[str, Any] = {}
+
+    for raw_section_name, section_rows in payload.items():
+        if not isinstance(raw_section_name, str):
+            unknown_sections.append(str(raw_section_name))
+            continue
+
+        canonical_section_name = _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.get(
+            _normalize_vetting_editor_section_name(raw_section_name)
+        )
+        if canonical_section_name is None:
+            unknown_sections.append(raw_section_name)
+            continue
+
+        if canonical_section_name in section_rows_by_canonical_name:
+            raise ValueError(
+                f"Duplicate section alias for '{canonical_section_name}': '{raw_section_name}'."
+            )
+
+        section_rows_by_canonical_name[canonical_section_name] = section_rows
+
+    if unknown_sections:
+        unknown_sections_sorted = sorted(unknown_sections, key=lambda section: section.lower())
+        raise ValueError(f"Unsupported sections: {', '.join(unknown_sections_sorted)}")
+
+    vetting_url_sections = set(VETTING_EDITOR_VETTING_URL_SECTIONS)
+    normalized: dict[str, list[dict[str, str]]] = {}
+
+    for section in VETTING_EDITOR_ALLOWED_SECTIONS:
+        if section not in section_rows_by_canonical_name:
+            continue
+
+        section_rows = section_rows_by_canonical_name[section]
+        if not isinstance(section_rows, list):
+            raise ValueError(f"Section '{section}' must be an array of rows.")
+
+        normalized_section_rows: list[dict[str, str]] = []
+
+        for index, row in enumerate(section_rows):
+            if not isinstance(row, dict):
+                raise ValueError(f"Section '{section}' row {index + 1} must be an object.")
+
+            allowed_fields = {"name", "category", "url", "vettingUrl"}
+            unknown_fields = sorted(key for key in row.keys() if key not in allowed_fields)
+            if unknown_fields:
+                raise ValueError(
+                    f"Section '{section}' row {index + 1} has unsupported fields: {', '.join(unknown_fields)}"
+                )
+
+            name = row.get("name")
+            category = row.get("category")
+            product_url = row.get("url")
+
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(f"Section '{section}' row {index + 1} has invalid 'name'.")
+            if not isinstance(category, str) or category not in allowed_categories:
+                raise ValueError(f"Section '{section}' row {index + 1} has invalid 'category'.")
+            if not isinstance(product_url, str) or not product_url.strip():
+                raise ValueError(f"Section '{section}' row {index + 1} has invalid 'url'.")
+
+            normalized_row: dict[str, str] = {
+                "name": name.strip(),
+                "category": category,
+                "url": product_url.strip(),
+            }
+
+            vetting_url = row.get("vettingUrl")
+            if section in vetting_url_sections:
+                if vetting_url is not None:
+                    if not isinstance(vetting_url, str):
+                        raise ValueError(f"Section '{section}' row {index + 1} has invalid 'vettingUrl'.")
+                    trimmed_vetting_url = vetting_url.strip()
+                    if trimmed_vetting_url:
+                        normalized_row["vettingUrl"] = trimmed_vetting_url
+            elif vetting_url not in (None, ""):
+                raise ValueError(
+                    f"'vettingUrl' is only allowed for sections: {', '.join(VETTING_EDITOR_VETTING_URL_SECTIONS)}."
+                )
+
+            normalized_section_rows.append(normalized_row)
+
+        normalized[section] = normalized_section_rows
+
+    return normalized
+
+
+def _try_download_vetting_editor_json(url: str, username: str, password: str) -> Optional[dict[str, Any]]:
+    headers = dict(_VETTING_EDITOR_DOWNLOAD_HEADERS)
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        headers["Origin"] = base
+        headers["Referer"] = f"{base}/"
+
+    attempts = (
+        ("none", None),
+        ("basic", HTTPBasicAuth(username, password)),
+        ("digest", HTTPDigestAuth(username, password)),
+    )
+
+    for auth_name, auth in attempts:
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                auth=auth,
+                timeout=_VETTING_EDITOR_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.RequestException as exc:
+            logger.warning("Vetting editor GET failed (%s): %s", auth_name, exc)
+            continue
+
+        if response.status_code != 200:
+            logger.warning("Vetting editor GET returned %s (%s)", response.status_code, auth_name)
+            continue
+
+        try:
+            payload = response.json()
+        except ValueError:
+            logger.warning("Vetting editor GET returned non-JSON payload (%s)", auth_name)
+            continue
+
+        if isinstance(payload, dict):
+            return payload
+
+        logger.warning("Vetting editor GET returned non-object JSON (%s)", auth_name)
+
+    return None
+
+
+def _upload_vetting_editor_json(url: str, payload: dict[str, list[dict[str, str]]], username: str, password: str) -> bool:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json; charset=UTF-8",
+        "Accept": "application/json, text/plain, */*",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+
+    attempts = (
+        ("digest", HTTPDigestAuth(username, password)),
+        ("basic", HTTPBasicAuth(username, password)),
+    )
+
+    for auth_name, auth in attempts:
+        try:
+            requests.request(
+                "PROPFIND",
+                url,
+                headers=headers,
+                auth=auth,
+                timeout=_VETTING_EDITOR_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.RequestException:
+            logger.debug("Vetting editor PROPFIND warmup failed (%s)", auth_name)
+
+        try:
+            response = requests.put(
+                url,
+                data=body,
+                headers=headers,
+                auth=auth,
+                timeout=_VETTING_EDITOR_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.RequestException as exc:
+            logger.warning("Vetting editor PUT failed (%s): %s", auth_name, exc)
+            continue
+
+        if response.status_code in (200, 201, 204):
+            return True
+
+        logger.warning("Vetting editor PUT returned %s (%s)", response.status_code, auth_name)
+
+    return False
 
 
 def _to_utc_iso_z(value: Optional[datetime]) -> Optional[str]:
@@ -260,6 +494,71 @@ def update_admins():
         raise
     finally:
         db.close()
+
+
+# ============ Vetting Editor Endpoints ============
+
+
+@bp.route("/vetting-editor", methods=["GET"])
+@require_admin
+def get_vetting_editor_data():
+    download_url = (settings.vetting_editor_download_url or "").strip()
+    upload_url = (settings.vetting_editor_upload_url or "").strip()
+    if not download_url and not upload_url:
+        return jsonify({"error": "Vetting editor is not configured (missing VETTING_EDITOR_DOWNLOAD_URL)."}), 500
+
+    try:
+        username, password = _get_vetting_editor_auth()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    candidate_urls: list[str] = []
+    for candidate in (download_url, upload_url):
+        if candidate and candidate not in candidate_urls:
+            candidate_urls.append(candidate)
+
+    payload: Optional[dict[str, Any]] = None
+    for url in candidate_urls:
+        payload = _try_download_vetting_editor_json(url, username, password)
+        if payload is not None:
+            break
+
+    if payload is None:
+        return jsonify({"error": "Failed to fetch vetting editor JSON from WebDAV."}), 502
+
+    try:
+        normalized = _validate_vetting_editor_payload(payload)
+    except ValueError as exc:
+        return jsonify({"error": f"Remote vetting editor JSON is invalid: {exc}"}), 502
+
+    return jsonify(normalized)
+
+
+@bp.route("/vetting-editor", methods=["PUT"])
+@require_admin
+def save_vetting_editor_data():
+    upload_url = (settings.vetting_editor_upload_url or "").strip()
+    if not upload_url:
+        return jsonify({"error": "Vetting editor is not configured (missing VETTING_EDITOR_UPLOAD_URL)."}), 500
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"error": "Missing JSON request body."}), 400
+
+    try:
+        normalized = _validate_vetting_editor_payload(payload)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        username, password = _get_vetting_editor_auth()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    if not _upload_vetting_editor_json(upload_url, normalized, username, password):
+        return jsonify({"error": "Failed to upload vetting editor JSON to WebDAV."}), 502
+
+    return jsonify({"success": True})
 
 
 # ============ Testing Endpoints ============

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum as SQLEnum, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, DateTime, Enum as SQLEnum, Integer, Text, ForeignKey, Index
 import enum
 
 from app.database import Base
@@ -14,6 +14,10 @@ class NotificationStatus(str, enum.Enum):
 
 class TeamsNotification(Base):
     __tablename__ = "teams_notifications"
+
+    __table_args__ = (
+        Index("ix_teams_notifications_order_status_sent_at", "order_id", "status", "sent_at"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     order_id = Column(String(36), ForeignKey("orders.id"), nullable=False, index=True)
