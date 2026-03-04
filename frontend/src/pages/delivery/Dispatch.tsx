@@ -12,10 +12,10 @@ import {
   vehicleCheckoutsApi,
 } from "../../api/vehicleCheckouts";
 import VehicleCommandCard from "../../components/delivery/VehicleCommandCard";
+import DispatchOrderLane from "../../components/delivery/DispatchOrderLane";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
-import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
+import { Input } from "../../components/ui/input";
 import { useAuth } from "../../contexts/AuthContext";
 import { useOrdersWebSocket } from "../../hooks/useOrdersWebSocket";
 import { useVehicleStatuses } from "../../hooks/useVehicleStatuses";
@@ -93,9 +94,12 @@ export default function DeliveryDispatchPage() {
   const [partialPickOrders, setPartialPickOrders] = useState<Order[]>([]);
   const [pendingStartVehicle, setPendingStartVehicle] = useState<Vehicle | null>(null);
   const [pendingStartPriority, setPendingStartPriority] = useState<DeliveryRunPriorityPurpose | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [pre, inDelivery] = await Promise.all([
         ordersApi.getOrders({ status: OrderStatus.PRE_DELIVERY }),
@@ -103,8 +107,10 @@ export default function DeliveryDispatchPage() {
       ]);
       setPreDeliveryOrders(pre);
       setInDeliveryOrders(inDelivery);
-    } catch {
-      toast.error("Failed to load delivery orders");
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -120,6 +126,46 @@ export default function DeliveryDispatchPage() {
     [preDeliveryOrders, selectedOrders]
   );
 
+  useEffect(() => {
+    setSelectedOrders((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+      const availableIds = new Set(preDeliveryOrders.map((order) => order.id));
+      const next = new Set(Array.from(previous).filter((orderId) => availableIds.has(orderId)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [preDeliveryOrders]);
+
+  const preDeliveryFilteredOrders = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+    if (!search) return preDeliveryOrders;
+
+    return preDeliveryOrders.filter((order) => {
+      const haystack = [
+        order.inflow_order_id,
+        order.recipient_name,
+        order.assigned_deliverer,
+        formatDeliveryLocation(order),
+      ]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(search);
+    });
+  }, [preDeliveryOrders, searchTerm]);
+
+  const needsAttentionOrders = useMemo(
+    () => preDeliveryFilteredOrders.filter((order) => Boolean(order.pick_status && !order.pick_status.is_fully_picked)),
+    [preDeliveryFilteredOrders]
+  );
+
+  const readyOrders = useMemo(
+    () => preDeliveryFilteredOrders.filter((order) => !order.pick_status || order.pick_status.is_fully_picked),
+    [preDeliveryFilteredOrders]
+  );
+
   const activeDeliveryPreview = useMemo(() => {
     const sorted = [...inDeliveryOrders].sort((left, right) => {
       const leftTime = Date.parse(left.updated_at);
@@ -132,7 +178,7 @@ export default function DeliveryDispatchPage() {
   }, [inDeliveryOrders]);
 
   const allVisibleSelected =
-    preDeliveryOrders.length > 0 && preDeliveryOrders.every((order) => selectedOrders.has(order.id));
+    preDeliveryFilteredOrders.length > 0 && preDeliveryFilteredOrders.every((order) => selectedOrders.has(order.id));
 
   const selectedPartialPickCount = useMemo(
     () => selectedOrdersList.filter((order) => order.pick_status && !order.pick_status.is_fully_picked).length,
@@ -186,7 +232,7 @@ export default function DeliveryDispatchPage() {
     if (allVisibleSelected) {
       setSelectedOrders((previous) => {
         const next = new Set(previous);
-        for (const order of preDeliveryOrders) {
+        for (const order of preDeliveryFilteredOrders) {
           next.delete(order.id);
         }
         return next;
@@ -196,7 +242,7 @@ export default function DeliveryDispatchPage() {
 
     setSelectedOrders((previous) => {
       const next = new Set(previous);
-      for (const order of preDeliveryOrders) {
+      for (const order of preDeliveryFilteredOrders) {
         next.add(order.id);
       }
       return next;
@@ -386,6 +432,27 @@ export default function DeliveryDispatchPage() {
     navigate(`/orders/${orderId}`);
   };
 
+  const selectedVehicleStartBlockedReason = selectedVehicle ? getStartDisabledReason(selectedVehicle.id) : "Select a vehicle";
+
+  const preflightBlockers = useMemo(() => {
+    const blockers: Array<{ kind: "error" | "warning"; message: string }> = [];
+    if (selectedOrders.size === 0) {
+      blockers.push({ kind: "error", message: "Select at least one ready order to dispatch." });
+    }
+    if (!selectedVehicle) {
+      blockers.push({ kind: "error", message: "Select a vehicle." });
+    } else if (selectedVehicleStartBlockedReason) {
+      blockers.push({ kind: "error", message: selectedVehicleStartBlockedReason });
+    }
+    if (selectedPartialPickCount > 0) {
+      blockers.push({
+        kind: "warning",
+        message: `${selectedPartialPickCount} selected order${selectedPartialPickCount === 1 ? " is" : "s are"} partially picked.`,
+      });
+    }
+    return blockers;
+  }, [selectedOrders.size, selectedVehicle, selectedVehicleStartBlockedReason, selectedPartialPickCount]);
+
   if (loading) {
     return <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">Loading...</div>;
   }
@@ -396,7 +463,17 @@ export default function DeliveryDispatchPage() {
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Pre-Delivery Orders</h2>
+            <p className="text-xs text-muted-foreground">Use lanes to triage ready vs exception orders before dispatch.</p>
           </div>
+
+          {loadError ? (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              <span>Failed to refresh delivery orders. {loadError}</span>
+              <Button variant="outline" size="sm" onClick={() => void loadOrders()}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs">
             <span className="text-muted-foreground">Selected</span>
@@ -407,66 +484,58 @@ export default function DeliveryDispatchPage() {
             <span className="text-border">|</span>
             <span className="text-muted-foreground">Partial picks</span>
             <span className="font-semibold text-foreground">{selectedPartialPickCount}</span>
+            <span className="text-border">|</span>
+            <span className="text-muted-foreground">Ready lane</span>
+            <span className="font-semibold text-foreground">{readyOrders.length}</span>
+            <span className="text-border">|</span>
+            <span className="text-muted-foreground">Needs attention</span>
+            <span className="font-semibold text-foreground">{needsAttentionOrders.length}</span>
           </div>
 
           <Card>
             <CardContent className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-muted-foreground">Quick selection</div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleToggleVisible}
-                  disabled={preDeliveryOrders.length === 0}
-                >
-                  {allVisibleSelected ? "Clear all" : "Select all"}
-                </Button>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="text-xs text-muted-foreground">Quick selection for currently filtered orders</div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search ID, recipient, deliverer, or location"
+                    className="h-8 w-[280px] max-w-full"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleToggleVisible}
+                    disabled={preDeliveryFilteredOrders.length === 0}
+                  >
+                    {allVisibleSelected ? "Clear visible" : "Select visible"}
+                  </Button>
+                </div>
               </div>
 
-              {preDeliveryOrders.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">No pre-delivery orders</div>
+              {preDeliveryFilteredOrders.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">No pre-delivery orders match this filter</div>
               ) : (
-                <div className="divide-y divide-border/60 xl:max-h-[620px] xl:overflow-y-auto xl:pr-1">
-                  {preDeliveryOrders.map((order) => {
-                    const isSelected = selectedOrders.has(order.id);
-
-                    return (
-                      <div key={order.id} className="py-3 first:pt-0 last:pb-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <button
-                              type="button"
-                              className="-mx-2 inline-flex min-h-9 items-center rounded px-2 text-left text-sm font-medium text-foreground hover:underline"
-                              onClick={() => handleViewDetail(order.id)}
-                            >
-                              {order.inflow_order_id}
-                            </button>
-                            <div className="text-xs text-muted-foreground">{order.recipient_name || "N/A"}</div>
-                            <div className="text-xs text-muted-foreground">{formatDeliveryLocation(order)}</div>
-                          </div>
-                          <Checkbox
-                            checked={isSelected}
-                            onChange={() => handleSelectOrder(order.id)}
-                            aria-label={`Select order ${order.inflow_order_id ?? order.id}`}
-                          />
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          <span className="text-muted-foreground">Deliverer: {order.assigned_deliverer || "Unassigned"}</span>
-                          {order.pick_status && !order.pick_status.is_fully_picked ? (
-                            <Badge
-                              variant="warning"
-                              className="gap-1"
-                              title={`Partial pick: ${order.pick_status.total_picked}/${order.pick_status.total_ordered} items picked`}
-                            >
-                              <AlertTriangle className="h-3 w-3" />
-                              Partial Pick
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="space-y-3 xl:max-h-[620px] xl:overflow-y-auto xl:pr-1">
+                  <DispatchOrderLane
+                    title="Needs Attention"
+                    description="Partial picks or exceptions to review before starting a run."
+                    orders={needsAttentionOrders}
+                    selectedOrderIds={selectedOrders}
+                    emptyText="No exception orders in the current filter"
+                    onToggleOrder={handleSelectOrder}
+                    onViewOrder={handleViewDetail}
+                  />
+                  <DispatchOrderLane
+                    title="Ready to Dispatch"
+                    description="Orders that are fully picked and ready for vehicle assignment."
+                    orders={readyOrders}
+                    selectedOrderIds={selectedOrders}
+                    emptyText="No ready orders in the current filter"
+                    onToggleOrder={handleSelectOrder}
+                    onViewOrder={handleViewDetail}
+                  />
                 </div>
               )}
             </CardContent>
@@ -542,6 +611,40 @@ export default function DeliveryDispatchPage() {
           </div>
 
           <div className="grid gap-3">
+            <Card>
+              <CardContent className="space-y-2 p-4">
+                <div className="text-sm font-semibold text-foreground">Dispatch Preflight</div>
+                <div className="text-xs text-muted-foreground">
+                  Vehicle: {selectedVehicle?.label ?? "None selected"} | Selected orders: {selectedOrders.size}
+                </div>
+                {preflightBlockers.length === 0 ? (
+                  <div className="rounded-md border border-emerald-300/50 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    Ready to start a run when purpose is selected in Fleet Command.
+                  </div>
+                ) : (
+                  <ul className="space-y-1 text-xs">
+                    {preflightBlockers.map((blocker) => (
+                      <li
+                        key={`${blocker.kind}-${blocker.message}`}
+                        className={`rounded-md px-3 py-2 ${
+                          blocker.kind === "error"
+                            ? "border border-destructive/30 bg-destructive/5 text-destructive"
+                            : "border border-amber-300/40 bg-amber-50 text-amber-800"
+                        }`}
+                      >
+                        {blocker.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {selectedPartialPickCount > 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Review partial picks in the Needs Attention lane before continuing.
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
             {selectedVehicle ? (
               <VehicleCommandCard
                 key={selectedVehicle.id}
@@ -576,12 +679,21 @@ export default function DeliveryDispatchPage() {
           </DialogHeader>
           <div className="max-h-48 overflow-y-auto py-2">
             <ul className="space-y-1 text-sm">
-              {partialPickOrders.map((order) => (
-                <li key={order.id} className="flex items-center justify-between rounded bg-muted px-2 py-1">
-                  <span className="font-medium">{order.inflow_order_id}</span>
-                  <span className="text-muted-foreground">
-                    {order.pick_status?.total_picked}/{order.pick_status?.total_ordered} items
-                  </span>
+                  {partialPickOrders.map((order) => (
+                    <li key={order.id} className="flex items-center justify-between rounded bg-muted px-2 py-1">
+                      <button
+                        type="button"
+                        className="font-medium hover:underline"
+                        onClick={() => {
+                          handlePartialPickDialogOpenChange(false);
+                          handleViewDetail(order.id);
+                        }}
+                      >
+                        {order.inflow_order_id}
+                      </button>
+                      <span className="text-muted-foreground">
+                        {order.pick_status?.total_picked}/{order.pick_status?.total_ordered} items
+                      </span>
                 </li>
               ))}
             </ul>
