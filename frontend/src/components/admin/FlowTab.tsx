@@ -52,6 +52,45 @@ const mergeUniqueById = (current: SystemAuditItem[], incoming: SystemAuditItem[]
     return next;
 };
 
+const toErrorMessage = (error: unknown, fallback: string): string => {
+    const e = error as {
+        message?: unknown;
+        response?: {
+            status?: number;
+            data?: {
+                error?: unknown;
+                message?: unknown;
+            };
+        };
+    };
+
+    const fromDataError = e?.response?.data?.error;
+    if (typeof fromDataError === "string" && fromDataError.trim()) return fromDataError;
+    if (typeof fromDataError === "object" && fromDataError) {
+        const maybeMessage = (fromDataError as { message?: unknown }).message;
+        if (typeof maybeMessage === "string" && maybeMessage.trim()) return maybeMessage;
+    }
+
+    const fromDataMessage = e?.response?.data?.message;
+    if (typeof fromDataMessage === "string" && fromDataMessage.trim()) return fromDataMessage;
+
+    if (typeof e?.message === "string" && e.message.trim()) return e.message;
+
+    return fallback;
+};
+
+const withOrderNumberPrefixCandidates = (value: string): string[] => {
+    const trimmed = value.trim();
+    const upper = trimmed.toUpperCase();
+    const candidates = [trimmed];
+    if (/^\d+$/.test(trimmed)) {
+        candidates.push(`TH${trimmed}`);
+    } else if (/^[A-Z]{2}\d+$/.test(upper)) {
+        candidates.push(upper);
+    }
+    return Array.from(new Set(candidates));
+};
+
 export default function FlowTab() {
     const [range, setRange] = useState<TimeRange>("24h");
     const [search, setSearch] = useState("");
@@ -94,8 +133,8 @@ export default function FlowTab() {
             setSystemAudit(items);
             setNextCursor(systemRes.next_cursor || null);
             setSelectedEventId((current) => current || items[0]?.id || null);
-        } catch (e: any) {
-            setError(e?.response?.data?.error || e?.message || "Failed to load audit stream");
+        } catch (e: unknown) {
+            setError(toErrorMessage(e, "Failed to load audit stream"));
         } finally {
             setLoading(false);
         }
@@ -116,8 +155,8 @@ export default function FlowTab() {
             });
             setSystemAudit((current) => mergeUniqueById(current, systemRes.items || []));
             setNextCursor(systemRes.next_cursor || null);
-        } catch (e: any) {
-            toast.error(e?.response?.data?.error || e?.message || "Failed to load more events");
+        } catch (e: unknown) {
+            toast.error(toErrorMessage(e, "Failed to load more events"));
         } finally {
             setLoadingMore(false);
         }
@@ -176,7 +215,26 @@ export default function FlowTab() {
             let resolvedOrderNumber: string | null | undefined = hintOrderNumber || null;
 
             if (!isUuid(trimmed)) {
-                const resolved = await ordersApi.resolveOrder(trimmed);
+                let resolved = null as Awaited<ReturnType<typeof ordersApi.resolveOrder>> | null;
+                const candidates = withOrderNumberPrefixCandidates(trimmed);
+                for (const candidate of candidates) {
+                    try {
+                        resolved = await ordersApi.resolveOrder(candidate);
+                        break;
+                    } catch (err: unknown) {
+                        const status = (err as { response?: { status?: number } })?.response?.status;
+                        const isLast = candidate === candidates[candidates.length - 1];
+                        if (status === 404 && !isLast) {
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
+
+                if (!resolved) {
+                    throw new Error("Order could not be resolved");
+                }
+
                 resolvedId = resolved.id;
                 resolvedOrderNumber = resolved.order_number;
             } else if (!resolvedOrderNumber) {
@@ -203,10 +261,10 @@ export default function FlowTab() {
             toast.message("Loaded order audit", {
                 description: resolvedOrderNumber ? `Order ${resolvedOrderNumber}` : resolvedId,
             });
-        } catch (e: any) {
+        } catch (e: unknown) {
             setAuditLogs([]);
             setInspectorResolved(null);
-            setAuditError(e?.response?.data?.error || e?.message || "Failed to load order audit");
+            setAuditError(toErrorMessage(e, "Failed to load order audit"));
         } finally {
             setAuditLoading(false);
         }
