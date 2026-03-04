@@ -84,7 +84,7 @@ const withOrderNumberPrefixCandidates = (value: string): string[] => {
     const upper = trimmed.toUpperCase();
     const candidates = [trimmed];
     if (/^\d+$/.test(trimmed)) {
-        candidates.push(`TH${trimmed}`);
+        return [`TH${trimmed}`, trimmed];
     } else if (/^[A-Z]{2}\d+$/.test(upper)) {
         candidates.push(upper);
     }
