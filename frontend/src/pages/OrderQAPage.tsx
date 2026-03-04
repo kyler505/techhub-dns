@@ -167,17 +167,16 @@ export default function OrderQAPage() {
     if (!order) return null;
 
     return (
-        <div className="container mx-auto py-6">
-            <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border border-maroon-900/10 bg-card shadow-lg">
-                <div className="bg-gradient-to-br from-maroon-50 via-background to-background p-6 border-b border-maroon-900/10 flex items-start justify-between">
+        <div className="min-h-screen bg-gray-50 py-8 px-4">
+            <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                <div className="p-6 border-b border-gray-200 flex items-start justify-between bg-white">
                     <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Quality Assurance</div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">QA Checklist</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Order: <span className="font-semibold text-foreground">{order.inflow_order_id}</span>
+                        <h1 className="text-2xl font-bold text-gray-900">QA Checklist</h1>
+                        <p className="text-gray-600 mt-1">
+                            Order: <span className="font-semibold text-gray-900">{order.inflow_order_id}</span>
                         </p>
                         {lastSavedAt && (
-                            <p className="mt-1 text-xs text-muted-foreground">
+                            <p className="text-xs text-gray-500 mt-1">
                                 Previously submitted: {new Date(lastSavedAt).toLocaleString()}
                             </p>
                         )}
@@ -187,19 +186,19 @@ export default function OrderQAPage() {
                 <div className="p-6 space-y-8">
                     {/* Q1 */}
                     <div>
-                        <label className="block text-sm font-medium text-foreground">
+                        <label className="block text-sm font-medium text-gray-700">
                             1. Order Number <span className="text-red-600">*</span>
                         </label>
                         <input
                             value={form.orderNumber}
                             readOnly
-                            className="mt-1 w-full rounded-md border border-maroon-900/10 bg-maroon-50/40 px-3 py-2 text-muted-foreground shadow-sm focus:outline-none"
+                            className="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 shadow-sm focus:outline-none"
                         />
                     </div>
 
                     {/* Q2 Removed - Auto Assignment */}
-                    <div className="rounded-md border border-maroon-900/15 bg-maroon-50/60 p-4">
-                        <p className="flex items-center gap-2 text-sm text-maroon-900">
+                    <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
+                        <p className="text-sm text-blue-800 flex items-center gap-2">
                             <span className="font-semibold">Info:</span>
                             Technician will be automatically recorded as:
                             <span className="font-mono font-medium">{user?.display_name || user?.email || "Current User"}</span>
@@ -208,7 +207,7 @@ export default function OrderQAPage() {
 
                     {/* Q3 - Q8 */}
                     <div className="space-y-4">
-                        <p className="border-b border-maroon-900/10 pb-2 font-medium text-foreground">
+                        <p className="font-medium text-gray-900 border-b pb-2">
                             Verification Steps <span className="text-red-600">*</span>
                         </p>
 
@@ -250,14 +249,14 @@ export default function OrderQAPage() {
                                 setter: () => setForm((p) => ({ ...p, verifyBoxesLabeledCorrectly: !p.verifyBoxesLabeledCorrectly }))
                             }
                         ].map((item) => (
-                            <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${item.checked ? 'border-emerald-200 bg-emerald-50' : 'border-maroon-900/10 bg-white hover:border-maroon-900/30'}`}>
+                            <label key={item.id} className={`flex items-start gap-3 rounded-lg border p-4 transition-colors cursor-pointer ${item.checked ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-[#800000]'}`}>
                                 <input
                                     type="checkbox"
                                     checked={item.checked}
                                     onChange={item.setter}
-                                    className="mt-1 h-5 w-5 rounded border-maroon-900/20 text-primary focus:ring-primary"
+                                    className="mt-1 h-5 w-5 rounded border-gray-300 text-[#800000] focus:ring-[#800000]"
                                 />
-                                <span className={`text-sm ${item.checked ? 'font-medium text-emerald-900' : 'text-foreground'}`}>
+                                <span className={`text-sm ${item.checked ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
                                     {item.label}
                                 </span>
                             </label>
@@ -266,24 +265,24 @@ export default function OrderQAPage() {
 
                     {/* Q9 - Auto Assigned */}
                     <div>
-                        <label className="mb-1 block text-sm font-medium text-foreground">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                             9. QA Signature (First and Last Name) <span className="text-red-600">*</span>
                         </label>
-                        <div className="w-full rounded-md border border-maroon-900/10 bg-maroon-50/40 px-3 py-2 text-muted-foreground">
+                        <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600">
                             {user?.display_name || user?.email || "Current User"}
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="text-xs text-gray-500 mt-1">
                             Signature will be automatically recorded upon submission.
                         </p>
                     </div>
 
                     {/* Q10 */}
                     <div>
-                        <label className="mb-2 block text-sm font-medium text-foreground">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
                             10. Method <span className="text-red-600">*</span>
                         </label>
                         <div className="grid grid-cols-2 gap-4">
-                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border p-4 transition-all ${form.method === 'Delivery' ? 'border-primary bg-primary text-white' : 'border-maroon-900/10 bg-white text-foreground hover:border-maroon-900/25'}`}>
+                            <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Delivery' ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                                 <input
                                     type="radio"
                                     name="qa-method"
@@ -294,7 +293,7 @@ export default function OrderQAPage() {
                                 <span className="font-medium">Delivery</span>
                             </label>
 
-                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border p-4 transition-all ${form.method === 'Shipping' ? 'border-primary bg-primary text-white' : 'border-maroon-900/10 bg-white text-foreground hover:border-maroon-900/25'}`}>
+                            <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Shipping' ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                                 <input
                                     type="radio"
                                     name="qa-method"
@@ -308,11 +307,11 @@ export default function OrderQAPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-maroon-900/10 bg-maroon-50/40 px-6 py-4">
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                     <button
                         type="button"
                         onClick={() => navigate(-1)}
-                        className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                        className="text-sm font-medium text-gray-600 hover:text-gray-900 px-4 py-2"
                     >
                         Cancel
                     </button>
@@ -322,7 +321,7 @@ export default function OrderQAPage() {
                         onClick={submitQA}
                         disabled={!isFormComplete(form)}
                         className={`rounded-md px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors ${isFormComplete(form)
-                            ? 'bg-primary hover:bg-primary/90'
+                            ? 'bg-[#800000] hover:bg-[#660000]'
                             : 'bg-gray-300 cursor-not-allowed'
                             }`}
                     >

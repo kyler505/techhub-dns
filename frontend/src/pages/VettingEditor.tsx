@@ -174,7 +174,7 @@ export default function VettingEditor() {
   if (authLoading || loading) {
     return (
       <div className="container mx-auto py-6">
-        <Card className="border-maroon-900/10">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -189,12 +189,11 @@ export default function VettingEditor() {
   if (!isAdmin) {
     return (
       <div className="container mx-auto py-6 space-y-4">
-        <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6 space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Administration</div>
+        <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Vetting Editor</h1>
           <p className="text-sm text-muted-foreground">Admin-only vetting list editor.</p>
         </div>
-        <Card className="border-maroon-900/10">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">Access denied</CardTitle>
             <CardDescription>Admin access is required to view this page.</CardDescription>
@@ -209,29 +208,26 @@ export default function VettingEditor() {
 
   return (
     <div className="container mx-auto py-6 space-y-4">
-      <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Administration</div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Vetting Editor</h1>
-            <p className="text-sm text-muted-foreground">
-              Edit vetting rows and upload section-keyed JSON to WebDAV.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={addRow} disabled={saving}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Item
-            </Button>
-            <Button type="button" onClick={() => void handleSave()} disabled={saving} className="btn-lift">
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save
-            </Button>
-          </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Vetting Editor</h1>
+          <p className="text-sm text-muted-foreground">
+            Edit vetting rows and upload section-keyed JSON to WebDAV.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={addRow} disabled={saving}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Item
+          </Button>
+          <Button type="button" onClick={() => void handleSave()} disabled={saving} className="btn-lift">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save
+          </Button>
         </div>
       </div>
 
-      <Card className="border-maroon-900/10">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">Rows</CardTitle>
           <CardDescription>
@@ -240,11 +236,11 @@ export default function VettingEditor() {
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-maroon-900/20 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
               No rows loaded. Add an item to begin.
             </div>
           ) : (
-            <div className="rounded-lg border border-maroon-900/10 bg-card">
+            <div className="rounded-lg border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>

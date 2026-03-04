@@ -134,7 +134,7 @@ export default function VehicleCommandCard({
   };
 
   return (
-    <div className="rounded-md border border-maroon-900/10 bg-background p-3">
+    <div className="rounded-md border border-border bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-semibold">{label}</div>
         <Badge variant={getDispatchabilityBadgeVariant(priority.dispatchability)}>
@@ -146,7 +146,7 @@ export default function VehicleCommandCard({
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <Badge variant={getPriorityBadgeVariant(priority.tier)}>{priority.label}</Badge>
           {priority.isRecallable ? (
-            <span className="rounded border border-dashed border-maroon-900/20 px-2 py-0.5 text-muted-foreground">Recallable</span>
+            <span className="rounded border border-dashed border-border px-2 py-0.5 text-muted-foreground">Recallable</span>
           ) : null}
         </div>
       ) : null}
@@ -182,8 +182,8 @@ export default function VehicleCommandCard({
                       className={
                         isSelected
                           ? "border-accent bg-accent text-accent-foreground hover:bg-accent/90 hover:text-accent-foreground"
-                           : "border-maroon-900/20 bg-background text-foreground"
-                       }
+                          : "border-border bg-background text-foreground"
+                      }
                       onClick={() => {
                         setSelectedPriority(option.purpose);
                         setPriorityError(null);
@@ -231,7 +231,7 @@ export default function VehicleCommandCard({
       {children ? <div className="mt-3 flex flex-wrap items-center gap-2">{children}</div> : null}
 
       {hasHistory ? (
-        <div className="mt-3 border-t border-maroon-900/10 pt-3">
+        <div className="mt-3 border-t border-border pt-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-foreground">History</div>
           <Button variant="ghost" size="sm" onClick={onToggleHistory}>
@@ -242,11 +242,11 @@ export default function VehicleCommandCard({
         {resolvedHistoryOpen ? (
           <div className="mt-2 space-y-3">
             {resolvedHistoryLoading ? (
-              <div className="rounded border border-dashed border-maroon-900/20 py-4 text-center text-xs text-muted-foreground">
+              <div className="rounded border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
                 Loading history...
               </div>
             ) : resolvedHistoryCheckouts.length === 0 && resolvedHistoryRuns.length === 0 ? (
-              <div className="rounded border border-dashed border-maroon-900/20 py-4 text-center text-xs text-muted-foreground">
+              <div className="rounded border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
                 No history available
               </div>
             ) : (
@@ -257,7 +257,7 @@ export default function VehicleCommandCard({
                     <div className="text-xs text-muted-foreground">No checkout history</div>
                   ) : (
                     resolvedHistoryCheckouts.map((checkout) => (
-                      <div key={checkout.id} className="rounded border border-maroon-900/10 p-2 text-xs">
+                      <div key={checkout.id} className="rounded border border-border p-2 text-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium text-foreground">
                             {formatCheckoutType(checkout.checkout_type)}
@@ -280,7 +280,7 @@ export default function VehicleCommandCard({
                     <div className="text-xs text-muted-foreground">No delivery runs</div>
                   ) : (
                     resolvedHistoryRuns.map((run) => (
-                      <div key={run.id} className="rounded border border-maroon-900/10 p-2 text-xs">
+                      <div key={run.id} className="rounded border border-border p-2 text-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium text-foreground">{formatRunLabel(run)}</span>
                           <Badge variant="secondary">{run.status}</Badge>

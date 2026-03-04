@@ -31,7 +31,7 @@ export default function AuditTimeline({
     const empty = !loading && timeline.length === 0;
 
     return (
-        <Card className="border-maroon-900/10">
+        <Card>
             <CardHeader>
                 <CardTitle className="text-base">Timeline</CardTitle>
                 <CardDescription>
@@ -60,7 +60,7 @@ export default function AuditTimeline({
                                     key={row.id}
                                     type="button"
                                     onClick={() => onSelectEvent(row.id)}
-                                    className={`w-full text-left rounded-lg border bg-card p-3 transition-colors hover:bg-muted/30 hover:border-maroon-900/20 ${
+                                    className={`w-full text-left rounded-lg border bg-card p-3 transition-colors hover:bg-muted/30 ${
                                         isSelected ? "ring-1 ring-primary/60" : ""
                                     }`}
                                 >

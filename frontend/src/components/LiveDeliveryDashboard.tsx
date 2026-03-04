@@ -37,7 +37,7 @@ export default function LiveDeliveryDashboard() {
                             to={`/delivery/runs/${r.id}`}
                             className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
-                            <Card className="cursor-pointer border-maroon-900/10 p-4 transition-colors hover:border-maroon-900/20 hover:bg-muted/30">
+                            <Card className="cursor-pointer p-4 transition-colors hover:bg-muted/30">
                                 <div className="flex justify-between items-center">
                                     <div>
                                         <div className="text-sm text-muted-foreground">Run</div>

@@ -107,8 +107,7 @@ export default function Orders() {
     if (loading && isInitialLoad) {
         return (
             <div className="container mx-auto py-6 space-y-4">
-                <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6 space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Queue Management</div>
+                <div className="space-y-2">
                     <div className="text-2xl font-semibold text-foreground">Orders</div>
                     <div className="text-sm text-muted-foreground">Loading current workflow queues.</div>
                 </div>
@@ -129,13 +128,11 @@ export default function Orders() {
 
     return (
         <div className="container mx-auto py-6 space-y-4">
-            <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Queue Management</div>
+            <div className="space-y-1">
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
-                <p className="text-sm text-muted-foreground">Monitor and advance workflow-ready orders in real time.</p>
             </div>
 
-            <Card className="border-maroon-900/10">
+            <Card>
                 <div className="p-6 pb-4">
                     <Filters
                         status={statusFilter}
