@@ -344,11 +344,12 @@ export default function Admin() {
     if (authLoading || loading) {
         return (
             <div className="container mx-auto py-6 space-y-4">
-                <div className="space-y-1">
+                <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Administration</div>
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
                     <p className="text-sm text-muted-foreground">Loading system configuration and diagnostics.</p>
                 </div>
-                <Card>
+                <Card className="border-maroon-900/10">
                     <CardContent className="p-6">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -363,11 +364,12 @@ export default function Admin() {
     if (!isAdmin) {
         return (
             <div className="container mx-auto py-6 space-y-4">
-                <div className="space-y-1">
+                <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Administration</div>
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
                     <p className="text-sm text-muted-foreground">Restricted tools and diagnostics.</p>
                 </div>
-                <Card>
+                <Card className="border-maroon-900/10">
                     <CardHeader>
                         <CardTitle className="text-base">Access denied</CardTitle>
                         <CardDescription>Admin access is required to view this page.</CardDescription>
@@ -410,32 +412,35 @@ export default function Admin() {
 
     return (
         <div className="container mx-auto py-6 space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
-                    <p className="text-sm text-muted-foreground">System status, notification switches, and operational tools.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {user?.email && <span className="text-xs text-muted-foreground">Signed in as {user.email}</span>}
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            void loadSystemStatus();
-                            void loadSystemSettings();
-                            void loadInflowWebhooks();
-                            toast.message("Refreshing admin data");
-                        }}
-                        className="btn-lift"
-                    >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Refresh
-                    </Button>
+            <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Administration</div>
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin</h1>
+                        <p className="text-sm text-muted-foreground">System status, notification switches, and operational tools.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {user?.email && <span className="text-xs text-muted-foreground">Signed in as {user.email}</span>}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                void loadSystemStatus();
+                                void loadSystemSettings();
+                                void loadInflowWebhooks();
+                                toast.message("Refreshing admin data");
+                            }}
+                            className="btn-lift"
+                        >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Refresh
+                        </Button>
+                    </div>
                 </div>
             </div>
 
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-                    <TabsList className="w-full justify-start">
+                    <TabsList className="w-full justify-start border border-maroon-900/10 bg-maroon-50/60">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="notifications">Notifications</TabsTrigger>
                         <TabsTrigger value="operations">Operations</TabsTrigger>
@@ -444,7 +449,7 @@ export default function Admin() {
                     </TabsList>
 
                 <TabsContent value="overview" className="mt-4 space-y-6">
-                    <Card>
+                    <Card className="border-maroon-900/10">
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <CardTitle className="text-base">System Status</CardTitle>
@@ -459,7 +464,7 @@ export default function Admin() {
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {systemStatusList.map((feature) => (
-                                    <Card key={feature.name} className="shadow-none">
+                                    <Card key={feature.name} className="shadow-none border-maroon-900/10">
                                         <CardHeader className="p-4 pb-3">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div>
@@ -487,7 +492,7 @@ export default function Admin() {
                 </TabsContent>
 
                 <TabsContent value="notifications" className="mt-4 space-y-6">
-                    <Card>
+                    <Card className="border-maroon-900/10">
                         <CardHeader>
                             <CardTitle className="text-base">Notification Settings</CardTitle>
                             <CardDescription>Enable or disable services. Core configuration is managed via environment variables.</CardDescription>
@@ -541,7 +546,7 @@ export default function Admin() {
 
                 <TabsContent value="operations" className="mt-4 space-y-6">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                        <Card>
+                        <Card className="border-maroon-900/10">
                             <CardHeader>
                                 <CardTitle className="text-base">Service Testing</CardTitle>
                                 <CardDescription>Trigger test sends and verify connectivity.</CardDescription>
@@ -604,7 +609,7 @@ export default function Admin() {
                             </CardContent>
                         </Card>
 
-                        <Card>
+                        <Card className="border-maroon-900/10">
                             <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <CardTitle className="text-base">Manual Order Sync</CardTitle>
@@ -626,7 +631,7 @@ export default function Admin() {
                             </CardContent>
                         </Card>
 
-                        <Card>
+                        <Card className="border-maroon-900/10">
                             <CardHeader>
                                 <CardTitle className="text-base">Tag Request Upload (Bypass)</CardTitle>
                                 <CardDescription>Uploads order values, bypassing eligibility checks.</CardDescription>
@@ -698,7 +703,7 @@ export default function Admin() {
                         </Card>
                     </div>
 
-                    <Card>
+                    <Card className="border-maroon-900/10">
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <CardTitle className="text-base">Inflow Webhooks</CardTitle>
@@ -782,7 +787,7 @@ export default function Admin() {
                 <TabsContent value="flow" className="mt-4 space-y-6">
                     <Suspense
                         fallback={
-                            <Card>
+                            <Card className="border-maroon-900/10">
                                 <CardContent className="p-6">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -799,7 +804,7 @@ export default function Admin() {
                 <TabsContent value="admins" className="mt-4 space-y-6">
                     <Suspense
                         fallback={
-                            <Card>
+                            <Card className="border-maroon-900/10">
                                 <CardContent className="p-6">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Loader2 className="h-4 w-4 animate-spin" />
