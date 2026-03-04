@@ -13,6 +13,7 @@ export interface DeliveryRunResponse {
   status: string;
   start_time: string | null;
   end_time?: string | null;
+  updated_at?: string | null;
 }
 
 export interface OrderSummary {
@@ -38,10 +39,17 @@ export const deliveryRunsApi = {
     return response.data;
   },
 
-  finishRun: async (runId: string, createRemainders: boolean = true): Promise<DeliveryRunResponse> => {
+  finishRun: async (
+    runId: string,
+    createRemainders: boolean = true,
+    expectedUpdatedAt?: string | null
+  ): Promise<DeliveryRunResponse> => {
     const response = await apiClient.put<DeliveryRunResponse>(
       `/delivery-runs/${runId}/finish`,
-      { create_remainders: createRemainders }
+      {
+        create_remainders: createRemainders,
+        expected_updated_at: expectedUpdatedAt ?? undefined,
+      }
     );
     return response.data;
   },

@@ -2,7 +2,7 @@ name: Deploy to PythonAnywhere
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 jobs:
@@ -13,9 +13,6 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -36,11 +33,24 @@ jobs:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
         run: |
           set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            main)
+              WEBAPP_DOMAIN="techhub.pythonanywhere.com"
+              ;;
+            dev)
+              WEBAPP_DOMAIN="dev-techhub.pythonanywhere.com"
+              ;;
+            *)
+              echo "Unsupported deploy branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
           ssh -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            'WEBAPP_DOMAIN=techhub.pythonanywhere.com bash ~/techhub-dns/scripts/deploy.sh'
+            "WEBAPP_DOMAIN=${WEBAPP_DOMAIN} BRANCH=${GITHUB_REF_NAME} bash ~/techhub-dns/scripts/deploy.sh"
 
       - name: Tail deploy.log on failure
         if: failure()

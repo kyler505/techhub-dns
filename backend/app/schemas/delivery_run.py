@@ -34,6 +34,11 @@ class DeliveryRunResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FinishDeliveryRunRequest(BaseModel):
+    create_remainders: bool = True
+    expected_updated_at: Optional[datetime] = None
+
+
 class OrderSummary(BaseModel):
     id: UUID
     inflow_order_id: Optional[str] = None
@@ -52,6 +57,7 @@ class DeliveryRunDetailResponse(BaseModel):
     status: str
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     orders: List[OrderSummary] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

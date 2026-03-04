@@ -38,6 +38,29 @@ export interface TimeTrendsResponse {
   data: TimeTrendDataPoint[];
 }
 
+export interface WorkflowDailyTrendDataPoint {
+  date: string;
+  shipped_count: number;
+  delivered_count: number;
+  fulfilled_count: number;
+  picked_count: number;
+}
+
+export interface WorkflowDailyTrendsResponse {
+  period: string;
+  data: WorkflowDailyTrendDataPoint[];
+}
+
+export interface FulfilledTotalDataPoint {
+  period: string;
+  fulfilled_count: number;
+}
+
+export interface FulfilledTotalsResponse {
+  period: "month" | "year";
+  data: FulfilledTotalDataPoint[];
+}
+
 // API client functions
 export const analyticsApi = {
   getOrderStatusCounts: async (): Promise<StatusCountsResponse> => {
@@ -58,6 +81,20 @@ export const analyticsApi = {
   getTimeTrends: async (period: "day" | "week", days: number): Promise<TimeTrendsResponse> => {
     const response = await apiClient.get<TimeTrendsResponse>("/analytics/time-trends", {
       params: { period, days },
+    });
+    return response.data;
+  },
+
+  getWorkflowDailyTrends: async (days: number = 30): Promise<WorkflowDailyTrendsResponse> => {
+    const response = await apiClient.get<WorkflowDailyTrendsResponse>("/analytics/workflow-daily-trends", {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getFulfilledTotals: async (params: { period: "month"; months?: number } | { period: "year"; years?: number }): Promise<FulfilledTotalsResponse> => {
+    const response = await apiClient.get<FulfilledTotalsResponse>("/analytics/fulfilled-totals", {
+      params,
     });
     return response.data;
   },

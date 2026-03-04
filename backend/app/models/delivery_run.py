@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 import enum
 
-from sqlalchemy import Column, String, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, String, DateTime, Enum as SQLEnum, Index
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -21,6 +21,11 @@ class DeliveryRunStatus(enum.Enum):
 
 class DeliveryRun(Base):
     __tablename__ = "delivery_runs"
+    __table_args__ = (
+        Index("ix_delivery_runs_created_at", "created_at"),
+        Index("ix_delivery_runs_status_created_at_id", "status", "created_at", "id"),
+        Index("ix_delivery_runs_vehicle_status_created_at_id", "vehicle", "status", "created_at", "id"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
