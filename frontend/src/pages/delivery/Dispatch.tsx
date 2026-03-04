@@ -96,6 +96,7 @@ export default function DeliveryDispatchPage() {
   const [pendingStartPriority, setPendingStartPriority] = useState<DeliveryRunPriorityPurpose | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [exceptionBulkUpdating, setExceptionBulkUpdating] = useState(false);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -185,6 +186,11 @@ export default function DeliveryDispatchPage() {
     [selectedOrdersList]
   );
 
+  const selectedExceptionOrderIds = useMemo(() => {
+    const exceptionIds = new Set(needsAttentionOrders.map((order) => order.id));
+    return Array.from(selectedOrders).filter((orderId) => exceptionIds.has(orderId));
+  }, [needsAttentionOrders, selectedOrders]);
+
   const selectedVehicle = useMemo(
     () => VEHICLES.find((vehicle) => vehicle.id === selectedVehicleId) ?? null,
     [selectedVehicleId]
@@ -256,6 +262,53 @@ export default function DeliveryDispatchPage() {
       else next.add(orderId);
       return next;
     });
+  };
+
+  const handleSelectExceptionLane = () => {
+    setSelectedOrders((previous) => {
+      const next = new Set(previous);
+      for (const order of needsAttentionOrders) {
+        next.add(order.id);
+      }
+      return next;
+    });
+  };
+
+  const handleClearExceptionSelection = () => {
+    setSelectedOrders((previous) => {
+      const exceptionIds = new Set(needsAttentionOrders.map((order) => order.id));
+      return new Set(Array.from(previous).filter((orderId) => !exceptionIds.has(orderId)));
+    });
+  };
+
+  const handleMoveExceptionsToIssue = async () => {
+    if (selectedExceptionOrderIds.length === 0 || exceptionBulkUpdating) {
+      return;
+    }
+
+    setExceptionBulkUpdating(true);
+    try {
+      await ordersApi.bulkUpdateStatus({
+        order_ids: selectedExceptionOrderIds,
+        status: OrderStatus.ISSUE,
+      });
+
+      toast.success(
+        `Moved ${selectedExceptionOrderIds.length} order${selectedExceptionOrderIds.length === 1 ? "" : "s"} to Issue`
+      );
+
+      setSelectedOrders((previous) => {
+        const next = new Set(previous);
+        selectedExceptionOrderIds.forEach((orderId) => next.delete(orderId));
+        return next;
+      });
+
+      await loadOrders();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setExceptionBulkUpdating(false);
+    }
   };
 
   const doStartRun = async (
@@ -611,6 +664,79 @@ export default function DeliveryDispatchPage() {
           </div>
 
           <div className="grid gap-3">
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Exception Queue</div>
+                    <div className="text-xs text-muted-foreground">
+                      Partial-pick orders that should be reviewed before dispatch.
+                    </div>
+                  </div>
+                  <Badge variant="warning">{needsAttentionOrders.length}</Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectExceptionLane}
+                    disabled={needsAttentionOrders.length === 0}
+                  >
+                    Select exceptions
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearExceptionSelection}
+                    disabled={selectedExceptionOrderIds.length === 0}
+                  >
+                    Clear exception selection
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void handleMoveExceptionsToIssue()}
+                    disabled={selectedExceptionOrderIds.length === 0 || exceptionBulkUpdating}
+                  >
+                    {exceptionBulkUpdating
+                      ? "Moving..."
+                      : `Move selected to Issue (${selectedExceptionOrderIds.length})`}
+                  </Button>
+                </div>
+
+                {needsAttentionOrders.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
+                    No exception orders in the current queue filter.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {needsAttentionOrders.slice(0, 6).map((order) => (
+                      <div
+                        key={`exception-${order.id}`}
+                        className="flex items-center justify-between gap-2 rounded-md border border-amber-300/40 bg-amber-50/50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium text-foreground">{order.inflow_order_id || order.id}</div>
+                          <div className="truncate text-xs text-muted-foreground">{order.recipient_name || "Unknown recipient"}</div>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleViewDetail(order.id)}>
+                          Review
+                        </Button>
+                      </div>
+                    ))}
+                    {needsAttentionOrders.length > 6 ? (
+                      <div className="text-xs text-muted-foreground">
+                        +{needsAttentionOrders.length - 6} more in Needs Attention lane
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardContent className="space-y-2 p-4">
                 <div className="text-sm font-semibold text-foreground">Dispatch Preflight</div>
