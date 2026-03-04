@@ -151,6 +151,7 @@ def get_tag_request_candidates():
 
     with get_db() as db:
         inflow_service = InflowService()
+        asset_tag_requirement_cache: dict[tuple[object, ...], bool] = {}
         query = (
             db.query(Order)
             .filter(Order.status == OrderStatus.PICKED.value)
@@ -180,7 +181,10 @@ def get_tag_request_candidates():
 
             if not order.inflow_data:
                 continue
-            if not inflow_service.requires_asset_tags(order.inflow_data):
+            if not inflow_service.requires_asset_tags_cached(
+                order.inflow_data,
+                asset_tag_requirement_cache,
+            ):
                 continue
 
             needing_request.append(OrderResponse.model_validate(order).model_dump())

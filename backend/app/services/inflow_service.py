@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 import logging
 import uuid
 from datetime import datetime
+import time
 from sqlalchemy.orm import Session
 from app.config import settings
 
@@ -10,6 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class InflowService:
+    _CATEGORY_MAP_TTL_SECONDS = 300
+    _CATEGORY_MAP_EMPTY_TTL_SECONDS = 30
+    _category_map_cache: Optional[Dict[str, str]] = None
+    _category_map_cache_expires_at = 0.0
+
     def __init__(self):
         self.base_url = settings.inflow_api_url
         self.company_id = settings.inflow_company_id
@@ -606,6 +612,55 @@ class InflowService:
 
         return False
 
+    def build_asset_tag_requirement_key(self, order: Dict[str, Any]) -> tuple[Any, ...]:
+        lines = order.get("lines", []) or []
+        if not isinstance(lines, list) or not lines:
+            return tuple()
+
+        key_parts: list[tuple[str, str, str]] = []
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+
+            raw_price = line.get("unitPrice")
+            try:
+                unit_price = float(raw_price or 0)
+            except (TypeError, ValueError):
+                unit_price = 0
+
+            if unit_price <= 500:
+                continue
+
+            category_name = self._extract_category_name(line)
+            if category_name:
+                key_parts.append(
+                    (
+                        f"{unit_price:.2f}",
+                        self._normalize_category_name(category_name),
+                        "",
+                    )
+                )
+                continue
+
+            category_id = self._extract_category_id(line)
+            key_parts.append((f"{unit_price:.2f}", "", str(category_id or "")))
+
+        return tuple(key_parts)
+
+    def requires_asset_tags_cached(
+        self,
+        order: Dict[str, Any],
+        cache: Dict[tuple[Any, ...], bool],
+    ) -> bool:
+        key = self.build_asset_tag_requirement_key(order)
+        cached_result = cache.get(key)
+        if cached_result is not None:
+            return cached_result
+
+        result = self.requires_asset_tags(order)
+        cache[key] = result
+        return result
+
     def _extract_product_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> str:
         product = line.get("product", {})
         return (
@@ -650,6 +705,14 @@ class InflowService:
         return []
 
     def get_category_map_sync(self) -> Dict[str, str]:
+        cls = type(self)
+        now = time.monotonic()
+        if (
+            cls._category_map_cache is not None
+            and now < cls._category_map_cache_expires_at
+        ):
+            return cls._category_map_cache
+
         categories = self.fetch_categories_sync()
         category_map: Dict[str, str] = {}
 
@@ -663,7 +726,18 @@ class InflowService:
             if category_id and name:
                 category_map[str(category_id)] = name
 
-        return category_map
+        if category_map:
+            cls._category_map_cache = category_map
+            cls._category_map_cache_expires_at = now + cls._CATEGORY_MAP_TTL_SECONDS
+            return category_map
+
+        if cls._category_map_cache is not None:
+            return cls._category_map_cache
+
+        cls._category_map_cache = {}
+        cls._category_map_cache_expires_at = now + cls._CATEGORY_MAP_EMPTY_TTL_SECONDS
+
+        return cls._category_map_cache
 
     def get_asset_tag_serials(self, order: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
