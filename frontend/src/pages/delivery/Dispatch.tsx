@@ -96,7 +96,6 @@ export default function DeliveryDispatchPage() {
   const [pendingStartPriority, setPendingStartPriority] = useState<DeliveryRunPriorityPurpose | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [exceptionBulkUpdating, setExceptionBulkUpdating] = useState(false);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -186,11 +185,6 @@ export default function DeliveryDispatchPage() {
     [selectedOrdersList]
   );
 
-  const selectedExceptionOrderIds = useMemo(() => {
-    const exceptionIds = new Set(needsAttentionOrders.map((order) => order.id));
-    return Array.from(selectedOrders).filter((orderId) => exceptionIds.has(orderId));
-  }, [needsAttentionOrders, selectedOrders]);
-
   const selectedVehicle = useMemo(
     () => VEHICLES.find((vehicle) => vehicle.id === selectedVehicleId) ?? null,
     [selectedVehicleId]
@@ -262,53 +256,6 @@ export default function DeliveryDispatchPage() {
       else next.add(orderId);
       return next;
     });
-  };
-
-  const handleSelectExceptionLane = () => {
-    setSelectedOrders((previous) => {
-      const next = new Set(previous);
-      for (const order of needsAttentionOrders) {
-        next.add(order.id);
-      }
-      return next;
-    });
-  };
-
-  const handleClearExceptionSelection = () => {
-    setSelectedOrders((previous) => {
-      const exceptionIds = new Set(needsAttentionOrders.map((order) => order.id));
-      return new Set(Array.from(previous).filter((orderId) => !exceptionIds.has(orderId)));
-    });
-  };
-
-  const handleMoveExceptionsToIssue = async () => {
-    if (selectedExceptionOrderIds.length === 0 || exceptionBulkUpdating) {
-      return;
-    }
-
-    setExceptionBulkUpdating(true);
-    try {
-      await ordersApi.bulkUpdateStatus({
-        order_ids: selectedExceptionOrderIds,
-        status: OrderStatus.ISSUE,
-      });
-
-      toast.success(
-        `Moved ${selectedExceptionOrderIds.length} order${selectedExceptionOrderIds.length === 1 ? "" : "s"} to Issue`
-      );
-
-      setSelectedOrders((previous) => {
-        const next = new Set(previous);
-        selectedExceptionOrderIds.forEach((orderId) => next.delete(orderId));
-        return next;
-      });
-
-      await loadOrders();
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setExceptionBulkUpdating(false);
-    }
   };
 
   const doStartRun = async (
@@ -674,37 +621,6 @@ export default function DeliveryDispatchPage() {
                     </div>
                   </div>
                   <Badge variant="warning">{needsAttentionOrders.length}</Badge>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSelectExceptionLane}
-                    disabled={needsAttentionOrders.length === 0}
-                  >
-                    Select exceptions
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearExceptionSelection}
-                    disabled={selectedExceptionOrderIds.length === 0}
-                  >
-                    Clear exception selection
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => void handleMoveExceptionsToIssue()}
-                    disabled={selectedExceptionOrderIds.length === 0 || exceptionBulkUpdating}
-                  >
-                    {exceptionBulkUpdating
-                      ? "Moving..."
-                      : `Move selected to Issue (${selectedExceptionOrderIds.length})`}
-                  </Button>
                 </div>
 
                 {needsAttentionOrders.length === 0 ? (
