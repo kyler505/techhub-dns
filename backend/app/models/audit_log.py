@@ -28,6 +28,13 @@ class SystemAuditLog(Base):
     __tablename__ = "system_audit_logs"
     __table_args__ = (
         Index("ix_system_audit_logs_timestamp_id", "timestamp", "id"),
+        Index(
+            "ix_system_audit_logs_entity_type_entity_id_timestamp_id",
+            "entity_type",
+            "entity_id",
+            "timestamp",
+            "id",
+        ),
     )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -64,6 +71,13 @@ class SystemAuditLogArchive(Base):
     __tablename__ = "system_audit_logs_archive"
     __table_args__ = (
         Index("ix_system_audit_logs_archive_timestamp_id", "timestamp", "id"),
+        Index(
+            "ix_system_audit_logs_archive_entity_type_entity_id_timestamp_id",
+            "entity_type",
+            "entity_id",
+            "timestamp",
+            "id",
+        ),
     )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
