@@ -99,6 +99,12 @@ export default function FlowTab() {
     const [entityIdFilter, setEntityIdFilter] = useState("");
     const [includeValues, setIncludeValues] = useState(false);
 
+    const [appliedRange, setAppliedRange] = useState<TimeRange>("24h");
+    const [appliedEntityTypeFilter, setAppliedEntityTypeFilter] = useState("");
+    const [appliedActionFilter, setAppliedActionFilter] = useState("");
+    const [appliedEntityIdFilter, setAppliedEntityIdFilter] = useState("");
+    const [appliedIncludeValues, setAppliedIncludeValues] = useState(false);
+
     const [systemAudit, setSystemAudit] = useState<SystemAuditItem[]>([]);
     const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -113,7 +119,7 @@ export default function FlowTab() {
     const [auditLoading, setAuditLoading] = useState(false);
     const [auditError, setAuditError] = useState<string | null>(null);
 
-    const sinceMillis = useMemo(() => getSinceMillis(range), [range]);
+    const sinceMillis = useMemo(() => getSinceMillis(appliedRange), [appliedRange]);
     const sinceIso = useMemo(() => new Date(sinceMillis).toISOString(), [sinceMillis]);
 
     const load = async () => {
@@ -123,10 +129,10 @@ export default function FlowTab() {
             const systemRes = await observabilityApi.getSystemAudit({
                 limit: 150,
                 since: sinceIso,
-                entity_type: entityTypeFilter || undefined,
-                entity_id: entityIdFilter || undefined,
-                action: actionFilter || undefined,
-                include_values: includeValues,
+                entity_type: appliedEntityTypeFilter || undefined,
+                entity_id: appliedEntityIdFilter || undefined,
+                action: appliedActionFilter || undefined,
+                include_values: appliedIncludeValues,
             });
 
             const items = systemRes.items || [];
@@ -147,10 +153,10 @@ export default function FlowTab() {
             const systemRes = await observabilityApi.getSystemAudit({
                 limit: 150,
                 since: sinceIso,
-                entity_type: entityTypeFilter || undefined,
-                entity_id: entityIdFilter || undefined,
-                action: actionFilter || undefined,
-                include_values: includeValues,
+                entity_type: appliedEntityTypeFilter || undefined,
+                entity_id: appliedEntityIdFilter || undefined,
+                action: appliedActionFilter || undefined,
+                include_values: appliedIncludeValues,
                 cursor: nextCursor,
             });
             setSystemAudit((current) => mergeUniqueById(current, systemRes.items || []));
@@ -164,7 +170,35 @@ export default function FlowTab() {
 
     useEffect(() => {
         void load();
-    }, [range, entityTypeFilter, actionFilter, entityIdFilter, includeValues]);
+    }, [appliedRange, appliedEntityTypeFilter, appliedActionFilter, appliedEntityIdFilter, appliedIncludeValues]);
+
+    const hasPendingServerFilters =
+        range !== appliedRange ||
+        entityTypeFilter !== appliedEntityTypeFilter ||
+        actionFilter !== appliedActionFilter ||
+        entityIdFilter !== appliedEntityIdFilter ||
+        includeValues !== appliedIncludeValues;
+
+    const applyServerFilters = () => {
+        setAppliedRange(range);
+        setAppliedEntityTypeFilter(entityTypeFilter);
+        setAppliedActionFilter(actionFilter);
+        setAppliedEntityIdFilter(entityIdFilter);
+        setAppliedIncludeValues(includeValues);
+    };
+
+    const resetServerFilters = () => {
+        setRange("24h");
+        setEntityTypeFilter("");
+        setActionFilter("");
+        setEntityIdFilter("");
+        setIncludeValues(false);
+        setAppliedRange("24h");
+        setAppliedEntityTypeFilter("");
+        setAppliedActionFilter("");
+        setAppliedEntityIdFilter("");
+        setAppliedIncludeValues(false);
+    };
 
     const timeline = useMemo(() => {
         const q = normalize(search);
@@ -304,6 +338,10 @@ export default function FlowTab() {
                         setEntityIdFilter={setEntityIdFilter}
                         entityTypes={entityTypes}
                         actions={actions}
+                        onApply={applyServerFilters}
+                        onReset={resetServerFilters}
+                        hasPendingChanges={hasPendingServerFilters}
+                        isApplying={loading}
                     />
                 </div>
 
@@ -323,9 +361,18 @@ export default function FlowTab() {
                 <div className="xl:col-span-4">
                     <AuditInspector
                         selectedEvent={selectedEvent}
-                        setEntityTypeFilter={setEntityTypeFilter}
-                        setActionFilter={setActionFilter}
-                        setEntityIdFilter={setEntityIdFilter}
+                        setEntityTypeFilter={(value) => {
+                            setEntityTypeFilter(value);
+                            setAppliedEntityTypeFilter(value);
+                        }}
+                        setActionFilter={(value) => {
+                            setActionFilter(value);
+                            setAppliedActionFilter(value);
+                        }}
+                        setEntityIdFilter={(value) => {
+                            setEntityIdFilter(value);
+                            setAppliedEntityIdFilter(value);
+                        }}
                         inspectorOrderId={inspectorOrderId}
                         setInspectorOrderId={setInspectorOrderId}
                         loadOrderAudit={(orderIdentifier, hint) => {

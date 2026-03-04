@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -388,9 +389,12 @@ export default function Dashboard() {
               <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
                 {completedTodayOrders.map((order) => (
                   <div key={order.id} className="flex items-center justify-between text-sm">
-                    <div className="font-medium text-foreground">
+                    <Link
+                      to={`/orders/${order.id}`}
+                      className="font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
+                    >
                       {order.inflow_order_id || order.id.slice(0, 8)}
-                    </div>
+                    </Link>
                     <div className="text-muted-foreground">
                       {formatSignatureTime(order.signature_captured_at)}
                     </div>

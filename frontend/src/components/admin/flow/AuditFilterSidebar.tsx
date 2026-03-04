@@ -22,6 +22,10 @@ interface AuditFilterSidebarProps {
     setEntityIdFilter: (value: string) => void;
     entityTypes: string[];
     actions: string[];
+    onApply: () => void;
+    onReset: () => void;
+    hasPendingChanges: boolean;
+    isApplying: boolean;
 }
 
 export default function AuditFilterSidebar({
@@ -39,6 +43,10 @@ export default function AuditFilterSidebar({
     setEntityIdFilter,
     entityTypes,
     actions,
+    onApply,
+    onReset,
+    hasPendingChanges,
+    isApplying,
 }: AuditFilterSidebarProps) {
     return (
         <Card>
@@ -116,6 +124,21 @@ export default function AuditFilterSidebar({
                             </Button>
                         ))}
                     </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                    <Button
+                        type="button"
+                        onClick={onApply}
+                        disabled={!hasPendingChanges || isApplying}
+                        className="btn-lift"
+                    >
+                        Apply
+                    </Button>
+                    <Button type="button" variant="outline" onClick={onReset} disabled={isApplying}>
+                        Reset
+                    </Button>
+                    {hasPendingChanges ? <span className="text-xs text-muted-foreground">Unsaved filter changes</span> : null}
                 </div>
             </CardContent>
         </Card>
