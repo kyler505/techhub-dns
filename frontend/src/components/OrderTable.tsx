@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Order, OrderStatus } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
@@ -13,29 +13,21 @@ import {
     TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
-import { Checkbox } from "./ui/checkbox";
 
 interface OrderTableProps {
     orders: Order[];
     onStatusChange?: (orderId: string, newStatus: OrderStatus, reason?: string) => void;
     onViewDetail: (orderId: string) => void;
     showEmptyState?: boolean;
-    selectedOrderIds: Set<string>;
-    onToggleSelectOrder: (orderId: string, checked: boolean) => void;
-    onToggleSelectAllVisible: (checked: boolean) => void;
 }
 
 export default function OrderTable({
     orders,
     onViewDetail,
     showEmptyState = true,
-    selectedOrderIds,
-    onToggleSelectOrder,
-    onToggleSelectAllVisible,
 }: OrderTableProps) {
     const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-    const headerCheckboxRef = useRef<HTMLInputElement | null>(null);
 
     const sortedOrders = useMemo(() => {
         const copy = [...orders];
@@ -90,15 +82,6 @@ export default function OrderTable({
         navigateToOrder(orderId);
     };
 
-    const allVisibleSelected = sortedOrders.length > 0 && sortedOrders.every((order) => selectedOrderIds.has(order.id));
-    const someVisibleSelected = sortedOrders.some((order) => selectedOrderIds.has(order.id));
-
-    useEffect(() => {
-        if (headerCheckboxRef.current) {
-            headerCheckboxRef.current.indeterminate = !allVisibleSelected && someVisibleSelected;
-        }
-    }, [allVisibleSelected, someVisibleSelected]);
-
     if (orders.length === 0) {
         if (!showEmptyState) {
             return null;
@@ -117,15 +100,7 @@ export default function OrderTable({
             <Table className="min-w-[720px]">
                 <TableHeader className="sticky top-0 z-20 bg-muted/40">
                     <TableRow>
-                        <TableHead className="sticky left-0 z-30 w-[260px] bg-muted/40">
-                            <div className="flex items-center gap-3">
-                                <Checkbox
-                                    ref={headerCheckboxRef}
-                                    checked={allVisibleSelected}
-                                    aria-label="Select all visible orders"
-                                    onChange={(e) => onToggleSelectAllVisible(e.currentTarget.checked)}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
+                        <TableHead className="w-[260px]">
                             <button
                                 type="button"
                                 onClick={() => toggleSort("id")}
@@ -134,7 +109,6 @@ export default function OrderTable({
                                 Order ID
                                 <ArrowUpDown className="h-3.5 w-3.5" />
                             </button>
-                            </div>
                         </TableHead>
                         <TableHead>
                             <button
@@ -188,25 +162,17 @@ export default function OrderTable({
                             onKeyDown={(e) => onRowKeyDown(e, order.id)}
                             className="cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
-                        <TableCell className="sticky left-0 z-10 bg-card">
-                            <div className="flex items-center gap-3">
-                                <Checkbox
-                                    checked={selectedOrderIds.has(order.id)}
-                                    aria-label={`Select order ${order.inflow_order_id}`}
-                                    onChange={(e) => onToggleSelectOrder(order.id, e.currentTarget.checked)}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
-                                <Button
-                                    variant="link"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigateToOrder(order.id);
-                                    }}
-                                    className="p-0 h-auto font-normal text-foreground/90 hover:text-foreground"
-                                >
-                                    {order.inflow_order_id}
-                                </Button>
-                            </div>
+                        <TableCell>
+                            <Button
+                                variant="link"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigateToOrder(order.id);
+                                }}
+                                className="p-0 h-auto font-normal text-foreground/90 hover:text-foreground"
+                            >
+                                {order.inflow_order_id}
+                            </Button>
                         </TableCell>
                         <TableCell>{order.recipient_name || "N/A"}</TableCell>
                         <TableCell className="hidden lg:table-cell">{formatDeliveryLocation(order)}</TableCell>

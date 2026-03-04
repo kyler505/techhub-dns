@@ -18,9 +18,6 @@ export default function Orders() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
-    const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-    const [bulkStatus, setBulkStatus] = useState<OrderStatus>(OrderStatus.PRE_DELIVERY);
-    const [bulkUpdating, setBulkUpdating] = useState(false);
     const [transitioningOrder, setTransitioningOrder] = useState<{
         orderId: string;
         newStatus: OrderStatus;
@@ -57,17 +54,6 @@ export default function Orders() {
     useEffect(() => {
         loadOrders();
     }, [statusFilter, debouncedSearch]);
-
-    useEffect(() => {
-        setSelectedOrderIds((previous) => {
-            if (previous.size === 0) {
-                return previous;
-            }
-            const visibleIds = new Set(orders.map((order) => order.id));
-            const next = new Set([...previous].filter((id) => visibleIds.has(id)));
-            return next.size === previous.size ? previous : next;
-        });
-    }, [orders]);
 
     const loadOrders = async () => {
         setLoading(true);
@@ -131,52 +117,6 @@ export default function Orders() {
         navigate(`/orders/${orderId}`);
     };
 
-    const handleToggleSelectOrder = (orderId: string, checked: boolean) => {
-        setSelectedOrderIds((previous) => {
-            const next = new Set(previous);
-            if (checked) {
-                next.add(orderId);
-            } else {
-                next.delete(orderId);
-            }
-            return next;
-        });
-    };
-
-    const handleToggleSelectAllVisible = (checked: boolean) => {
-        setSelectedOrderIds((previous) => {
-            const next = new Set(previous);
-            if (checked) {
-                orders.forEach((order) => next.add(order.id));
-            } else {
-                orders.forEach((order) => next.delete(order.id));
-            }
-            return next;
-        });
-    };
-
-    const handleBulkMove = async () => {
-        if (selectedOrderIds.size === 0 || bulkUpdating) {
-            return;
-        }
-
-        setBulkUpdating(true);
-        try {
-            await ordersApi.bulkUpdateStatus({
-                order_ids: Array.from(selectedOrderIds),
-                status: bulkStatus,
-            });
-            toast.success(`Moved ${selectedOrderIds.size} order${selectedOrderIds.size === 1 ? "" : "s"} to ${bulkStatus}`);
-            setSelectedOrderIds(new Set());
-            loadOrders();
-        } catch (error) {
-            console.error("Failed to bulk update order status:", error);
-            toast.error("Failed to move selected orders");
-        } finally {
-            setBulkUpdating(false);
-        }
-    };
-
     if (loading && isInitialLoad) {
         return (
             <div className="container mx-auto py-6 space-y-4">
@@ -220,52 +160,9 @@ export default function Orders() {
                         onStatusChange={handleStatusChange}
                         onViewDetail={handleViewDetail}
                         showEmptyState={false}
-                        selectedOrderIds={selectedOrderIds}
-                        onToggleSelectOrder={handleToggleSelectOrder}
-                        onToggleSelectAllVisible={handleToggleSelectAllVisible}
                     />
                 </CardContent>
             </Card>
-            {selectedOrderIds.size > 0 && (
-                <div className="fixed bottom-4 left-1/2 z-40 w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-border/60 bg-popover shadow-lg backdrop-blur">
-                    <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="text-sm font-medium text-foreground">
-                            {selectedOrderIds.size} selected
-                        </div>
-                        <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-                            <label htmlFor="bulk-status" className="text-xs text-muted-foreground">
-                                Move to
-                            </label>
-                            <select
-                                id="bulk-status"
-                                value={bulkStatus}
-                                onChange={(e) => setBulkStatus(e.target.value as OrderStatus)}
-                                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                            >
-                                <option value={OrderStatus.PRE_DELIVERY}>Pre-Delivery</option>
-                                <option value={OrderStatus.IN_DELIVERY}>In Delivery</option>
-                                <option value={OrderStatus.SHIPPING}>Shipping</option>
-                                <option value={OrderStatus.DELIVERED}>Delivered</option>
-                            </select>
-                            <button
-                                type="button"
-                                onClick={handleBulkMove}
-                                disabled={bulkUpdating}
-                                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {bulkUpdating ? "Moving..." : "Apply"}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setSelectedOrderIds(new Set())}
-                                className="h-9 rounded-md border border-input px-3 text-sm text-foreground hover:bg-muted"
-                            >
-                                Clear
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
             {!loading && orders.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
                     <PackageSearch className="mx-auto mb-3 h-8 w-8 text-muted-foreground/60" />
