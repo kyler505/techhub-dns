@@ -3,14 +3,19 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
-import { analyticsApi, StatusCountsResponse, DeliveryPerformanceResponse, TimeTrendDataPoint } from "../api/analytics";
+import {
+  analyticsApi,
+  StatusCountsResponse,
+  DeliveryPerformanceResponse,
+  WorkflowDailyTrendDataPoint,
+  FulfilledTotalDataPoint,
+} from "../api/analytics";
 import { ordersApi } from "../api/orders";
 import { Order, OrderStatus } from "../types/order";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
-import OrdersLineChart from "../components/charts/OrdersLineChart";
-import OrdersBarChart from "../components/charts/OrdersBarChart";
+import WorkflowDailyLineChart from "../components/charts/WorkflowDailyLineChart";
+import FulfilledTotalsBarChart from "../components/charts/FulfilledTotalsBarChart";
 import { Activity, Package, CheckCircle2, Truck } from "lucide-react";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
@@ -103,9 +108,10 @@ export default function Dashboard() {
     completed_today: 0,
     ready_for_delivery: 0,
   });
-  const [timeTrends, setTimeTrends] = useState<TimeTrendDataPoint[]>([]);
+  const [workflowDailyTrends, setWorkflowDailyTrends] = useState<WorkflowDailyTrendDataPoint[]>([]);
+  const [monthlyFulfilledTotals, setMonthlyFulfilledTotals] = useState<FulfilledTotalDataPoint[]>([]);
+  const [yearlyFulfilledTotals, setYearlyFulfilledTotals] = useState<FulfilledTotalDataPoint[]>([]);
   const [completedTodayOrders, setCompletedTodayOrders] = useState<Order[]>([]);
-  const [chartType, setChartType] = useState<"line" | "bar">("line");
   // Loading states
   const [statusLoading, setStatusLoading] = useState(true);
   const [perfLoading, setPerfLoading] = useState(true);
@@ -133,20 +139,24 @@ export default function Dashboard() {
       }
 
       // Fetch all data in parallel
-      const [counts, perf, trends, deliveredOrders] = await Promise.all([
+      const [counts, perf, dailyTrends, monthlyTotals, yearlyTotals, deliveredOrders] = await Promise.all([
         analyticsApi.getOrderStatusCounts().catch(() => ({})),
         analyticsApi.getDeliveryPerformance().catch(() => ({
           active_runs: 0,
           completed_today: 0,
           ready_for_delivery: 0,
         })),
-        analyticsApi.getTimeTrends("day", 7).catch(() => ({ period: "day", data: [] })),
+        analyticsApi.getWorkflowDailyTrends(30).catch(() => ({ period: "day", data: [] })),
+        analyticsApi.getFulfilledTotals({ period: "month", months: 12 }).catch(() => ({ period: "month" as const, data: [] })),
+        analyticsApi.getFulfilledTotals({ period: "year", years: 5 }).catch(() => ({ period: "year" as const, data: [] })),
         ordersApi.getOrders({ status: OrderStatus.DELIVERED }).catch(() => []),
       ]);
 
       setStatusCounts(counts);
       setDeliveryPerf(perf);
-      setTimeTrends(trends.data || []);
+      setWorkflowDailyTrends(dailyTrends.data || []);
+      setMonthlyFulfilledTotals(monthlyTotals.data || []);
+      setYearlyFulfilledTotals(yearlyTotals.data || []);
 
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -406,36 +416,34 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-base">Orders Delivered</CardTitle>
-              <p className="text-xs text-muted-foreground">Last 7 days</p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={chartType === "line" ? "default" : "outline"}
-                onClick={() => setChartType("line")}
-                className="btn-lift"
-              >
-                Line
-              </Button>
-              <Button
-                size="sm"
-                variant={chartType === "bar" ? "default" : "outline"}
-                onClick={() => setChartType("bar")}
-                className="btn-lift"
-              >
-                Bar
-              </Button>
-            </div>
+          <CardHeader>
+            <CardTitle className="text-base">Orders Daily Workflow</CardTitle>
+            <p className="text-xs text-muted-foreground">Last 30 days</p>
           </CardHeader>
           <CardContent>
-            {chartType === "line" ? (
-              <OrdersLineChart data={timeTrends} loading={trendsLoading} />
-            ) : (
-              <OrdersBarChart data={timeTrends} loading={trendsLoading} />
-            )}
+            <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Monthly Fulfilled Totals</CardTitle>
+            <p className="text-xs text-muted-foreground">Last 12 months</p>
+          </CardHeader>
+          <CardContent>
+            <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Yearly Fulfilled Totals</CardTitle>
+            <p className="text-xs text-muted-foreground">Last 5 years</p>
+          </CardHeader>
+          <CardContent>
+            <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
           </CardContent>
         </Card>
       </div>
