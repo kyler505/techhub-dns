@@ -129,15 +129,13 @@ export default function DeliveryRunDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="outline" size="sm" onClick={() => navigate(backTo)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Run Operations</div>
             <h2 className="text-xl font-semibold">{run.name}</h2>
             <p className="text-sm text-muted-foreground">Run ID: {run.id}</p>
           </div>
@@ -154,9 +152,8 @@ export default function DeliveryRunDetailPage() {
           </Button>
         ) : null}
       </div>
-      </div>
 
-      <Card className="border-maroon-900/10">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
@@ -220,7 +217,7 @@ export default function DeliveryRunDetailPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-maroon-900/10">
+      <Card>
         <CardHeader>
           <CardTitle>Orders in This Run</CardTitle>
           <CardDescription>
@@ -235,7 +232,7 @@ export default function DeliveryRunDetailPage() {
               {run.orders.map((order) => (
                 <div
                   key={order.id}
-                  className={`flex flex-col gap-3 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center sm:justify-between ${order.status.toLowerCase() !== "delivered" ? "border-accent/20 bg-accent/5" : "hover:bg-muted/50 hover:border-maroon-900/20"}`}
+                  className={`flex flex-col gap-3 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center sm:justify-between ${order.status.toLowerCase() !== "delivered" ? "border-accent/20 bg-accent/5" : "hover:bg-muted/50"}`}
                 >
                   <div>
                     <div className="font-medium">Order {order.inflow_order_id || order.id.slice(0, 8)}</div>

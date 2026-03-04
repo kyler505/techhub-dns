@@ -272,7 +272,7 @@ export default function FlowTab() {
 
     return (
         <div className="space-y-4">
-            <Card className="border-maroon-900/10">
+            <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Audit Explorer</CardTitle>
                     <CardDescription>Server-driven audit stream with entity/action filters and order drill-down.</CardDescription>

@@ -160,7 +160,7 @@ export default function AuditInspector({
     const selectedEventIsOrder = normalize(selectedEvent?.entity_type) === "order";
 
     return (
-        <Card className="border-maroon-900/10">
+        <Card>
             <CardHeader>
                 <CardTitle className="text-base">Event inspector</CardTitle>
                 <CardDescription>Inspect one event in detail and optionally drill into order status history.</CardDescription>
@@ -222,7 +222,7 @@ export default function AuditInspector({
                 ) : null}
 
                 {inspectorResolved ? (
-            <div className="rounded-lg border border-maroon-900/10 bg-muted/20 p-3">
+                    <div className="rounded-lg border bg-muted/20 p-3">
                         <div className="text-sm font-medium text-foreground">
                             {inspectorResolved.orderNumber ? `Order ${inspectorResolved.orderNumber}` : "Order"}
                         </div>
@@ -254,7 +254,7 @@ export default function AuditInspector({
                             .slice()
                             .sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp))
                             .map((log) => (
-                                <div key={log.id} className="rounded-lg border border-maroon-900/10 bg-card p-3">
+                                <div key={log.id} className="rounded-lg border bg-card p-3">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</div>
                                         <Badge variant={toCanonicalStatus(log.to_status) === "ISSUE" ? "destructive" : "secondary"}>{log.to_status}</Badge>

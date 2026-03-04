@@ -41,7 +41,7 @@ export default function AuditFilterSidebar({
     actions,
 }: AuditFilterSidebarProps) {
     return (
-        <Card className="border-maroon-900/10">
+        <Card>
             <CardHeader>
                 <CardTitle className="text-base">Filters</CardTitle>
                 <CardDescription>Time range, text search, and entity pivots.</CardDescription>

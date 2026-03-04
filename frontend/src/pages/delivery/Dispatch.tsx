@@ -392,21 +392,13 @@ export default function DeliveryDispatchPage() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6">
-        <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Dispatch Command</div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Delivery Dispatch</h1>
-          <p className="text-sm text-muted-foreground">Coordinate pre-delivery queue selection with live fleet command actions.</p>
-        </div>
-      </div>
-
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <section className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-base font-semibold">Pre-Delivery Orders</h2>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-maroon-900/10 bg-maroon-50/40 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs">
             <span className="text-muted-foreground">Selected</span>
             <span className="font-semibold text-foreground">{selectedOrders.size}</span>
             <span className="text-border">|</span>
@@ -417,7 +409,7 @@ export default function DeliveryDispatchPage() {
             <span className="font-semibold text-foreground">{selectedPartialPickCount}</span>
           </div>
 
-          <Card className="border-maroon-900/10">
+          <Card>
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-muted-foreground">Quick selection</div>
@@ -480,7 +472,7 @@ export default function DeliveryDispatchPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-maroon-900/10">
+          <Card>
             <div className="px-4 pt-4">
               <h3 className="text-sm font-semibold">Active Delivery Orders</h3>
             </div>
@@ -524,7 +516,7 @@ export default function DeliveryDispatchPage() {
             <h2 className="text-base font-semibold">Fleet Command</h2>
           </div>
 
-          <div className="rounded-lg border border-maroon-900/10 bg-maroon-50/40 p-1">
+          <div className="rounded-lg border border-border bg-muted/30 p-1">
             <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Select vehicle">
               {VEHICLES.map((vehicle) => {
                 const isActive = vehicle.id === selectedVehicleId;

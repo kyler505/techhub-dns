@@ -221,14 +221,12 @@ export default function TagRequest() {
 
     return (
         <div className="container mx-auto py-6 space-y-6">
-            <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Canopy Operations</div>
+            <div className="space-y-1">
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tag Request</h1>
-                <p className="text-sm text-muted-foreground">Build, validate, and upload picked-order batches for canopy tag generation.</p>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                <Card className="border-maroon-900/10">
+                <Card>
                     <CardHeader>
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -287,7 +285,7 @@ export default function TagRequest() {
                         </div>
 
                         {candidatesLoading && safeCandidates.length === 0 ? (
-                            <div className="rounded-lg border border-maroon-900/10 bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+                            <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
                                 Loading picked orders...
                             </div>
                         ) : candidatesError ? (
@@ -295,11 +293,11 @@ export default function TagRequest() {
                                 {candidatesError}
                             </div>
                         ) : filteredCandidates.length === 0 ? (
-                            <div className="rounded-lg border border-dashed border-maroon-900/20 bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+                            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
                                 No candidates found.
                             </div>
                         ) : (
-                            <div className="rounded-lg border border-maroon-900/10 bg-card">
+                            <div className="rounded-lg border bg-card">
                                 <div className="max-h-[26rem] overflow-y-auto">
                                     <Table>
                                         <TableHeader className="sticky top-0 bg-card z-10">
@@ -384,12 +382,12 @@ export default function TagRequest() {
                     </CardContent>
                 </Card>
 
-                <Card className="self-start border-maroon-900/10 lg:sticky lg:top-6">
+                <Card className="self-start lg:sticky lg:top-6">
                     <CardHeader>
                         <CardTitle className="text-base">Upload summary</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="rounded-lg border border-maroon-900/10 bg-muted/30 p-4 text-sm text-muted-foreground">
+                        <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
                             <p className="text-foreground font-medium">{selectedCount} selected</p>
                             {selectedCount > 0 ? (
                                 <p className="mt-1 text-xs text-muted-foreground break-words">
