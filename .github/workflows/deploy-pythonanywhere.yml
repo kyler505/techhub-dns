@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     concurrency:
-      group: pythonanywhere-deploy-${{ github.ref_name }}
+      group: pythonanywhere-deploy
       cancel-in-progress: false
 
     steps:
