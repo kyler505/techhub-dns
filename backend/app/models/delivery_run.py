@@ -22,6 +22,7 @@ class DeliveryRunStatus(enum.Enum):
 class DeliveryRun(Base):
     __tablename__ = "delivery_runs"
     __table_args__ = (
+        Index("ix_delivery_runs_created_at", "created_at"),
         Index("ix_delivery_runs_status_created_at_id", "status", "created_at", "id"),
         Index("ix_delivery_runs_vehicle_status_created_at_id", "vehicle", "status", "created_at", "id"),
     )

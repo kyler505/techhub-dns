@@ -9,6 +9,9 @@ from app.database import Base
 class AuditLog(Base):
     """Legacy audit log for order status changes (backward compatibility)"""
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_order_id_timestamp", "order_id", "timestamp"),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     order_id = Column(String(36), ForeignKey("orders.id"), nullable=False, index=True)
