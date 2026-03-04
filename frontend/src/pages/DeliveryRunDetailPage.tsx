@@ -111,12 +111,13 @@ export default function DeliveryRunDetailPage() {
 
     setFinishing(true);
     try {
-      await deliveryRunsApi.finishRun(run.id);
+      await deliveryRunsApi.finishRun(run.id, true, run.updated_at ?? undefined);
       toast.success("Delivery run completed");
       await refetch();
     } catch (error: unknown) {
       setErrorMessage(getApiErrorMessage(error));
       setErrorDialogOpen(true);
+      await refetch();
     } finally {
       setFinishing(false);
     }
