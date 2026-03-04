@@ -13,6 +13,12 @@ class VehicleCheckout(Base):
     __table_args__ = (
         Index("ix_vehicle_checkouts_vehicle_checked_in_at", "vehicle", "checked_in_at"),
         Index("ix_vehicle_checkouts_checked_out_at", "checked_out_at"),
+        Index(
+            "ix_vehicle_checkouts_checkout_type_checked_out_at_id",
+            "checkout_type",
+            "checked_out_at",
+            "id",
+        ),
     )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
