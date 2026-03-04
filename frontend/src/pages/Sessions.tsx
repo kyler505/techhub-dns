@@ -82,46 +82,49 @@ export default function Sessions() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-maroon-700"></div>
+            <div className="container mx-auto py-6">
+                <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background">
+                    <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-maroon-700"></div>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-6">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-900">Active Sessions</h1>
-                <p className="text-gray-600 mt-1">
+        <div className="container mx-auto max-w-4xl py-6 space-y-4">
+            <div className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Security</div>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Active Sessions</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
                     Logged in as <strong>{user?.email}</strong>
                 </p>
             </div>
 
             {error && (
-                <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-destructive">
                     {error}
                 </div>
             )}
 
-            <div className="bg-white shadow rounded-lg divide-y">
+            <div className="overflow-hidden rounded-lg border border-maroon-900/10 bg-card divide-y">
                 {sessions?.map((session) => (
-                    <div key={session.id} className="p-4 flex items-center justify-between">
+                    <div key={session.id} className="flex items-center justify-between p-4 hover:bg-muted/30">
                         <div className="flex items-center gap-4">
-                            <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center">
-                                <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-maroon-50">
+                                <svg className="h-5 w-5 text-maroon-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                 </svg>
                             </div>
                             <div>
-                                <div className="font-medium text-gray-900 flex items-center gap-2">
+                                <div className="flex items-center gap-2 font-medium text-foreground">
                                     {parseUserAgent(session.user_agent)}
                                     {session.is_current && (
-                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
                                             Current
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-sm text-gray-500">
+                                <div className="text-sm text-muted-foreground">
                                     {session.ip_address || 'Unknown IP'} • Last active {formatDate(session.last_seen_at)}
                                 </div>
                             </div>
@@ -130,7 +133,7 @@ export default function Sessions() {
                         {!session.is_current && (
                             <button
                                 onClick={() => revokeSession(session.id)}
-                                className="text-sm text-red-600 hover:text-red-800 font-medium"
+                                className="text-sm font-medium text-destructive hover:opacity-80"
                             >
                                 Sign out
                             </button>
@@ -138,8 +141,8 @@ export default function Sessions() {
                     </div>
                 ))}
                 {sessions.length === 0 && !isLoading && (
-                    <div className="p-8 text-center text-gray-500">
-                        <svg className="mx-auto h-12 w-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="p-8 text-center text-muted-foreground">
+                        <svg className="mx-auto mb-3 h-12 w-12 text-maroon-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
                         <p>No active sessions found</p>
@@ -149,20 +152,20 @@ export default function Sessions() {
             </div>
 
             {sessions.length > 1 && (
-                <div className="mt-6 flex gap-4">
+                <div className="flex gap-4">
                     <button
                         onClick={revokeAllOtherSessions}
-                        className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800"
+                        className="rounded-md border border-destructive/30 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/5"
                     >
                         Sign out of all other sessions
                     </button>
                 </div>
             )}
 
-            <div className="mt-8 pt-8 border-t">
+            <div className="border-t border-maroon-900/10 pt-6">
                 <button
                     onClick={logout}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    className="rounded-lg bg-primary px-4 py-2 text-white transition-colors hover:bg-primary/90"
                 >
                     Sign out of this device
                 </button>

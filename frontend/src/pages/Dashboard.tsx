@@ -304,10 +304,12 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        className="rounded-xl border border-maroon-900/10 bg-gradient-to-br from-maroon-50 via-background to-background p-5 sm:p-6"
       >
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-maroon-700">Operations Center</span>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Delivery Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Live order throughput, run progress, and completion trends.</p>
         </div>
       </motion.div>
 
@@ -318,7 +320,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        <Card className="xl:col-span-2 h-full">
+        <Card className="xl:col-span-2 h-full border-maroon-900/10">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
             <span
@@ -367,7 +369,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+        <Card className="border-maroon-900/10">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Completed Today</CardTitle>
             <span className="text-xs text-muted-foreground">Last 24h</span>
@@ -401,7 +403,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-maroon-900/10">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-base">Orders Delivered</CardTitle>
