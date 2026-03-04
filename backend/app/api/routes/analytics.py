@@ -9,7 +9,11 @@ from app.schemas.analytics import (
     RecentActivityResponse,
     ActivityItem,
     TimeTrendsResponse,
-    TimeTrendDataPoint
+    TimeTrendDataPoint,
+    WorkflowDailyTrendDataPoint,
+    WorkflowDailyTrendsResponse,
+    FulfilledTotalDataPoint,
+    FulfilledTotalsResponse,
 )
 
 bp = Blueprint('analytics', __name__)
@@ -92,3 +96,53 @@ def get_time_trends():
             data_points.append(data_point)
         
         return jsonify(TimeTrendsResponse(period=period, data=data_points).model_dump())
+
+
+@bp.route('/workflow-daily-trends', methods=['GET'])
+def get_workflow_daily_trends():
+    """Get daily workflow transition counts used for dashboard multi-line chart."""
+    days = request.args.get('days', 30, type=int)
+    days = max(1, min(days, 365))
+
+    with get_db() as db:
+        service = AnalyticsService(db)
+        result = service.get_workflow_daily_trends(days=days)
+
+        data_points = [
+            WorkflowDailyTrendDataPoint(
+                date=item['date'],
+                shipped_count=item['shipped_count'],
+                delivered_count=item['delivered_count'],
+                fulfilled_count=item['fulfilled_count'],
+                picked_count=item['picked_count'],
+            )
+            for item in result
+        ]
+
+        return jsonify(WorkflowDailyTrendsResponse(period='day', data=data_points).model_dump())
+
+
+@bp.route('/fulfilled-totals', methods=['GET'])
+def get_fulfilled_totals():
+    """Get fulfilled totals grouped by month or year."""
+    period = request.args.get('period', 'month')
+
+    if period not in ['month', 'year']:
+        return jsonify({'error': "Invalid period. Must be 'month' or 'year'"}), 400
+
+    with get_db() as db:
+        service = AnalyticsService(db)
+        if period == 'month':
+            months = request.args.get('months', 12, type=int)
+            months = max(1, min(months, 60))
+            result = service.get_fulfilled_totals_by_month(months=months)
+        else:
+            years = request.args.get('years', 5, type=int)
+            years = max(1, min(years, 20))
+            result = service.get_fulfilled_totals_by_year(years=years)
+
+        data_points = [
+            FulfilledTotalDataPoint(period=item['period'], fulfilled_count=item['fulfilled_count'])
+            for item in result
+        ]
+        return jsonify(FulfilledTotalsResponse(period=period, data=data_points).model_dump())

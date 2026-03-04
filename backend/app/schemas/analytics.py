@@ -60,6 +60,45 @@ class TimeTrendsResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WorkflowDailyTrendDataPoint(BaseModel):
+    """Daily workflow transition counts used by dashboard line graph."""
+
+    date: str
+    shipped_count: int
+    delivered_count: int
+    fulfilled_count: int
+    picked_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class WorkflowDailyTrendsResponse(BaseModel):
+    """Daily workflow trends response."""
+
+    period: str
+    data: List[WorkflowDailyTrendDataPoint]
+
+    model_config = {"from_attributes": True}
+
+
+class FulfilledTotalDataPoint(BaseModel):
+    """Aggregated fulfillment total for a month or year period."""
+
+    period: str
+    fulfilled_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class FulfilledTotalsResponse(BaseModel):
+    """Monthly/yearly fulfilled totals response."""
+
+    period: str
+    data: List[FulfilledTotalDataPoint]
+
+    model_config = {"from_attributes": True}
+
+
 __all__ = [
     "StatusCountsResponse",
     "DeliveryPerformanceResponse",
@@ -67,4 +106,8 @@ __all__ = [
     "RecentActivityResponse",
     "TimeTrendDataPoint",
     "TimeTrendsResponse",
+    "WorkflowDailyTrendDataPoint",
+    "WorkflowDailyTrendsResponse",
+    "FulfilledTotalDataPoint",
+    "FulfilledTotalsResponse",
 ]
