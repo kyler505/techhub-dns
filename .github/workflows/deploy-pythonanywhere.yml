@@ -3,6 +3,8 @@ name: Deploy to PythonAnywhere
 on:
   push:
     branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
   workflow_dispatch:
 
 jobs:
@@ -13,12 +15,21 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Deploy check for pull requests
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PR deploy check passed (no remote deployment on pull_request events)."
+
       - name: Load SSH key
+        if: github.event_name != 'pull_request'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.PA_SSH_PRIVATE_KEY }}
 
       - name: Add PythonAnywhere host key
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -28,6 +39,7 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       - name: Run deploy script over SSH
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
