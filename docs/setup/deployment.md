@@ -192,6 +192,20 @@ bash ~/techhub-dns/scripts/deploy.sh
 
 Logs stream in the Actions job output. If the deploy fails, the workflow tails `~/techhub-dns/deploy.log` and uploads it as an artifact.
 
+### Release Gate Checklist
+
+Before any remote deploy step runs, the workflow must pass all of these checks:
+
+1. Backend compile sweep: `python3 -m compileall backend/app`
+2. Backend regression scripts:
+   - `cd backend && python3 tests/test_error_handling.py`
+   - `cd backend && python3 tests/test_location_resolver.py`
+3. Frontend quality gates:
+   - `cd frontend && npm run lint`
+   - `cd frontend && npm run build`
+
+If any check fails, deployment is blocked.
+
 ### Setup Steps
 
 #### 1. Add GitHub repository secrets

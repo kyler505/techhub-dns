@@ -15,12 +15,58 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Backend release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall backend/app
+          cd backend
+          python3 tests/test_error_handling.py
+          python3 tests/test_location_resolver.py
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+
+      - name: Frontend release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm run lint
+          npm run build
+
       - name: Deploy check for pull requests
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
-          echo "PR deploy check passed (no remote deployment on pull_request events)."
+          echo "Release gates passed (no remote deployment on pull_request events)."
 
       - name: Load SSH key
         if: github.event_name != 'pull_request'
@@ -75,11 +121,23 @@ jobs:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
         run: |
           set +e
+          case "${GITHUB_REF_NAME}" in
+            main)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+            dev)
+              DEPLOY_LOG="~/techhub-dns-dev/deploy.log"
+              ;;
+            *)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+          esac
+
           ssh -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            'tail -n 300 ~/techhub-dns/deploy.log || true'
+            "tail -n 300 ${DEPLOY_LOG} || true"
 
       - name: Download deploy.log artifact on failure
         if: failure()
@@ -88,10 +146,22 @@ jobs:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
         run: |
           set +e
+          case "${GITHUB_REF_NAME}" in
+            main)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+            dev)
+              DEPLOY_LOG="~/techhub-dns-dev/deploy.log"
+              ;;
+            *)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+          esac
+
           scp -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
-            "${PA_USERNAME}@ssh.pythonanywhere.com:~/techhub-dns/deploy.log" \
+            "${PA_USERNAME}@ssh.pythonanywhere.com:${DEPLOY_LOG}" \
             ./deploy.log
           ls -la ./deploy.log || true
 
