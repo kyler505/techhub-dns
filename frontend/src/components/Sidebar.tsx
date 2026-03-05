@@ -88,9 +88,11 @@ export function Sidebar({ className }: { className?: string }) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -16 }}
                 transition={{ duration: 0.2 }}
-                className="font-semibold text-foreground tracking-tight"
+                className="font-semibold text-foreground tracking-tight leading-tight"
               >
-                TechHub Super App
+                TechHub
+                <br />
+                Super App
               </motion.span>
             )}
           </AnimatePresence>
