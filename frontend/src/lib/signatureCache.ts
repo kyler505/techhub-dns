@@ -3,17 +3,32 @@ export interface LastSignature {
     width: number;
     height: number;
     createdAt: number;
+    recipientNameNormalized?: string;
+    deliveryLocationNormalized?: string;
+    sourceOrderId?: string;
 }
 
 const CACHE_KEY = 'dns_last_signature';
 
 export const signatureCache = {
-    save: (dataUrl: string, width: number, height: number) => {
+    save: (
+        dataUrl: string,
+        width: number,
+        height: number,
+        context?: {
+            recipientNameNormalized?: string;
+            deliveryLocationNormalized?: string;
+            sourceOrderId?: string;
+        }
+    ) => {
         const entry: LastSignature = {
             dataUrl,
             width,
             height,
             createdAt: Date.now(),
+            recipientNameNormalized: context?.recipientNameNormalized,
+            deliveryLocationNormalized: context?.deliveryLocationNormalized,
+            sourceOrderId: context?.sourceOrderId,
         };
         try {
             localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
@@ -36,7 +51,10 @@ export const signatureCache = {
                 !Number.isFinite(parsed.width) ||
                 !Number.isFinite(parsed.height) ||
                 parsed.width <= 0 ||
-                parsed.height <= 0
+                parsed.height <= 0 ||
+                typeof parsed.createdAt !== 'number' ||
+                !Number.isFinite(parsed.createdAt) ||
+                parsed.createdAt <= 0
             ) {
                 localStorage.removeItem(CACHE_KEY);
                 return null;
