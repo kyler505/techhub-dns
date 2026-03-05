@@ -34,6 +34,13 @@ const vettingUrlSections = new Set<VettingEditorSection>(VETTING_EDITOR_VETTING_
 
 const sectionUsesVettingUrl = (section: VettingEditorSection): boolean => vettingUrlSections.has(section);
 
+const formatSectionLabel = (section: VettingEditorSection): string => section.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+const formatCategoryLabel = (category: VettingEditorCategory): string =>
+  category
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 const createRow = (item?: Partial<VettingEditorRow>): VettingEditorRow => ({
   id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
   name: item?.name ?? "",
@@ -119,7 +126,7 @@ export default function VettingEditor() {
   }, [rows]);
 
   const sectionSummary = useMemo(
-    () => VETTING_EDITOR_SECTIONS.map((section) => `${section} ${sectionCounts[section]}`).join(" · "),
+    () => VETTING_EDITOR_SECTIONS.map((section) => `${formatSectionLabel(section)} ${sectionCounts[section]}`).join(" · "),
     [sectionCounts]
   );
 
@@ -212,13 +219,13 @@ export default function VettingEditor() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Vetting Editor</h1>
           <p className="text-sm text-muted-foreground">
-            Edit vetting rows and upload section-keyed JSON to WebDAV.
+            Manage products across the vetting lifecycle.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" onClick={addRow} disabled={saving}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Item
+            Add Product
           </Button>
           <Button type="button" onClick={() => void handleSave()} disabled={saving} className="btn-lift">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -229,7 +236,7 @@ export default function VettingEditor() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Rows</CardTitle>
+          <CardTitle className="text-base">Products</CardTitle>
           <CardDescription>
             {rowCount} total · {sectionSummary}
           </CardDescription>
@@ -237,7 +244,7 @@ export default function VettingEditor() {
         <CardContent>
           {rows.length === 0 ? (
             <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              No rows loaded. Add an item to begin.
+              No products found. Add a product to begin.
             </div>
           ) : (
             <div className="rounded-lg border bg-card">
@@ -269,8 +276,8 @@ export default function VettingEditor() {
                               name: event.target.value,
                             }))
                           }
-                          placeholder="Item name"
-                        />
+                           placeholder="e.g., Magic Keyboard"
+                         />
                       </TableCell>
                       <TableCell>
                         <select
@@ -290,7 +297,7 @@ export default function VettingEditor() {
                         >
                           {VETTING_EDITOR_SECTIONS.map((section) => (
                             <option key={section} value={section}>
-                              {section}
+                              {formatSectionLabel(section)}
                             </option>
                           ))}
                         </select>
@@ -306,7 +313,7 @@ export default function VettingEditor() {
                         >
                           {VETTING_EDITOR_CATEGORIES.map((category) => (
                             <option key={category} value={category}>
-                              {category}
+                              {formatCategoryLabel(category)}
                             </option>
                           ))}
                         </select>
@@ -320,7 +327,7 @@ export default function VettingEditor() {
                               url: event.target.value,
                             }))
                           }
-                          placeholder="https://..."
+                          placeholder="e.g., https://store.example.com"
                         />
                       </TableCell>
                       <TableCell>
@@ -333,11 +340,9 @@ export default function VettingEditor() {
                                 vettingUrl: event.target.value,
                               }))
                             }
-                            placeholder="https://..."
+                            placeholder="e.g., https://store.example.com"
                           />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Not used for {row.section}</span>
-                        )}
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   ))}
