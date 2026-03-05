@@ -1,10 +1,10 @@
-name: Deploy Prod to PythonAnywhere
+name: Deploy Dev to PythonAnywhere
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
   pull_request:
-    branches: [main]
+    branches: [dev]
   workflow_dispatch:
 
 jobs:
@@ -28,48 +28,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m compileall backend/app
-
-      - name: Set up Node.js
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install backend dependencies
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-
-      - name: Full backend release gate (main only)
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd backend
-          python3 tests/test_error_handling.py
-          python3 tests/test_location_resolver.py
-
-      - name: Install frontend dependencies
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd frontend
-          npm ci
-
-      - name: Full frontend release gate (main only)
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd frontend
-          npm run lint
-          npm run build
 
       - name: Deploy check for pull requests
         if: github.event_name == 'pull_request'
@@ -105,7 +63,7 @@ jobs:
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            "PROJECT_ROOT=/home/techhub/techhub-dns WEBAPP_DOMAIN=techhub.pythonanywhere.com BRANCH=main bash ~/techhub-dns/scripts/deploy.sh"
+            "PROJECT_ROOT=/home/techhub/techhub-dns-dev WEBAPP_DOMAIN=dev-techhub.pythonanywhere.com BRANCH=dev bash ~/techhub-dns-dev/scripts/deploy.sh"
 
       - name: Tail deploy.log on failure
         if: failure()
@@ -118,7 +76,7 @@ jobs:
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            "tail -n 300 ~/techhub-dns/deploy.log || true"
+            "tail -n 300 ~/techhub-dns-dev/deploy.log || true"
 
       - name: Download deploy.log artifact on failure
         if: failure()
@@ -130,7 +88,7 @@ jobs:
           scp -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
-            "${PA_USERNAME}@ssh.pythonanywhere.com:~/techhub-dns/deploy.log" \
+            "${PA_USERNAME}@ssh.pythonanywhere.com:~/techhub-dns-dev/deploy.log" \
             ./deploy.log
           ls -la ./deploy.log || true
 
