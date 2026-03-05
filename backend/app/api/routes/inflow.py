@@ -99,6 +99,7 @@ def get_sync_status():
 
 
 @bp.route("/webhook", methods=["POST"])
+@bp.route("/webhook/order-update", methods=["POST"])
 def inflow_webhook():
     """
     Receive webhook notifications from Inflow.
