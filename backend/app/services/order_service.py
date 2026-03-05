@@ -395,10 +395,7 @@ class OrderService:
         limit: int = 100
     ) -> tuple[List[Order], int]:
         """Get orders with filters and pagination"""
-        from sqlalchemy.orm import selectinload
-
-        # Use selectinload to avoid N+1 queries when accessing delivery_run
-        query = self.db.query(Order).options(selectinload(Order.delivery_run))
+        query = self.db.query(Order)
 
         if status:
             query = query.filter(Order.status == status.value)
