@@ -36,9 +36,13 @@ jobs:
           case "${GITHUB_REF_NAME}" in
             main)
               WEBAPP_DOMAIN="techhub.pythonanywhere.com"
+              PROJECT_ROOT="/home/techhub/techhub-dns"
+              DEPLOY_SCRIPT="~/techhub-dns/scripts/deploy.sh"
               ;;
             dev)
               WEBAPP_DOMAIN="dev-techhub.pythonanywhere.com"
+              PROJECT_ROOT="/home/techhub/techhub-dns-dev"
+              DEPLOY_SCRIPT="~/techhub-dns-dev/scripts/deploy.sh"
               ;;
             *)
               echo "Unsupported deploy branch: ${GITHUB_REF_NAME}" >&2
@@ -50,7 +54,7 @@ jobs:
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            "WEBAPP_DOMAIN=${WEBAPP_DOMAIN} BRANCH=${GITHUB_REF_NAME} bash ~/techhub-dns/scripts/deploy.sh"
+            "PROJECT_ROOT=${PROJECT_ROOT} WEBAPP_DOMAIN=${WEBAPP_DOMAIN} BRANCH=${GITHUB_REF_NAME} bash ${DEPLOY_SCRIPT}"
 
       - name: Tail deploy.log on failure
         if: failure()
