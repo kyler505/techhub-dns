@@ -1,7 +1,7 @@
 """add delivery sequence to orders
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0013_add_delivery_sequence_to_orders
+Revises: 0012_additional_operational_index_tuning
 Create Date: 2026-03-04
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0013"
-down_revision = "0012"
+revision = "0013_add_delivery_sequence_to_orders"
+down_revision = "0012_additional_operational_index_tuning"
 branch_labels = None
 depends_on = None
 
