@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Sequence
 from flask import g
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -108,7 +108,7 @@ class DeliveryRunService:
             and_(VehicleCheckout.vehicle == vehicle, VehicleCheckout.checked_in_at.is_(None))
         ).first()
 
-    def create_run_for_current_user(self, order_ids: List[Union[UUID, str]], vehicle: str) -> DeliveryRun:
+    def create_run_for_current_user(self, order_ids: Sequence[Union[UUID, str]], vehicle: str) -> DeliveryRun:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
         runner_display = self._format_actor_display(actor_email, actor_display_name)
@@ -151,7 +151,7 @@ class DeliveryRunService:
 
         return self.create_run(runner=runner_display, order_ids=order_ids, vehicle=vehicle_norm)
 
-    def create_run(self, runner: str, order_ids: List[Union[UUID, str]], vehicle: str) -> DeliveryRun:
+    def create_run(self, runner: str, order_ids: Sequence[Union[UUID, str]], vehicle: str) -> DeliveryRun:
         """Create a delivery run and assign orders to it.
 
         Validates that orders are in Pre-Delivery and that the vehicle is available.
@@ -164,6 +164,7 @@ class DeliveryRunService:
 
         # Convert order IDs to strings for MySQL compatibility
         order_ids_str = [str(oid) for oid in order_ids]
+        order_position_map = {order_id: index + 1 for index, order_id in enumerate(order_ids_str)}
 
         # Validate orders
         orders = self.db.query(Order).filter(Order.id.in_(order_ids_str)).with_for_update().all()
@@ -196,6 +197,7 @@ class DeliveryRunService:
         for o in orders:
             old_status = o.status
             o.delivery_run_id = run.id
+            o.delivery_sequence = order_position_map.get(str(o.id))
             o.status = OrderStatus.IN_DELIVERY.value
             o.updated_at = datetime.utcnow()
 
@@ -511,6 +513,88 @@ class DeliveryRunService:
             old_value={"status": previous_status, "delivery_run_id": run_id_str},
             new_value={"status": OrderStatus.ISSUE.value, "delivery_run_id": None},
             audit_metadata={"reason": reason_value},
+        )
+
+        self.db.commit()
+        self.db.refresh(run)
+        return run
+
+    def reorder_run_orders(
+        self,
+        run_id: Union[UUID, str],
+        order_ids: Sequence[Union[UUID, str]],
+        expected_updated_at: Optional[datetime] = None,
+    ) -> DeliveryRun:
+        """Persist sequence ordering for orders currently assigned to an active run."""
+        run_id_str = str(run_id)
+        requested_order_ids = [str(order_id) for order_id in order_ids]
+
+        if not requested_order_ids:
+            raise ValidationError("order_ids is required", field="order_ids")
+
+        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
+        if not run:
+            raise NotFoundError("DeliveryRun", run_id_str)
+
+        if run.status != DeliveryRunStatus.ACTIVE.value:
+            raise ValidationError(
+                "Only active runs can be reordered",
+                details={"run_id": run_id_str, "current_status": run.status},
+            )
+
+        if expected_updated_at is not None and run.updated_at is not None:
+            expected_utc = expected_updated_at
+            if expected_utc.tzinfo is not None:
+                expected_utc = expected_utc.astimezone(timezone.utc).replace(tzinfo=None)
+
+            current_utc = run.updated_at
+            if current_utc.tzinfo is not None:
+                current_utc = current_utc.astimezone(timezone.utc).replace(tzinfo=None)
+
+            if expected_utc != current_utc:
+                raise ConflictError(
+                    "Delivery run has changed since it was loaded. Refresh and try again.",
+                    details={
+                        "run_id": run_id_str,
+                        "expected_updated_at": expected_utc.isoformat(),
+                        "current_updated_at": current_utc.isoformat(),
+                    },
+                )
+
+        run_orders = (
+            self.db.query(Order)
+            .filter(Order.delivery_run_id == run_id_str)
+            .with_for_update()
+            .all()
+        )
+        run_order_ids = {str(order.id) for order in run_orders}
+        requested_set = set(requested_order_ids)
+
+        if requested_set != run_order_ids or len(requested_order_ids) != len(run_order_ids):
+            raise ValidationError(
+                "order_ids must include all and only orders assigned to the run",
+                details={
+                    "run_order_ids": sorted(run_order_ids),
+                    "requested_order_ids": requested_order_ids,
+                },
+            )
+
+        order_lookup = {str(order.id): order for order in run_orders}
+        for index, order_id in enumerate(requested_order_ids, start=1):
+            order = order_lookup[order_id]
+            order.delivery_sequence = index
+            order.updated_at = datetime.utcnow()
+
+        run.updated_at = datetime.utcnow()
+
+        actor_user_id, _, _ = self._get_authenticated_actor()
+        audit_service = AuditService(self.db)
+        audit_service.log_delivery_run_action(
+            run_id=run_id_str,
+            action="orders_reordered",
+            user_id=actor_user_id,
+            description="Run order sequence updated",
+            audit_metadata={"order_ids": requested_order_ids},
         )
 
         self.db.commit()

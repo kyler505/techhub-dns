@@ -27,6 +27,7 @@ export interface OrderSummary {
   recipient_name: string | null;
   delivery_location: string | null;
   status: string;
+  delivery_sequence?: number | null;
 }
 
 export interface DeliveryRunDetailResponse extends DeliveryRunResponse {
@@ -72,6 +73,18 @@ export const deliveryRunsApi = {
         expected_updated_at: expectedUpdatedAt ?? undefined,
       } satisfies RecallOrderRequest
     );
+    return response.data;
+  },
+
+  reorderOrders: async (
+    runId: string,
+    orderIds: string[],
+    expectedUpdatedAt?: string | null
+  ): Promise<DeliveryRunResponse> => {
+    const response = await apiClient.put<DeliveryRunResponse>(`/delivery-runs/${runId}/orders/reorder`, {
+      order_ids: orderIds,
+      expected_updated_at: expectedUpdatedAt ?? undefined,
+    });
     return response.data;
   },
 
