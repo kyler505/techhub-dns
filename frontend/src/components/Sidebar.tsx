@@ -90,7 +90,7 @@ export function Sidebar({ className }: { className?: string }) {
                 transition={{ duration: 0.2 }}
                 className="font-semibold text-foreground tracking-tight"
               >
-                TechHub
+                TechHub Super App
               </motion.span>
             )}
           </AnimatePresence>
