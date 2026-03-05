@@ -266,6 +266,36 @@ save_lockfile_fingerprint() {
     fi
 }
 
+run_backend_migrations() {
+    local backend_dir="${PROJECT_ROOT}/backend"
+    local -a alembic_cmd
+
+    if [ ! -d "$backend_dir" ]; then
+        log "ERROR: Backend directory not found at $backend_dir"
+        return 1
+    fi
+
+    if [ -x "${backend_dir}/venv/bin/alembic" ]; then
+        alembic_cmd=("${backend_dir}/venv/bin/alembic")
+    elif command -v alembic >/dev/null 2>&1; then
+        alembic_cmd=("alembic")
+    elif command -v python3 >/dev/null 2>&1; then
+        alembic_cmd=("python3" "-m" "alembic")
+    else
+        log "ERROR: Alembic is unavailable; cannot run database migrations"
+        return 1
+    fi
+
+    log "Running database migrations (alembic upgrade head)..."
+    cd "$backend_dir"
+    if ! "${alembic_cmd[@]}" upgrade head; then
+        log "ERROR: Database migration failed"
+        return 1
+    fi
+    cd "$PROJECT_ROOT"
+    log "Database migrations complete"
+}
+
 install_frontend_deps() {
     local -a install_cmd
     local -a fallback_cmd
@@ -402,6 +432,10 @@ fi
 
 git reset --hard "origin/$BRANCH"
 log "Git pull complete"
+
+if ! run_backend_migrations; then
+    exit 1
+fi
 
 # Build frontend on PythonAnywhere
 if [ -d "$FRONTEND_DIR" ]; then
