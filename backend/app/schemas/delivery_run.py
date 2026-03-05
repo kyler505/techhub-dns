@@ -39,12 +39,23 @@ class FinishDeliveryRunRequest(BaseModel):
     expected_updated_at: Optional[datetime] = None
 
 
+class RecallDeliveryRunOrderRequest(BaseModel):
+    reason: str = Field(min_length=1)
+    expected_updated_at: Optional[datetime] = None
+
+
+class ReorderDeliveryRunOrdersRequest(BaseModel):
+    order_ids: List[UUID] = Field(default_factory=list)
+    expected_updated_at: Optional[datetime] = None
+
+
 class OrderSummary(BaseModel):
     id: UUID
     inflow_order_id: Optional[str] = None
     recipient_name: Optional[str] = None
     delivery_location: Optional[str] = None
     status: str
+    delivery_sequence: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

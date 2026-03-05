@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { AlertCircle, ArrowLeft, CheckCircle, Clock, Package, Truck, User } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, CheckCircle, Clock, Package, Truck, User } from "lucide-react";
 
 import { deliveryRunsApi } from "../api/deliveryRuns";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { OrderStatus } from "../types/order";
 
@@ -72,7 +73,7 @@ function getApiErrorMessage(error: unknown): string {
     }
   }
 
-  return "Failed to complete delivery. Ensure all orders are delivered first.";
+  return "Action failed. Refresh and try again.";
 }
 
 export default function DeliveryRunDetailPage() {
@@ -81,8 +82,15 @@ export default function DeliveryRunDetailPage() {
   const location = useLocation();
   const { run, loading, error, refetch } = useDeliveryRun(runId);
   const [finishing, setFinishing] = useState(false);
+  const [recalling, setRecalling] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
+  const [recallReason, setRecallReason] = useState("");
+  const [recallOrderId, setRecallOrderId] = useState<string | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [orderedOrderIds, setOrderedOrderIds] = useState<string[]>([]);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   const locationState = location.state as DeliveryDetailLocationState | null;
   const backTo = locationState?.from ?? "/delivery/dispatch";
@@ -106,6 +114,40 @@ export default function DeliveryRunDetailPage() {
     [blockingOrders]
   );
 
+  useEffect(() => {
+    if (!run) {
+      return;
+    }
+
+    const nextIds = run.orders
+      .slice()
+      .sort((a, b) => {
+        const aSeq = a.delivery_sequence ?? Number.MAX_SAFE_INTEGER;
+        const bSeq = b.delivery_sequence ?? Number.MAX_SAFE_INTEGER;
+        if (aSeq === bSeq) {
+          return (a.inflow_order_id || a.id).localeCompare(b.inflow_order_id || b.id);
+        }
+        return aSeq - bSeq;
+      })
+      .map((order) => order.id);
+
+    setOrderedOrderIds(nextIds);
+  }, [run]);
+
+  const orderedOrders = useMemo(() => {
+    if (!run) {
+      return [];
+    }
+
+    const orderMap = new Map(run.orders.map((order) => [order.id, order]));
+    const ordered = orderedOrderIds.map((id) => orderMap.get(id)).filter((order): order is NonNullable<typeof order> => Boolean(order));
+
+    if (ordered.length !== run.orders.length) {
+      return run.orders;
+    }
+    return ordered;
+  }, [run, orderedOrderIds]);
+
   const handleCompleteRun = async () => {
     if (!run || !allOrdersDelivered) return;
 
@@ -115,11 +157,100 @@ export default function DeliveryRunDetailPage() {
       toast.success("Delivery run completed");
       await refetch();
     } catch (error: unknown) {
-      setErrorMessage(getApiErrorMessage(error));
+      setErrorMessage(getApiErrorMessage(error) || "Failed to complete delivery. Ensure all orders are delivered first.");
       setErrorDialogOpen(true);
       await refetch();
     } finally {
       setFinishing(false);
+    }
+  };
+
+  const openRecallDialog = (orderId: string) => {
+    setRecallOrderId(orderId);
+    setRecallReason("");
+    setRecallDialogOpen(true);
+  };
+
+  const handleRecallOrder = async () => {
+    if (!run || !recallOrderId) {
+      return;
+    }
+
+    const reason = recallReason.trim();
+    if (!reason) {
+      toast.error("Recall reason is required");
+      return;
+    }
+
+    setRecalling(true);
+    try {
+      await deliveryRunsApi.recallOrder(run.id, recallOrderId, reason, run.updated_at ?? undefined);
+      toast.success("Order recalled from run");
+      setRecallDialogOpen(false);
+      setRecallOrderId(null);
+      setRecallReason("");
+      await refetch();
+    } catch (error: unknown) {
+      setErrorMessage(getApiErrorMessage(error));
+      setErrorDialogOpen(true);
+      await refetch();
+    } finally {
+      setRecalling(false);
+    }
+  };
+
+  const moveOrder = (orderId: string, direction: "up" | "down") => {
+    setOrderedOrderIds((previous) => {
+      const index = previous.indexOf(orderId);
+      if (index < 0) return previous;
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= previous.length) return previous;
+
+      const next = previous.slice();
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const hasReorderChanges = useMemo(() => {
+    if (!run || orderedOrderIds.length !== run.orders.length) {
+      return false;
+    }
+
+    const currentIds = run.orders
+      .slice()
+      .sort((a, b) => {
+        const aSeq = a.delivery_sequence ?? Number.MAX_SAFE_INTEGER;
+        const bSeq = b.delivery_sequence ?? Number.MAX_SAFE_INTEGER;
+        if (aSeq === bSeq) {
+          return (a.inflow_order_id || a.id).localeCompare(b.inflow_order_id || b.id);
+        }
+        return aSeq - bSeq;
+      })
+      .map((order) => order.id);
+
+    return currentIds.some((id, index) => id !== orderedOrderIds[index]);
+  }, [run, orderedOrderIds]);
+
+  const handleSaveOrder = async () => {
+    if (!run || !hasReorderChanges) {
+      setReorderMode(false);
+      return;
+    }
+
+    setSavingOrder(true);
+    try {
+      await deliveryRunsApi.reorderOrders(run.id, orderedOrderIds, run.updated_at ?? undefined);
+      toast.success("Run order updated");
+      setReorderMode(false);
+      await refetch();
+    } catch (error: unknown) {
+      setErrorMessage(getApiErrorMessage(error));
+      setErrorDialogOpen(true);
+      await refetch();
+    } finally {
+      setSavingOrder(false);
     }
   };
 
@@ -161,10 +292,45 @@ export default function DeliveryRunDetailPage() {
           <Button variant="outline" onClick={() => void refetch()}>
             Refresh Status
           </Button>
+          {runIsActive && run.orders.length > 1 ? (
+            reorderMode ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setReorderMode(false);
+                    setOrderedOrderIds(
+                      run.orders
+                        .slice()
+                        .sort((a, b) => {
+                          const aSeq = a.delivery_sequence ?? Number.MAX_SAFE_INTEGER;
+                          const bSeq = b.delivery_sequence ?? Number.MAX_SAFE_INTEGER;
+                          if (aSeq === bSeq) {
+                            return (a.inflow_order_id || a.id).localeCompare(b.inflow_order_id || b.id);
+                          }
+                          return aSeq - bSeq;
+                        })
+                        .map((order) => order.id)
+                    );
+                  }}
+                  disabled={savingOrder}
+                >
+                  Cancel Reorder
+                </Button>
+                <Button onClick={() => void handleSaveOrder()} disabled={savingOrder || !hasReorderChanges}>
+                  {savingOrder ? "Saving..." : "Save Order"}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => setReorderMode(true)}>
+                Reorder Stops
+              </Button>
+            )
+          ) : null}
           {runIsActive ? (
             <Button
               onClick={handleCompleteRun}
-              disabled={!allOrdersDelivered || finishing}
+              disabled={!allOrdersDelivered || finishing || savingOrder}
               className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-muted disabled:text-muted-foreground"
             >
               <CheckCircle className="mr-2 h-4 w-4" />
@@ -225,11 +391,16 @@ export default function DeliveryRunDetailPage() {
                         </Button>
                       </Link>
                       {isSignable ? (
-                        <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
-                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                            Sign Now
+                        <>
+                          <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                              Sign Now
+                            </Button>
+                          </Link>
+                          <Button size="sm" variant="outline" onClick={() => openRecallDialog(order.id)}>
+                            Recall Order
                           </Button>
-                        </Link>
+                        </>
                       ) : (
                         <Badge variant="warning">Move to In Delivery first</Badge>
                       )}
@@ -311,6 +482,7 @@ export default function DeliveryRunDetailPage() {
           <CardTitle>Orders in This Run</CardTitle>
           <CardDescription>
             {run.orders.length} order{run.orders.length !== 1 ? "s" : ""} assigned to this delivery run
+            {reorderMode ? " - reorder mode enabled" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -318,21 +490,16 @@ export default function DeliveryRunDetailPage() {
             <div className="py-8 text-center text-muted-foreground">No orders assigned to this run</div>
           ) : (
             <div className="space-y-3">
-              {run.orders
-                .slice()
-                .sort((a, b) => {
-                  const aDelivered = a.status.toLowerCase() === "delivered";
-                  const bDelivered = b.status.toLowerCase() === "delivered";
-                  if (aDelivered === bDelivered) return 0;
-                  return aDelivered ? 1 : -1;
-                })
-                .map((order) => (
+              {orderedOrders.map((order, index) => (
                 <div
                   key={order.id}
                   className={`flex flex-col gap-3 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center sm:justify-between ${order.status.toLowerCase() !== "delivered" ? "border-accent/20 bg-accent/5" : "hover:bg-muted/50"}`}
                 >
                   <div>
-                    <div className="font-medium">Order {order.inflow_order_id || order.id.slice(0, 8)}</div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">Stop {index + 1}</Badge>
+                      <div className="font-medium">Order {order.inflow_order_id || order.id.slice(0, 8)}</div>
+                    </div>
                     {order.recipient_name ? (
                       <div className="text-sm text-muted-foreground">{order.recipient_name}</div>
                     ) : null}
@@ -360,16 +527,44 @@ export default function DeliveryRunDetailPage() {
                       </Button>
                     </Link>
 
-                    {order.status === OrderStatus.IN_DELIVERY ? (
-                      <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
-                        <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                          Sign Document
+                    {reorderMode ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => moveOrder(order.id, "up")}
+                          disabled={index === 0 || savingOrder}
+                        >
+                          <ArrowUp className="mr-1 h-4 w-4" />
+                          Up
                         </Button>
-                      </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => moveOrder(order.id, "down")}
+                          disabled={index === orderedOrders.length - 1 || savingOrder}
+                        >
+                          <ArrowDown className="mr-1 h-4 w-4" />
+                          Down
+                        </Button>
+                      </>
+                    ) : null}
+
+                    {!reorderMode && order.status === OrderStatus.IN_DELIVERY ? (
+                      <>
+                        <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
+                          <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                            Sign Document
+                          </Button>
+                        </Link>
+                        <Button variant="outline" size="sm" onClick={() => openRecallDialog(order.id)}>
+                          Recall
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 </div>
-                ))}
+              ))}
             </div>
           )}
         </CardContent>
@@ -386,6 +581,40 @@ export default function DeliveryRunDetailPage() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setErrorDialogOpen(false)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={recallDialogOpen} onOpenChange={setRecallDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Recall Order From Run</DialogTitle>
+            <DialogDescription>
+              This marks the order as Issue and removes it from the active run so you can finish remaining deliveries.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label htmlFor="recall-reason" className="text-sm font-medium text-foreground">
+              Reason
+            </label>
+            <Input
+              id="recall-reason"
+              value={recallReason}
+              onChange={(event) => setRecallReason(event.target.value)}
+              placeholder="Undeliverable details (recipient unavailable, address issue, etc.)"
+              maxLength={500}
+              disabled={recalling}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecallDialogOpen(false)} disabled={recalling}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRecallOrder()} disabled={recalling || !recallReason.trim()}>
+              {recalling ? "Recalling..." : "Confirm Recall"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
