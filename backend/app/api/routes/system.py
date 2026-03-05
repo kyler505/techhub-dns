@@ -9,7 +9,7 @@ import re
 from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
-from typing import Dict, Any, cast, Optional
+from typing import Dict, Any, cast, Optional, Sequence
 from datetime import datetime, timezone
 import requests
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
@@ -63,6 +63,29 @@ _VETTING_EDITOR_DOWNLOAD_HEADERS = {
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
 }
+
+COMPATIBILITY_EDITOR_STATUS_VALUES = (
+    "Compatible",
+    "Incompatible",
+    "Partially Compatible",
+)
+COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES = (
+    "Functional",
+    "Partially Functional",
+    "Non-functional",
+    "N/A",
+)
+COMPATIBILITY_EDITOR_DETAIL_FIELDS = (
+    "display",
+    "charging",
+    "usbDetection",
+    "ethernet",
+    "audio",
+    "sdCard",
+)
+
+_COMPATIBILITY_EDITOR_TIMEOUT = _VETTING_EDITOR_TIMEOUT
+_COMPATIBILITY_EDITOR_DOWNLOAD_HEADERS = dict(_VETTING_EDITOR_DOWNLOAD_HEADERS)
 
 
 def _normalize_vetting_editor_section_name(section_name: str) -> str:
@@ -270,6 +293,336 @@ def _upload_vetting_editor_json(url: str, payload: dict[str, list[dict[str, str]
             return True
 
         logger.warning("Vetting editor PUT returned %s (%s)", response.status_code, auth_name)
+
+    return False
+
+
+def _get_compatibility_editor_staging_auth() -> tuple[str, str]:
+    username = (settings.compatibility_editor_staging_webdav_username or "").strip()
+    password = settings.compatibility_editor_staging_webdav_password
+    if not username or not password:
+        raise RuntimeError(
+            "Compatibility editor staging credentials are not configured "
+            "(COMPATIBILITY_EDITOR_STAGING_WEBDAV_USERNAME and COMPATIBILITY_EDITOR_STAGING_WEBDAV_PASSWORD)."
+        )
+    return username, password
+
+
+def _normalize_string_array(value: Any, field_name: str, *, allow_empty: bool = False) -> list[str]:
+    if value in (None, ""):
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"'{field_name}' must be an array of strings.")
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError(f"'{field_name}' entries must be strings.")
+        trimmed = item.strip()
+        if not trimmed and not allow_empty:
+            continue
+        if trimmed and trimmed not in seen:
+            seen.add(trimmed)
+            normalized.append(trimmed)
+    return normalized
+
+
+def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Payload must be a JSON object.")
+
+    docks_raw = payload.get("docks")
+    computers_raw = payload.get("computers")
+    if not isinstance(docks_raw, dict):
+        raise ValueError("'docks' must be an object keyed by dock SKU.")
+    if not isinstance(computers_raw, dict):
+        raise ValueError("'computers' must be an object keyed by computer SKU.")
+
+    normalized_docks: dict[str, dict[str, Any]] = {}
+    for raw_dock_key, raw_dock in docks_raw.items():
+        if not isinstance(raw_dock_key, str):
+            raise ValueError("Dock keys must be strings.")
+        dock_key = raw_dock_key.strip()
+        if not dock_key:
+            raise ValueError("Dock keys cannot be blank.")
+        if not isinstance(raw_dock, dict):
+            raise ValueError(f"Dock '{dock_key}' must be an object.")
+
+        name = raw_dock.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"Dock '{dock_key}' has invalid 'name'.")
+
+        normalized_dock: dict[str, Any] = dict(raw_dock)
+        normalized_dock["name"] = name.strip()
+
+        dock_url = raw_dock.get("url")
+        if dock_url is not None:
+            if not isinstance(dock_url, str):
+                raise ValueError(f"Dock '{dock_key}' has invalid 'url'.")
+            normalized_dock["url"] = dock_url.strip()
+
+        hidden = raw_dock.get("hidden")
+        if hidden is not None and not isinstance(hidden, bool):
+            raise ValueError(f"Dock '{dock_key}' has invalid 'hidden' flag.")
+
+        normalized_docks[dock_key] = normalized_dock
+
+    dock_keys = set(normalized_docks.keys())
+    normalized_computers: dict[str, dict[str, Any]] = {}
+    for raw_computer_key, raw_computer in computers_raw.items():
+        if not isinstance(raw_computer_key, str):
+            raise ValueError("Computer keys must be strings.")
+        computer_key = raw_computer_key.strip()
+        if not computer_key:
+            raise ValueError("Computer keys cannot be blank.")
+        if not isinstance(raw_computer, dict):
+            raise ValueError(f"Computer '{computer_key}' must be an object.")
+
+        name = raw_computer.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"Computer '{computer_key}' has invalid 'name'.")
+
+        normalized_computer: dict[str, Any] = dict(raw_computer)
+        normalized_computer["name"] = name.strip()
+
+        computer_url = raw_computer.get("url")
+        if computer_url is not None:
+            if not isinstance(computer_url, str):
+                raise ValueError(f"Computer '{computer_key}' has invalid 'url'.")
+            normalized_computer["url"] = computer_url.strip()
+
+        hidden = raw_computer.get("hidden")
+        if hidden is not None and not isinstance(hidden, bool):
+            raise ValueError(f"Computer '{computer_key}' has invalid 'hidden' flag.")
+
+        incompatible_with = _normalize_string_array(raw_computer.get("incompatibleWith"), "incompatibleWith")
+        partially_compatible_with = _normalize_string_array(
+            raw_computer.get("partiallyCompatibleWith"), "partiallyCompatibleWith"
+        )
+
+        overlap = set(incompatible_with).intersection(partially_compatible_with)
+        if overlap:
+            overlap_sorted = ", ".join(sorted(overlap))
+            raise ValueError(
+                f"Computer '{computer_key}' cannot list the same dock as incompatible and partially compatible: {overlap_sorted}."
+            )
+
+        compatibility_notes_raw = raw_computer.get("compatibilityNotes")
+        compatibility_notes: dict[str, str] = {}
+        if compatibility_notes_raw is not None:
+            if not isinstance(compatibility_notes_raw, dict):
+                raise ValueError(f"Computer '{computer_key}' has invalid 'compatibilityNotes'.")
+            for raw_note_dock_key, raw_note in compatibility_notes_raw.items():
+                if not isinstance(raw_note_dock_key, str):
+                    raise ValueError(f"Computer '{computer_key}' compatibilityNotes keys must be strings.")
+                note_dock_key = raw_note_dock_key.strip()
+                if note_dock_key not in dock_keys:
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityNotes references unknown dock '{raw_note_dock_key}'."
+                    )
+                if not isinstance(raw_note, str):
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityNotes for dock '{note_dock_key}' must be a string."
+                    )
+                trimmed_note = raw_note.strip()
+                if trimmed_note:
+                    compatibility_notes[note_dock_key] = trimmed_note
+
+        compatibility_data_raw = raw_computer.get("compatibilityData")
+        compatibility_data: dict[str, dict[str, Any]] = {}
+        if compatibility_data_raw is not None:
+            if not isinstance(compatibility_data_raw, dict):
+                raise ValueError(f"Computer '{computer_key}' has invalid 'compatibilityData'.")
+            for raw_data_dock_key, raw_data in compatibility_data_raw.items():
+                if not isinstance(raw_data_dock_key, str):
+                    raise ValueError(f"Computer '{computer_key}' compatibilityData keys must be strings.")
+                data_dock_key = raw_data_dock_key.strip()
+                if data_dock_key not in dock_keys:
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityData references unknown dock '{raw_data_dock_key}'."
+                    )
+                if not isinstance(raw_data, dict):
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' must be an object."
+                    )
+
+                normalized_entry: dict[str, Any] = dict(raw_data)
+                status = raw_data.get("compatibilityStatus")
+                if status is not None:
+                    if not isinstance(status, str) or status not in COMPATIBILITY_EDITOR_STATUS_VALUES:
+                        allowed = ", ".join(COMPATIBILITY_EDITOR_STATUS_VALUES)
+                        raise ValueError(
+                            f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid "
+                            f"compatibilityStatus. Allowed: {allowed}."
+                        )
+
+                notes_value = raw_data.get("notes")
+                if notes_value is not None:
+                    if not isinstance(notes_value, str):
+                        raise ValueError(
+                            f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid notes."
+                        )
+                    trimmed_entry_notes = notes_value.strip()
+                    if trimmed_entry_notes:
+                        normalized_entry["notes"] = trimmed_entry_notes
+                    else:
+                        normalized_entry.pop("notes", None)
+
+                reboot_needed = raw_data.get("rebootNeeded")
+                if reboot_needed is not None and not isinstance(reboot_needed, bool):
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid rebootNeeded."
+                    )
+
+                student_edited = raw_data.get("studentEdited")
+                if student_edited is not None and not isinstance(student_edited, bool):
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid studentEdited."
+                    )
+
+                for detail_field in COMPATIBILITY_EDITOR_DETAIL_FIELDS:
+                    detail_value = raw_data.get(detail_field)
+                    if detail_value is None:
+                        continue
+                    if not isinstance(detail_value, str) or detail_value not in COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES:
+                        allowed = ", ".join(COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES)
+                        raise ValueError(
+                            f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid "
+                            f"'{detail_field}'. Allowed: {allowed}."
+                        )
+
+                compatibility_data[data_dock_key] = normalized_entry
+
+        def _ensure_known_docks(values: Sequence[str], field_name: str) -> None:
+            unknown = sorted({dock for dock in values if dock not in dock_keys})
+            if unknown:
+                raise ValueError(
+                    f"Computer '{computer_key}' {field_name} references unknown docks: {', '.join(unknown)}."
+                )
+
+        _ensure_known_docks(incompatible_with, "incompatibleWith")
+        _ensure_known_docks(partially_compatible_with, "partiallyCompatibleWith")
+
+        normalized_computer["incompatibleWith"] = incompatible_with
+        normalized_computer["partiallyCompatibleWith"] = partially_compatible_with
+        normalized_computer["compatibilityNotes"] = compatibility_notes
+        normalized_computer["compatibilityData"] = compatibility_data
+
+        normalized_computers[computer_key] = normalized_computer
+
+    normalized_payload: dict[str, Any] = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"docks", "computers"}
+    }
+    normalized_payload["docks"] = normalized_docks
+    normalized_payload["computers"] = normalized_computers
+    return normalized_payload
+
+
+def _try_download_compatibility_editor_staging_json(
+    url: str,
+    username: str,
+    password: str,
+) -> Optional[dict[str, Any]]:
+    headers = dict(_COMPATIBILITY_EDITOR_DOWNLOAD_HEADERS)
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        headers["Origin"] = base
+        headers["Referer"] = f"{base}/"
+
+    attempts = (
+        ("none", None),
+        ("basic", HTTPBasicAuth(username, password)),
+        ("digest", HTTPDigestAuth(username, password)),
+    )
+
+    for auth_name, auth in attempts:
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                auth=auth,
+                timeout=_COMPATIBILITY_EDITOR_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.RequestException as exc:
+            logger.warning("Compatibility editor staging GET failed (%s): %s", auth_name, exc)
+            continue
+
+        if response.status_code != 200:
+            logger.warning(
+                "Compatibility editor staging GET returned %s (%s)",
+                response.status_code,
+                auth_name,
+            )
+            continue
+
+        try:
+            payload = response.json()
+        except ValueError:
+            logger.warning("Compatibility editor staging GET returned non-JSON payload (%s)", auth_name)
+            continue
+
+        if isinstance(payload, dict):
+            return payload
+
+        logger.warning("Compatibility editor staging GET returned non-object JSON (%s)", auth_name)
+
+    return None
+
+
+def _upload_compatibility_editor_staging_json(
+    url: str,
+    payload: dict[str, Any],
+    username: str,
+    password: str,
+) -> bool:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json; charset=UTF-8",
+        "Accept": "application/json, text/plain, */*",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+
+    attempts = (
+        ("digest", HTTPDigestAuth(username, password)),
+        ("basic", HTTPBasicAuth(username, password)),
+    )
+
+    for auth_name, auth in attempts:
+        try:
+            requests.request(
+                "PROPFIND",
+                url,
+                headers=headers,
+                auth=auth,
+                timeout=_COMPATIBILITY_EDITOR_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.RequestException:
+            logger.debug("Compatibility editor staging PROPFIND warmup failed (%s)", auth_name)
+
+        try:
+            response = requests.put(
+                url,
+                data=body,
+                headers=headers,
+                auth=auth,
+                timeout=_COMPATIBILITY_EDITOR_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.RequestException as exc:
+            logger.warning("Compatibility editor staging PUT failed (%s): %s", auth_name, exc)
+            continue
+
+        if response.status_code in (200, 201, 204):
+            return True
+
+        logger.warning("Compatibility editor staging PUT returned %s (%s)", response.status_code, auth_name)
 
     return False
 
@@ -557,6 +910,78 @@ def save_vetting_editor_data():
 
     if not _upload_vetting_editor_json(upload_url, normalized, username, password):
         return jsonify({"error": "Failed to upload vetting editor JSON to WebDAV."}), 502
+
+    return jsonify({"success": True})
+
+
+@bp.route("/compatibility-editor-staging", methods=["GET"])
+@require_admin
+def get_compatibility_editor_staging_data():
+    download_url = (settings.compatibility_editor_staging_download_url or "").strip()
+    upload_url = (settings.compatibility_editor_staging_upload_url or "").strip()
+    if not download_url and not upload_url:
+        return jsonify({
+            "error": (
+                "Compatibility editor staging is not configured "
+                "(missing COMPATIBILITY_EDITOR_STAGING_DOWNLOAD_URL)."
+            )
+        }), 500
+
+    try:
+        username, password = _get_compatibility_editor_staging_auth()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    candidate_urls: list[str] = []
+    for candidate in (download_url, upload_url):
+        if candidate and candidate not in candidate_urls:
+            candidate_urls.append(candidate)
+
+    payload: Optional[dict[str, Any]] = None
+    for url in candidate_urls:
+        payload = _try_download_compatibility_editor_staging_json(url, username, password)
+        if payload is not None:
+            break
+
+    if payload is None:
+        return jsonify({"error": "Failed to fetch compatibility editor staging JSON from WebDAV."}), 502
+
+    try:
+        normalized = _validate_compatibility_editor_staging_payload(payload)
+    except ValueError as exc:
+        return jsonify({"error": f"Remote compatibility editor staging JSON is invalid: {exc}"}), 502
+
+    return jsonify(normalized)
+
+
+@bp.route("/compatibility-editor-staging", methods=["PUT"])
+@require_admin
+def save_compatibility_editor_staging_data():
+    upload_url = (settings.compatibility_editor_staging_upload_url or "").strip()
+    if not upload_url:
+        return jsonify({
+            "error": (
+                "Compatibility editor staging is not configured "
+                "(missing COMPATIBILITY_EDITOR_STAGING_UPLOAD_URL)."
+            )
+        }), 500
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"error": "Missing JSON request body."}), 400
+
+    try:
+        normalized = _validate_compatibility_editor_staging_payload(payload)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        username, password = _get_compatibility_editor_staging_auth()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    if not _upload_compatibility_editor_staging_json(upload_url, normalized, username, password):
+        return jsonify({"error": "Failed to upload compatibility editor staging JSON to WebDAV."}), 502
 
     return jsonify({"success": True})
 
