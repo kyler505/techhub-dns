@@ -142,30 +142,6 @@ export function Sidebar({ className }: { className?: string }) {
 
         <div className="my-4 border-t border-border" />
 
-{visibleAdminItems.map((item) => {
-          const active = isActive(item.path);
-          const Icon = item.icon;
-          return (
-            <NavLink key={item.path} to={item.path}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                active
-                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              <AnimatePresence mode="wait">
-                {!collapsed && (
-                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }} className="whitespace-nowrap overflow-hidden">
-                    {item.label}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </NavLink>
-          );
-        })}
-        
         {/* Vetting Editor item - positioned after separator but before other admin items */}
         {isAdmin && (
           <NavLink
@@ -196,6 +172,30 @@ export function Sidebar({ className }: { className?: string }) {
             </AnimatePresence>
           </NavLink>
         )}
+
+        {visibleAdminItems.map((item) => {
+          const active = isActive(item.path);
+          const Icon = item.icon;
+          return (
+            <NavLink key={item.path} to={item.path}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                active
+                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              )}
+            >
+              <Icon className="w-5 h-5 flex-shrink-0" />
+              <AnimatePresence mode="wait">
+                {!collapsed && (
+                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }} className="whitespace-nowrap overflow-hidden">
+                    {item.label}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </NavLink>
+          );
+        })}
       </nav>
     </motion.aside>
   );
