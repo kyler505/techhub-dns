@@ -30,9 +30,11 @@ from app.models.order import Order
 from app.schemas.audit import AuditLogResponse
 from app.utils.exceptions import DNSApiError, NotFoundError, ValidationError
 from app.api.auth_middleware import get_current_user_email
+import logging
 
 bp = Blueprint('orders', __name__)
 bp.strict_slashes = False
+logger = logging.getLogger(__name__)
 
 # Simple in-memory broadcaster for SocketIO clients
 _order_clients = set()
@@ -105,8 +107,15 @@ def get_orders():
 
             # Compute pick_status from inflow_data if available
             if o.inflow_data:
-                pick_status_data = inflow_service.get_pick_status(o.inflow_data)
-                order_dict['pick_status'] = pick_status_data
+                try:
+                    pick_status_data = inflow_service.get_pick_status(o.inflow_data)
+                    order_dict['pick_status'] = pick_status_data
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to compute pick_status for order %s: %s",
+                        o.inflow_order_id,
+                        exc,
+                    )
 
             result.append(order_dict)
 
