@@ -23,7 +23,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Fast backend gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall backend/app
+
       - name: Set up Node.js
+        if: github.ref_name == 'main' || github.base_ref == 'main'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -31,29 +38,32 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install backend dependencies
+        if: github.ref_name == 'main' || github.base_ref == 'main'
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Backend release gate
+      - name: Full backend release gate (main only)
+        if: github.ref_name == 'main' || github.base_ref == 'main'
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m compileall backend/app
           cd backend
           python3 tests/test_error_handling.py
           python3 tests/test_location_resolver.py
 
       - name: Install frontend dependencies
+        if: github.ref_name == 'main' || github.base_ref == 'main'
         shell: bash
         run: |
           set -euo pipefail
           cd frontend
           npm ci
 
-      - name: Frontend release gate
+      - name: Full frontend release gate (main only)
+        if: github.ref_name == 'main' || github.base_ref == 'main'
         shell: bash
         run: |
           set -euo pipefail

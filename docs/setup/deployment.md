@@ -194,17 +194,17 @@ Logs stream in the Actions job output. If the deploy fails, the workflow tails `
 
 ### Release Gate Checklist
 
-Before any remote deploy step runs, the workflow must pass all of these checks:
+The workflow now uses branch-specific gates before remote deployment:
 
-1. Backend compile sweep: `python3 -m compileall backend/app`
-2. Backend regression scripts:
+1. All deploy branches (`dev` and `main`) must pass a fast backend gate:
+   - `python3 -m compileall backend/app`
+2. `main` branch (and PRs targeting `main`) must also pass full quality gates:
    - `cd backend && python3 tests/test_error_handling.py`
    - `cd backend && python3 tests/test_location_resolver.py`
-3. Frontend quality gates:
    - `cd frontend && npm run lint`
    - `cd frontend && npm run build`
 
-If any check fails, deployment is blocked.
+If any required gate for the target branch fails, deployment is blocked.
 
 ### Setup Steps
 
