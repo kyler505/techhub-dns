@@ -37,7 +37,6 @@ const navItems: LeafNavItem[] = [
 
 const adminItems = [
   { path: "/admin", label: "Admin", icon: Settings },
-  { path: "/vetting-editor", label: "Vetting Editor", icon: FilePenLine },
   { path: "/sessions", label: "Sessions", icon: Users },
 ];
 
@@ -89,9 +88,11 @@ export function Sidebar({ className }: { className?: string }) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -16 }}
                 transition={{ duration: 0.2 }}
-                className="font-semibold text-foreground tracking-tight"
+                className="font-semibold text-foreground tracking-tight leading-tight"
               >
                 TechHub
+                <br />
+                Super App
               </motion.span>
             )}
           </AnimatePresence>
@@ -142,6 +143,37 @@ export function Sidebar({ className }: { className?: string }) {
         })}
 
         <div className="my-4 border-t border-border" />
+
+        {/* Vetting Editor item - positioned after separator but before other admin items */}
+        {isAdmin && (
+          <NavLink
+            key="/vetting-editor"
+            to="/vetting-editor"
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                isActive
+                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              )
+            }
+          >
+            <FilePenLine className="w-5 h-5 flex-shrink-0" />
+            <AnimatePresence mode="wait">
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="whitespace-nowrap overflow-hidden"
+                >
+                  Vetting Editor
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </NavLink>
+        )}
 
         {visibleAdminItems.map((item) => {
           const active = isActive(item.path);

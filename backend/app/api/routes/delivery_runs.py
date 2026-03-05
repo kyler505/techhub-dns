@@ -9,7 +9,13 @@ from app.database import get_db, get_db_session
 from app.api.auth_middleware import require_auth
 from app.api.vehicle_status_events import broadcast_vehicle_status_update_sync
 from app.services.delivery_run_service import DeliveryRunService
-from app.schemas.delivery_run import CreateDeliveryRunRequest, DeliveryRunResponse
+from app.schemas.delivery_run import (
+    CreateDeliveryRunRequest,
+    DeliveryRunResponse,
+    FinishDeliveryRunRequest,
+    RecallDeliveryRunOrderRequest,
+    ReorderDeliveryRunOrdersRequest,
+)
 from app.models.delivery_run import VehicleEnum
 from app.utils.exceptions import ValidationError
 from pydantic import ValidationError as PydanticValidationError
@@ -175,8 +181,16 @@ def get_run(run_id):
                     inflow_order_id=o.inflow_order_id,
                     recipient_name=o.recipient_name,
                     delivery_location=o.delivery_location,
-                    status=o.status
-                ) for o in run.orders
+                    status=o.status,
+                    delivery_sequence=o.delivery_sequence,
+                )
+                for o in sorted(
+                    run.orders,
+                    key=lambda order: (
+                        order.delivery_sequence if order.delivery_sequence is not None else 999999,
+                        order.updated_at or order.created_at,
+                    ),
+                )
             ]
         )
         return jsonify(response.model_dump())
@@ -186,14 +200,19 @@ def get_run(run_id):
 def finish_run(run_id):
     """Finish a delivery run, optionally creating remainder orders for partial picks"""
     data = request.get_json() or {}
-    create_remainders = data.get("create_remainders", True)  # Default to True if not specified
+
+    try:
+        req = FinishDeliveryRunRequest(**data)
+    except PydanticValidationError as exc:
+        raise ValidationError("Invalid finish run request", details={"errors": exc.errors()})
 
     with get_db() as db:
         service = DeliveryRunService(db)
         try:
             run = service.finish_run(
                 UUID(run_id),
-                create_remainders=create_remainders
+                create_remainders=req.create_remainders,
+                expected_updated_at=req.expected_updated_at,
             )
 
             # Broadcast via SocketIO in background
@@ -213,6 +232,76 @@ def finish_run(run_id):
             return jsonify(response.model_dump())
         except ValueError as e:
             abort(400, description=str(e))
+
+
+@bp.route("/<run_id>/orders/<order_id>/recall", methods=["PUT"])
+@require_auth
+def recall_run_order(run_id, order_id):
+    """Recall an undeliverable order from an active run."""
+    data = request.get_json() or {}
+
+    try:
+        req = RecallDeliveryRunOrderRequest(**data)
+    except PydanticValidationError as exc:
+        raise ValidationError("Invalid recall request", details={"errors": exc.errors()})
+
+    with get_db() as db:
+        service = DeliveryRunService(db)
+        run = service.recall_order_from_run(
+            UUID(run_id),
+            UUID(order_id),
+            reason=req.reason,
+            expected_updated_at=req.expected_updated_at,
+        )
+
+        threading.Thread(target=_broadcast_active_runs_sync).start()
+        threading.Thread(target=broadcast_vehicle_status_update_sync).start()
+
+        response = DeliveryRunResponse(
+            id=run.id,
+            name=run.name,
+            runner=run.runner,
+            vehicle=run.vehicle,
+            status=run.status,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            order_ids=[o.id for o in run.orders],
+        )
+        return jsonify(response.model_dump())
+
+
+@bp.route("/<run_id>/orders/reorder", methods=["PUT"])
+@require_auth
+def reorder_run_orders(run_id):
+    """Persist display/delivery order for orders assigned to an active run."""
+    data = request.get_json() or {}
+
+    try:
+        req = ReorderDeliveryRunOrdersRequest(**data)
+    except PydanticValidationError as exc:
+        raise ValidationError("Invalid reorder request", details={"errors": exc.errors()})
+
+    with get_db() as db:
+        service = DeliveryRunService(db)
+        run = service.reorder_run_orders(
+            UUID(run_id),
+            order_ids=req.order_ids,
+            expected_updated_at=req.expected_updated_at,
+        )
+
+        threading.Thread(target=_broadcast_active_runs_sync).start()
+
+        response = DeliveryRunResponse(
+            id=run.id,
+            name=run.name,
+            runner=run.runner,
+            vehicle=run.vehicle,
+            status=run.status,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            order_ids=[o.id for o in run.orders],
+        )
+        return jsonify(response.model_dump())
 
 
 # SocketIO event handlers will be registered in main.py

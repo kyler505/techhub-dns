@@ -1499,8 +1499,8 @@ class OrderService:
             for path in overlay_map.values():
                 try:
                     os.unlink(path)
-                except:
-                    pass
+                except OSError as exc:
+                    logger.warning("Failed to remove temporary signature overlay %s: %s", path, exc)
 
     def _generate_qa_pdf(self, qa_data: dict, order: Order) -> str:
         """Generate QA checklist PDF from JSON data"""
