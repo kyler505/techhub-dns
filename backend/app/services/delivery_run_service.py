@@ -407,3 +407,112 @@ class DeliveryRunService:
         self.db.refresh(run)
 
         return run
+
+    def recall_order_from_run(
+        self,
+        run_id: Union[UUID, str],
+        order_id: Union[UUID, str],
+        reason: str,
+        expected_updated_at: Optional[datetime] = None,
+    ) -> DeliveryRun:
+        """Recall an undeliverable order from an active run, moving it to ISSUE and detaching it."""
+        reason_value = (reason or "").strip()
+        if not reason_value:
+            raise ValidationError("Recall reason is required", field="reason")
+
+        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
+        actor = self._format_actor_display(actor_email, actor_display_name)
+
+        run_id_str = str(run_id)
+        order_id_str = str(order_id)
+
+        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
+        if not run:
+            raise NotFoundError("DeliveryRun", run_id_str)
+
+        if run.status != DeliveryRunStatus.ACTIVE.value:
+            raise ValidationError(
+                "Only active runs support order recall",
+                details={"run_id": run_id_str, "current_status": run.status},
+            )
+
+        if expected_updated_at is not None and run.updated_at is not None:
+            expected_utc = expected_updated_at
+            if expected_utc.tzinfo is not None:
+                expected_utc = expected_utc.astimezone(timezone.utc).replace(tzinfo=None)
+
+            current_utc = run.updated_at
+            if current_utc.tzinfo is not None:
+                current_utc = current_utc.astimezone(timezone.utc).replace(tzinfo=None)
+
+            if expected_utc != current_utc:
+                raise ConflictError(
+                    "Delivery run has changed since it was loaded. Refresh and try again.",
+                    details={
+                        "run_id": run_id_str,
+                        "expected_updated_at": expected_utc.isoformat(),
+                        "current_updated_at": current_utc.isoformat(),
+                    },
+                )
+
+        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        if not order:
+            raise NotFoundError("Order", order_id_str)
+
+        if str(order.delivery_run_id) != run_id_str:
+            raise ValidationError(
+                "Order is not assigned to this run",
+                details={"order_id": order_id_str, "delivery_run_id": order.delivery_run_id, "run_id": run_id_str},
+            )
+
+        if order.status == OrderStatus.DELIVERED.value:
+            raise ValidationError(
+                "Delivered orders cannot be recalled",
+                details={"order_id": order_id_str, "status": order.status},
+            )
+
+        previous_status = order.status
+        order.status = OrderStatus.ISSUE.value
+        order.issue_reason = reason_value
+        order.delivery_run_id = None
+        order.updated_at = datetime.utcnow()
+        run.updated_at = datetime.utcnow()
+
+        self.db.add(
+            AuditLog(
+                order_id=order.id,
+                changed_by=actor,
+                from_status=previous_status,
+                to_status=OrderStatus.ISSUE.value,
+                reason=f"Recalled from run {run.name}: {reason_value}",
+            )
+        )
+
+        audit_service = AuditService(self.db)
+        audit_service.log_delivery_run_action(
+            run_id=run_id_str,
+            action="order_recalled",
+            user_id=actor_user_id,
+            description=f"Order {order.inflow_order_id} recalled from active run",
+            audit_metadata={
+                "order_id": order_id_str,
+                "order_inflow_id": order.inflow_order_id,
+                "reason": reason_value,
+                "previous_status": previous_status,
+                "new_status": OrderStatus.ISSUE.value,
+            },
+        )
+
+        audit_service.log_order_action(
+            order_id=order_id_str,
+            action="recalled_from_delivery_run",
+            user_id=actor_user_id,
+            description=f"Order recalled from run {run.name}",
+            old_value={"status": previous_status, "delivery_run_id": run_id_str},
+            new_value={"status": OrderStatus.ISSUE.value, "delivery_run_id": None},
+            audit_metadata={"reason": reason_value},
+        )
+
+        self.db.commit()
+        self.db.refresh(run)
+        return run

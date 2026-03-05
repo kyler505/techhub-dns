@@ -8,6 +8,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { OrderStatus } from "../types/order";
 
@@ -72,7 +73,7 @@ function getApiErrorMessage(error: unknown): string {
     }
   }
 
-  return "Failed to complete delivery. Ensure all orders are delivered first.";
+  return "Action failed. Refresh and try again.";
 }
 
 export default function DeliveryRunDetailPage() {
@@ -81,8 +82,12 @@ export default function DeliveryRunDetailPage() {
   const location = useLocation();
   const { run, loading, error, refetch } = useDeliveryRun(runId);
   const [finishing, setFinishing] = useState(false);
+  const [recalling, setRecalling] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
+  const [recallReason, setRecallReason] = useState("");
+  const [recallOrderId, setRecallOrderId] = useState<string | null>(null);
 
   const locationState = location.state as DeliveryDetailLocationState | null;
   const backTo = locationState?.from ?? "/delivery/dispatch";
@@ -115,11 +120,45 @@ export default function DeliveryRunDetailPage() {
       toast.success("Delivery run completed");
       await refetch();
     } catch (error: unknown) {
-      setErrorMessage(getApiErrorMessage(error));
+      setErrorMessage(getApiErrorMessage(error) || "Failed to complete delivery. Ensure all orders are delivered first.");
       setErrorDialogOpen(true);
       await refetch();
     } finally {
       setFinishing(false);
+    }
+  };
+
+  const openRecallDialog = (orderId: string) => {
+    setRecallOrderId(orderId);
+    setRecallReason("");
+    setRecallDialogOpen(true);
+  };
+
+  const handleRecallOrder = async () => {
+    if (!run || !recallOrderId) {
+      return;
+    }
+
+    const reason = recallReason.trim();
+    if (!reason) {
+      toast.error("Recall reason is required");
+      return;
+    }
+
+    setRecalling(true);
+    try {
+      await deliveryRunsApi.recallOrder(run.id, recallOrderId, reason, run.updated_at ?? undefined);
+      toast.success("Order recalled from run");
+      setRecallDialogOpen(false);
+      setRecallOrderId(null);
+      setRecallReason("");
+      await refetch();
+    } catch (error: unknown) {
+      setErrorMessage(getApiErrorMessage(error));
+      setErrorDialogOpen(true);
+      await refetch();
+    } finally {
+      setRecalling(false);
     }
   };
 
@@ -225,11 +264,16 @@ export default function DeliveryRunDetailPage() {
                         </Button>
                       </Link>
                       {isSignable ? (
-                        <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
-                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                            Sign Now
+                        <>
+                          <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                              Sign Now
+                            </Button>
+                          </Link>
+                          <Button size="sm" variant="outline" onClick={() => openRecallDialog(order.id)}>
+                            Recall Order
                           </Button>
-                        </Link>
+                        </>
                       ) : (
                         <Badge variant="warning">Move to In Delivery first</Badge>
                       )}
@@ -361,11 +405,16 @@ export default function DeliveryRunDetailPage() {
                     </Link>
 
                     {order.status === OrderStatus.IN_DELIVERY ? (
-                      <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
-                        <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                          Sign Document
+                      <>
+                        <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
+                          <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                            Sign Document
+                          </Button>
+                        </Link>
+                        <Button variant="outline" size="sm" onClick={() => openRecallDialog(order.id)}>
+                          Recall
                         </Button>
-                      </Link>
+                      </>
                     ) : null}
                   </div>
                 </div>
@@ -386,6 +435,40 @@ export default function DeliveryRunDetailPage() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setErrorDialogOpen(false)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={recallDialogOpen} onOpenChange={setRecallDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Recall Order From Run</DialogTitle>
+            <DialogDescription>
+              This marks the order as Issue and removes it from the active run so you can finish remaining deliveries.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label htmlFor="recall-reason" className="text-sm font-medium text-foreground">
+              Reason
+            </label>
+            <Input
+              id="recall-reason"
+              value={recallReason}
+              onChange={(event) => setRecallReason(event.target.value)}
+              placeholder="Undeliverable details (recipient unavailable, address issue, etc.)"
+              maxLength={500}
+              disabled={recalling}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecallDialogOpen(false)} disabled={recalling}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRecallOrder()} disabled={recalling || !recallReason.trim()}>
+              {recalling ? "Recalling..." : "Confirm Recall"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
