@@ -9,12 +9,22 @@ import "react-pdf/dist/Page/TextLayer.css";
 import { ordersApi } from "../api/orders";
 import { OrderDetail } from "../types/order";
 import { SignatureModal } from "../components/SignatureModal";
-import { signatureCache } from "../lib/signatureCache";
+import { signatureCache, type LastSignature } from "../lib/signatureCache";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { PenTool, X } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+const SIGNATURE_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+
+function normalizeText(value: string | undefined): string {
+    return (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+type ReusableSignatureState =
+    | { canUse: true; entry: LastSignature }
+    | { canUse: false; reason: string };
 
 interface PdfEntry {
     name: string;
@@ -80,6 +90,52 @@ function DocumentSigningPage() {
     const viewerRef = useRef<HTMLDivElement | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [cachedSignature, setCachedSignature] = useState<LastSignature | null>(null);
+
+    const refreshCachedSignature = useCallback(() => {
+        setCachedSignature(signatureCache.load());
+    }, []);
+
+    useEffect(() => {
+        refreshCachedSignature();
+    }, [refreshCachedSignature]);
+
+    const orderRecipientNormalized = useMemo(
+        () => normalizeText(order?.recipient_name),
+        [order?.recipient_name]
+    );
+
+    const orderLocationNormalized = useMemo(
+        () => normalizeText(order?.delivery_location),
+        [order?.delivery_location]
+    );
+
+    const reusableSignature = useMemo<ReusableSignatureState>(() => {
+        if (!cachedSignature) {
+            return { canUse: false, reason: "No saved signature available." };
+        }
+
+        const ageMs = Date.now() - cachedSignature.createdAt;
+        if (ageMs > SIGNATURE_CACHE_TTL_MS) {
+            return { canUse: false, reason: "Saved signature expired. Capture a new one." };
+        }
+
+        if (!cachedSignature.recipientNameNormalized || !cachedSignature.deliveryLocationNormalized) {
+            return { canUse: false, reason: "Saved signature is missing recipient/location context." };
+        }
+
+        if (
+            cachedSignature.recipientNameNormalized !== orderRecipientNormalized ||
+            cachedSignature.deliveryLocationNormalized !== orderLocationNormalized
+        ) {
+            return {
+                canUse: false,
+                reason: "Saved signature belongs to a different recipient or location.",
+            };
+        }
+
+        return { canUse: true, entry: cachedSignature };
+    }, [cachedSignature, orderLocationNormalized, orderRecipientNormalized]);
 
     // Load order when component mounts
     useEffect(() => {
@@ -199,6 +255,15 @@ function DocumentSigningPage() {
     };
 
     const handleModalSave = (dataUrl: string, w: number, h: number) => {
+        if (order) {
+            signatureCache.save(dataUrl, w, h, {
+                recipientNameNormalized: normalizeText(order.recipient_name),
+                deliveryLocationNormalized: normalizeText(order.delivery_location),
+                sourceOrderId: order.id,
+            });
+            refreshCachedSignature();
+        }
+
         const placed = addPlacement(dataUrl, w, h);
         if (placed) {
             setModalOpen(false);
@@ -206,9 +271,28 @@ function DocumentSigningPage() {
         return placed;
     };
 
-    const useLastSignature = () => {
+    const openSignatureModal = () => {
         setError(null);
         setModalOpen(true);
+    };
+
+    const useLastSignature = () => {
+        if (!reusableSignature.canUse) {
+            setError(reusableSignature.reason);
+            return;
+        }
+
+        const placed = addPlacement(
+            reusableSignature.entry.dataUrl,
+            reusableSignature.entry.width,
+            reusableSignature.entry.height
+        );
+
+        if (!placed) {
+            return;
+        }
+
+        setError(null);
     };
 
     const removePlacement = (id: string) => {
@@ -656,15 +740,29 @@ function DocumentSigningPage() {
                         <p className="text-muted-foreground">
                             Order {order.inflow_order_id} • {order.recipient_name}
                         </p>
+                        {reusableSignature.canUse && (
+                            <p className="text-xs text-muted-foreground">
+                                Last signature from order {reusableSignature.entry.sourceOrderId?.slice(0, 8) || "unknown"} is available for this recipient/location.
+                            </p>
+                        )}
                     </div>
                     <div className="flex items-center gap-3">
                         <Button
                             variant="outline"
-                            onClick={useLastSignature}
+                            onClick={openSignatureModal}
                             className="hidden sm:flex"
                         >
                             <PenTool className="w-4 h-4 mr-2" />
                             Add Signature
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={useLastSignature}
+                            className="hidden sm:flex"
+                            disabled={!reusableSignature.canUse}
+                            title={reusableSignature.canUse ? "Apply last saved signature" : reusableSignature.reason}
+                        >
+                            Use Last Signature
                         </Button>
                         <Button
                             onClick={saveSignedPdf}
@@ -755,7 +853,7 @@ function DocumentSigningPage() {
                                 {placements.length === 0 && (
                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
                                         <div className="rounded-full bg-foreground/85 px-4 py-2 text-sm text-background backdrop-blur-sm">
-                                            Tap "Add Signature" to draw, then drag to place
+                                            Tap "Add Signature" to draw or "Use Last Signature", then drag to place
                                         </div>
                                     </div>
                                 )}
@@ -769,7 +867,7 @@ function DocumentSigningPage() {
                     <div className="sm:hidden fixed bottom-6 right-6">
                         <Button
                             className="h-14 w-14 rounded-full p-0 shadow-premium"
-                            onClick={useLastSignature}
+                            onClick={openSignatureModal}
                         >
                             <PenTool className="w-6 h-6 text-white" />
                         </Button>
