@@ -39,6 +39,11 @@ class FinishDeliveryRunRequest(BaseModel):
     expected_updated_at: Optional[datetime] = None
 
 
+class RecallDeliveryRunOrderRequest(BaseModel):
+    reason: str = Field(min_length=1)
+    expected_updated_at: Optional[datetime] = None
+
+
 class OrderSummary(BaseModel):
     id: UUID
     inflow_order_id: Optional[str] = None

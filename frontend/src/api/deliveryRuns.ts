@@ -5,6 +5,11 @@ export interface CreateDeliveryRunRequest {
   vehicle: "van" | "golf_cart";
 }
 
+export interface RecallOrderRequest {
+  reason: string;
+  expected_updated_at?: string;
+}
+
 export interface DeliveryRunResponse {
   id: string;
   name: string;
@@ -50,6 +55,22 @@ export const deliveryRunsApi = {
         create_remainders: createRemainders,
         expected_updated_at: expectedUpdatedAt ?? undefined,
       }
+    );
+    return response.data;
+  },
+
+  recallOrder: async (
+    runId: string,
+    orderId: string,
+    reason: string,
+    expectedUpdatedAt?: string | null
+  ): Promise<DeliveryRunResponse> => {
+    const response = await apiClient.put<DeliveryRunResponse>(
+      `/delivery-runs/${runId}/orders/${orderId}/recall`,
+      {
+        reason,
+        expected_updated_at: expectedUpdatedAt ?? undefined,
+      } satisfies RecallOrderRequest
     );
     return response.data;
   },
