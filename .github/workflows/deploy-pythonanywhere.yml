@@ -1,10 +1,10 @@
-name: Deploy Prod to PythonAnywhere
+name: Deploy to PythonAnywhere
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 jobs:
@@ -101,11 +101,30 @@ jobs:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
         run: |
           set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            main)
+              PROJECT_ROOT="/home/techhub/techhub-dns"
+              WEBAPP_DOMAIN="techhub.pythonanywhere.com"
+              BRANCH="main"
+              DEPLOY_SCRIPT="~/techhub-dns/scripts/deploy.sh"
+              ;;
+            dev)
+              PROJECT_ROOT="/home/techhub/techhub-dns-dev"
+              WEBAPP_DOMAIN="dev-techhub.pythonanywhere.com"
+              BRANCH="dev"
+              DEPLOY_SCRIPT="~/techhub-dns-dev/scripts/deploy.sh"
+              ;;
+            *)
+              echo "Unsupported deploy branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
           ssh -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            "PROJECT_ROOT=/home/techhub/techhub-dns WEBAPP_DOMAIN=techhub.pythonanywhere.com BRANCH=main bash ~/techhub-dns/scripts/deploy.sh"
+            "PROJECT_ROOT=${PROJECT_ROOT} WEBAPP_DOMAIN=${WEBAPP_DOMAIN} BRANCH=${BRANCH} bash ${DEPLOY_SCRIPT}"
 
       - name: Tail deploy.log on failure
         if: failure()
@@ -114,11 +133,23 @@ jobs:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
         run: |
           set +e
+          case "${GITHUB_REF_NAME}" in
+            main)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+            dev)
+              DEPLOY_LOG="~/techhub-dns-dev/deploy.log"
+              ;;
+            *)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+          esac
+
           ssh -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
             "${PA_USERNAME}@ssh.pythonanywhere.com" \
-            "tail -n 300 ~/techhub-dns/deploy.log || true"
+            "tail -n 300 ${DEPLOY_LOG} || true"
 
       - name: Download deploy.log artifact on failure
         if: failure()
@@ -127,10 +158,22 @@ jobs:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}
         run: |
           set +e
+          case "${GITHUB_REF_NAME}" in
+            main)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+            dev)
+              DEPLOY_LOG="~/techhub-dns-dev/deploy.log"
+              ;;
+            *)
+              DEPLOY_LOG="~/techhub-dns/deploy.log"
+              ;;
+          esac
+
           scp -4 \
             -o AddressFamily=inet \
             -o StrictHostKeyChecking=yes \
-            "${PA_USERNAME}@ssh.pythonanywhere.com:~/techhub-dns/deploy.log" \
+            "${PA_USERNAME}@ssh.pythonanywhere.com:${DEPLOY_LOG}" \
             ./deploy.log
           ls -la ./deploy.log || true
 
