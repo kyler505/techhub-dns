@@ -14,6 +14,7 @@ from app.schemas.delivery_run import (
     DeliveryRunResponse,
     FinishDeliveryRunRequest,
     RecallDeliveryRunOrderRequest,
+    ReorderDeliveryRunOrdersRequest,
 )
 from app.models.delivery_run import VehicleEnum
 from app.utils.exceptions import ValidationError
@@ -180,8 +181,16 @@ def get_run(run_id):
                     inflow_order_id=o.inflow_order_id,
                     recipient_name=o.recipient_name,
                     delivery_location=o.delivery_location,
-                    status=o.status
-                ) for o in run.orders
+                    status=o.status,
+                    delivery_sequence=o.delivery_sequence,
+                )
+                for o in sorted(
+                    run.orders,
+                    key=lambda order: (
+                        order.delivery_sequence if order.delivery_sequence is not None else 999999,
+                        order.updated_at or order.created_at,
+                    ),
+                )
             ]
         )
         return jsonify(response.model_dump())
@@ -247,6 +256,40 @@ def recall_run_order(run_id, order_id):
 
         threading.Thread(target=_broadcast_active_runs_sync).start()
         threading.Thread(target=broadcast_vehicle_status_update_sync).start()
+
+        response = DeliveryRunResponse(
+            id=run.id,
+            name=run.name,
+            runner=run.runner,
+            vehicle=run.vehicle,
+            status=run.status,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            order_ids=[o.id for o in run.orders],
+        )
+        return jsonify(response.model_dump())
+
+
+@bp.route("/<run_id>/orders/reorder", methods=["PUT"])
+@require_auth
+def reorder_run_orders(run_id):
+    """Persist display/delivery order for orders assigned to an active run."""
+    data = request.get_json() or {}
+
+    try:
+        req = ReorderDeliveryRunOrdersRequest(**data)
+    except PydanticValidationError as exc:
+        raise ValidationError("Invalid reorder request", details={"errors": exc.errors()})
+
+    with get_db() as db:
+        service = DeliveryRunService(db)
+        run = service.reorder_run_orders(
+            UUID(run_id),
+            order_ids=req.order_ids,
+            expected_updated_at=req.expected_updated_at,
+        )
+
+        threading.Thread(target=_broadcast_active_runs_sync).start()
 
         response = DeliveryRunResponse(
             id=run.id,

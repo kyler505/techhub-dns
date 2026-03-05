@@ -58,6 +58,7 @@ class Order(Base):
         Index("ix_orders_signature_captured_at", "signature_captured_at"),
         Index("ix_orders_status_updated_at", "status", "updated_at"),
         Index("ix_orders_status_tagged_at_updated_at", "status", "tagged_at", "updated_at"),
+        Index("ix_orders_delivery_run_id_delivery_sequence", "delivery_run_id", "delivery_sequence"),
     )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -85,6 +86,7 @@ class Order(Base):
     picklist_generated_by = Column(String(255), nullable=True)
     picklist_path = Column(String(500), nullable=True)
     delivery_run_id = Column(String(36), ForeignKey('delivery_runs.id'), nullable=True, index=True)
+    delivery_sequence = Column(sa.Integer, nullable=True)
     qa_completed_at = Column(DateTime, nullable=True)
     qa_completed_by = Column(String(255), nullable=True)
     qa_data = Column(JSON, nullable=True)
