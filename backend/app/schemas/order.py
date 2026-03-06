@@ -52,15 +52,18 @@ class OrderStatusUpdate(BaseModel):
 class AssetTagUpdate(BaseModel):
     tag_ids: List[str] = Field(default_factory=list)
     technician: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class PicklistGenerationRequest(BaseModel):
     generated_by: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class QASubmission(BaseModel):
     responses: Dict[str, Any] = Field(default_factory=dict)
     technician: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class SignaturePlacement(BaseModel):
@@ -74,6 +77,7 @@ class SignaturePlacement(BaseModel):
 class SignatureData(BaseModel):
     signature_image: str  # Base64 encoded PNG
     placements: List[SignaturePlacement] = Field(default_factory=list)
+    expected_updated_at: Optional[datetime] = None
     # Backward compatibility (optional)
     page_number: Optional[int] = None
     position: Optional[Dict[str, float]] = None
@@ -138,6 +142,7 @@ class ShippingWorkflowUpdateRequest(BaseModel):
     carrier_name: Optional[str] = None
     tracking_number: Optional[str] = None
     updated_by: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class ShippingWorkflowResponse(BaseModel):
