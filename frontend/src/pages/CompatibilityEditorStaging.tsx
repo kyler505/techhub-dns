@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
@@ -38,6 +38,8 @@ type CellEditorState = {
   rebootNeeded: boolean;
   detailByField: Record<CompatibilityDetailField, CompatibilityDetailStatus | "">;
 };
+
+type MatrixStatusFilter = "all" | CompatibilityStatus | "has-notes";
 
 const DEFAULT_STATUS: CompatibilityStatus = "Compatible";
 
@@ -156,6 +158,11 @@ export default function CompatibilityEditorStaging() {
   const [newDockKey, setNewDockKey] = useState("");
   const [newDockName, setNewDockName] = useState("");
   const [newDockUrl, setNewDockUrl] = useState("");
+  const [computerSearch, setComputerSearch] = useState("");
+  const [dockSearch, setDockSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<MatrixStatusFilter>("all");
+  const computerSearchRef = useRef<HTMLInputElement | null>(null);
+  const dockSearchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (authLoading) {
@@ -183,6 +190,40 @@ export default function CompatibilityEditorStaging() {
     loadData();
   }, [authLoading, isAdmin]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName ?? "";
+      const isTextInput = tagName === "INPUT" || tagName === "TEXTAREA" || target?.isContentEditable;
+      const isSelect = tagName === "SELECT";
+
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTextInput && !isSelect) {
+        event.preventDefault();
+        computerSearchRef.current?.focus();
+        computerSearchRef.current?.select();
+        return;
+      }
+
+      if (event.key === "Escape" && !event.metaKey && !event.ctrlKey && !event.altKey && editingCell === null) {
+        const hasActiveFilters = computerSearch !== "" || dockSearch !== "" || statusFilter !== "all";
+        if (!hasActiveFilters) {
+          return;
+        }
+
+        setComputerSearch("");
+        setDockSearch("");
+        setStatusFilter("all");
+
+        if (target === computerSearchRef.current || target === dockSearchRef.current) {
+          (target as HTMLInputElement).blur();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [computerSearch, dockSearch, editingCell, statusFilter]);
+
   const isDirty = useMemo(() => {
     if (!payload) {
       return false;
@@ -203,6 +244,50 @@ export default function CompatibilityEditorStaging() {
     }
     return sortMapKeysByName(payload.computers);
   }, [payload]);
+
+  const filteredDockKeys = useMemo(() => {
+    const query = dockSearch.trim().toLowerCase();
+    if (!query || !payload) {
+      return sortedDockKeys;
+    }
+
+    return sortedDockKeys.filter((dockKey) => {
+      const dock = payload.docks[dockKey];
+      const dockName = dock?.name ?? dockKey;
+      return dockKey.toLowerCase().includes(query) || dockName.toLowerCase().includes(query);
+    });
+  }, [dockSearch, payload, sortedDockKeys]);
+
+  const filteredComputerKeys = useMemo(() => {
+    if (!payload) {
+      return [];
+    }
+
+    const query = computerSearch.trim().toLowerCase();
+    return sortedComputerKeys.filter((computerKey) => {
+      const computer = payload.computers[computerKey];
+      if (!computer) {
+        return false;
+      }
+
+      const nameMatch = !query
+        || computerKey.toLowerCase().includes(query)
+        || (computer.name ?? computerKey).toLowerCase().includes(query);
+      if (!nameMatch) {
+        return false;
+      }
+
+      if (statusFilter === "all") {
+        return true;
+      }
+
+      if (statusFilter === "has-notes") {
+        return filteredDockKeys.some((dockKey) => cellHasNotes(computer, dockKey));
+      }
+
+      return filteredDockKeys.some((dockKey) => cellStatus(computer, dockKey) === statusFilter);
+    });
+  }, [computerSearch, filteredDockKeys, payload, sortedComputerKeys, statusFilter]);
 
   const updatePayload = (updater: (current: CompatibilityEditorStagingPayload) => CompatibilityEditorStagingPayload) => {
     setPayload((current) => {
@@ -525,20 +610,52 @@ export default function CompatibilityEditorStaging() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <Input
+              ref={computerSearchRef}
+              value={computerSearch}
+              onChange={(event) => setComputerSearch(event.target.value)}
+              placeholder="Search computers by key or name"
+            />
+            <Input
+              ref={dockSearchRef}
+              value={dockSearch}
+              onChange={(event) => setDockSearch(event.target.value)}
+              placeholder="Search docks by key or name"
+            />
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as MatrixStatusFilter)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="all">All statuses</option>
+              {COMPATIBILITY_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+              <option value="has-notes">Has notes</option>
+            </select>
+          </div>
+
           {sortedComputerKeys.length === 0 || sortedDockKeys.length === 0 ? (
             <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
               Add at least one computer and one dock to start editing compatibility.
+            </div>
+          ) : filteredComputerKeys.length === 0 || filteredDockKeys.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+              No matrix entries match the current filters.
             </div>
           ) : (
             <div className="overflow-auto rounded-lg border">
               <table className="w-full min-w-[960px] border-collapse text-sm">
                 <thead>
                   <tr className="bg-muted/40">
-                    <th className="sticky left-0 z-10 border-b border-r bg-muted/60 px-3 py-2 text-left font-medium">Computer</th>
-                    {sortedDockKeys.map((dockKey) => {
+                    <th className="sticky left-0 top-0 z-30 border-b border-r bg-muted/60 px-3 py-2 text-left font-medium">Computer</th>
+                    {filteredDockKeys.map((dockKey) => {
                       const dock = payload?.docks[dockKey];
                       return (
-                        <th key={dockKey} className="min-w-[180px] border-b border-r px-3 py-2 align-top text-left">
+                        <th key={dockKey} className="sticky top-0 z-20 min-w-[180px] border-b border-r bg-muted/40 px-3 py-2 align-top text-left">
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <div className="font-medium">{dock?.name || dockKey}</div>
@@ -560,7 +677,7 @@ export default function CompatibilityEditorStaging() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedComputerKeys.map((computerKey) => {
+                  {filteredComputerKeys.map((computerKey) => {
                     const computer = payload?.computers[computerKey];
                     if (!computer) {
                       return null;
@@ -584,7 +701,7 @@ export default function CompatibilityEditorStaging() {
                             </Button>
                           </div>
                         </td>
-                        {sortedDockKeys.map((dockKey) => {
+                        {filteredDockKeys.map((dockKey) => {
                           const status = cellStatus(computer, dockKey);
                           const hasNotes = cellHasNotes(computer, dockKey);
                           return (
