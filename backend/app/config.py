@@ -26,19 +26,22 @@ class Settings(BaseSettings):
     inflow_polling_sync_enabled: bool = True
     inflow_polling_sync_interval_minutes: Optional[int] = None
 
-
-
     # Storage
     storage_root: str = "storage"
     picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
 
     # SharePoint Storage
     sharepoint_enabled: bool = False  # Safety: disabled by default
-    sharepoint_site_url: Optional[str] = None  # e.g., https://tamucs.sharepoint.com/teams/Team-TechHub
-    sharepoint_folder_path: str = "General/delivery-storage"  # Folder within Documents library
+    sharepoint_site_url: Optional[str] = (
+        None  # e.g., https://tamucs.sharepoint.com/teams/Team-TechHub
+    )
+    sharepoint_folder_path: str = (
+        "General/delivery-storage"  # Folder within Documents library
+    )
     sharepoint_tenant_id: Optional[str] = None  # Azure AD tenant ID (e.g., from TAMU)
-    sharepoint_client_id: Optional[str] = None  # Azure AD app client ID (register in Azure portal)
-
+    sharepoint_client_id: Optional[str] = (
+        None  # Azure AD app client ID (register in Azure portal)
+    )
 
     # CORS
     frontend_url: str = "http://localhost:5173"
@@ -63,10 +66,9 @@ class Settings(BaseSettings):
 
     # Teams Recipient Notifications (Graph API)
     teams_recipient_notifications_enabled: bool = False
-    teams_notification_queue_folder: str = "teams-queue"  # Relative to sharepoint_folder_path
-
-
-
+    teams_notification_queue_folder: str = (
+        "teams-queue"  # Relative to sharepoint_folder_path
+    )
 
     # ===========================================
     # TAMU Entra ID Authentication (SAML + Service Principal)
@@ -93,7 +95,7 @@ class Settings(BaseSettings):
     maintenance_tick_enabled: bool = True
     maintenance_tick_min_interval_seconds: int = 60
 
-    # APScheduler background jobs (disabled by default for shared DB users)
+    # Background scheduler runner (used by backend/run_scheduler.py)
     scheduler_enabled: bool = False
 
     maintenance_sessions_purge_interval_hours: int = 24
@@ -186,9 +188,7 @@ class Settings(BaseSettings):
     compatibility_editor_staging_upload_url: Optional[str] = None
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", case_sensitive=False, extra="ignore"
     )
 
     @field_validator("inflow_webhook_events", mode="before")
@@ -209,5 +209,6 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
+
 
 settings = Settings()
