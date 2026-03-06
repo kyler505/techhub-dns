@@ -81,6 +81,18 @@ pytest -q tests/test_error_handling.py -k "validation"   # run a single test by 
 - PythonAnywhere logs: `~/logs/<domain>.error.log`, `~/logs/<domain>.server.log`.
 - Do not run `scripts/deploy.sh` locally; it assumes PythonAnywhere paths and hard-resets to `origin/main`.
 
+
+## PythonAnywhere SSH Key Usage
+
+- For PythonAnywhere SSH/SCP commands, use the explicit local key:
+  - key path: `/home/kcao/.ssh/pythonanywhere_kcao`
+- Always force that key to avoid agent/key mismatch:
+  - `-i /home/kcao/.ssh/pythonanywhere_kcao -o IdentitiesOnly=yes`
+- Keep host verification enabled:
+  - `-o StrictHostKeyChecking=yes`
+- Example:
+  - `ssh -i /home/kcao/.ssh/pythonanywhere_kcao -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes techhub@ssh.pythonanywhere.com "echo ok"`
+
 ## Error Handling Conventions
 - Expected API failures: raise `DNSApiError` (or subclasses) from `backend/app/utils/exceptions.py`.
 - Do not hand-roll JSON error payloads per-route; rely on `backend/app/api/middleware.py` handlers.
