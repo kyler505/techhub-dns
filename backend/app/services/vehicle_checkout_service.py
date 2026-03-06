@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime
+import logging
 from typing import Optional
 
 from flask import g
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from sqlalchemy.orm import Session
 
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.models.vehicle_checkout import VehicleCheckout
 from app.utils.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class VehicleCheckoutService:
@@ -28,19 +32,37 @@ class VehicleCheckoutService:
         return vehicle_norm
 
     def _delivery_run_active(self, vehicle: str) -> bool:
-        active = self.db.query(DeliveryRun).filter(
-            and_(DeliveryRun.vehicle == vehicle, DeliveryRun.status == DeliveryRunStatus.ACTIVE.value)
-        ).first()
+        active = (
+            self.db.query(DeliveryRun)
+            .filter(
+                and_(
+                    DeliveryRun.vehicle == vehicle,
+                    DeliveryRun.status == DeliveryRunStatus.ACTIVE.value,
+                )
+            )
+            .first()
+        )
         return active is not None
 
     def get_active_checkout(self, vehicle: str) -> Optional[VehicleCheckout]:
         vehicle_norm = self._validate_vehicle(vehicle)
-        return self.db.query(VehicleCheckout).filter(
-            and_(VehicleCheckout.vehicle == vehicle_norm, VehicleCheckout.checked_in_at.is_(None))
-        ).first()
+        return (
+            self.db.query(VehicleCheckout)
+            .filter(
+                and_(
+                    VehicleCheckout.vehicle == vehicle_norm,
+                    VehicleCheckout.checked_in_at.is_(None),
+                )
+            )
+            .first()
+        )
 
     def get_active_checkouts(self) -> list[VehicleCheckout]:
-        return self.db.query(VehicleCheckout).filter(VehicleCheckout.checked_in_at.is_(None)).all()
+        return (
+            self.db.query(VehicleCheckout)
+            .filter(VehicleCheckout.checked_in_at.is_(None))
+            .all()
+        )
 
     def _get_authenticated_actor(self) -> tuple[str, str, Optional[str]]:
         user_id = (getattr(g, "user_id", None) or "").strip()
@@ -59,6 +81,34 @@ class VehicleCheckoutService:
     def _format_actor_display(self, email: str, display_name: Optional[str]) -> str:
         return (display_name or "").strip() or email.strip()
 
+    @contextmanager
+    def _vehicle_lock(self, vehicle: str):
+        bind = self.db.get_bind()
+        if bind.dialect.name != "mysql":
+            yield
+            return
+
+        lock_name = f"vehicle-checkout:{vehicle}"
+        acquired = self.db.execute(
+            text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
+            {"lock_name": lock_name, "timeout_seconds": 5},
+        ).scalar()
+        if acquired != 1:
+            logger.warning(
+                "Timed out waiting for vehicle checkout lock: vehicle=%s", vehicle
+            )
+            raise ValidationError(
+                f"Vehicle {vehicle} is busy processing another request. Please try again.",
+                details={"vehicle": vehicle, "lock_timeout_seconds": 5},
+            )
+
+        try:
+            yield
+        finally:
+            self.db.execute(
+                text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+            )
+
     def checkout(
         self,
         vehicle: str,
@@ -68,7 +118,9 @@ class VehicleCheckoutService:
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
-        checked_out_by_display = self._format_actor_display(actor_email, actor_display_name)
+        checked_out_by_display = self._format_actor_display(
+            actor_email, actor_display_name
+        )
 
         checkout_type_norm = (checkout_type or "").strip()
         if checkout_type_norm not in {"delivery_run", "other"}:
@@ -86,40 +138,57 @@ class VehicleCheckoutService:
                 details={"checkout_type": checkout_type_norm},
             )
 
-        if self._delivery_run_active(vehicle_norm):
-            raise ValidationError(
-                f"Vehicle {vehicle_norm} is currently in use",
-                details={"vehicle": vehicle_norm, "delivery_run_active": True},
-            )
+        with self._vehicle_lock(vehicle_norm):
+            if self._delivery_run_active(vehicle_norm):
+                raise ValidationError(
+                    f"Vehicle {vehicle_norm} is currently in use",
+                    details={"vehicle": vehicle_norm, "delivery_run_active": True},
+                )
 
-        existing = self.db.query(VehicleCheckout).filter(
-            and_(VehicleCheckout.vehicle == vehicle_norm, VehicleCheckout.checked_in_at.is_(None))
-        ).first()
-        if existing:
-            raise ValidationError(
-                f"Vehicle {vehicle_norm} is already checked out",
-                details={
-                    "vehicle": vehicle_norm,
-                    "checked_out_by": existing.checked_out_by,
-                    "checked_out_at": existing.checked_out_at.isoformat() if existing.checked_out_at else None,
-                },
+            existing = (
+                self.db.query(VehicleCheckout)
+                .filter(
+                    and_(
+                        VehicleCheckout.vehicle == vehicle_norm,
+                        VehicleCheckout.checked_in_at.is_(None),
+                    )
+                )
+                .first()
             )
+            if existing:
+                raise ValidationError(
+                    f"Vehicle {vehicle_norm} is already checked out",
+                    details={
+                        "vehicle": vehicle_norm,
+                        "checked_out_by": existing.checked_out_by,
+                        "checked_out_at": existing.checked_out_at.isoformat()
+                        if existing.checked_out_at
+                        else None,
+                    },
+                )
 
-        checkout = VehicleCheckout(
-            vehicle=vehicle_norm,
-            checked_out_by=checked_out_by_display,
-            checked_out_by_user_id=actor_user_id,
-            checked_out_by_email=actor_email,
-            checked_out_by_display_name=actor_display_name,
-            checkout_type=checkout_type_norm,
-            purpose=purpose_norm,
-            notes=(notes.strip() if notes else None) or None,
-            checked_out_at=datetime.utcnow(),
-        )
-        self.db.add(checkout)
-        self.db.commit()
-        self.db.refresh(checkout)
-        return checkout
+            checkout = VehicleCheckout(
+                vehicle=vehicle_norm,
+                checked_out_by=checked_out_by_display,
+                checked_out_by_user_id=actor_user_id,
+                checked_out_by_email=actor_email,
+                checked_out_by_display_name=actor_display_name,
+                checkout_type=checkout_type_norm,
+                purpose=purpose_norm,
+                notes=(notes.strip() if notes else None) or None,
+                checked_out_at=datetime.utcnow(),
+            )
+            self.db.add(checkout)
+            self.db.commit()
+            self.db.refresh(checkout)
+            logger.info(
+                "Vehicle checked out: vehicle=%s checkout_id=%s actor=%s checkout_type=%s",
+                vehicle_norm,
+                checkout.id,
+                actor_email,
+                checkout_type_norm,
+            )
+            return checkout
 
     def checkin(
         self,
@@ -128,56 +197,87 @@ class VehicleCheckoutService:
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
-        checked_in_by_display = self._format_actor_display(actor_email, actor_display_name)
-        if self._delivery_run_active(vehicle_norm):
-            raise ValidationError(
-                f"Cannot check in {vehicle_norm} while a delivery run is active",
-                details={"vehicle": vehicle_norm, "delivery_run_active": True},
+        checked_in_by_display = self._format_actor_display(
+            actor_email, actor_display_name
+        )
+        with self._vehicle_lock(vehicle_norm):
+            if self._delivery_run_active(vehicle_norm):
+                raise ValidationError(
+                    f"Cannot check in {vehicle_norm} while a delivery run is active",
+                    details={"vehicle": vehicle_norm, "delivery_run_active": True},
+                )
+
+            checkout = (
+                self.db.query(VehicleCheckout)
+                .filter(
+                    and_(
+                        VehicleCheckout.vehicle == vehicle_norm,
+                        VehicleCheckout.checked_in_at.is_(None),
+                    )
+                )
+                .first()
             )
+            if not checkout:
+                raise ValidationError(
+                    f"Vehicle {vehicle_norm} is not currently checked out",
+                    details={"vehicle": vehicle_norm},
+                )
 
-        checkout = self.db.query(VehicleCheckout).filter(
-            and_(VehicleCheckout.vehicle == vehicle_norm, VehicleCheckout.checked_in_at.is_(None))
-        ).first()
-        if not checkout:
-            raise ValidationError(
-                f"Vehicle {vehicle_norm} is not currently checked out",
-                details={"vehicle": vehicle_norm},
+            notes_norm = (notes or "").strip() or None
+            if notes_norm:
+                if checkout.notes:
+                    checkout.notes = f"{checkout.notes}\n\n[Checkin note] {notes_norm}"
+                else:
+                    checkout.notes = f"[Checkin note] {notes_norm}"
+
+            checkout.checked_in_at = datetime.utcnow()
+            checkout.checked_in_by = checked_in_by_display
+            checkout.checked_in_by_user_id = actor_user_id
+            checkout.checked_in_by_email = actor_email
+            checkout.checked_in_by_display_name = actor_display_name
+            checkout.updated_at = datetime.utcnow()
+
+            self.db.commit()
+            self.db.refresh(checkout)
+            logger.info(
+                "Vehicle checked in: vehicle=%s checkout_id=%s actor=%s",
+                vehicle_norm,
+                checkout.id,
+                actor_email,
             )
-
-        notes_norm = (notes or "").strip() or None
-        if notes_norm:
-            if checkout.notes:
-                checkout.notes = f"{checkout.notes}\n\n[Checkin note] {notes_norm}"
-            else:
-                checkout.notes = f"[Checkin note] {notes_norm}"
-
-        checkout.checked_in_at = datetime.utcnow()
-        checkout.checked_in_by = checked_in_by_display
-        checkout.checked_in_by_user_id = actor_user_id
-        checkout.checked_in_by_email = actor_email
-        checkout.checked_in_by_display_name = actor_display_name
-        checkout.updated_at = datetime.utcnow()
-
-        self.db.commit()
-        self.db.refresh(checkout)
-        return checkout
+            return checkout
 
     def get_vehicle_statuses(self) -> list[dict]:
         statuses: list[dict] = []
         for v in VehicleEnum:
             vehicle = v.value
-            active_checkout = self.db.query(VehicleCheckout).filter(
-                and_(VehicleCheckout.vehicle == vehicle, VehicleCheckout.checked_in_at.is_(None))
-            ).first()
+            active_checkout = (
+                self.db.query(VehicleCheckout)
+                .filter(
+                    and_(
+                        VehicleCheckout.vehicle == vehicle,
+                        VehicleCheckout.checked_in_at.is_(None),
+                    )
+                )
+                .first()
+            )
             statuses.append(
                 {
                     "vehicle": vehicle,
                     "checked_out": active_checkout is not None,
-                    "checked_out_by": active_checkout.checked_out_by if active_checkout else None,
-                    "checked_out_by_user_id": active_checkout.checked_out_by_user_id if active_checkout else None,
-                    "checkout_type": getattr(active_checkout, "checkout_type", None) if active_checkout else None,
+                    "checked_out_by": active_checkout.checked_out_by
+                    if active_checkout
+                    else None,
+                    "checked_out_by_user_id": active_checkout.checked_out_by_user_id
+                    if active_checkout
+                    else None,
+                    "checkout_type": getattr(active_checkout, "checkout_type", None)
+                    if active_checkout
+                    else None,
                     "purpose": active_checkout.purpose if active_checkout else None,
-                    "checked_out_at": active_checkout.checked_out_at if active_checkout else None,
+                    "checked_out_at": active_checkout.checked_out_at
+                    if active_checkout
+                    else None,
                     "delivery_run_active": self._delivery_run_active(vehicle),
                 }
             )
@@ -193,7 +293,9 @@ class VehicleCheckoutService:
         if page < 1:
             raise ValidationError("page must be >= 1", field="page")
         if page_size < 1 or page_size > 200:
-            raise ValidationError("page_size must be between 1 and 200", field="page_size")
+            raise ValidationError(
+                "page_size must be between 1 and 200", field="page_size"
+            )
 
         query = self.db.query(VehicleCheckout)
 
@@ -231,8 +333,12 @@ class VehicleCheckoutService:
                         "checkout_type": c.checkout_type,
                         "purpose": c.purpose,
                         "notes": c.notes,
-                        "checked_out_at": c.checked_out_at.isoformat() if c.checked_out_at else None,
-                        "checked_in_at": c.checked_in_at.isoformat() if c.checked_in_at else None,
+                        "checked_out_at": c.checked_out_at.isoformat()
+                        if c.checked_out_at
+                        else None,
+                        "checked_in_at": c.checked_in_at.isoformat()
+                        if c.checked_in_at
+                        else None,
                         "checked_in_by": c.checked_in_by,
                     }
                 }
