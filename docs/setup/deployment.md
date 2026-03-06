@@ -133,9 +133,32 @@ pa website create \
 
 Replace `username` with your PythonAnywhere username.
 
+### Create the Background Scheduler Task
+
+For PythonAnywhere, keep the web app focused on requests and run the Inflow
+polling scheduler as a single Always-on task.
+
+Command:
+
+```bash
+cd /home/username/techhub-dns/backend && /home/username/techhub-dns/backend/.venv/bin/python run_scheduler.py
+```
+
+Recommended behavior:
+
+- Keep exactly one Always-on task running this command.
+- Keep the web app on a single worker unless you later add a shared Socket.IO broker.
+- `SCHEDULER_ENABLED` now controls the standalone scheduler runner. The web app no
+  longer starts APScheduler on incoming requests.
+
+If you do not want polling fallback, set `SCHEDULER_ENABLED=false` and rely on
+webhooks only.
+
 ### Verify Deployment
 
 Visit `https://username.pythonanywhere.com` - you should see the React frontend.
+Then confirm the Always-on task is running and check its log output after the
+first poll interval.
 
 ## Managing Your Site
 
@@ -147,6 +170,8 @@ Visit `https://username.pythonanywhere.com` - you should see the React frontend.
 | `pa website get --domain username.pythonanywhere.com` | Get site details |
 | `pa website reload --domain username.pythonanywhere.com` | Reload after code changes |
 | `pa website delete --domain username.pythonanywhere.com` | Delete the website |
+
+Always-on task management is done from the PythonAnywhere Tasks tab.
 
 ### View Logs
 
@@ -179,6 +204,7 @@ bash scripts/deploy.sh
 ```
 
 The deploy script runs `npm ci` and `npm run build` in `frontend/`, then reloads the app.
+If you changed scheduler code or env vars, restart the Always-on task after the deploy.
 
 ## Automated Deployment (GitHub Actions)
 
