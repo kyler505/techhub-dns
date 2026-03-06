@@ -26,6 +26,7 @@ from app.utils.building_mapper import (
     extract_building_code_from_location,
 )
 from app.utils.exceptions import (
+    ConflictError,
     NotFoundError,
     ValidationError,
     StatusTransitionError,
@@ -493,12 +494,51 @@ class OrderService:
             .first()
         )
 
+    def assert_not_stale(
+        self,
+        order: Order,
+        expected_updated_at: Optional[datetime],
+    ) -> None:
+        if expected_updated_at is None or order.updated_at is None:
+            return
+
+        expected = (
+            expected_updated_at.replace(tzinfo=None)
+            if expected_updated_at.tzinfo
+            else expected_updated_at
+        )
+        actual = (
+            order.updated_at.replace(tzinfo=None)
+            if order.updated_at.tzinfo
+            else order.updated_at
+        )
+
+        if actual == expected:
+            return
+
+        logger.warning(
+            "Stale order update blocked: order_id=%s inflow_order_id=%s expected_updated_at=%s actual_updated_at=%s",
+            order.id,
+            order.inflow_order_id,
+            expected.isoformat(),
+            actual.isoformat(),
+        )
+        raise ConflictError(
+            "Order has been updated by another user. Refresh and try again.",
+            details={
+                "order_id": str(order.id),
+                "expected_updated_at": expected.isoformat(),
+                "actual_updated_at": actual.isoformat(),
+            },
+        )
+
     def transition_status(
         self,
         order_id: Union[UUID, str],
         new_status: OrderStatus,
         changed_by: Optional[str] = None,
         reason: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         """Transition order status with validation and audit logging"""
         order_id_str = str(order_id)
@@ -511,6 +551,8 @@ class OrderService:
 
         if not order:
             raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
 
         old_status = order.status
         qa_method = order.qa_method.strip().lower() if order.qa_method else None
