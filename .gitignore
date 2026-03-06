@@ -21,7 +21,6 @@ frontend/.env
 .cursor/
 .agent/
 agent.md
-AGENTS.md
 .idea/
 *.swp
 *.swo
