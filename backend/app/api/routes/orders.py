@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
 from pathlib import Path
+from datetime import datetime
 import threading
 
 from app.database import get_db
@@ -28,7 +29,12 @@ from app.schemas.order import (
 from app.models.order import OrderStatus
 from app.models.order import Order
 from app.schemas.audit import AuditLogResponse
-from app.utils.exceptions import DNSApiError, NotFoundError, ValidationError
+from app.utils.exceptions import (
+    ConflictError,
+    DNSApiError,
+    NotFoundError,
+    ValidationError,
+)
 from app.api.auth_middleware import get_current_user_email
 import logging
 
@@ -248,13 +254,30 @@ def update_order(order_id):
 
     with get_db() as db:
         service = OrderService(db)
-        order = service.get_order_detail(order_id)
+        order = (
+            db.query(Order).filter(Order.id == str(order_id)).with_for_update().first()
+        )
         if not order:
             abort(404, description="Order not found")
 
         update = OrderUpdate(**data)
-        for field, value in update.model_dump(exclude_unset=True).items():
+        service.assert_not_stale(order, update.expected_updated_at)
+
+        for field, value in update.model_dump(
+            exclude_unset=True, exclude={"expected_updated_at"}
+        ).items():
             setattr(order, field, value)
+
+        order.updated_at = datetime.utcnow()
+        logger.info(
+            "Order fields updated: order_id=%s fields=%s",
+            order.id,
+            sorted(
+                update.model_dump(
+                    exclude_unset=True, exclude={"expected_updated_at"}
+                ).keys()
+            ),
+        )
 
         db.commit()
         db.refresh(order)
@@ -275,6 +298,7 @@ def update_order_status(order_id):
             new_status=status_update.status,
             changed_by=changed_by,
             reason=status_update.reason,
+            expected_updated_at=status_update.expected_updated_at,
         )
 
         # Send notifications based on new status
