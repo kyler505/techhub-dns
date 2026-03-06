@@ -31,9 +31,47 @@ export interface GetSystemAuditParams {
     include_values?: boolean;
 }
 
+export interface RuntimeSummaryResponse {
+    generated_at: string;
+    app: {
+        scheduler_enabled: boolean;
+        inflow_polling_sync_enabled: boolean;
+        inflow_webhook_enabled: boolean;
+        cors_allowed_origins: string[];
+    };
+    database: {
+        database_backend: string;
+        pool_size: number | null;
+        max_overflow: number | null;
+        pool_timeout: number | null;
+        pool_recycle: number | null;
+    };
+    rate_limits: {
+        window_seconds: number;
+        rules: Record<string, number>;
+        active_events: Record<string, number>;
+        active_scopes: Record<string, number>;
+    };
+    workload: {
+        active_sessions: number;
+        active_delivery_runs: number;
+        open_orders: number;
+    };
+    inflow: {
+        active_webhook: boolean;
+        webhook_id: string | null;
+        last_webhook_received_at: string | null;
+        effective_poll_interval_minutes: number | null;
+    };
+}
+
 export const observabilityApi = {
     getSystemAudit: async (params?: GetSystemAuditParams): Promise<SystemAuditResponse> => {
         const response = await apiClient.get<SystemAuditResponse>("/observability/system-audit", { params });
+        return response.data;
+    },
+    getRuntimeSummary: async (): Promise<RuntimeSummaryResponse> => {
+        const response = await apiClient.get<RuntimeSummaryResponse>("/observability/runtime-summary");
         return response.data;
     },
 };
