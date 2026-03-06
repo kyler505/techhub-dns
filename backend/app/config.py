@@ -1,7 +1,7 @@
 import json
 from typing import Optional, List, Any
 
-from pydantic import field_validator, model_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -169,29 +169,21 @@ class Settings(BaseSettings):
     canopyorders_dav_root_path: str = "/dav"
     canopyorders_base_dir: str = "/content/canopyorders"
 
-    # Shared WebDAV credentials (canonical)
+    # Shared WebDAV credentials
     webdav_username: Optional[str] = None
     webdav_password: Optional[str] = None
-
-    # Canopy Orders-specific aliases (backward-compatible)
-    canopyorders_username: Optional[str] = None
-    canopyorders_password: Optional[str] = None
     canopyorders_password_secret_name: str = "ehanson-webdav"
     canopyorders_user_agent: str = "Cyberduck/9.0.0 (Windows 10/10.0) (x86_64) (WebDAV)"
     canopyorders_teams_workflow_url: Optional[str] = None
     canopyorders_teams_shared_secret: Optional[str] = None
 
-    # Vetting Editor (env-only, no Key Vault integration)
+    # Vetting Editor
     vetting_editor_download_url: Optional[str] = None
     vetting_editor_upload_url: Optional[str] = None
-    vetting_editor_webdav_username: Optional[str] = None
-    vetting_editor_webdav_password: Optional[str] = None
 
-    # Compatibility Editor Staging (env-only, no Key Vault integration)
+    # Compatibility Editor Staging
     compatibility_editor_staging_download_url: Optional[str] = None
     compatibility_editor_staging_upload_url: Optional[str] = None
-    compatibility_editor_staging_webdav_username: Optional[str] = None
-    compatibility_editor_staging_webdav_password: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -217,37 +209,5 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
-
-    @model_validator(mode="after")
-    def apply_shared_webdav_defaults(self):
-        canonical_username = (self.webdav_username or "").strip() or None
-        canonical_password = self.webdav_password
-
-        # Backward compatibility: if canonical vars are unset, inherit from
-        # Canopy aliases so existing deployments continue to work unchanged.
-        if canonical_username is None:
-            canonical_username = (self.canopyorders_username or "").strip() or None
-            self.webdav_username = canonical_username
-        if not canonical_password:
-            canonical_password = self.canopyorders_password
-            self.webdav_password = canonical_password
-
-        # Ensure all WebDAV consumers use shared canonical credentials by default.
-        if not (self.canopyorders_username or "").strip():
-            self.canopyorders_username = canonical_username
-        if not self.canopyorders_password:
-            self.canopyorders_password = canonical_password
-
-        if not (self.vetting_editor_webdav_username or "").strip():
-            self.vetting_editor_webdav_username = canonical_username
-        if not self.vetting_editor_webdav_password:
-            self.vetting_editor_webdav_password = canonical_password
-
-        if not (self.compatibility_editor_staging_webdav_username or "").strip():
-            self.compatibility_editor_staging_webdav_username = canonical_username
-        if not self.compatibility_editor_staging_webdav_password:
-            self.compatibility_editor_staging_webdav_password = canonical_password
-
-        return self
 
 settings = Settings()
