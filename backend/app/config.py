@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     maintenance_tick_enabled: bool = True
     maintenance_tick_min_interval_seconds: int = 60
 
+    # Lightweight in-process API throttling for admin-heavy endpoints
+    rate_limit_window_seconds: int = 60
+    admin_read_rate_limit_requests: int = 30
+    admin_write_rate_limit_requests: int = 10
+
     # Background scheduler runner (used by backend/run_scheduler.py)
     scheduler_enabled: bool = False
 
