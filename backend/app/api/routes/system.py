@@ -103,11 +103,11 @@ _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.update(
 
 
 def _get_vetting_editor_auth() -> tuple[str, str]:
-    username = (settings.vetting_editor_webdav_username or "").strip()
-    password = settings.vetting_editor_webdav_password
+    username = (settings.webdav_username or "").strip()
+    password = settings.webdav_password
     if not username or not password:
         raise RuntimeError(
-            "Vetting editor credentials are not configured (VETTING_EDITOR_WEBDAV_USERNAME and VETTING_EDITOR_WEBDAV_PASSWORD)."
+            "Vetting editor credentials are not configured (WEBDAV_USERNAME and WEBDAV_PASSWORD)."
         )
     return username, password
 
@@ -298,12 +298,12 @@ def _upload_vetting_editor_json(url: str, payload: dict[str, list[dict[str, str]
 
 
 def _get_compatibility_editor_staging_auth() -> tuple[str, str]:
-    username = (settings.compatibility_editor_staging_webdav_username or "").strip()
-    password = settings.compatibility_editor_staging_webdav_password
+    username = (settings.webdav_username or "").strip()
+    password = settings.webdav_password
     if not username or not password:
         raise RuntimeError(
             "Compatibility editor staging credentials are not configured "
-            "(COMPATIBILITY_EDITOR_STAGING_WEBDAV_USERNAME and COMPATIBILITY_EDITOR_STAGING_WEBDAV_PASSWORD)."
+            "(WEBDAV_USERNAME and WEBDAV_PASSWORD)."
         )
     return username, password
 
