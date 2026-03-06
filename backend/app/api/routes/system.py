@@ -93,7 +93,8 @@ def _normalize_vetting_editor_section_name(section_name: str) -> str:
 
 
 _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME = {
-    _normalize_vetting_editor_section_name(section): section for section in VETTING_EDITOR_ALLOWED_SECTIONS
+    _normalize_vetting_editor_section_name(section): section
+    for section in VETTING_EDITOR_ALLOWED_SECTIONS
 }
 _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.update(
     {
@@ -140,7 +141,9 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
         section_rows_by_canonical_name[canonical_section_name] = section_rows
 
     if unknown_sections:
-        unknown_sections_sorted = sorted(unknown_sections, key=lambda section: section.lower())
+        unknown_sections_sorted = sorted(
+            unknown_sections, key=lambda section: section.lower()
+        )
         raise ValueError(f"Unsupported sections: {', '.join(unknown_sections_sorted)}")
 
     vetting_url_sections = set(VETTING_EDITOR_VETTING_URL_SECTIONS)
@@ -158,10 +161,14 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
 
         for index, row in enumerate(section_rows):
             if not isinstance(row, dict):
-                raise ValueError(f"Section '{section}' row {index + 1} must be an object.")
+                raise ValueError(
+                    f"Section '{section}' row {index + 1} must be an object."
+                )
 
             allowed_fields = {"name", "category", "url", "vettingUrl"}
-            unknown_fields = sorted(key for key in row.keys() if key not in allowed_fields)
+            unknown_fields = sorted(
+                key for key in row.keys() if key not in allowed_fields
+            )
             if unknown_fields:
                 raise ValueError(
                     f"Section '{section}' row {index + 1} has unsupported fields: {', '.join(unknown_fields)}"
@@ -172,11 +179,17 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
             product_url = row.get("url")
 
             if not isinstance(name, str) or not name.strip():
-                raise ValueError(f"Section '{section}' row {index + 1} has invalid 'name'.")
+                raise ValueError(
+                    f"Section '{section}' row {index + 1} has invalid 'name'."
+                )
             if not isinstance(category, str) or category not in allowed_categories:
-                raise ValueError(f"Section '{section}' row {index + 1} has invalid 'category'.")
+                raise ValueError(
+                    f"Section '{section}' row {index + 1} has invalid 'category'."
+                )
             if not isinstance(product_url, str) or not product_url.strip():
-                raise ValueError(f"Section '{section}' row {index + 1} has invalid 'url'.")
+                raise ValueError(
+                    f"Section '{section}' row {index + 1} has invalid 'url'."
+                )
 
             normalized_row: dict[str, str] = {
                 "name": name.strip(),
@@ -188,7 +201,9 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
             if section in vetting_url_sections:
                 if vetting_url is not None:
                     if not isinstance(vetting_url, str):
-                        raise ValueError(f"Section '{section}' row {index + 1} has invalid 'vettingUrl'.")
+                        raise ValueError(
+                            f"Section '{section}' row {index + 1} has invalid 'vettingUrl'."
+                        )
                     trimmed_vetting_url = vetting_url.strip()
                     if trimmed_vetting_url:
                         normalized_row["vettingUrl"] = trimmed_vetting_url
@@ -204,7 +219,9 @@ def _validate_vetting_editor_payload(payload: Any) -> dict[str, list[dict[str, s
     return normalized
 
 
-def _try_download_vetting_editor_json(url: str, username: str, password: str) -> Optional[dict[str, Any]]:
+def _try_download_vetting_editor_json(
+    url: str, username: str, password: str
+) -> Optional[dict[str, Any]]:
     headers = dict(_VETTING_EDITOR_DOWNLOAD_HEADERS)
     parsed = urlparse(url)
     if parsed.scheme and parsed.netloc:
@@ -232,13 +249,17 @@ def _try_download_vetting_editor_json(url: str, username: str, password: str) ->
             continue
 
         if response.status_code != 200:
-            logger.warning("Vetting editor GET returned %s (%s)", response.status_code, auth_name)
+            logger.warning(
+                "Vetting editor GET returned %s (%s)", response.status_code, auth_name
+            )
             continue
 
         try:
             payload = response.json()
         except ValueError:
-            logger.warning("Vetting editor GET returned non-JSON payload (%s)", auth_name)
+            logger.warning(
+                "Vetting editor GET returned non-JSON payload (%s)", auth_name
+            )
             continue
 
         if isinstance(payload, dict):
@@ -249,7 +270,9 @@ def _try_download_vetting_editor_json(url: str, username: str, password: str) ->
     return None
 
 
-def _upload_vetting_editor_json(url: str, payload: dict[str, list[dict[str, str]]], username: str, password: str) -> bool:
+def _upload_vetting_editor_json(
+    url: str, payload: dict[str, list[dict[str, str]]], username: str, password: str
+) -> bool:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json; charset=UTF-8",
@@ -292,7 +315,9 @@ def _upload_vetting_editor_json(url: str, payload: dict[str, list[dict[str, str]
         if response.status_code in (200, 201, 204):
             return True
 
-        logger.warning("Vetting editor PUT returned %s (%s)", response.status_code, auth_name)
+        logger.warning(
+            "Vetting editor PUT returned %s (%s)", response.status_code, auth_name
+        )
 
     return False
 
@@ -308,7 +333,9 @@ def _get_compatibility_editor_staging_auth() -> tuple[str, str]:
     return username, password
 
 
-def _normalize_string_array(value: Any, field_name: str, *, allow_empty: bool = False) -> list[str]:
+def _normalize_string_array(
+    value: Any, field_name: str, *, allow_empty: bool = False
+) -> list[str]:
     if value in (None, ""):
         return []
     if not isinstance(value, list):
@@ -416,7 +443,9 @@ def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, An
         if hidden is not None and not isinstance(hidden, bool):
             raise ValueError(f"Computer '{computer_key}' has invalid 'hidden' flag.")
 
-        incompatible_with = _normalize_string_array(raw_computer.get("incompatibleWith"), "incompatibleWith")
+        incompatible_with = _normalize_string_array(
+            raw_computer.get("incompatibleWith"), "incompatibleWith"
+        )
         partially_compatible_with = _normalize_string_array(
             raw_computer.get("partiallyCompatibleWith"), "partiallyCompatibleWith"
         )
@@ -432,10 +461,14 @@ def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, An
         compatibility_notes: dict[str, str] = {}
         if compatibility_notes_raw is not None:
             if not isinstance(compatibility_notes_raw, dict):
-                raise ValueError(f"Computer '{computer_key}' has invalid 'compatibilityNotes'.")
+                raise ValueError(
+                    f"Computer '{computer_key}' has invalid 'compatibilityNotes'."
+                )
             for raw_note_dock_key, raw_note in compatibility_notes_raw.items():
                 if not isinstance(raw_note_dock_key, str):
-                    raise ValueError(f"Computer '{computer_key}' compatibilityNotes keys must be strings.")
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityNotes keys must be strings."
+                    )
                 note_dock_key = raw_note_dock_key.strip()
                 if note_dock_key not in dock_keys:
                     raise ValueError(
@@ -453,10 +486,14 @@ def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, An
         compatibility_data: dict[str, dict[str, Any]] = {}
         if compatibility_data_raw is not None:
             if not isinstance(compatibility_data_raw, dict):
-                raise ValueError(f"Computer '{computer_key}' has invalid 'compatibilityData'.")
+                raise ValueError(
+                    f"Computer '{computer_key}' has invalid 'compatibilityData'."
+                )
             for raw_data_dock_key, raw_data in compatibility_data_raw.items():
                 if not isinstance(raw_data_dock_key, str):
-                    raise ValueError(f"Computer '{computer_key}' compatibilityData keys must be strings.")
+                    raise ValueError(
+                        f"Computer '{computer_key}' compatibilityData keys must be strings."
+                    )
                 data_dock_key = raw_data_dock_key.strip()
                 if data_dock_key not in dock_keys:
                     raise ValueError(
@@ -470,7 +507,10 @@ def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, An
                 normalized_entry: dict[str, Any] = dict(raw_data)
                 status = raw_data.get("compatibilityStatus")
                 if status is not None:
-                    if not isinstance(status, str) or status not in COMPATIBILITY_EDITOR_STATUS_VALUES:
+                    if (
+                        not isinstance(status, str)
+                        or status not in COMPATIBILITY_EDITOR_STATUS_VALUES
+                    ):
                         allowed = ", ".join(COMPATIBILITY_EDITOR_STATUS_VALUES)
                         raise ValueError(
                             f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid "
@@ -513,7 +553,10 @@ def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, An
                     detail_value = raw_data.get(detail_field)
                     if detail_value is None:
                         continue
-                    if not isinstance(detail_value, str) or detail_value not in COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES:
+                    if (
+                        not isinstance(detail_value, str)
+                        or detail_value not in COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES
+                    ):
                         allowed = ", ".join(COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES)
                         raise ValueError(
                             f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid "
@@ -577,7 +620,9 @@ def _try_download_compatibility_editor_staging_json(
                 allow_redirects=True,
             )
         except requests.RequestException as exc:
-            logger.warning("Compatibility editor staging GET failed (%s): %s", auth_name, exc)
+            logger.warning(
+                "Compatibility editor staging GET failed (%s): %s", auth_name, exc
+            )
             continue
 
         if response.status_code != 200:
@@ -591,13 +636,18 @@ def _try_download_compatibility_editor_staging_json(
         try:
             payload = response.json()
         except ValueError:
-            logger.warning("Compatibility editor staging GET returned non-JSON payload (%s)", auth_name)
+            logger.warning(
+                "Compatibility editor staging GET returned non-JSON payload (%s)",
+                auth_name,
+            )
             continue
 
         if isinstance(payload, dict):
             return payload
 
-        logger.warning("Compatibility editor staging GET returned non-object JSON (%s)", auth_name)
+        logger.warning(
+            "Compatibility editor staging GET returned non-object JSON (%s)", auth_name
+        )
 
     return None
 
@@ -632,7 +682,9 @@ def _upload_compatibility_editor_staging_json(
                 allow_redirects=True,
             )
         except requests.RequestException:
-            logger.debug("Compatibility editor staging PROPFIND warmup failed (%s)", auth_name)
+            logger.debug(
+                "Compatibility editor staging PROPFIND warmup failed (%s)", auth_name
+            )
 
         try:
             response = requests.put(
@@ -644,13 +696,19 @@ def _upload_compatibility_editor_staging_json(
                 allow_redirects=True,
             )
         except requests.RequestException as exc:
-            logger.warning("Compatibility editor staging PUT failed (%s): %s", auth_name, exc)
+            logger.warning(
+                "Compatibility editor staging PUT failed (%s): %s", auth_name, exc
+            )
             continue
 
         if response.status_code in (200, 201, 204):
             return True
 
-        logger.warning("Compatibility editor staging PUT returned %s (%s)", response.status_code, auth_name)
+        logger.warning(
+            "Compatibility editor staging PUT returned %s (%s)",
+            response.status_code,
+            auth_name,
+        )
 
     return False
 
@@ -685,7 +743,11 @@ def _get_request_user_email_normalized() -> str:
     # Prefer middleware-populated email to avoid extra DB query.
     from flask import g
 
-    email = (getattr(g, "user_email", None) or get_current_user_email() or "").strip().lower()
+    email = (
+        (getattr(g, "user_email", None) or get_current_user_email() or "")
+        .strip()
+        .lower()
+    )
     return email
 
 
@@ -701,7 +763,9 @@ def _get_db_admin_allowlist() -> list[str]:
 def _is_env_admin_override_active() -> bool:
     return bool(settings.get_admin_emails())
 
+
 # ============ Settings Endpoints ============
+
 
 @bp.route("/settings", methods=["GET"])
 @require_admin
@@ -720,7 +784,9 @@ def update_system_setting(key: str):
         return jsonify({"error": f"Unknown setting: {key}"}), 400
 
     if key == SETTING_ADMIN_EMAILS:
-        return jsonify({"error": "Admin allowlist must be updated via /api/system/admins"}), 400
+        return jsonify(
+            {"error": "Admin allowlist must be updated via /api/system/admins"}
+        ), 400
 
     data = request.get_json()
     if not data or "value" not in data:
@@ -731,12 +797,16 @@ def update_system_setting(key: str):
     # SystemSettingService handles its own DB session
     setting = SystemSettingService.set_setting(key, str(data["value"]), updated_by)
 
-    return jsonify({
-        "key": setting.key,
-        "value": setting.value,
-        "updated_at": setting.updated_at.isoformat() if setting.updated_at is not None else None,
-        "updated_by": setting.updated_by,
-    })
+    return jsonify(
+        {
+            "key": setting.key,
+            "value": setting.value,
+            "updated_at": setting.updated_at.isoformat()
+            if setting.updated_at is not None
+            else None,
+            "updated_by": setting.updated_by,
+        }
+    )
 
 
 # ============ Admin Allowlist Endpoints ============
@@ -832,7 +902,11 @@ def update_admins():
 
     db = get_db_session()
     try:
-        setting = db.query(SystemSetting).filter(SystemSetting.key == SETTING_ADMIN_EMAILS).first()
+        setting = (
+            db.query(SystemSetting)
+            .filter(SystemSetting.key == SETTING_ADMIN_EMAILS)
+            .first()
+        )
         old_raw = setting.value if setting else None
         old_list = _parse_allowlist_string(old_raw)
 
@@ -843,7 +917,9 @@ def update_admins():
             setting = SystemSetting(
                 key=SETTING_ADMIN_EMAILS,
                 value=new_raw,
-                description=DEFAULT_SETTINGS.get(SETTING_ADMIN_EMAILS, {}).get("description"),
+                description=DEFAULT_SETTINGS.get(SETTING_ADMIN_EMAILS, {}).get(
+                    "description"
+                ),
                 updated_by=updated_by,
             )
             db.add(setting)
@@ -865,11 +941,13 @@ def update_admins():
 
         db.commit()
 
-        return jsonify({
-            "admins": normalized,
-            "source": "db",
-            "updated_by": updated_by,
-        })
+        return jsonify(
+            {
+                "admins": normalized,
+                "source": "db",
+                "updated_by": updated_by,
+            }
+        )
     except Exception:
         db.rollback()
         raise
@@ -886,7 +964,11 @@ def get_vetting_editor_data():
     download_url = (settings.vetting_editor_download_url or "").strip()
     upload_url = (settings.vetting_editor_upload_url or "").strip()
     if not download_url and not upload_url:
-        return jsonify({"error": "Vetting editor is not configured (missing VETTING_EDITOR_DOWNLOAD_URL)."}), 500
+        return jsonify(
+            {
+                "error": "Vetting editor is not configured (missing VETTING_EDITOR_DOWNLOAD_URL)."
+            }
+        ), 500
 
     try:
         username, password = _get_vetting_editor_auth()
@@ -905,7 +987,9 @@ def get_vetting_editor_data():
             break
 
     if payload is None:
-        return jsonify({"error": "Failed to fetch vetting editor JSON from WebDAV."}), 502
+        return jsonify(
+            {"error": "Failed to fetch vetting editor JSON from WebDAV."}
+        ), 502
 
     try:
         normalized = _validate_vetting_editor_payload(payload)
@@ -920,7 +1004,11 @@ def get_vetting_editor_data():
 def save_vetting_editor_data():
     upload_url = (settings.vetting_editor_upload_url or "").strip()
     if not upload_url:
-        return jsonify({"error": "Vetting editor is not configured (missing VETTING_EDITOR_UPLOAD_URL)."}), 500
+        return jsonify(
+            {
+                "error": "Vetting editor is not configured (missing VETTING_EDITOR_UPLOAD_URL)."
+            }
+        ), 500
 
     payload = request.get_json(silent=True)
     if payload is None:
@@ -937,7 +1025,9 @@ def save_vetting_editor_data():
         return jsonify({"error": str(exc)}), 500
 
     if not _upload_vetting_editor_json(upload_url, normalized, username, password):
-        return jsonify({"error": "Failed to upload vetting editor JSON to WebDAV."}), 502
+        return jsonify(
+            {"error": "Failed to upload vetting editor JSON to WebDAV."}
+        ), 502
 
     return jsonify({"success": True})
 
@@ -948,12 +1038,14 @@ def get_compatibility_editor_staging_data():
     download_url = (settings.compatibility_editor_staging_download_url or "").strip()
     upload_url = (settings.compatibility_editor_staging_upload_url or "").strip()
     if not download_url and not upload_url:
-        return jsonify({
-            "error": (
-                "Compatibility editor staging is not configured "
-                "(missing COMPATIBILITY_EDITOR_STAGING_DOWNLOAD_URL)."
-            )
-        }), 500
+        return jsonify(
+            {
+                "error": (
+                    "Compatibility editor staging is not configured "
+                    "(missing COMPATIBILITY_EDITOR_STAGING_DOWNLOAD_URL)."
+                )
+            }
+        ), 500
 
     try:
         username, password = _get_compatibility_editor_staging_auth()
@@ -967,17 +1059,23 @@ def get_compatibility_editor_staging_data():
 
     payload: Optional[dict[str, Any]] = None
     for url in candidate_urls:
-        payload = _try_download_compatibility_editor_staging_json(url, username, password)
+        payload = _try_download_compatibility_editor_staging_json(
+            url, username, password
+        )
         if payload is not None:
             break
 
     if payload is None:
-        return jsonify({"error": "Failed to fetch compatibility editor staging JSON from WebDAV."}), 502
+        return jsonify(
+            {"error": "Failed to fetch compatibility editor staging JSON from WebDAV."}
+        ), 502
 
     try:
         normalized = _validate_compatibility_editor_staging_payload(payload)
     except ValueError as exc:
-        return jsonify({"error": f"Remote compatibility editor staging JSON is invalid: {exc}"}), 502
+        return jsonify(
+            {"error": f"Remote compatibility editor staging JSON is invalid: {exc}"}
+        ), 502
 
     return jsonify(normalized)
 
@@ -987,12 +1085,14 @@ def get_compatibility_editor_staging_data():
 def save_compatibility_editor_staging_data():
     upload_url = (settings.compatibility_editor_staging_upload_url or "").strip()
     if not upload_url:
-        return jsonify({
-            "error": (
-                "Compatibility editor staging is not configured "
-                "(missing COMPATIBILITY_EDITOR_STAGING_UPLOAD_URL)."
-            )
-        }), 500
+        return jsonify(
+            {
+                "error": (
+                    "Compatibility editor staging is not configured "
+                    "(missing COMPATIBILITY_EDITOR_STAGING_UPLOAD_URL)."
+                )
+            }
+        ), 500
 
     payload = request.get_json(silent=True)
     if payload is None:
@@ -1008,13 +1108,18 @@ def save_compatibility_editor_staging_data():
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 500
 
-    if not _upload_compatibility_editor_staging_json(upload_url, normalized, username, password):
-        return jsonify({"error": "Failed to upload compatibility editor staging JSON to WebDAV."}), 502
+    if not _upload_compatibility_editor_staging_json(
+        upload_url, normalized, username, password
+    ):
+        return jsonify(
+            {"error": "Failed to upload compatibility editor staging JSON to WebDAV."}
+        ), 502
 
     return jsonify({"success": True})
 
 
 # ============ Testing Endpoints ============
+
 
 @bp.route("/test/email", methods=["POST"])
 @require_admin
@@ -1030,15 +1135,21 @@ def test_email_notification():
 
     if not email_service.is_configured():
         missing = []
-        if not settings.azure_tenant_id: missing.append("AZURE_TENANT_ID")
-        if not settings.azure_client_id: missing.append("AZURE_CLIENT_ID")
-        if not settings.azure_client_secret: missing.append("AZURE_CLIENT_SECRET")
-        if not settings.smtp_from_address: missing.append("SMTP_FROM_ADDRESS")
+        if not settings.azure_tenant_id:
+            missing.append("AZURE_TENANT_ID")
+        if not settings.azure_client_id:
+            missing.append("AZURE_CLIENT_ID")
+        if not settings.azure_client_secret:
+            missing.append("AZURE_CLIENT_SECRET")
+        if not settings.smtp_from_address:
+            missing.append("SMTP_FROM_ADDRESS")
 
-        return jsonify({
-            "success": False,
-            "error": f"Email not configured. Missing environment variables: {', '.join(missing)}"
-        }), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": f"Email not configured. Missing environment variables: {', '.join(missing)}",
+            }
+        ), 400
 
     # Send test email (force=True to bypass enabled check)
     subject = "TechHub DNS - Test Email"
@@ -1060,13 +1171,15 @@ def test_email_notification():
         subject=subject,
         body_html=body_html,
         body_text=body_text,
-        force=True
+        force=True,
     )
 
     if success:
         return jsonify({"success": True, "message": f"Test email sent to {to_address}"})
     else:
-        return jsonify({"success": False, "error": "Failed to send email. Check server logs."}), 500
+        return jsonify(
+            {"success": False, "error": "Failed to send email. Check server logs."}
+        ), 500
 
 
 @bp.route("/test/teams-recipient", methods=["POST"])
@@ -1096,20 +1209,24 @@ def test_teams_recipient():
             delivery_runner="System Administrator",
             estimated_time="Currently (Test)",
             order_items=["Test Item 1", "Test Item 2"],
-            force=True  # Force send even if disabled in settings
+            force=True,  # Force send even if disabled in settings
         )
 
         if success:
-            return jsonify({"success": True, "message": f"Notification queued for {recipient_email}"})
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"Notification queued for {recipient_email}",
+                }
+            )
         else:
-            return jsonify({"success": False, "error": "Failed to send Teams message. Check logs."}), 500
+            return jsonify(
+                {"success": False, "error": "Failed to send Teams message. Check logs."}
+            ), 500
 
     except Exception as e:
         logger.error(f"Teams recipient test failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-
-
 
 
 @bp.route("/test/inflow", methods=["POST"])
@@ -1121,10 +1238,12 @@ def test_inflow_connection():
     try:
         # Try to fetch a small number of orders to verify connection
         orders = service.sync_recent_started_orders_sync(max_pages=1, target_matches=1)
-        return jsonify({
-            "success": True,
-            "message": f"Inflow API connected. Found {len(orders)} order(s) in sample query."
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Inflow API connected. Found {len(orders)} order(s) in sample query.",
+            }
+        )
     except Exception as e:
         logger.error(f"Inflow connection test failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1140,18 +1259,22 @@ def test_sharepoint_connection():
         sp_service = get_sharepoint_service()
 
         if not sp_service.is_enabled:
-            return jsonify({
-                "success": False,
-                "error": "SharePoint not enabled. Check SHAREPOINT_ENABLED and Azure configuration."
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "SharePoint not enabled. Check SHAREPOINT_ENABLED and Azure configuration.",
+                }
+            ), 400
 
         # Test authentication and site access
         sp_service._get_access_token()
 
-        return jsonify({
-            "success": True,
-            "message": f"SharePoint connected. Site: {settings.sharepoint_site_url}"
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": f"SharePoint connected. Site: {settings.sharepoint_site_url}",
+            }
+        )
     except Exception as e:
         logger.error(f"SharePoint connection test failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1170,7 +1293,6 @@ def get_system_status():
         "graph_api": _get_graph_status(),
         "sharepoint": _get_sharepoint_status(),
         "inflow_sync": _get_inflow_sync_status(),
-
     }
 
     return jsonify(status)
@@ -1192,13 +1314,21 @@ def get_sync_health():
         try:
             webhook = (
                 db.query(InflowWebhook)
-                .filter(InflowWebhook.status.in_([WebhookStatus.active, WebhookStatus.failed]))
+                .filter(
+                    InflowWebhook.status.in_(
+                        [WebhookStatus.active, WebhookStatus.failed]
+                    )
+                )
                 .order_by(InflowWebhook.updated_at.desc())
                 .first()
             )
 
-            inflow["webhook_failed"] = bool(webhook and webhook.status == WebhookStatus.failed)
-            inflow["last_webhook_received_at"] = _to_utc_iso_z(getattr(webhook, "last_received_at", None))
+            inflow["webhook_failed"] = bool(
+                webhook and webhook.status == WebhookStatus.failed
+            )
+            inflow["last_webhook_received_at"] = _to_utc_iso_z(
+                getattr(webhook, "last_received_at", None)
+            )
         finally:
             db.close()
 
@@ -1221,6 +1351,7 @@ def sync_orders():
     # Sync recent started orders
     # We use sync version because this is a blocking HTTP request
     from app.database import get_db_session
+
     db = get_db_session()
 
     try:
@@ -1229,6 +1360,7 @@ def sync_orders():
 
         # Then create/update them in local DB
         from app.services.order_service import OrderService
+
         order_service = OrderService(db)
 
         synced_count = 0
@@ -1239,13 +1371,18 @@ def sync_orders():
             except Exception as e:
                 # Log but continue
                 import logging
-                logging.getLogger(__name__).error(f"Failed to sync order {order_data.get('orderNumber')}: {e}")
 
-        return jsonify({
-            "success": True,
-            "message": f"Synced {synced_count} orders from Inflow",
-            "count": synced_count
-        })
+                logging.getLogger(__name__).error(
+                    f"Failed to sync order {order_data.get('orderNumber')}: {e}"
+                )
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Synced {synced_count} orders from Inflow",
+                "count": synced_count,
+            }
+        )
     finally:
         db.close()
 
@@ -1272,7 +1409,9 @@ def upload_canopy_orders():
 
         digits = compact[2:] if compact.startswith("TH") else compact
         if len(digits) != 4 or not digits.isdigit():
-            return jsonify({"error": "Order number must be 4 digits (e.g., 1234 or TH1234)"}), 400
+            return jsonify(
+                {"error": "Order number must be 4 digits (e.g., 1234 or TH1234)"}
+            ), 400
 
         normalized = f"TH{digits}"
         if normalized in seen_orders:
@@ -1288,11 +1427,11 @@ def upload_canopy_orders():
     try:
         inflow_service = InflowService()
         db_orders = (
-            db.query(Order)
-            .filter(Order.inflow_order_id.in_(normalized_orders))
-            .all()
+            db.query(Order).filter(Order.inflow_order_id.in_(normalized_orders)).all()
         )
-        orders_by_inflow_id: dict[str, Order] = {cast(str, order.inflow_order_id): order for order in db_orders}
+        orders_by_inflow_id: dict[str, Order] = {
+            cast(str, order.inflow_order_id): order for order in db_orders
+        }
 
         eligible_orders: list[str] = []
         ineligible_orders: list[dict[str, str]] = []
@@ -1306,7 +1445,9 @@ def upload_canopy_orders():
 
             status_value = (getattr(order, "status", None) or "").strip()
             if status_value != "picked":
-                ineligible_orders.append({"order": th, "reason": f"status={status_value or 'unknown'}"})
+                ineligible_orders.append(
+                    {"order": th, "reason": f"status={status_value or 'unknown'}"}
+                )
                 continue
 
             if getattr(order, "tagged_at", None) is not None:
@@ -1326,7 +1467,9 @@ def upload_canopy_orders():
 
             inflow_data = getattr(order, "inflow_data", None)
             if not inflow_data or not inflow_service.requires_asset_tags(inflow_data):
-                ineligible_orders.append({"order": th, "reason": "not asset-tag required"})
+                ineligible_orders.append(
+                    {"order": th, "reason": "not asset-tag required"}
+                )
                 continue
 
             eligible_orders.append(th)
@@ -1386,7 +1529,9 @@ def upload_canopy_orders():
                 missing_orders.append(th)
                 continue
 
-            tag_data = dict(cast(dict[str, Any], getattr(order, "tag_data", None) or {}))
+            tag_data = dict(
+                cast(dict[str, Any], getattr(order, "tag_data", None) or {})
+            )
             for key, value in request_metadata.items():
                 tag_data[key] = value
 
@@ -1398,17 +1543,19 @@ def upload_canopy_orders():
     finally:
         db.close()
 
-    return jsonify({
-        "success": True,
-        "filename": result.get("filename"),
-        "uploaded_url": uploaded_url,
-        "count": len(eligible_orders),
-        "teams_notified": teams_notified,
-        "updated_orders": updated_orders,
-        "missing_orders": missing_orders,
-        "eligible_orders": eligible_orders,
-        "ineligible_orders": [],
-    })
+    return jsonify(
+        {
+            "success": True,
+            "filename": result.get("filename"),
+            "uploaded_url": uploaded_url,
+            "count": len(eligible_orders),
+            "teams_notified": teams_notified,
+            "updated_orders": updated_orders,
+            "missing_orders": missing_orders,
+            "eligible_orders": eligible_orders,
+            "ineligible_orders": [],
+        }
+    )
 
 
 def _normalize_canopyorders_bypass_value(raw_value: str) -> str:
@@ -1479,7 +1626,9 @@ def upload_canopy_orders_bypass():
     uploaded_url = result.get("uploaded_url")
     teams_notified = False
     if uploaded_url:
-        teams_notified = uploader.send_teams_notification(normalized_orders, uploaded_url)
+        teams_notified = uploader.send_teams_notification(
+            normalized_orders, uploaded_url
+        )
 
     updated_orders = 0
     missing_orders: list[str] = []
@@ -1503,7 +1652,9 @@ def upload_canopy_orders_bypass():
                     missing_orders.append(th)
                     continue
 
-                tag_data = dict(cast(dict[str, Any], getattr(order, "tag_data", None) or {}))
+                tag_data = dict(
+                    cast(dict[str, Any], getattr(order, "tag_data", None) or {})
+                )
                 for key, value in request_metadata.items():
                     tag_data[key] = value
                 setattr(order, "tag_data", tag_data)
@@ -1513,21 +1664,25 @@ def upload_canopy_orders_bypass():
                 try:
                     db.commit()
                 except Exception:
-                    logger.exception("Failed to persist CanopyOrders bypass request metadata")
+                    logger.exception(
+                        "Failed to persist CanopyOrders bypass request metadata"
+                    )
                     db.rollback()
                     updated_orders = 0
         finally:
             db.close()
 
-    return jsonify({
-        "success": True,
-        "filename": result.get("filename"),
-        "uploaded_url": uploaded_url,
-        "count": len(normalized_orders),
-        "teams_notified": teams_notified,
-        "updated_orders": updated_orders,
-        "missing_orders": missing_orders,
-    })
+    return jsonify(
+        {
+            "success": True,
+            "filename": result.get("filename"),
+            "uploaded_url": uploaded_url,
+            "count": len(normalized_orders),
+            "teams_notified": teams_notified,
+            "updated_orders": updated_orders,
+            "missing_orders": missing_orders,
+        }
+    )
 
 
 @bp.route("/deploy", methods=["POST"])
@@ -1820,11 +1975,27 @@ def _get_inflow_sync_status():
             "details": "Polling sync disabled (using webhooks only)",
         }
 
-    interval = settings.inflow_polling_sync_interval_minutes or 5
+    interval = 5
+    details = f"Polling every {interval} minutes"
+
+    db = get_db_session()
+    try:
+        has_active_webhook = bool(
+            db.query(InflowWebhook)
+            .filter(InflowWebhook.status == WebhookStatus.active)
+            .first()
+        )
+    finally:
+        db.close()
+
+    if has_active_webhook and settings.inflow_webhook_enabled:
+        interval = 30
+        details = f"Polling every {interval} minutes (webhook backup mode)"
+
     return {
         "name": "Inflow Sync",
         "enabled": True,
         "configured": True,
         "status": "active",
-        "details": f"Polling every {interval} minutes",
+        "details": details,
     }

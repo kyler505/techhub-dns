@@ -80,11 +80,20 @@ export default function OrderDetailPage() {
     const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
         try {
-            await ordersApi.updateOrderStatus(order.id, { status: newStatus, reason });
+            await ordersApi.updateOrderStatus(order.id, {
+                status: newStatus,
+                reason,
+                expected_updated_at: order.updated_at,
+            });
             setTransitioningStatus(null);
             loadOrder();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to update status:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                loadOrder();
+                return;
+            }
             toast.error("Failed to update order status");
         }
     };

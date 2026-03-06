@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # CORS
     frontend_url: str = "http://localhost:5173"
+    cors_allowed_origins: Optional[str] = None
 
     # Auth (structure only)
     secret_key: str = "change-me-in-production"
@@ -126,8 +127,23 @@ class Settings(BaseSettings):
         """
         return self._parse_admin_emails(self.admin_emails)
 
+    def get_cors_allowed_origins(self) -> list[str]:
+        origins = self._parse_string_list(self.cors_allowed_origins)
+        if origins:
+            return origins
+
+        frontend_url = (self.frontend_url or "").strip()
+        if frontend_url:
+            return [frontend_url]
+
+        return ["http://localhost:5173"]
+
     @staticmethod
     def _parse_admin_emails(raw_value: Optional[str]) -> list[str]:
+        return Settings._parse_string_list(raw_value)
+
+    @staticmethod
+    def _parse_string_list(raw_value: Optional[str]) -> list[str]:
         if raw_value is None:
             return []
 

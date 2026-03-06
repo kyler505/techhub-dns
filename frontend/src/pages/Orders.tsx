@@ -103,12 +103,22 @@ export default function Orders() {
         newStatus: OrderStatus,
         reason?: string
     ) => {
+        const currentOrder = orders.find((o) => o.id === orderId);
         try {
-            await ordersApi.updateOrderStatus(orderId, { status: newStatus, reason });
+            await ordersApi.updateOrderStatus(orderId, {
+                status: newStatus,
+                reason,
+                expected_updated_at: currentOrder?.updated_at,
+            });
             setTransitioningOrder(null);
             loadOrders();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to update status:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest queue.");
+                loadOrders();
+                return;
+            }
             toast.error("Failed to update order status");
         }
     };
