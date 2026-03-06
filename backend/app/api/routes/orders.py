@@ -372,8 +372,13 @@ def tag_order(order_id):
         technician = current_user if current_user != "system" else tag_update.technician
 
         order = service.mark_asset_tagged(
-            order_id=order_id, tag_ids=tag_update.tag_ids, technician=technician
+            order_id=order_id,
+            tag_ids=tag_update.tag_ids,
+            technician=technician,
+            expected_updated_at=tag_update.expected_updated_at,
         )
+
+        threading.Thread(target=_broadcast_orders_sync).start()
         return jsonify(OrderResponse.model_validate(order).model_dump())
 
 
@@ -392,7 +397,13 @@ def generate_picklist(order_id):
             current_user if current_user != "system" else gen_request.generated_by
         )
 
-        order = service.generate_picklist(order_id=order_id, generated_by=generated_by)
+        order = service.generate_picklist(
+            order_id=order_id,
+            generated_by=generated_by,
+            expected_updated_at=gen_request.expected_updated_at,
+        )
+
+        threading.Thread(target=_broadcast_orders_sync).start()
         return jsonify(OrderResponse.model_validate(order).model_dump())
 
 
@@ -410,7 +421,10 @@ def submit_qa(order_id):
         technician = current_user if current_user != "system" else submission.technician
 
         order = service.submit_qa(
-            order_id=order_id, qa_data=submission.responses, technician=technician
+            order_id=order_id,
+            qa_data=submission.responses,
+            technician=technician,
+            expected_updated_at=submission.expected_updated_at,
         )
 
         # Broadcast order update via SocketIO
@@ -502,7 +516,9 @@ def sign_order(order_id):
     with get_db() as db:
         service = OrderService(db)
 
-        order = service.get_order_by_id(order_id)
+        order = (
+            db.query(Order).filter(Order.id == str(order_id)).with_for_update().first()
+        )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -516,8 +532,10 @@ def sign_order(order_id):
             )
 
         signature_data = SignatureData(**data)
+        service.assert_not_stale(order, signature_data.expected_updated_at)
         bundled_path = service.generate_bundled_documents(
-            order_id=order_id, signature_data=signature_data.model_dump()
+            order_id=order_id,
+            signature_data=signature_data.model_dump(exclude={"expected_updated_at"}),
         )
 
         from datetime import datetime
@@ -559,6 +577,7 @@ def update_shipping_workflow(order_id):
             carrier_name=req.carrier_name,
             tracking_number=req.tracking_number,
             updated_by=req.updated_by,
+            expected_updated_at=req.expected_updated_at,
         )
 
         # Broadcast order update via SocketIO
