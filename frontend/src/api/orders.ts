@@ -50,19 +50,19 @@ export const ordersApi = {
     return response.data;
   },
 
-  tagOrder: async (orderId: string, payload: { tag_ids: string[]; technician?: string }) => {
+  tagOrder: async (orderId: string, payload: { tag_ids: string[]; technician?: string; expected_updated_at?: string }) => {
     const response = await apiClient.post<Order>(`/orders/${orderId}/tag`, payload);
     return response.data;
   },
 
-  generatePicklist: async (orderId: string, payload?: { generated_by?: string }) => {
+  generatePicklist: async (orderId: string, payload?: { generated_by?: string; expected_updated_at?: string }) => {
     const response = await apiClient.post<Order>(`/orders/${orderId}/picklist`, payload || {});
     return response.data;
   },
 
   submitQa: async (
     orderId: string,
-    payload: { responses: Record<string, any>; technician?: string }
+    payload: { responses: Record<string, any>; technician?: string; expected_updated_at?: string }
   ) => {
     const response = await apiClient.post<Order>(`/orders/${orderId}/qa`, payload);
     return response.data;
@@ -71,6 +71,7 @@ export const ordersApi = {
   signOrder: async (orderId: string, signatureData?: {
     signature_image: string;
     placements?: Array<{ page_number: number; x: number; y: number; width: number; height: number }>;
+    expected_updated_at?: string;
     page_number?: number;
     position?: { x: number; y: number }
   }) => {
@@ -85,6 +86,7 @@ export const ordersApi = {
       carrier_name?: string;
       tracking_number?: string;
       updated_by?: string;
+      expected_updated_at?: string;
     }
   ): Promise<Order> => {
     const response = await apiClient.patch<Order>(`/orders/${orderId}/shipping-workflow`, payload);
