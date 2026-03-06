@@ -7,10 +7,12 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy import and_, func, inspect, or_, select, union_all
 from sqlalchemy.orm import Session
 
-from app.api.auth_middleware import require_admin
-from app.database import engine, get_db
+from app.api.auth_middleware import get_rate_limit_snapshot, require_admin
+from app.config import settings
+from app.database import engine, get_db, get_runtime_db_pool_settings
 from app.models.audit_log import AuditLog, SystemAuditLog, SystemAuditLogArchive
 from app.models.delivery_run import DeliveryRun
+from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.models.order import Order
 from app.models.session import Session as UserSession
 from app.models.user import User
@@ -91,7 +93,9 @@ def _is_sensitive_column_name(name: str) -> bool:
     return any(token in lowered for token in _SENSITIVE_COLUMN_TOKENS)
 
 
-def _truncate_json(value: Any, *, max_depth: int = 4, max_items: int = 50, max_string_len: int = 500) -> Any:
+def _truncate_json(
+    value: Any, *, max_depth: int = 4, max_items: int = 50, max_string_len: int = 500
+) -> Any:
     if max_depth <= 0:
         return "<truncated>"
 
@@ -108,7 +112,15 @@ def _truncate_json(value: Any, *, max_depth: int = 4, max_items: int = 50, max_s
 
     if isinstance(value, list):
         items = value[:max_items]
-        return [_truncate_json(v, max_depth=max_depth - 1, max_items=max_items, max_string_len=max_string_len) for v in items]
+        return [
+            _truncate_json(
+                v,
+                max_depth=max_depth - 1,
+                max_items=max_items,
+                max_string_len=max_string_len,
+            )
+            for v in items
+        ]
 
     if isinstance(value, dict):
         out: dict[str, Any] = {}
@@ -117,7 +129,12 @@ def _truncate_json(value: Any, *, max_depth: int = 4, max_items: int = 50, max_s
                 out["<truncated>"] = f"{len(value) - max_items} more item(s)"
                 break
             key = str(k)
-            out[key] = _truncate_json(v, max_depth=max_depth - 1, max_items=max_items, max_string_len=max_string_len)
+            out[key] = _truncate_json(
+                v,
+                max_depth=max_depth - 1,
+                max_items=max_items,
+                max_string_len=max_string_len,
+            )
         return out
 
     # Fallback: ensure JSON-serializable
@@ -189,7 +206,9 @@ def _system_audit_select(model):
 def get_table_stats():
     """Return allowlisted table row counts and freshness timestamps."""
 
-    def table_stat(db: Session, *, name: str, row_count_query, last_updated_query=None) -> dict[str, Any]:
+    def table_stat(
+        db: Session, *, name: str, row_count_query, last_updated_query=None
+    ) -> dict[str, Any]:
         row_count = int(row_count_query.scalar() or 0)
         last_updated_value = None
         if last_updated_query is not None:
@@ -197,7 +216,9 @@ def get_table_stats():
         return {
             "table": name,
             "row_count": row_count,
-            "last_updated": _to_iso_z(last_updated_value) if isinstance(last_updated_value, datetime) else None,
+            "last_updated": _to_iso_z(last_updated_value)
+            if isinstance(last_updated_value, datetime)
+            else None,
         }
 
     with get_db() as db:
@@ -208,7 +229,9 @@ def get_table_stats():
                 db,
                 name="orders",
                 row_count_query=db.query(func.count()).select_from(Order),
-                last_updated_query=db.query(func.max(Order.updated_at)).select_from(Order),
+                last_updated_query=db.query(func.max(Order.updated_at)).select_from(
+                    Order
+                ),
             )
         )
         tables.append(
@@ -216,7 +239,9 @@ def get_table_stats():
                 db,
                 name="audit_logs",
                 row_count_query=db.query(func.count()).select_from(AuditLog),
-                last_updated_query=db.query(func.max(AuditLog.timestamp)).select_from(AuditLog),
+                last_updated_query=db.query(func.max(AuditLog.timestamp)).select_from(
+                    AuditLog
+                ),
             )
         )
         tables.append(
@@ -224,15 +249,21 @@ def get_table_stats():
                 db,
                 name="system_audit_logs",
                 row_count_query=db.query(func.count()).select_from(SystemAuditLog),
-                last_updated_query=db.query(func.max(SystemAuditLog.timestamp)).select_from(SystemAuditLog),
+                last_updated_query=db.query(
+                    func.max(SystemAuditLog.timestamp)
+                ).select_from(SystemAuditLog),
             )
         )
         tables.append(
             table_stat(
                 db,
                 name="system_audit_logs_archive",
-                row_count_query=db.query(func.count()).select_from(SystemAuditLogArchive),
-                last_updated_query=db.query(func.max(SystemAuditLogArchive.timestamp)).select_from(SystemAuditLogArchive),
+                row_count_query=db.query(func.count()).select_from(
+                    SystemAuditLogArchive
+                ),
+                last_updated_query=db.query(
+                    func.max(SystemAuditLogArchive.timestamp)
+                ).select_from(SystemAuditLogArchive),
             )
         )
         tables.append(
@@ -240,7 +271,9 @@ def get_table_stats():
                 db,
                 name="delivery_runs",
                 row_count_query=db.query(func.count()).select_from(DeliveryRun),
-                last_updated_query=db.query(func.max(DeliveryRun.updated_at)).select_from(DeliveryRun),
+                last_updated_query=db.query(
+                    func.max(DeliveryRun.updated_at)
+                ).select_from(DeliveryRun),
             )
         )
         tables.append(
@@ -248,7 +281,9 @@ def get_table_stats():
                 db,
                 name="users",
                 row_count_query=db.query(func.count()).select_from(User),
-                last_updated_query=db.query(func.max(User.last_login_at)).select_from(User),
+                last_updated_query=db.query(func.max(User.last_login_at)).select_from(
+                    User
+                ),
             )
         )
         tables.append(
@@ -256,11 +291,15 @@ def get_table_stats():
                 db,
                 name="sessions",
                 row_count_query=db.query(func.count()).select_from(UserSession),
-                last_updated_query=db.query(func.max(UserSession.last_seen_at)).select_from(UserSession),
+                last_updated_query=db.query(
+                    func.max(UserSession.last_seen_at)
+                ).select_from(UserSession),
             )
         )
 
-    return jsonify({"generated_at": _to_iso_z(datetime.now(tz=timezone.utc)), "tables": tables})
+    return jsonify(
+        {"generated_at": _to_iso_z(datetime.now(tz=timezone.utc)), "tables": tables}
+    )
 
 
 @bp.route("/schema-summary", methods=["GET"])
@@ -289,7 +328,10 @@ def get_schema_summary():
             # Table missing in this environment; skip quietly.
             continue
 
-        pk_columns = set((inspector.get_pk_constraint(table_name) or {}).get("constrained_columns") or [])
+        pk_columns = set(
+            (inspector.get_pk_constraint(table_name) or {}).get("constrained_columns")
+            or []
+        )
         fk_columns: set[str] = set()
         foreign_keys = inspector.get_foreign_keys(table_name) or []
         for fk in foreign_keys:
@@ -380,11 +422,16 @@ def get_system_audit():
                 query = query.filter(
                     or_(
                         SystemAuditLog.timestamp < cursor_ts,
-                        and_(SystemAuditLog.timestamp == cursor_ts, SystemAuditLog.id < cursor_id),
+                        and_(
+                            SystemAuditLog.timestamp == cursor_ts,
+                            SystemAuditLog.id < cursor_id,
+                        ),
                     )
                 )
 
-            query = query.order_by(SystemAuditLog.timestamp.desc(), SystemAuditLog.id.desc()).limit(limit + 1)
+            query = query.order_by(
+                SystemAuditLog.timestamp.desc(), SystemAuditLog.id.desc()
+            ).limit(limit + 1)
             rows_any: list[Any] = query.all()
         else:
             hot = _system_audit_select(SystemAuditLog)
@@ -407,11 +454,15 @@ def get_system_audit():
                 stmt = stmt.where(
                     or_(
                         combined.c.timestamp < cursor_ts,
-                        and_(combined.c.timestamp == cursor_ts, combined.c.id < cursor_id),
+                        and_(
+                            combined.c.timestamp == cursor_ts, combined.c.id < cursor_id
+                        ),
                     )
                 )
 
-            stmt = stmt.order_by(combined.c.timestamp.desc(), combined.c.id.desc()).limit(limit + 1)
+            stmt = stmt.order_by(
+                combined.c.timestamp.desc(), combined.c.id.desc()
+            ).limit(limit + 1)
             rows_any = [r._mapping for r in db.execute(stmt).all()]
 
         rows = rows_any
@@ -445,7 +496,9 @@ def get_system_audit():
                 )
                 for oid, order_number in order_rows_fallback:
                     if oid and order_number:
-                        order_number_by_id.setdefault(str(oid).lower(), str(order_number))
+                        order_number_by_id.setdefault(
+                            str(oid).lower(), str(order_number)
+                        )
 
         next_cursor: Optional[str] = None
         if len(rows) > limit:
@@ -463,15 +516,23 @@ def get_system_audit():
             row_user_agent = _row_get(row, "user_agent")
             item: dict[str, Any] = {
                 "id": _row_get(row, "id"),
-                "timestamp": _to_iso_z(row_ts if isinstance(row_ts, datetime) else None),
+                "timestamp": _to_iso_z(
+                    row_ts if isinstance(row_ts, datetime) else None
+                ),
                 "entity_type": _row_get(row, "entity_type"),
                 "entity_id": _row_get(row, "entity_id"),
                 "action": _row_get(row, "action"),
-                "description": _truncate_string(row_description if isinstance(row_description, str) else None, max_len=2000),
+                "description": _truncate_string(
+                    row_description if isinstance(row_description, str) else None,
+                    max_len=2000,
+                ),
                 "user_id": (_row_get(row, "user_id") or None),
                 "user_role": (_row_get(row, "user_role") or None),
                 "ip": (_row_get(row, "ip_address") or None),
-                "user_agent": _truncate_string(row_user_agent if isinstance(row_user_agent, str) else None, max_len=500),
+                "user_agent": _truncate_string(
+                    row_user_agent if isinstance(row_user_agent, str) else None,
+                    max_len=500,
+                ),
             }
 
             if str(item.get("entity_type") or "").strip().lower() == "order":
@@ -486,3 +547,73 @@ def get_system_audit():
             items.append(item)
 
     return jsonify({"items": items, "next_cursor": next_cursor})
+
+
+@bp.route("/runtime-summary", methods=["GET"])
+@require_admin
+def get_runtime_summary():
+    """Return lightweight live runtime diagnostics for admin troubleshooting."""
+    generated_at = _to_iso_z(datetime.now(tz=timezone.utc))
+    pool_settings = get_runtime_db_pool_settings()
+
+    with get_db() as db:
+        active_webhook = (
+            db.query(InflowWebhook)
+            .filter(InflowWebhook.status == WebhookStatus.active)
+            .order_by(InflowWebhook.updated_at.desc())
+            .first()
+        )
+        active_sessions = int(
+            db.query(func.count())
+            .select_from(UserSession)
+            .filter(UserSession.expires_at > datetime.utcnow())
+            .scalar()
+            or 0
+        )
+        active_delivery_runs = int(
+            db.query(func.count())
+            .select_from(DeliveryRun)
+            .filter(DeliveryRun.status == "active")
+            .scalar()
+            or 0
+        )
+        open_orders = int(
+            db.query(func.count())
+            .select_from(Order)
+            .filter(Order.status.notin_(["delivered", "cancelled"]))
+            .scalar()
+            or 0
+        )
+
+    effective_poll_interval_minutes = None
+    if settings.inflow_polling_sync_enabled:
+        effective_poll_interval_minutes = (
+            30 if (active_webhook and settings.inflow_webhook_enabled) else 5
+        )
+
+    return jsonify(
+        {
+            "generated_at": generated_at,
+            "app": {
+                "scheduler_enabled": settings.scheduler_enabled,
+                "inflow_polling_sync_enabled": settings.inflow_polling_sync_enabled,
+                "inflow_webhook_enabled": settings.inflow_webhook_enabled,
+                "cors_allowed_origins": settings.get_cors_allowed_origins(),
+            },
+            "database": pool_settings,
+            "rate_limits": get_rate_limit_snapshot(),
+            "workload": {
+                "active_sessions": active_sessions,
+                "active_delivery_runs": active_delivery_runs,
+                "open_orders": open_orders,
+            },
+            "inflow": {
+                "active_webhook": bool(active_webhook),
+                "webhook_id": active_webhook.webhook_id if active_webhook else None,
+                "last_webhook_received_at": _to_iso_z(
+                    active_webhook.last_received_at if active_webhook else None
+                ),
+                "effective_poll_interval_minutes": effective_poll_interval_minutes,
+            },
+        }
+    )
