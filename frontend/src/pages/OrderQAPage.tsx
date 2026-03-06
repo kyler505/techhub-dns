@@ -137,6 +137,7 @@ export default function OrderQAPage() {
                     qaSignature: user?.display_name || user?.email || "System", // Force auto-assign signature
                 },
                 technician: user?.email || "system", // Fallback for types, backend ignores this for auth user
+                expected_updated_at: order.updated_at,
             });
 
             // Also save locally for UI state (optional history)
@@ -150,8 +151,13 @@ export default function OrderQAPage() {
 
             toast.success("QA checklist submitted successfully!");
             navigate("/order-qa"); // Go back to dashboard
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to submit QA:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                await loadOrder(order.id);
+                return;
+            }
             toast.error("Failed to submit QA checklist. Please try again.");
         }
     };

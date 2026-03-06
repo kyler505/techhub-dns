@@ -21,8 +21,16 @@ from app.utils.pdf_helpers import wrap_text, check_page_break, filter_picklines
 from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
 
-from app.utils.building_mapper import get_building_abbreviation, extract_building_code_from_location
-from app.utils.exceptions import NotFoundError, ValidationError, StatusTransitionError, FileOperationError
+from app.utils.building_mapper import (
+    get_building_abbreviation,
+    extract_building_code_from_location,
+)
+from app.utils.exceptions import (
+    NotFoundError,
+    ValidationError,
+    StatusTransitionError,
+    FileOperationError,
+)
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -40,9 +48,11 @@ class OrderService:
         if not identifier or identifier.lower() == "system":
             return None
 
-        user = self.db.query(User).filter(
-            or_(User.id == identifier, User.email == identifier)
-        ).first()
+        user = (
+            self.db.query(User)
+            .filter(or_(User.id == identifier, User.email == identifier))
+            .first()
+        )
         return user.id if user else None
 
     def _record_status_history(
@@ -66,9 +76,10 @@ class OrderService:
         )
         self.db.add(history_entry)
 
-
     def _prep_steps_complete(self, order: Order) -> bool:
-        complete = bool(order.tagged_at and order.picklist_generated_at and order.qa_completed_at)
+        complete = bool(
+            order.tagged_at and order.picklist_generated_at and order.qa_completed_at
+        )
         if not complete:
             steps = self._get_incomplete_steps(order)
             logger.info(f"Order {order.inflow_order_id} prep steps incomplete: {steps}")
@@ -80,7 +91,11 @@ class OrderService:
             return False
 
         shipping_addr_obj = order.inflow_data.get("shippingAddress", {})
-        city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+        city = (
+            shipping_addr_obj.get("city", "").strip()
+            if shipping_addr_obj.get("city")
+            else ""
+        )
 
         if city:
             city_upper = city.upper()
@@ -95,12 +110,20 @@ class OrderService:
         self,
         order_id: Union[UUID, str],
         tag_ids: List[str],
-        technician: Optional[str] = None
+        technician: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
-        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
 
         tag_data = dict(order.tag_data or {})
         tag_data["tag_ids"] = tag_ids
@@ -120,10 +143,7 @@ class OrderService:
             action="asset_tagged",
             user_id=technician or "unknown",
             description=f"Order tagged with {len(tag_ids)} asset tags",
-            audit_metadata={
-                "tag_ids": tag_ids,
-                "tagged_by": technician
-            }
+            audit_metadata={"tag_ids": tag_ids, "tagged_by": technician},
         )
 
         return order
@@ -131,15 +151,25 @@ class OrderService:
     def generate_picklist(
         self,
         order_id: Union[UUID, str],
-        generated_by: Optional[str] = None
+        generated_by: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
-        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
+        self.assert_not_stale(order, expected_updated_at)
+
         if not order.tagged_at:
-            raise ValidationError("Asset tagging must be completed before generating a picklist")
+            raise ValidationError(
+                "Asset tagging must be completed before generating a picklist"
+            )
 
         if not order.inflow_data:
             raise ValidationError("Order must have inFlow data to generate picklist")
@@ -159,6 +189,7 @@ class OrderService:
 
         # Generate the actual picklist PDF from inFlow data using PicklistService
         from app.services.picklist_service import PicklistService
+
         picklist_svc = PicklistService()
         picklist_svc.generate_picklist_pdf(order.inflow_data, str(destination))
 
@@ -169,15 +200,23 @@ class OrderService:
             """Background task for SharePoint upload"""
             try:
                 from app.services.sharepoint_service import get_sharepoint_service
+
                 sp_service = get_sharepoint_service()
                 if sp_service.is_enabled:
                     sp_service.upload_pdf(str(destination), "picklists", filename)
-                    logger.info(f"[Background] Picklist uploaded to SharePoint: {filename}")
+                    logger.info(
+                        f"[Background] Picklist uploaded to SharePoint: {filename}"
+                    )
             except Exception as e:
-                logger.warning(f"[Background] SharePoint upload failed for picklist: {e}")
+                logger.warning(
+                    f"[Background] SharePoint upload failed for picklist: {e}"
+                )
 
         from app.services.background_tasks import run_in_background
-        run_in_background(async_sharepoint_upload, task_name=f"upload_picklist_{filename}")
+
+        run_in_background(
+            async_sharepoint_upload, task_name=f"upload_picklist_{filename}"
+        )
 
         order.picklist_generated_at = datetime.utcnow()
         order.picklist_generated_by = generated_by
@@ -197,8 +236,8 @@ class OrderService:
             audit_metadata={
                 "filename": filename,
                 "generated_by": generated_by,
-                "file_path": str(destination)
-            }
+                "file_path": str(destination),
+            },
         )
 
         # Send Order Details email to recipient (after picklist, before QA)
@@ -217,7 +256,7 @@ class OrderService:
                 from_status=old_status,
                 to_status=OrderStatus.QA.value,
                 reason="Picklist generated - moved to QA queue",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             self.db.add(audit_log)
             self._record_status_history(
@@ -238,8 +277,8 @@ class OrderService:
                 description="Order moved to QA queue after picklist generation",
                 audit_metadata={
                     "from_status": OrderStatus.PICKED.value,
-                    "to_status": OrderStatus.QA.value
-                }
+                    "to_status": OrderStatus.QA.value,
+                },
             )
 
         return order
@@ -248,56 +287,75 @@ class OrderService:
         self,
         order_id: Union[UUID, str],
         qa_data: Dict[str, Any],
-        technician: Optional[str] = None
+        technician: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
-        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
+        self.assert_not_stale(order, expected_updated_at)
+
         if not order.picklist_generated_at:
-            raise ValidationError("Picklist must be generated before QA can be completed")
+            raise ValidationError(
+                "Picklist must be generated before QA can be completed"
+            )
 
         # Inject authenticated technician into QA data if provided
         # This ensures consistency between the audit log and the stored form data
         if technician:
-            qa_data['technician'] = technician
+            qa_data["technician"] = technician
 
         # Validate QA data format - must use detailed shipping QA format
         required_fields = [
-            'orderNumber', 'technician', 'qaSignature', 'method',
-            'verifyAssetTagSerialMatch', 'verifyOrderDetailsTemplateSent',
-            'verifyPackagedProperly', 'verifyPackingSlipSerialsMatch',
-            'verifyElectronicPackingSlipSaved', 'verifyBoxesLabeledCorrectly'
+            "orderNumber",
+            "technician",
+            "qaSignature",
+            "method",
+            "verifyAssetTagSerialMatch",
+            "verifyOrderDetailsTemplateSent",
+            "verifyPackagedProperly",
+            "verifyPackingSlipSerialsMatch",
+            "verifyElectronicPackingSlipSaved",
+            "verifyBoxesLabeledCorrectly",
         ]
 
         missing_fields = [field for field in required_fields if field not in qa_data]
         if missing_fields:
             raise ValidationError(
                 f"QA data missing required fields for detailed format: {', '.join(missing_fields)}",
-                details={"missing_fields": missing_fields}
+                details={"missing_fields": missing_fields},
             )
 
         # Validate method is either "Delivery" or "Shipping"
-        if qa_data.get('method') not in ['Delivery', 'Shipping']:
+        if qa_data.get("method") not in ["Delivery", "Shipping"]:
             raise ValidationError(
                 "QA method must be either 'Delivery' or 'Shipping'",
                 field="method",
-                details={"provided_method": qa_data.get('method')}
+                details={"provided_method": qa_data.get("method")},
             )
 
         # Validate boolean fields are boolean
         boolean_fields = [
-            'verifyAssetTagSerialMatch', 'verifyOrderDetailsTemplateSent',
-            'verifyPackagedProperly', 'verifyPackingSlipSerialsMatch',
-            'verifyElectronicPackingSlipSaved', 'verifyBoxesLabeledCorrectly'
+            "verifyAssetTagSerialMatch",
+            "verifyOrderDetailsTemplateSent",
+            "verifyPackagedProperly",
+            "verifyPackingSlipSerialsMatch",
+            "verifyElectronicPackingSlipSaved",
+            "verifyBoxesLabeledCorrectly",
         ]
         for field in boolean_fields:
             if not isinstance(qa_data.get(field), bool):
                 raise ValidationError(
                     f"QA field '{field}' must be a boolean value",
                     field=field,
-                    details={"field_type": type(qa_data.get(field)).__name__}
+                    details={"field_type": type(qa_data.get(field)).__name__},
                 )
 
         qa_dir = self._storage_path("qa")
@@ -312,21 +370,23 @@ class OrderService:
             "responses": qa_data,
         }
         qa_file.write_text(
-            json.dumps(qa_payload, indent=2, sort_keys=True),
-            encoding="utf-8"
+            json.dumps(qa_payload, indent=2, sort_keys=True), encoding="utf-8"
         )
 
         # Upload to SharePoint if enabled
         qa_path = str(qa_file)
         try:
             from app.services.sharepoint_service import get_sharepoint_service
+
             sp_service = get_sharepoint_service()
             if sp_service.is_enabled:
                 sp_url = sp_service.upload_json(qa_payload, "qa", qa_filename)
                 qa_path = sp_url
                 logger.info(f"QA data uploaded to SharePoint: {sp_url}")
         except Exception as e:
-            logger.warning(f"SharePoint upload failed for QA data, using local path: {e}")
+            logger.warning(
+                f"SharePoint upload failed for QA data, using local path: {e}"
+            )
 
         # Update order object (BUT DO NOT COMMIT YET to keep transition atomic)
         order.qa_completed_at = datetime.utcnow()
@@ -346,11 +406,9 @@ class OrderService:
             audit_metadata={
                 "qa_method": qa_data.get("method"),
                 "completed_by": technician,
-                "qa_file_path": str(qa_file)
-            }
+                "qa_file_path": str(qa_file),
+            },
         )
-
-
 
         # Automatically transition status based on QA method
         target_status = None
@@ -364,7 +422,9 @@ class OrderService:
             target_status = OrderStatus.SHIPPING
 
         if target_status:
-            logger.info(f"Triggering auto-transition for order {order.inflow_order_id} to {target_status.value}")
+            logger.info(
+                f"Triggering auto-transition for order {order.inflow_order_id} to {target_status.value}"
+            )
             try:
                 # We use transition_status to ensure valid transitions and audit logging.
                 # It will handle the final commit.
@@ -372,10 +432,12 @@ class OrderService:
                     order_id=order.id,
                     new_status=target_status,
                     changed_by=technician,
-                    reason=f"QA passed via {method} method"
+                    reason=f"QA passed via {method} method",
                 )
             except Exception as e:
-                logger.error(f"Auto-transition failed for order {order.inflow_order_id}: {e}")
+                logger.error(
+                    f"Auto-transition failed for order {order.inflow_order_id}: {e}"
+                )
                 # We do NOT commit the QA data if transition fails to maintain atomicity
                 # provided this whole method is wrapped in a transaction (which it is by default in Flask context).
                 # But to be explicit and safe:
@@ -392,7 +454,7 @@ class OrderService:
         status: Optional[OrderStatus] = None,
         search: Optional[str] = None,
         skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
     ) -> tuple[List[Order], int]:
         """Get orders with filters and pagination"""
         query = self.db.query(Order)
@@ -405,7 +467,7 @@ class OrderService:
                 Order.inflow_order_id.ilike(f"%{search}%"),
                 Order.recipient_name.ilike(f"%{search}%"),
                 Order.delivery_location.ilike(f"%{search}%"),
-                Order.po_number.ilike(f"%{search}%")
+                Order.po_number.ilike(f"%{search}%"),
             )
             query = query.filter(search_filter)
 
@@ -422,21 +484,30 @@ class OrderService:
     def get_order_detail(self, order_id: Union[UUID, str]) -> Optional[Order]:
         """Get order with related data (audit logs, notifications)"""
         order_id_str = str(order_id)
-        return self.db.query(Order).options(
-            selectinload(Order.audit_logs),
-
-        ).filter(Order.id == order_id_str).first()
+        return (
+            self.db.query(Order)
+            .options(
+                selectinload(Order.audit_logs),
+            )
+            .filter(Order.id == order_id_str)
+            .first()
+        )
 
     def transition_status(
         self,
         order_id: Union[UUID, str],
         new_status: OrderStatus,
         changed_by: Optional[str] = None,
-        reason: Optional[str] = None
+        reason: Optional[str] = None,
     ) -> Order:
         """Transition order status with validation and audit logging"""
         order_id_str = str(order_id)
-        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
 
         if not order:
             raise NotFoundError("Order", str(order_id))
@@ -450,42 +521,62 @@ class OrderService:
 
         if new_status == OrderStatus.PRE_DELIVERY:
             # Log exact state for debugging
-            logger.info(f"Checking PRE_DELIVERY requirements for {order.inflow_order_id}: tagged={bool(order.tagged_at)}, picklist={bool(order.picklist_generated_at)}, qa={bool(order.qa_completed_at)}")
+            logger.info(
+                f"Checking PRE_DELIVERY requirements for {order.inflow_order_id}: tagged={bool(order.tagged_at)}, picklist={bool(order.picklist_generated_at)}, qa={bool(order.qa_completed_at)}"
+            )
 
             if not self._prep_steps_complete(order):
                 raise ValidationError(
                     "Asset tagging, picklist, and QA must be completed before Pre-Delivery",
-                    details={"missing_steps": self._get_incomplete_steps(order), "order_id": order.inflow_order_id}
+                    details={
+                        "missing_steps": self._get_incomplete_steps(order),
+                        "order_id": order.inflow_order_id,
+                    },
                 )
 
         if new_status in (OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING):
             if not qa_method:
                 raise ValidationError(
                     "QA method must be set before routing an order to Delivery or Shipping",
-                    field="qa_method"
+                    field="qa_method",
                 )
             if new_status == OrderStatus.IN_DELIVERY and qa_method != "delivery":
                 raise ValidationError(
                     "Order QA method must be Delivery to transition to In Delivery",
                     field="qa_method",
-                    details={"qa_method": order.qa_method, "requested_status": new_status.value}
+                    details={
+                        "qa_method": order.qa_method,
+                        "requested_status": new_status.value,
+                    },
                 )
             if new_status == OrderStatus.SHIPPING and qa_method != "shipping":
                 raise ValidationError(
                     "Order QA method must be Shipping to transition to Shipping",
                     field="qa_method",
-                    details={"qa_method": order.qa_method, "requested_status": new_status.value}
+                    details={
+                        "qa_method": order.qa_method,
+                        "requested_status": new_status.value,
+                    },
                 )
 
-        if new_status == OrderStatus.IN_DELIVERY and old_status == OrderStatus.PRE_DELIVERY:
+        if (
+            new_status == OrderStatus.IN_DELIVERY
+            and old_status == OrderStatus.PRE_DELIVERY
+        ):
             if not order.delivery_run_id:
-                raise ValidationError("Order must be assigned to a delivery run before transitioning to In-Delivery")
+                raise ValidationError(
+                    "Order must be assigned to a delivery run before transitioning to In-Delivery"
+                )
             if self._is_shipping_order(order):
-                raise ValidationError("Shipping orders cannot be transitioned to In-Delivery")
+                raise ValidationError(
+                    "Shipping orders cannot be transitioned to In-Delivery"
+                )
 
         if new_status == OrderStatus.SHIPPING:
             if not self._is_shipping_order(order):
-                raise ValidationError("Only shipping orders (outside Bryan/College Station) can be transitioned to Shipping")
+                raise ValidationError(
+                    "Only shipping orders (outside Bryan/College Station) can be transitioned to Shipping"
+                )
 
         # Require reason for Issue status
         if new_status == OrderStatus.ISSUE and not reason:
@@ -505,7 +596,7 @@ class OrderService:
             from_status=old_status,
             to_status=new_status.value,
             reason=reason,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
         self.db.add(audit_log)
         self._record_status_history(
@@ -527,13 +618,36 @@ class OrderService:
     def _is_valid_transition(self, from_status: str, to_status: str) -> bool:
         """Validate status transition"""
         valid_transitions = {
-            OrderStatus.PICKED.value: [OrderStatus.QA.value, OrderStatus.PRE_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
-            OrderStatus.QA.value: [OrderStatus.PRE_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
-            OrderStatus.PRE_DELIVERY.value: [OrderStatus.IN_DELIVERY.value, OrderStatus.SHIPPING.value, OrderStatus.ISSUE.value],
-            OrderStatus.IN_DELIVERY.value: [OrderStatus.DELIVERED.value, OrderStatus.ISSUE.value],
-            OrderStatus.SHIPPING.value: [OrderStatus.DELIVERED.value, OrderStatus.ISSUE.value],
-            OrderStatus.ISSUE.value: [OrderStatus.PICKED.value, OrderStatus.QA.value, OrderStatus.PRE_DELIVERY.value],
-            OrderStatus.DELIVERED.value: []  # Terminal state
+            OrderStatus.PICKED.value: [
+                OrderStatus.QA.value,
+                OrderStatus.PRE_DELIVERY.value,
+                OrderStatus.SHIPPING.value,
+                OrderStatus.ISSUE.value,
+            ],
+            OrderStatus.QA.value: [
+                OrderStatus.PRE_DELIVERY.value,
+                OrderStatus.SHIPPING.value,
+                OrderStatus.ISSUE.value,
+            ],
+            OrderStatus.PRE_DELIVERY.value: [
+                OrderStatus.IN_DELIVERY.value,
+                OrderStatus.SHIPPING.value,
+                OrderStatus.ISSUE.value,
+            ],
+            OrderStatus.IN_DELIVERY.value: [
+                OrderStatus.DELIVERED.value,
+                OrderStatus.ISSUE.value,
+            ],
+            OrderStatus.SHIPPING.value: [
+                OrderStatus.DELIVERED.value,
+                OrderStatus.ISSUE.value,
+            ],
+            OrderStatus.ISSUE.value: [
+                OrderStatus.PICKED.value,
+                OrderStatus.QA.value,
+                OrderStatus.PRE_DELIVERY.value,
+            ],
+            OrderStatus.DELIVERED.value: [],  # Terminal state
         }
 
         return to_status in valid_transitions.get(from_status, [])
@@ -543,7 +657,7 @@ class OrderService:
         order_ids: List[Union[UUID, str]],
         new_status: OrderStatus,
         changed_by: Optional[str] = None,
-        reason: Optional[str] = None
+        reason: Optional[str] = None,
     ) -> List[Order]:
         """Bulk transition multiple orders with logging."""
         successful_orders = []
@@ -558,7 +672,9 @@ class OrderService:
 
         return successful_orders
 
-    def _extract_delivery_location_from_remarks(self, order_remarks: str) -> Optional[str]:
+    def _extract_delivery_location_from_remarks(
+        self, order_remarks: str
+    ) -> Optional[str]:
         """
         Extract alternative delivery location from order remarks.
         Looks for patterns like "deliver to [location]" or "delivery to [location]"
@@ -573,13 +689,13 @@ class OrderService:
 
         # Patterns to match: "deliver to", "delivery to", "deliver at", etc.
         patterns = [
-            r'deliver\s+to\s+([^\r\n,]+)',  # "deliver to LAAH 424",
-            r'delivery\s+to\s+([^\r\n,]+)',  # "delivery to LAAH 424",
-            r'deliver\s+at\s+([^\r\n,]+)',   # "deliver at LAAH 424",
+            r"deliver\s+to\s+([^\r\n,]+)",  # "deliver to LAAH 424",
+            r"delivery\s+to\s+([^\r\n,]+)",  # "delivery to LAAH 424",
+            r"deliver\s+at\s+([^\r\n,]+)",  # "deliver at LAAH 424",
             # Auto-discovered patterns (from pattern analysis):
-            r'deliver\s+to\s+([^\r\n,;]+?)(?:\s*[-–—]|\s*$|\r|\n|,|;|$)',   # "deliver to" (found 8 times)
-            r'need\s+to\s+([^\r\n,;]+?)(?:\s*[-–—]|\s*$|\r|\n|,|;|$)',   # "need to" (found 6 times)
-            r'located\s+at\s+([^\r\n,;]+?)(?:\s*[-–—]|\s*$|\r|\n|,|;|$)',   # "located at" (found 6 times)
+            r"deliver\s+to\s+([^\r\n,;]+?)(?:\s*[-–—]|\s*$|\r|\n|,|;|$)",  # "deliver to" (found 8 times)
+            r"need\s+to\s+([^\r\n,;]+?)(?:\s*[-–—]|\s*$|\r|\n|,|;|$)",  # "need to" (found 6 times)
+            r"located\s+at\s+([^\r\n,;]+?)(?:\s*[-–—]|\s*$|\r|\n|,|;|$)",  # "located at" (found 6 times)
         ]
 
         for pattern in patterns:
@@ -587,12 +703,11 @@ class OrderService:
             if match:
                 location = match.group(1).strip()
                 # Remove trailing punctuation and common words
-                location = re.sub(r'[.,;:]+$', '', location)
+                location = re.sub(r"[.,;:]+$", "", location)
                 if location:
                     return location
 
         return None
-
 
     def _extract_order_basic_data(self, inflow_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract basic order data including order number, remarks, and shipping address."""
@@ -606,7 +721,9 @@ class OrderService:
         address2 = shipping_addr_obj.get("address2", "")
 
         shipping_address_parts = [part for part in [address1, address2] if part]
-        shipping_address = " ".join(shipping_address_parts) if shipping_address_parts else address1
+        shipping_address = (
+            " ".join(shipping_address_parts) if shipping_address_parts else address1
+        )
 
         return {
             "order_number": order_number,
@@ -614,18 +731,29 @@ class OrderService:
             "shipping_addr_obj": shipping_addr_obj,
             "address1": address1,
             "address2": address2,
-            "shipping_address": shipping_address
+            "shipping_address": shipping_address,
         }
 
-    def _determine_city_and_delivery_type(self, order_number: str, shipping_addr_obj: Dict[str, Any], shipping_address: str) -> Dict[str, Any]:
+    def _determine_city_and_delivery_type(
+        self,
+        order_number: str,
+        shipping_addr_obj: Dict[str, Any],
+        shipping_address: str,
+    ) -> Dict[str, Any]:
         """Determine if this is a local delivery based on city detection."""
-        city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+        city = (
+            shipping_addr_obj.get("city", "").strip()
+            if shipping_addr_obj.get("city")
+            else ""
+        )
 
         # If city is missing, try to detect it from the full address string for common non-local locations
         if not city and shipping_address:
             if "HOUSTON" in shipping_address.upper():
                 city = "Houston"
-                logger.info(f"City not specified but 'Houston' found in address for order {order_number}. inferred_city='Houston'")
+                logger.info(
+                    f"City not specified but 'Houston' found in address for order {order_number}. inferred_city='Houston'"
+                )
 
         is_local_delivery = False
 
@@ -633,135 +761,216 @@ class OrderService:
             city_upper = city.upper()
             is_local_delivery = city_upper in ("BRYAN", "COLLEGE STATION")
             if not is_local_delivery:
-                logger.info(f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order.")
+                logger.info(
+                    f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order."
+                )
         else:
             # If no city specified and couldn't be inferred, assume it's local delivery
             is_local_delivery = True
-            logger.debug(f"No city specified for order {order_number}, assuming local delivery")
+            logger.debug(
+                f"No city specified for order {order_number}, assuming local delivery"
+            )
 
-        return {
-            "city": city,
-            "is_local_delivery": is_local_delivery
-        }
+        return {"city": city, "is_local_delivery": is_local_delivery}
 
-    def _extract_building_code_for_local(self, order_number: str, order_remarks: str, shipping_address: str, address1: str, address2: str) -> str:
+    def _extract_building_code_for_local(
+        self,
+        order_number: str,
+        order_remarks: str,
+        shipping_address: str,
+        address1: str,
+        address2: str,
+    ) -> str:
         """Extract building code for local deliveries using 3 priority levels."""
         building_code = None
 
         # PRIORITY 1: Check order remarks FIRST for building codes
         if order_remarks:
-            logger.info(f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'")
+            logger.info(
+                f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'"
+            )
             building_code = extract_building_code_from_location(order_remarks)
             if building_code:
-                logger.info(f"Found building code '{building_code}' directly in order remarks for order {order_number}")
+                logger.info(
+                    f"Found building code '{building_code}' directly in order remarks for order {order_number}"
+                )
 
         # PRIORITY 2: If no building code in remarks, check alternative location from remarks
         if not building_code:
-            logger.debug(f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}")
-            alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
+            logger.debug(
+                f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}"
+            )
+            alternative_location = self._extract_delivery_location_from_remarks(
+                order_remarks
+            )
             if alternative_location:
-                logger.debug(f"Found alternative location in remarks: '{alternative_location}'")
-                building_code = extract_building_code_from_location(alternative_location)
+                logger.debug(
+                    f"Found alternative location in remarks: '{alternative_location}'"
+                )
+                building_code = extract_building_code_from_location(
+                    alternative_location
+                )
                 if building_code:
-                    logger.info(f"Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}")
+                    logger.info(
+                        f"Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}"
+                    )
 
         # PRIORITY 3: If still no building code, check shipping addresses
         if not building_code:
-            logger.info(f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'")
+            logger.info(
+                f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'"
+            )
 
             # Try extracting building code from address2
             if address2:
-                logger.info(f"Attempting to extract building code from address2: '{address2}'")
+                logger.info(
+                    f"Attempting to extract building code from address2: '{address2}'"
+                )
                 building_code = extract_building_code_from_location(address2)
                 if building_code:
-                    logger.info(f"Found building code '{building_code}' from address2 using location patterns: '{address2}'")
+                    logger.info(
+                        f"Found building code '{building_code}' from address2 using location patterns: '{address2}'"
+                    )
 
             # Try location extraction on combined address
             if not building_code and shipping_address:
-                logger.info(f"Attempting to extract building code from combined shipping address: '{shipping_address}'")
+                logger.info(
+                    f"Attempting to extract building code from combined shipping address: '{shipping_address}'"
+                )
                 building_code = extract_building_code_from_location(shipping_address)
                 if building_code:
-                    logger.info(f"Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'")
+                    logger.info(
+                        f"Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'"
+                    )
 
             # Try ArcGIS matching
             if not building_code:
                 building_code = get_building_abbreviation(None, shipping_address)
                 if building_code:
-                    logger.info(f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'")
+                    logger.info(
+                        f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'"
+                    )
 
             if not building_code and address2:
                 building_code = get_building_abbreviation(None, address2)
                 if building_code:
-                    logger.info(f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'")
+                    logger.info(
+                        f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'"
+                    )
 
         # Final fallback logic
         if building_code:
-            logger.info(f"Using building code as delivery_location for order {order_number}: '{building_code}'")
+            logger.info(
+                f"Using building code as delivery_location for order {order_number}: '{building_code}'"
+            )
             return building_code
 
         # Try fallback extraction
-        logger.debug(f"No building code found yet, attempting final extraction from fallback strings for order {order_number}")
-        alternative_location = self._extract_delivery_location_from_remarks(order_remarks) if order_remarks else None
+        logger.debug(
+            f"No building code found yet, attempting final extraction from fallback strings for order {order_number}"
+        )
+        alternative_location = (
+            self._extract_delivery_location_from_remarks(order_remarks)
+            if order_remarks
+            else None
+        )
 
         if alternative_location:
-            logger.debug(f"Attempting final extraction from alternative_location: '{alternative_location}'")
+            logger.debug(
+                f"Attempting final extraction from alternative_location: '{alternative_location}'"
+            )
             building_code = extract_building_code_from_location(alternative_location)
             if building_code:
-                logger.info(f"Extracted building code '{building_code}' from alternative_location fallback for order {order_number}")
+                logger.info(
+                    f"Extracted building code '{building_code}' from alternative_location fallback for order {order_number}"
+                )
                 return building_code
 
             building_code = extract_building_code_from_location(shipping_address)
             if building_code:
-                logger.info(f"Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+                logger.info(
+                    f"Extracted building code '{building_code}' from shipping_address fallback for order {order_number}"
+                )
                 return building_code
 
             delivery_location = alternative_location or shipping_address
-            logger.info(f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'")
+            logger.info(
+                f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'"
+            )
             return delivery_location
 
         # No alternative location
         building_code = extract_building_code_from_location(shipping_address)
         if building_code:
-            logger.info(f"Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+            logger.info(
+                f"Extracted building code '{building_code}' from shipping_address fallback for order {order_number}"
+            )
             return building_code
 
-        logger.info(f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{shipping_address}'")
+        logger.info(
+            f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{shipping_address}'"
+        )
         return shipping_address
 
-
-    def _determine_delivery_location(self, order_number: str, is_local_delivery: bool, shipping_address: str, order_remarks: str, address1: str, address2: str, custom_fields: Dict[str, Any]) -> str:
+    def _determine_delivery_location(
+        self,
+        order_number: str,
+        is_local_delivery: bool,
+        shipping_address: str,
+        order_remarks: str,
+        address1: str,
+        address2: str,
+        custom_fields: Dict[str, Any],
+    ) -> str:
         """Determine the final delivery location based on order type and available data."""
         if is_local_delivery:
-            return self._extract_building_code_for_local(order_number, order_remarks, shipping_address, address1, address2)
+            return self._extract_building_code_for_local(
+                order_number, order_remarks, shipping_address, address1, address2
+            )
 
         # For non-local deliveries
-        alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
+        alternative_location = self._extract_delivery_location_from_remarks(
+            order_remarks
+        )
 
         # Map to building abbreviation if possible
         if alternative_location:
             mapped_abbreviation = get_building_abbreviation(None, alternative_location)
             if mapped_abbreviation:
-                logger.info(f"Mapped alternative location '{alternative_location}' to building code '{mapped_abbreviation}' via ArcGIS for non-local order {order_number}")
+                logger.info(
+                    f"Mapped alternative location '{alternative_location}' to building code '{mapped_abbreviation}' via ArcGIS for non-local order {order_number}"
+                )
                 return mapped_abbreviation
-            logger.info(f"Using raw alternative_location for non-local order {order_number}: '{alternative_location}'. Note: This order is outside Bryan/College Station")
+            logger.info(
+                f"Using raw alternative_location for non-local order {order_number}: '{alternative_location}'. Note: This order is outside Bryan/College Station"
+            )
             return alternative_location
 
         # Fall back to shipping address for non-local
         mapped_abbreviation = get_building_abbreviation(None, shipping_address)
         if mapped_abbreviation:
-            logger.info(f"Mapped shipping address '{shipping_address}' to building code '{mapped_abbreviation}' via ArcGIS for non-local order {order_number}")
+            logger.info(
+                f"Mapped shipping address '{shipping_address}' to building code '{mapped_abbreviation}' via ArcGIS for non-local order {order_number}"
+            )
             return mapped_abbreviation
 
-        logger.info(f"Using raw shipping_address for non-local order {order_number}: '{shipping_address}'. Note: This order is outside Bryan/College Station")
+        logger.info(
+            f"Using raw shipping_address for non-local order {order_number}: '{shipping_address}'. Note: This order is outside Bryan/College Station"
+        )
         return shipping_address
 
-
-    def _update_existing_order(self, existing_order: Order, inflow_data: Dict[str, Any], delivery_location: str, user_id: Optional[str] = None) -> Order:
+    def _update_existing_order(
+        self,
+        existing_order: Order,
+        inflow_data: Dict[str, Any],
+        delivery_location: str,
+        user_id: Optional[str] = None,
+    ) -> Order:
         """Update an existing order with new inflow data."""
         order_remarks = inflow_data.get("orderRemarks", "")
         shipping_address_obj = inflow_data.get("shippingAddress", {})
         email = inflow_data.get("email", "")
-        
+
         existing_order.inflow_data = inflow_data
         existing_order.delivery_location = delivery_location
         existing_order.order_remarks = order_remarks
@@ -790,20 +999,27 @@ class OrderService:
             audit_metadata={
                 "order_number": existing_order.order_number,
                 "delivery_location": delivery_location,
-                "inflow_order_id": inflow_data.get("salesOrderId")
-            }
+                "inflow_order_id": inflow_data.get("salesOrderId"),
+            },
         )
 
-        logger.info(f"Updated existing order {existing_order.order_number} from Inflow webhook")
+        logger.info(
+            f"Updated existing order {existing_order.order_number} from Inflow webhook"
+        )
         return existing_order
 
-
-    def _create_new_order(self, inflow_data: Dict[str, Any], delivery_location: str, order_number: str, user_id: Optional[str] = None) -> Order:
+    def _create_new_order(
+        self,
+        inflow_data: Dict[str, Any],
+        delivery_location: str,
+        order_number: str,
+        user_id: Optional[str] = None,
+    ) -> Order:
         """Create a new order from inflow data."""
         order_remarks = inflow_data.get("orderRemarks", "")
         shipping_address_obj = inflow_data.get("shippingAddress", {})
         email = inflow_data.get("email", "")
-        
+
         # Check if customer is flagged as a "problem customer" from notes
         customer_notes = inflow_data.get("customerNotes", "")
         is_problem_customer = self._check_problem_customer(customer_notes)
@@ -823,7 +1039,7 @@ class OrderService:
             customer_id=inflow_data.get("customerId", ""),
             customer_name=inflow_data.get("customerName", ""),
             status=OrderStatus.NEW,
-            is_problem_customer=is_problem_customer
+            is_problem_customer=is_problem_customer,
         )
 
         self.db.add(new_order)
@@ -842,15 +1058,14 @@ class OrderService:
                 "order_number": order_number,
                 "delivery_location": delivery_location,
                 "is_problem_customer": is_problem_customer,
-                "inflow_order_id": inflow_data.get("salesOrderId")
-            }
+                "inflow_order_id": inflow_data.get("salesOrderId"),
+            },
         )
 
-        logger.info(f"Created new order {order_number} from Inflow webhook (problem_customer={is_problem_customer})")
+        logger.info(
+            f"Created new order {order_number} from Inflow webhook (problem_customer={is_problem_customer})"
+        )
         return new_order
-
-
-
 
     def create_order_from_inflow(self, inflow_data: Dict[str, Any]) -> Order:
         """Create or update order from Inflow data"""
@@ -866,16 +1081,24 @@ class OrderService:
 
         # Combine address1 and address2 if both exist
         shipping_address_parts = [part for part in [address1, address2] if part]
-        shipping_address = " ".join(shipping_address_parts) if shipping_address_parts else address1
+        shipping_address = (
+            " ".join(shipping_address_parts) if shipping_address_parts else address1
+        )
 
         # Check if order is in Bryan/College Station for delivery routing
-        city = shipping_addr_obj.get("city", "").strip() if shipping_addr_obj.get("city") else ""
+        city = (
+            shipping_addr_obj.get("city", "").strip()
+            if shipping_addr_obj.get("city")
+            else ""
+        )
 
         # If city is missing, try to detect it from the full address string for common non-local locations (like Houston)
         if not city and shipping_address:
             if "HOUSTON" in shipping_address.upper():
                 city = "Houston"
-                logger.info(f"City not specified but 'Houston' found in address for order {order_number}. inferred_city='Houston'")
+                logger.info(
+                    f"City not specified but 'Houston' found in address for order {order_number}. inferred_city='Houston'"
+                )
 
         is_local_delivery = False
 
@@ -884,11 +1107,15 @@ class OrderService:
             city_upper = city.upper()
             is_local_delivery = city_upper in ("BRYAN", "COLLEGE STATION")
             if not is_local_delivery:
-                logger.info(f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order.")
+                logger.info(
+                    f"Order {order_number} is outside Bryan/College Station (city: '{city}'). This will be processed as a shipping order."
+                )
         else:
             # If no city specified and couldn't be inferred, assume it's local delivery (might be data issue)
             is_local_delivery = True
-            logger.debug(f"No city specified for order {order_number}, assuming local delivery")
+            logger.debug(
+                f"No city specified for order {order_number}, assuming local delivery"
+            )
 
         building_code = None
 
@@ -896,112 +1123,184 @@ class OrderService:
             # For local deliveries, try to extract building codes
             # PRIORITY 1: Check order remarks FIRST for building codes
             if order_remarks:
-                logger.info(f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'")
+                logger.info(
+                    f"PRIORITY 1: Checking order remarks for order {order_number}: '{order_remarks[:100]}...'"
+                )
                 # Try to extract building code directly from order remarks
                 building_code = extract_building_code_from_location(order_remarks)
                 if building_code:
-                    logger.info(f"✓ Found building code '{building_code}' directly in order remarks for order {order_number}")
+                    logger.info(
+                        f"✓ Found building code '{building_code}' directly in order remarks for order {order_number}"
+                    )
                 else:
-                    logger.debug(f"✗ No building code found directly in order remarks for order {order_number}")
+                    logger.debug(
+                        f"✗ No building code found directly in order remarks for order {order_number}"
+                    )
 
             # PRIORITY 2: If no building code in remarks, check alternative location from remarks
             if not building_code:
-                logger.debug(f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}")
-                alternative_location = self._extract_delivery_location_from_remarks(order_remarks)
+                logger.debug(
+                    f"PRIORITY 2: Checking alternative location patterns in remarks for order {order_number}"
+                )
+                alternative_location = self._extract_delivery_location_from_remarks(
+                    order_remarks
+                )
                 if alternative_location:
-                    logger.debug(f"Found alternative location in remarks: '{alternative_location}'")
-                    building_code = extract_building_code_from_location(alternative_location)
+                    logger.debug(
+                        f"Found alternative location in remarks: '{alternative_location}'"
+                    )
+                    building_code = extract_building_code_from_location(
+                        alternative_location
+                    )
                     if building_code:
-                        logger.info(f"✓ Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}")
+                        logger.info(
+                            f"✓ Found building code '{building_code}' from alternative location in remarks: '{alternative_location}' for order {order_number}"
+                        )
                     else:
-                        logger.debug(f"✗ No building code extracted from alternative location '{alternative_location}'")
+                        logger.debug(
+                            f"✗ No building code extracted from alternative location '{alternative_location}'"
+                        )
                 else:
-                    logger.debug(f"No alternative location patterns found in remarks for order {order_number}")
+                    logger.debug(
+                        f"No alternative location patterns found in remarks for order {order_number}"
+                    )
 
             # PRIORITY 3: If still no building code, check shipping addresses
             if not building_code:
-                logger.info(f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'")
+                logger.info(
+                    f"PRIORITY 3: Checking shipping addresses for order {order_number}. address1='{address1}', address2='{address2}', shipping_address='{shipping_address}'"
+                )
 
                 # First try extracting building code from address2 using location patterns (e.g., "Wehner Bldg")
                 if address2:
-                    logger.info(f"Attempting to extract building code from address2: '{address2}'")
+                    logger.info(
+                        f"Attempting to extract building code from address2: '{address2}'"
+                    )
                     building_code = extract_building_code_from_location(address2)
                     if building_code:
-                        logger.info(f"✓ Found building code '{building_code}' from address2 using location patterns: '{address2}'")
+                        logger.info(
+                            f"✓ Found building code '{building_code}' from address2 using location patterns: '{address2}'"
+                        )
                     else:
-                        logger.info(f"✗ No building code extracted from address2: '{address2}'")
+                        logger.info(
+                            f"✗ No building code extracted from address2: '{address2}'"
+                        )
 
                 # If no building code found, try location extraction on combined address
                 if not building_code and shipping_address:
-                    logger.info(f"Attempting to extract building code from combined shipping address: '{shipping_address}'")
-                    building_code = extract_building_code_from_location(shipping_address)
+                    logger.info(
+                        f"Attempting to extract building code from combined shipping address: '{shipping_address}'"
+                    )
+                    building_code = extract_building_code_from_location(
+                        shipping_address
+                    )
                     if building_code:
-                        logger.info(f"✓ Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'")
+                        logger.info(
+                            f"✓ Found building code '{building_code}' from combined shipping address using location patterns: '{shipping_address}'"
+                        )
                     else:
-                        logger.info(f"✗ No building code extracted from combined shipping address: '{shipping_address}'")
+                        logger.info(
+                            f"✗ No building code extracted from combined shipping address: '{shipping_address}'"
+                        )
 
                 # If no building code found, try ArcGIS matching on combined address
                 if not building_code:
                     building_code = get_building_abbreviation(None, shipping_address)
                     if building_code:
-                        logger.info(f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'")
+                        logger.info(
+                            f"Found building code '{building_code}' from shipping address via ArcGIS: '{shipping_address}'"
+                        )
 
                 # If still no building code, try ArcGIS matching on address2
                 if not building_code and address2:
                     building_code = get_building_abbreviation(None, address2)
                     if building_code:
-                        logger.info(f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'")
+                        logger.info(
+                            f"Found building code '{building_code}' from address2 via ArcGIS: '{address2}'"
+                        )
 
             # Use building code if found, otherwise try to extract from fallback strings
             if building_code:
                 delivery_location = building_code
-                logger.info(f"Using building code as delivery_location for order {order_number}: '{delivery_location}'")
+                logger.info(
+                    f"Using building code as delivery_location for order {order_number}: '{delivery_location}'"
+                )
             else:
                 # Fallback: try to extract building code from alternative location or shipping address
                 # before using them as-is
-                logger.debug(f"No building code found yet, attempting final extraction from fallback strings for order {order_number}")
+                logger.debug(
+                    f"No building code found yet, attempting final extraction from fallback strings for order {order_number}"
+                )
 
                 # Get alternative location if not already extracted
-                alternative_location = self._extract_delivery_location_from_remarks(order_remarks) if order_remarks else None
+                alternative_location = (
+                    self._extract_delivery_location_from_remarks(order_remarks)
+                    if order_remarks
+                    else None
+                )
 
                 # Try to extract building code from alternative location first
                 if alternative_location:
-                    logger.debug(f"Attempting final extraction from alternative_location: '{alternative_location}'")
-                    building_code = extract_building_code_from_location(alternative_location)
+                    logger.debug(
+                        f"Attempting final extraction from alternative_location: '{alternative_location}'"
+                    )
+                    building_code = extract_building_code_from_location(
+                        alternative_location
+                    )
                     if building_code:
                         delivery_location = building_code
-                        logger.info(f"✓ Extracted building code '{building_code}' from alternative_location fallback for order {order_number}")
+                        logger.info(
+                            f"✓ Extracted building code '{building_code}' from alternative_location fallback for order {order_number}"
+                        )
                     else:
                         # Try to extract from shipping address
-                        logger.debug(f"Attempting final extraction from shipping_address: '{shipping_address}'")
-                        building_code = extract_building_code_from_location(shipping_address)
+                        logger.debug(
+                            f"Attempting final extraction from shipping_address: '{shipping_address}'"
+                        )
+                        building_code = extract_building_code_from_location(
+                            shipping_address
+                        )
                         if building_code:
                             delivery_location = building_code
-                            logger.info(f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+                            logger.info(
+                                f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}"
+                            )
                         else:
                             # Last resort: use alternative location or shipping address as-is
                             delivery_location = alternative_location or shipping_address
-                            logger.info(f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'")
+                            logger.info(
+                                f"No building code found, using raw fallback delivery_location for order {order_number}: '{delivery_location}'"
+                            )
                 else:
                     # No alternative location, try shipping address
-                    logger.debug(f"No alternative location, attempting final extraction from shipping_address: '{shipping_address}'")
-                    building_code = extract_building_code_from_location(shipping_address)
+                    logger.debug(
+                        f"No alternative location, attempting final extraction from shipping_address: '{shipping_address}'"
+                    )
+                    building_code = extract_building_code_from_location(
+                        shipping_address
+                    )
                     if building_code:
                         delivery_location = building_code
-                        logger.info(f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}")
+                        logger.info(
+                            f"✓ Extracted building code '{building_code}' from shipping_address fallback for order {order_number}"
+                        )
                     else:
                         # Last resort: use shipping address as-is
                         delivery_location = shipping_address
-                        logger.info(f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{delivery_location}'")
+                        logger.info(
+                            f"No building code found, using raw shipping_address as delivery_location for order {order_number}: '{delivery_location}'"
+                        )
         else:
             # For shipping orders, use the city as delivery location
             delivery_location = city if city else shipping_address
-            logger.info(f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'")
+            logger.info(
+                f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'"
+            )
 
         # Check if order exists
-        existing = self.db.query(Order).filter(
-            Order.inflow_order_id == order_number
-        ).first()
+        existing = (
+            self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+        )
 
         if existing:
             # Update existing order - only update timestamp if data actually changed
@@ -1049,14 +1348,23 @@ class OrderService:
                     order_date_str = inflow_data.get("orderDate")
                     if isinstance(order_date_str, str):
                         # Try common date formats
-                        for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]:
+                        for fmt in [
+                            "%Y-%m-%dT%H:%M:%S",
+                            "%Y-%m-%dT%H:%M:%S.%f",
+                            "%Y-%m-%d %H:%M:%S",
+                            "%Y-%m-%d",
+                        ]:
                             try:
-                                order_date = datetime.strptime(order_date_str.split("+")[0].split("Z")[0], fmt)
+                                order_date = datetime.strptime(
+                                    order_date_str.split("+")[0].split("Z")[0], fmt
+                                )
                                 break
                             except ValueError:
                                 continue
                 except Exception as e:
-                    logger.debug(f"Could not parse orderDate '{inflow_data.get('orderDate')}' for order {order_number}: {e}")
+                    logger.debug(
+                        f"Could not parse orderDate '{inflow_data.get('orderDate')}' for order {order_number}: {e}"
+                    )
 
             # Use orderDate if available, otherwise use current time
             created_time = order_date if order_date else datetime.utcnow()
@@ -1071,7 +1379,7 @@ class OrderService:
                 status=OrderStatus.PICKED.value,
                 inflow_data=inflow_data,
                 created_at=created_time,
-                updated_at=created_time  # Set to same as created_at initially
+                updated_at=created_time,  # Set to same as created_at initially
             )
             self.db.add(order)
             self.db.commit()
@@ -1084,7 +1392,7 @@ class OrderService:
                 from_status=None,  # No previous status - order was just created
                 to_status=OrderStatus.PICKED.value,
                 reason="Order ingested from inFlow",
-                timestamp=datetime.utcnow()  # Use ingestion time (not orderDate) for audit trail
+                timestamp=datetime.utcnow(),  # Use ingestion time (not orderDate) for audit trail
             )
             self.db.add(audit_log)
             self._record_status_history(
@@ -1107,17 +1415,17 @@ class OrderService:
                     "inflow_order_id": order_number,
                     "inflow_sales_order_id": inflow_data.get("salesOrderId"),
                     "source": "inflow_webhook",
-                    "order_type": "shipping" if self._is_shipping_order(order) else "delivery"
-                }
+                    "order_type": "shipping"
+                    if self._is_shipping_order(order)
+                    else "delivery",
+                },
             )
 
             return order
 
-
-
-
-
-    def _send_order_details_email(self, order: Order, generated_by: Optional[str] = None) -> None:
+    def _send_order_details_email(
+        self, order: Order, generated_by: Optional[str] = None
+    ) -> None:
         """
         Send Order Details PDF email to recipient after picklist generation.
 
@@ -1139,7 +1447,9 @@ class OrderService:
 
         try:
             if not order.inflow_data:
-                logger.warning(f"No inFlow data for order {order_number}, skipping Order Details generation")
+                logger.warning(
+                    f"No inFlow data for order {order_number}, skipping Order Details generation"
+                )
                 return
 
             pdf_bytes = None
@@ -1148,16 +1458,25 @@ class OrderService:
             # Step 1: Check SharePoint first for existing PDF
             try:
                 from app.services.sharepoint_service import get_sharepoint_service
+
                 sp_service = get_sharepoint_service()
 
                 if sp_service.is_enabled:
-                    logger.info(f"Checking SharePoint for existing Order Details PDF: {pdf_filename}")
-                    existing_pdf = sp_service.download_file("order-details", pdf_filename)
+                    logger.info(
+                        f"Checking SharePoint for existing Order Details PDF: {pdf_filename}"
+                    )
+                    existing_pdf = sp_service.download_file(
+                        "order-details", pdf_filename
+                    )
 
                     if existing_pdf:
-                        logger.info(f"Found existing Order Details PDF in SharePoint: {pdf_filename}")
+                        logger.info(
+                            f"Found existing Order Details PDF in SharePoint: {pdf_filename}"
+                        )
                         pdf_bytes = existing_pdf
-                        order_details_path = sp_service.get_file_url("order-details", pdf_filename)
+                        order_details_path = sp_service.get_file_url(
+                            "order-details", pdf_filename
+                        )
             except Exception as e:
                 logger.warning(f"Error checking SharePoint for existing PDF: {e}")
 
@@ -1177,13 +1496,20 @@ class OrderService:
                 # Upload to SharePoint if enabled
                 try:
                     from app.services.sharepoint_service import get_sharepoint_service
+
                     sp_service = get_sharepoint_service()
                     if sp_service.is_enabled:
-                        sp_url = sp_service.upload_file(pdf_bytes, "order-details", pdf_filename)
+                        sp_url = sp_service.upload_file(
+                            pdf_bytes, "order-details", pdf_filename
+                        )
                         order_details_path = sp_url
-                        logger.info(f"Order Details PDF uploaded to SharePoint: {sp_url}")
+                        logger.info(
+                            f"Order Details PDF uploaded to SharePoint: {sp_url}"
+                        )
                 except Exception as e:
-                    logger.warning(f"SharePoint upload failed for Order Details, using local path: {e}")
+                    logger.warning(
+                        f"SharePoint upload failed for Order Details, using local path: {e}"
+                    )
 
             # Update order with Order Details path
             order.order_details_path = order_details_path
@@ -1192,11 +1518,15 @@ class OrderService:
 
             # Check if email sending is configured
             if not email_service.is_configured():
-                logger.debug(f"Power Automate email not configured, skipping Order Details email for order {order_number}")
+                logger.debug(
+                    f"Power Automate email not configured, skipping Order Details email for order {order_number}"
+                )
                 return
 
             if not recipient_email:
-                logger.warning(f"No recipient email for order {order_number}, skipping Order Details email")
+                logger.warning(
+                    f"No recipient email for order {order_number}, skipping Order Details email"
+                )
                 return
 
             # Step 3: Send email with PDF
@@ -1206,11 +1536,13 @@ class OrderService:
                 to_address=recipient_email,
                 order_number=order_number,
                 customer_name=customer_name,
-                pdf_content=pdf_bytes
+                pdf_content=pdf_bytes,
             )
 
             if success:
-                logger.info(f"Order Details email sent to {recipient_email} for order {order_number}")
+                logger.info(
+                    f"Order Details email sent to {recipient_email} for order {order_number}"
+                )
 
                 # Audit log the email
                 audit_service = AuditService(self.db)
@@ -1222,15 +1554,19 @@ class OrderService:
                     audit_metadata={
                         "recipient_email": recipient_email,
                         "order_number": order_number,
-                        "pdf_path": order_details_path
-                    }
+                        "pdf_path": order_details_path,
+                    },
                 )
             else:
-                logger.error(f"Failed to send Order Details email to {recipient_email} for order {order_number}")
+                logger.error(
+                    f"Failed to send Order Details email to {recipient_email} for order {order_number}"
+                )
 
         except Exception as e:
             # Log error but don't fail the picklist generation
-            logger.error(f"Error generating/sending Order Details for order {order.inflow_order_id}: {e}")
+            logger.error(
+                f"Error generating/sending Order Details for order {order.inflow_order_id}: {e}"
+            )
 
     def transition_shipping_workflow(
         self,
@@ -1238,24 +1574,42 @@ class OrderService:
         new_status: ShippingWorkflowStatus,
         carrier_name: Optional[str] = None,
         tracking_number: Optional[str] = None,
-        updated_by: Optional[str] = None
+        updated_by: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         """Transition shipping workflow status with validation"""
         order_id_str = str(order_id)
-        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
+        self.assert_not_stale(order, expected_updated_at)
+
         if order.status != OrderStatus.SHIPPING.value:
-            raise ValidationError("Order must be in Shipping status to update shipping workflow")
+            raise ValidationError(
+                "Order must be in Shipping status to update shipping workflow"
+            )
 
         # Validate blocking requirements
-        current_status = order.shipping_workflow_status or ShippingWorkflowStatus.WORK_AREA.value
+        current_status = (
+            order.shipping_workflow_status or ShippingWorkflowStatus.WORK_AREA.value
+        )
 
-        if new_status == ShippingWorkflowStatus.DOCK and current_status != ShippingWorkflowStatus.WORK_AREA.value:
+        if (
+            new_status == ShippingWorkflowStatus.DOCK
+            and current_status != ShippingWorkflowStatus.WORK_AREA.value
+        ):
             raise ValidationError("Order must be in Work Area before moving to Dock")
 
-        if new_status == ShippingWorkflowStatus.SHIPPED and current_status != ShippingWorkflowStatus.DOCK.value:
+        if (
+            new_status == ShippingWorkflowStatus.SHIPPED
+            and current_status != ShippingWorkflowStatus.DOCK.value
+        ):
             raise ValidationError("Order must be at Dock before marking as Shipped")
 
         # Update fields
@@ -1282,8 +1636,9 @@ class OrderService:
                 changed_by=updated_by or "system",
                 from_status=old_status,
                 to_status=OrderStatus.DELIVERED.value,
-                reason=f"Shipped via {carrier_name or 'carrier'}" + (f" (Tracking: {tracking_number})" if tracking_number else ""),
-                timestamp=datetime.utcnow()
+                reason=f"Shipped via {carrier_name or 'carrier'}"
+                + (f" (Tracking: {tracking_number})" if tracking_number else ""),
+                timestamp=datetime.utcnow(),
             )
             self.db.add(audit_log)
             self._record_status_history(
@@ -1292,9 +1647,8 @@ class OrderService:
                 to_status=OrderStatus.DELIVERED.value,
                 actor_identifier=updated_by,
                 metadata={
-                    "reason": f"Shipped via {carrier_name or 'carrier'}" + (
-                        f" (Tracking: {tracking_number})" if tracking_number else ""
-                    ),
+                    "reason": f"Shipped via {carrier_name or 'carrier'}"
+                    + (f" (Tracking: {tracking_number})" if tracking_number else ""),
                 },
             )
 
@@ -1310,13 +1664,15 @@ class OrderService:
             description=f"Shipping workflow updated to {new_status.display_name}",
             audit_metadata={
                 "carrier_name": carrier_name,
-                "tracking_number": tracking_number
-            }
+                "tracking_number": tracking_number,
+            },
         )
 
         return order
 
-    def generate_bundled_documents(self, order_id: Union[UUID, str], signature_data: dict) -> str:
+    def generate_bundled_documents(
+        self, order_id: Union[UUID, str], signature_data: dict
+    ) -> str:
         """Generate bundled documents: create folder with signed picklist and QA form"""
         order_id_str = str(order_id)
         order = self.db.query(Order).filter(Order.id == order_id_str).first()
@@ -1328,8 +1684,8 @@ class OrderService:
                 "Order missing picklist or QA data",
                 details={
                     "has_picklist": bool(order.picklist_path),
-                    "has_qa": bool(order.qa_path)
-                }
+                    "has_qa": bool(order.qa_path),
+                },
             )
 
         # Create completed documents directory structure
@@ -1339,15 +1695,12 @@ class OrderService:
         order_dir = completed_dir / (order.inflow_order_id or str(order.id))
         order_dir.mkdir(parents=True, exist_ok=True)
 
-
         # Generate individual PDFs
         signed_picklist_path = self._apply_signature_to_pdf(
             order.picklist_path, signature_data
         )
 
-
         qa_pdf_path = self._generate_qa_pdf(order.qa_data, order)
-
 
         # Copy files to completed folder
         import shutil
@@ -1355,14 +1708,12 @@ class OrderService:
         signed_picklist_dest = order_dir / "signed_picklist.pdf"
         qa_form_dest = order_dir / "qa_form.pdf"
 
-
         shutil.copy2(signed_picklist_path, signed_picklist_dest)
         shutil.copy2(qa_pdf_path, qa_form_dest)
 
         # Clean up temporary files
         Path(signed_picklist_path).unlink(missing_ok=True)
         Path(qa_pdf_path).unlink(missing_ok=True)
-
 
         return str(order_dir)
 
@@ -1378,38 +1729,40 @@ class OrderService:
         import os
 
         # Extract signature data
-        signature_b64 = signature_data.get('signature_image', '')
-        placements = signature_data.get('placements', [])
+        signature_b64 = signature_data.get("signature_image", "")
+        placements = signature_data.get("placements", [])
 
         # Backward compatibility for single placement
-        if not placements and 'page_number' in signature_data:
-            placements = [{
-                'page_number': signature_data.get('page_number', 1),
-                # If position is missing, default to some safe spot?
-                # Original code defaulted to x=50, y=60.
-                # Schema might return None for position if not passed.
-                'x': signature_data.get('position', {}).get('x', 50),
-                'y': signature_data.get('position', {}).get('y', 60),
-                'width': 100, # Default width if not specified in old format? Old format didn't have width/height in backend logic?
-                # Wait, old logic: c.drawImage(..., width=page_width, height=page_height)
-                # It stretched the canvas capture to the FULL PAGE.
-                # The design doc says: "Front end sends canvas capture that matches PDF aspect ratio...".
-                # If we are refactoring, we need to handle the new "sticker" style.
-                # If old style: we should probably stick to old behavior or migrating is tricky without frontend changes first.
-                # BUT: The plan says "Refactor... to accept image + placements".
-                # I will assume "placements" means "sticker placements".
-                # If legacy call comes in, I will map it to "full page stamp" if that was the old behavior?
-                # Old behavior: c.drawImage(..., 0, 0, width=page_width, height=page_height).
-                # So if no placements, treat as legacy full-page overlay.
-                 'legacy_full_page': True
-            }]
+        if not placements and "page_number" in signature_data:
+            placements = [
+                {
+                    "page_number": signature_data.get("page_number", 1),
+                    # If position is missing, default to some safe spot?
+                    # Original code defaulted to x=50, y=60.
+                    # Schema might return None for position if not passed.
+                    "x": signature_data.get("position", {}).get("x", 50),
+                    "y": signature_data.get("position", {}).get("y", 60),
+                    "width": 100,  # Default width if not specified in old format? Old format didn't have width/height in backend logic?
+                    # Wait, old logic: c.drawImage(..., width=page_width, height=page_height)
+                    # It stretched the canvas capture to the FULL PAGE.
+                    # The design doc says: "Front end sends canvas capture that matches PDF aspect ratio...".
+                    # If we are refactoring, we need to handle the new "sticker" style.
+                    # If old style: we should probably stick to old behavior or migrating is tricky without frontend changes first.
+                    # BUT: The plan says "Refactor... to accept image + placements".
+                    # I will assume "placements" means "sticker placements".
+                    # If legacy call comes in, I will map it to "full page stamp" if that was the old behavior?
+                    # Old behavior: c.drawImage(..., 0, 0, width=page_width, height=page_height).
+                    # So if no placements, treat as legacy full-page overlay.
+                    "legacy_full_page": True,
+                }
+            ]
 
         if not signature_b64:
             return pdf_path
 
         try:
             # Decode base64 signature image
-            header, encoded = signature_b64.split(',', 1)
+            header, encoded = signature_b64.split(",", 1)
             signature_data_bytes = base64.b64decode(encoded)
             signature_image = Image.open(io.BytesIO(signature_data_bytes))
         except Exception as e:
@@ -1425,10 +1778,10 @@ class OrderService:
         placements_by_page = {}
         for p in placements:
             # Handle dictionary or object (if pydantic model passed directly, though dict expected here)
-            if hasattr(p, 'model_dump'):
+            if hasattr(p, "model_dump"):
                 p = p.model_dump()
 
-            page_num = p.get('page_number', 1)
+            page_num = p.get("page_number", 1)
             if page_num not in placements_by_page:
                 placements_by_page[page_num] = []
             placements_by_page[page_num].append(p)
@@ -1447,34 +1800,43 @@ class OrderService:
                 page_width = float(page.mediabox.width)
                 page_height = float(page.mediabox.height)
 
-                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as overlay_file:
-                     overlay_path = overlay_file.name
-                     overlay_map[page_idx] = overlay_path
+                with tempfile.NamedTemporaryFile(
+                    suffix=".pdf", delete=False
+                ) as overlay_file:
+                    overlay_path = overlay_file.name
+                    overlay_map[page_idx] = overlay_path
 
                 c = canvas.Canvas(overlay_path, pagesize=(page_width, page_height))
 
                 for placement in page_placements:
                     # Check for legacy full page flag
-                    if placement.get('legacy_full_page'):
+                    if placement.get("legacy_full_page"):
                         c.drawImage(
                             ImageReader(signature_image),
-                            0, 0, width=page_width, height=page_height,
-                            mask='auto'
+                            0,
+                            0,
+                            width=page_width,
+                            height=page_height,
+                            mask="auto",
                         )
                     else:
                         # New sticker placement
-                        x = placement.get('x', 0)
-                        y = placement.get('y', 0)
-                        w = placement.get('width', 100)
-                        h = placement.get('height', 50)
+                        x = placement.get("x", 0)
+                        y = placement.get("y", 0)
+                        w = placement.get("width", 100)
+                        h = placement.get("height", 50)
 
                         # Inverting Y is handled by frontend (sending PDF coords).
                         # We just draw at (x, y). Use preserveAspectRatio=True?
                         # Design doc implies w/h are explicit.
                         c.drawImage(
-                             ImageReader(signature_image),
-                             x, y, width=w, height=h,
-                             mask='auto', preserveAspectRatio=True
+                            ImageReader(signature_image),
+                            x,
+                            y,
+                            width=w,
+                            height=h,
+                            mask="auto",
+                            preserveAspectRatio=True,
                         )
 
                 c.save()
@@ -1488,8 +1850,8 @@ class OrderService:
                 writer.add_page(page)
 
             # Save signed PDF
-            signed_path = pdf_path.replace('.pdf', '-signed.pdf')
-            with open(signed_path, 'wb') as f:
+            signed_path = pdf_path.replace(".pdf", "-signed.pdf")
+            with open(signed_path, "wb") as f:
                 writer.write(f)
 
             return signed_path
@@ -1500,7 +1862,9 @@ class OrderService:
                 try:
                     os.unlink(path)
                 except OSError as exc:
-                    logger.warning("Failed to remove temporary signature overlay %s: %s", path, exc)
+                    logger.warning(
+                        "Failed to remove temporary signature overlay %s: %s", path, exc
+                    )
 
     def _generate_qa_pdf(self, qa_data: dict, order: Order) -> str:
         """Generate QA checklist PDF from JSON data"""
@@ -1521,10 +1885,16 @@ class OrderService:
         pdf.setFont("Helvetica", 12)
         y_pos = height - 80
         pdf.drawString(50, y_pos, f"Order: {order.inflow_order_id}")
-        pdf.drawString(50, y_pos - 20, f"Recipient: {order.recipient_name or 'Unknown'}")
+        pdf.drawString(
+            50, y_pos - 20, f"Recipient: {order.recipient_name or 'Unknown'}"
+        )
         pdf.drawString(50, y_pos - 40, f"Method: {qa_data.get('method', 'Unknown')}")
-        pdf.drawString(50, y_pos - 60, f"Technician: {qa_data.get('technician', 'Unknown')}")
-        pdf.drawString(50, y_pos - 80, f"QA Signature: {qa_data.get('qaSignature', 'Unknown')}")
+        pdf.drawString(
+            50, y_pos - 60, f"Technician: {qa_data.get('technician', 'Unknown')}"
+        )
+        pdf.drawString(
+            50, y_pos - 80, f"QA Signature: {qa_data.get('qaSignature', 'Unknown')}"
+        )
 
         # Checklist items
         y_pos -= 120
@@ -1546,12 +1916,30 @@ class OrderService:
         else:
             # New detailed format: individual boolean fields
             checklist_items = [
-                ("verifyAssetTagSerialMatch", "Asset tags applied and serial numbers match on device, sticker, and pick list"),
-                ("verifyOrderDetailsTemplateSent", "Order details template sent to customer before delivery"),
-                ("verifyPackagedProperly", "System and all materials packaged properly"),
-                ("verifyPackingSlipSerialsMatch", "Packing slip and picked items serial numbers match"),
-                ("verifyElectronicPackingSlipSaved", "Electronic packing slip saved on shipping/receiving computer"),
-                ("verifyBoxesLabeledCorrectly", "Boxes labeled with correct order details and shipping labels marked out")
+                (
+                    "verifyAssetTagSerialMatch",
+                    "Asset tags applied and serial numbers match on device, sticker, and pick list",
+                ),
+                (
+                    "verifyOrderDetailsTemplateSent",
+                    "Order details template sent to customer before delivery",
+                ),
+                (
+                    "verifyPackagedProperly",
+                    "System and all materials packaged properly",
+                ),
+                (
+                    "verifyPackingSlipSerialsMatch",
+                    "Packing slip and picked items serial numbers match",
+                ),
+                (
+                    "verifyElectronicPackingSlipSaved",
+                    "Electronic packing slip saved on shipping/receiving computer",
+                ),
+                (
+                    "verifyBoxesLabeledCorrectly",
+                    "Boxes labeled with correct order details and shipping labels marked out",
+                ),
             ]
 
             for field, description in checklist_items:
@@ -1577,7 +1965,6 @@ class OrderService:
         merger = PdfMerger()
         for pdf_path in pdf_paths:
             merger.append(pdf_path)
-
 
         merger.write(output_path)
         merger.close()
