@@ -41,12 +41,7 @@ app.url_map.strict_slashes = False  # Prevent 308 redirects that break CORS
 # Fix for running behind proxy (PythonAnywhere) - ensures correct URL generation
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Define allowed origins for security
-ALLOWED_ORIGINS = [
-    "https://techhub.pythonanywhere.com",  # Production
-    "https://dev-techhub.pythonanywhere.com",  # Development
-    "http://localhost:5173",  # Local development
-]
+ALLOWED_ORIGINS = settings.get_cors_allowed_origins()
 
 # Configure CORS with specific origins
 CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
@@ -96,13 +91,14 @@ def _log_runtime_startup_settings() -> None:
     _startup_settings_logged = True
     pool_settings = get_runtime_db_pool_settings()
     logger.info(
-        "Runtime settings: scheduler_enabled=%s db_backend=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s",
+        "Runtime settings: scheduler_enabled=%s db_backend=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s cors_allowed_origins=%s",
         settings.scheduler_enabled,
         pool_settings.get("database_backend"),
         pool_settings.get("pool_size"),
         pool_settings.get("max_overflow"),
         pool_settings.get("pool_timeout"),
         pool_settings.get("pool_recycle"),
+        ALLOWED_ORIGINS,
     )
 
 
