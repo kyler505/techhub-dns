@@ -328,6 +328,26 @@ def _normalize_string_array(value: Any, field_name: str, *, allow_empty: bool = 
     return normalized
 
 
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off", ""}:
+            return False
+    return None
+
+
 def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Payload must be a JSON object.")
@@ -470,10 +490,18 @@ def _validate_compatibility_editor_staging_payload(payload: Any) -> dict[str, An
                         normalized_entry.pop("notes", None)
 
                 reboot_needed = raw_data.get("rebootNeeded")
-                if reboot_needed is not None and not isinstance(reboot_needed, bool):
-                    raise ValueError(
-                        f"Computer '{computer_key}' compatibilityData for dock '{data_dock_key}' has invalid rebootNeeded."
-                    )
+                if reboot_needed is not None:
+                    coerced_reboot_needed = _coerce_optional_bool(reboot_needed)
+                    if coerced_reboot_needed is None:
+                        logger.warning(
+                            "Dropping invalid rebootNeeded value for computer '%s', dock '%s': %r",
+                            computer_key,
+                            data_dock_key,
+                            reboot_needed,
+                        )
+                        normalized_entry.pop("rebootNeeded", None)
+                    else:
+                        normalized_entry["rebootNeeded"] = coerced_reboot_needed
 
                 student_edited = raw_data.get("studentEdited")
                 if student_edited is not None and not isinstance(student_edited, bool):
