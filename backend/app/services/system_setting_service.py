@@ -11,11 +11,28 @@ SETTING_TEAMS_RECIPIENT_ENABLED = "teams_recipient_notifications_enabled"
 # Admin allowlist
 SETTING_ADMIN_EMAILS = "admin_emails"
 
+# Picklist printing
+SETTING_PICKLIST_AUTO_PRINT_ENABLED = "picklist_auto_print_enabled"
+
 DEFAULT_SETTINGS = {
-    SETTING_EMAIL_ENABLED: {"value": "true", "description": "Enable sending email notifications (Order Details PDFs)"},
-    SETTING_TEAMS_RECIPIENT_ENABLED: {"value": "false", "description": "Enable sending delivery notifications to recipients via Teams"},
-    SETTING_ADMIN_EMAILS: {"value": "[]", "description": "Admin email allowlist (JSON array string preferred; CSV accepted)"},
+    SETTING_EMAIL_ENABLED: {
+        "value": "true",
+        "description": "Enable sending email notifications (Order Details PDFs)",
+    },
+    SETTING_TEAMS_RECIPIENT_ENABLED: {
+        "value": "false",
+        "description": "Enable sending delivery notifications to recipients via Teams",
+    },
+    SETTING_ADMIN_EMAILS: {
+        "value": "[]",
+        "description": "Admin email allowlist (JSON array string preferred; CSV accepted)",
+    },
+    SETTING_PICKLIST_AUTO_PRINT_ENABLED: {
+        "value": "false",
+        "description": "Automatically queue the first generated picklist for ops printing",
+    },
 }
+
 
 class SystemSettingService:
     @staticmethod
@@ -27,7 +44,9 @@ class SystemSettingService:
         return DEFAULT_SETTINGS.get(key, {}).get("value", "false")
 
     @staticmethod
-    def set_setting(key: str, value: str, updated_by: str = None) -> SystemSetting:
+    def set_setting(
+        key: str, value: str, updated_by: Optional[str] = None
+    ) -> SystemSetting:
         """Set a setting value in the DB."""
         db = get_db_session()
         try:
@@ -37,7 +56,7 @@ class SystemSettingService:
                     key=key,
                     value=value,
                     description=DEFAULT_SETTINGS.get(key, {}).get("description"),
-                    updated_by=updated_by
+                    updated_by=updated_by,
                 )
                 db.add(setting)
             else:
@@ -66,11 +85,15 @@ class SystemSettingService:
         try:
             result = {}
             for key, defaults in DEFAULT_SETTINGS.items():
-                setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+                setting = (
+                    db.query(SystemSetting).filter(SystemSetting.key == key).first()
+                )
                 result[key] = {
                     "value": setting.value if setting else defaults["value"],
                     "description": defaults["description"],
-                    "updated_at": setting.updated_at.isoformat() if setting and setting.updated_at else None,
+                    "updated_at": setting.updated_at.isoformat()
+                    if setting and setting.updated_at
+                    else None,
                     "updated_by": setting.updated_by if setting else None,
                 }
             return result

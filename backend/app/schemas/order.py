@@ -86,6 +86,23 @@ class SignatureData(BaseModel):
     position: Optional[Dict[str, float]] = None
 
 
+class PrintJobSummary(BaseModel):
+    id: UUID
+    document_type: str
+    status: str
+    trigger_source: str
+    requested_by: Optional[str] = None
+    attempt_count: int = 0
+    claimed_at: Optional[datetime] = None
+    claim_expires_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class OrderResponse(OrderBase):
     id: UUID
     inflow_sales_order_id: Optional[str] = None
@@ -112,6 +129,7 @@ class OrderResponse(OrderBase):
     carrier_name: Optional[str] = None
     tracking_number: Optional[str] = None
     pick_status: Optional[PickStatus] = None
+    latest_picklist_print_job: Optional[PrintJobSummary] = None
     delivery_run_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

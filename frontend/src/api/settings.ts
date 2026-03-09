@@ -14,6 +14,25 @@ export interface SystemSettingValue {
 export interface SystemSettings {
     email_notifications_enabled: SystemSettingValue;
     teams_recipient_notifications_enabled: SystemSettingValue;
+    picklist_auto_print_enabled: SystemSettingValue;
+}
+
+export interface PrintJobRecord {
+    id: string;
+    order_id: string;
+    order_inflow_order_id?: string | null;
+    document_type: string;
+    status: string;
+    trigger_source: string;
+    requested_by?: string | null;
+    file_path: string;
+    attempt_count: number;
+    claimed_at?: string | null;
+    claim_expires_at?: string | null;
+    completed_at?: string | null;
+    last_error?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
 }
 
 
@@ -119,6 +138,18 @@ export const settingsApi = {
      */
     async uploadCanopyOrdersBypass(orders: string[]): Promise<CanopyOrdersBypassUploadResult> {
         const response = await apiClient.post("/system/canopyorders/upload-bypass", { orders });
+        return response.data;
+    },
+
+    async getPrintJobs(status?: string, limit = 25): Promise<{ jobs: PrintJobRecord[] }> {
+        const response = await apiClient.get("/system/print-jobs", {
+            params: { status, limit },
+        });
+        return response.data;
+    },
+
+    async retryPicklistPrint(orderId: string): Promise<{ success: boolean; job: PrintJobRecord }> {
+        const response = await apiClient.post(`/system/orders/${orderId}/reprint-picklist`);
         return response.data;
     },
 };

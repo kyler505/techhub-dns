@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # IMPORTANT: this is intentionally a raw string to avoid pydantic-settings
     # "complex" env parsing (json.loads) which can crash on empty strings.
     admin_emails: Optional[str] = None
+    picklist_print_agent_token: Optional[str] = None
 
     # TAMU SMTP Email Configuration
     smtp_enabled: bool = False  # Safety: disabled by default

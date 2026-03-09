@@ -44,6 +44,21 @@ export interface PickStatus {
   missing_items: PickStatusItem[];
 }
 
+export interface PrintJobSummary {
+  id: string;
+  document_type: string;
+  status: string;
+  trigger_source: string;
+  requested_by?: string;
+  attempt_count: number;
+  claimed_at?: string;
+  claim_expires_at?: string;
+  completed_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Order {
   id: string;
   inflow_order_id: string;
@@ -79,6 +94,7 @@ export interface Order {
   tracking_number?: string;
   inflow_data?: Record<string, any>;
   pick_status?: PickStatus;
+  latest_picklist_print_job?: PrintJobSummary;
   asset_tag_serials?: AssetTagSerial[];
   created_at: string;
   updated_at: string;
