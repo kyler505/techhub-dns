@@ -305,6 +305,8 @@ export default function VettingEditor() {
                       </TableCell>
                       <TableCell>
                         <Input
+                          id={`vetting-name-${row.id}`}
+                          name={`vettingName-${row.id}`}
                           value={row.name}
                           onChange={(event) =>
                             updateRow(row.id, (current) => ({
@@ -317,6 +319,8 @@ export default function VettingEditor() {
                       </TableCell>
                       <TableCell>
                         <select
+                          id={`vetting-section-${row.id}`}
+                          name={`vettingSection-${row.id}`}
                           value={row.section}
                           onChange={(event) => {
                             const section = normalizeVettingEditorSection(event.target.value);
@@ -340,6 +344,8 @@ export default function VettingEditor() {
                       </TableCell>
                       <TableCell>
                         <select
+                          id={`vetting-category-${row.id}`}
+                          name={`vettingCategory-${row.id}`}
                           value={row.category}
                           onChange={(event) => {
                             const category = event.target.value as VettingEditorCategory;
@@ -356,6 +362,8 @@ export default function VettingEditor() {
                       </TableCell>
                       <TableCell>
                         <Input
+                          id={`vetting-url-${row.id}`}
+                          name={`vettingUrl-${row.id}`}
                           value={row.url}
                           onChange={(event) =>
                             updateRow(row.id, (current) => ({
@@ -369,6 +377,8 @@ export default function VettingEditor() {
                       <TableCell>
                         {sectionUsesVettingUrl(row.section) ? (
                           <Input
+                            id={`vetting-review-url-${row.id}`}
+                            name={`vettingReviewUrl-${row.id}`}
                             value={row.vettingUrl}
                             onChange={(event) =>
                               updateRow(row.id, (current) => ({

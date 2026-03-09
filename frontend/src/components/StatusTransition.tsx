@@ -64,10 +64,12 @@ export default function StatusTransition({
 
           {requireReason && (
             <div className="mt-4">
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="status-transition-reason" className="block text-sm font-medium text-foreground mb-2">
                 Reason <span className="text-destructive">*</span>
               </label>
               <textarea
+                id="status-transition-reason"
+                name="statusTransitionReason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 onBlur={() => setReasonTouched(true)}
