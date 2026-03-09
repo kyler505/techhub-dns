@@ -195,16 +195,20 @@ export default function VehicleCheckoutPanel({
               Checked out as: {user?.display_name || user?.email || "your account"}
             </div>
             <div className="grid gap-1">
-              <label className="text-sm font-medium">Purpose (required)</label>
+              <label htmlFor="vehicle-checkout-purpose" className="text-sm font-medium">Purpose (required)</label>
               <Input
+                id="vehicle-checkout-purpose"
+                name="vehicleCheckoutPurpose"
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
                 placeholder="Meeting / Receiving / Maintenance"
               />
             </div>
             <div className="grid gap-1">
-              <label className="text-sm font-medium">Notes (optional)</label>
+              <label htmlFor="vehicle-checkout-notes" className="text-sm font-medium">Notes (optional)</label>
               <textarea
+                id="vehicle-checkout-notes"
+                name="vehicleCheckoutNotes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -236,8 +240,10 @@ export default function VehicleCheckoutPanel({
               Checking in as: {user?.display_name || user?.email || "your account"}
             </div>
             <div className="grid gap-1">
-              <label className="text-sm font-medium">Notes (optional)</label>
+              <label htmlFor="vehicle-checkin-notes" className="text-sm font-medium">Notes (optional)</label>
               <textarea
+                id="vehicle-checkin-notes"
+                name="vehicleCheckinNotes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
