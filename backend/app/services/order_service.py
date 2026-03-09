@@ -112,6 +112,7 @@ class OrderService:
         order_id: Union[UUID, str],
         tag_ids: List[str],
         technician: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
         order = (
@@ -122,6 +123,8 @@ class OrderService:
         )
         if not order:
             raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
 
         tag_data = dict(order.tag_data or {})
         tag_data["tag_ids"] = tag_ids
@@ -147,7 +150,10 @@ class OrderService:
         return order
 
     def generate_picklist(
-        self, order_id: Union[UUID, str], generated_by: Optional[str] = None
+        self,
+        order_id: Union[UUID, str],
+        generated_by: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
         order = (
@@ -158,6 +164,8 @@ class OrderService:
         )
         if not order:
             raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
 
         if not order.tagged_at:
             raise ValidationError(
@@ -281,6 +289,7 @@ class OrderService:
         order_id: Union[UUID, str],
         qa_data: Dict[str, Any],
         technician: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
         order = (
@@ -291,6 +300,8 @@ class OrderService:
         )
         if not order:
             raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
 
         if not order.picklist_generated_at:
             raise ValidationError(
@@ -1606,6 +1617,7 @@ class OrderService:
         carrier_name: Optional[str] = None,
         tracking_number: Optional[str] = None,
         updated_by: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         """Transition shipping workflow status with validation"""
         order_id_str = str(order_id)
@@ -1617,6 +1629,8 @@ class OrderService:
         )
         if not order:
             raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
 
         if order.status != OrderStatus.SHIPPING.value:
             raise ValidationError(
