@@ -79,6 +79,8 @@ export default function OrderQAChecklist() {
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
                         <div className="flex items-center gap-2">
                             <input
+                                id="qa-checklist-search"
+                                name="qaChecklistSearch"
                                 className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#800000]"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
