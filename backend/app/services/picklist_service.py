@@ -18,16 +18,35 @@ logger = logging.getLogger(__name__)
 class PicklistService:
     """Service for generating picklist PDFs from inFlow order data."""
 
-    def generate_picklist_pdf(self, inflow_data: Dict[str, Any], output_path: str) -> None:
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _as_text(value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value)
+
+    @staticmethod
+    def _as_text_list(value: Any) -> List[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if item is not None]
+
+    def generate_picklist_pdf(
+        self, inflow_data: Dict[str, Any], output_path: str
+    ) -> None:
         """Generate a picklist PDF from inFlow order data."""
         # Extract order data
-        po_number = inflow_data.get("poNumber", "")
+        po_number = self._as_text(inflow_data.get("poNumber", ""))
         pick_lines = inflow_data.get("pickLines", [])
-        customer_name = inflow_data.get("contactName", "")
-        email = inflow_data.get("email", "")
-        order_number = inflow_data.get("orderNumber", "")
-        shipping_address = inflow_data.get("shippingAddress", {}).get("address1", "")
-        order_remarks = inflow_data.get('orderRemarks', '')
+        customer_name = self._as_text(inflow_data.get("contactName", ""))
+        email = self._as_text(inflow_data.get("email", ""))
+        order_number = self._as_text(inflow_data.get("orderNumber", ""))
+        shipping_address_data = self._as_dict(inflow_data.get("shippingAddress"))
+        shipping_address = self._as_text(shipping_address_data.get("address1", ""))
+        order_remarks = self._as_text(inflow_data.get("orderRemarks", ""))
 
         # Filter pick lines (remove already shipped items)
         pick_lines = filter_picklines(inflow_data, pick_lines)
@@ -54,12 +73,17 @@ class PicklistService:
         pdf.drawRightString(width - x_offset, y_offset, f"PO Number: {po_number}")
         y_offset -= 15
         pdf.drawString(x_offset, y_offset, f"77843 USA")
-        pdf.drawRightString(width - x_offset, y_offset, f"Shipping Address: {shipping_address}")
+        pdf.drawRightString(
+            width - x_offset, y_offset, f"Shipping Address: {shipping_address}"
+        )
         y_offset -= 15
 
         # Add Recipient UIN(s) or Name(s)
-        recipient_info = inflow_data.get("customFields", {}).get("custom4", "")
-        pdf.drawRightString(width - x_offset, y_offset, f"Recipient UIN(s) or Name(s): {recipient_info}")
+        custom_fields = self._as_dict(inflow_data.get("customFields"))
+        recipient_info = self._as_text(custom_fields.get("custom4", ""))
+        pdf.drawRightString(
+            width - x_offset, y_offset, f"Recipient UIN(s) or Name(s): {recipient_info}"
+        )
         y_offset -= 15
         pdf.line(x_offset, y_offset - 5, x_offset + 500, y_offset - 5)
         y_offset -= 25
@@ -78,17 +102,21 @@ class PicklistService:
         pdf.setFont("Helvetica", 12)
 
         for item in pick_lines:
-            product = item.get('product', {})
-            item_name = product.get('name', '').upper()
-            sku = product.get('sku', "")
-            quantity = item.get('quantity', {})
-            standard_quantity = quantity.get('standardQuantity', "")
-            serial_numbers = quantity.get('serialNumbers', [])
+            product = self._as_dict(item.get("product"))
+            item_name = self._as_text(product.get("name", "")).upper()
+            sku = self._as_text(product.get("sku", ""))
+            quantity = self._as_dict(item.get("quantity"))
+            standard_quantity = self._as_text(quantity.get("standardQuantity", ""))
+            serial_numbers = self._as_text_list(quantity.get("serialNumbers", []))
 
             # Product name and quantity
             pdf.setFont("Helvetica-Oblique", 11)
             pdf.drawString(x_offset, y_offset, f"{item_name} (SKU: {sku})")
-            pdf.drawRightString(width - x_offset, y_offset, f"{standard_quantity.replace('.0', '')} item(s)")
+            pdf.drawRightString(
+                width - x_offset,
+                y_offset,
+                f"{standard_quantity.replace('.0', '')} item(s)",
+            )
             y_offset -= 20
 
             y_offset = check_page_break(pdf, y_offset, height)
@@ -101,10 +129,13 @@ class PicklistService:
                 text_object = pdf.beginText(x_offset, y_offset)
                 text_object.setFont("Helvetica-Bold", 11)
 
-                words = serial_text.split(' ')
+                words = serial_text.split(" ")
                 current_line = ""
                 for word in words:
-                    if pdf.stringWidth(current_line + word, "Helvetica", 11) < max_width:
+                    if (
+                        pdf.stringWidth(current_line + word, "Helvetica", 11)
+                        < max_width
+                    ):
                         current_line += word + " "
                     else:
                         text_object.textLine(current_line.strip())
@@ -152,9 +183,6 @@ class PicklistService:
 
         pdf.save()
         logger.info(f"Picklist PDF generated: {output_path}")
-
-
-
 
 
 # Singleton for easy import
