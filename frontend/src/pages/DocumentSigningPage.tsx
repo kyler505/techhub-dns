@@ -673,18 +673,25 @@ function DocumentSigningPage() {
                     y: p.y,
                     width: p.width,
                     height: p.height
-                }))
+                })),
+                expected_updated_at: order.updated_at,
             };
 
-            await ordersApi.signOrder(order.id, payload as any); // Cast because frontend types might need update
+            await ordersApi.signOrder(order.id, payload);
 
             const returnTo = searchParams.get('returnTo') || `/orders/${order.id}`;
             navigate(returnTo, {
                 state: { message: 'Document signed successfully!' }
             });
 
-        } catch (saveError) {
+        } catch (saveError: any) {
             console.error(saveError);
+            if (saveError?.response?.status === 409) {
+                setError("This order changed while you were signing. Reloaded the latest order data; review and sign again.");
+                const refreshedOrder = await ordersApi.getOrder(order.id);
+                setOrder(refreshedOrder);
+                return;
+            }
             setError("Unable to complete signing. Please try again.");
         } finally {
             setIsSaving(false);

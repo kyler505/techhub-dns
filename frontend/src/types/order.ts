@@ -115,6 +115,10 @@ export interface OrderStatusUpdate {
   expected_updated_at?: string;
 }
 
+export interface OrderMutationPayload {
+  expected_updated_at?: string;
+}
+
 export interface BulkStatusUpdate {
   order_ids: string[];
   status: OrderStatus;
