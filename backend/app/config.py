@@ -26,22 +26,26 @@ class Settings(BaseSettings):
     inflow_polling_sync_enabled: bool = True
     inflow_polling_sync_interval_minutes: Optional[int] = None
 
-
-
     # Storage
     storage_root: str = "storage"
     picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
 
     # SharePoint Storage
     sharepoint_enabled: bool = False  # Safety: disabled by default
-    sharepoint_site_url: Optional[str] = None  # e.g., https://tamucs.sharepoint.com/teams/Team-TechHub
-    sharepoint_folder_path: str = "General/delivery-storage"  # Folder within Documents library
+    sharepoint_site_url: Optional[str] = (
+        None  # e.g., https://tamucs.sharepoint.com/teams/Team-TechHub
+    )
+    sharepoint_folder_path: str = (
+        "General/delivery-storage"  # Folder within Documents library
+    )
     sharepoint_tenant_id: Optional[str] = None  # Azure AD tenant ID (e.g., from TAMU)
-    sharepoint_client_id: Optional[str] = None  # Azure AD app client ID (register in Azure portal)
-
+    sharepoint_client_id: Optional[str] = (
+        None  # Azure AD app client ID (register in Azure portal)
+    )
 
     # CORS
     frontend_url: str = "http://localhost:5173"
+    cors_allowed_origins: Optional[str] = None
 
     # Auth (structure only)
     secret_key: str = "change-me-in-production"
@@ -63,10 +67,9 @@ class Settings(BaseSettings):
 
     # Teams Recipient Notifications (Graph API)
     teams_recipient_notifications_enabled: bool = False
-    teams_notification_queue_folder: str = "teams-queue"  # Relative to sharepoint_folder_path
-
-
-
+    teams_notification_queue_folder: str = (
+        "teams-queue"  # Relative to sharepoint_folder_path
+    )
 
     # ===========================================
     # TAMU Entra ID Authentication (SAML + Service Principal)
@@ -93,7 +96,12 @@ class Settings(BaseSettings):
     maintenance_tick_enabled: bool = True
     maintenance_tick_min_interval_seconds: int = 60
 
-    # APScheduler background jobs (disabled by default for shared DB users)
+    # Lightweight in-process API throttling for admin-heavy endpoints
+    rate_limit_window_seconds: int = 60
+    admin_read_rate_limit_requests: int = 30
+    admin_write_rate_limit_requests: int = 10
+
+    # Background scheduler runner (used by backend/run_scheduler.py)
     scheduler_enabled: bool = False
 
     maintenance_sessions_purge_interval_hours: int = 24
@@ -124,8 +132,23 @@ class Settings(BaseSettings):
         """
         return self._parse_admin_emails(self.admin_emails)
 
+    def get_cors_allowed_origins(self) -> list[str]:
+        origins = self._parse_string_list(self.cors_allowed_origins)
+        if origins:
+            return origins
+
+        frontend_url = (self.frontend_url or "").strip()
+        if frontend_url:
+            return [frontend_url]
+
+        return ["http://localhost:5173"]
+
     @staticmethod
     def _parse_admin_emails(raw_value: Optional[str]) -> list[str]:
+        return Settings._parse_string_list(raw_value)
+
+    @staticmethod
+    def _parse_string_list(raw_value: Optional[str]) -> list[str]:
         if raw_value is None:
             return []
 
@@ -182,9 +205,7 @@ class Settings(BaseSettings):
     vetting_editor_webdav_password: Optional[str] = None
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", case_sensitive=False, extra="ignore"
     )
 
     @field_validator("inflow_webhook_events", mode="before")
@@ -205,5 +226,6 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
+
 
 settings = Settings()

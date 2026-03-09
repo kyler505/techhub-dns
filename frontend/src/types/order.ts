@@ -112,6 +112,11 @@ export interface AssetTagSerial {
 export interface OrderStatusUpdate {
   status: OrderStatus;
   reason?: string;
+  expected_updated_at?: string;
+}
+
+export interface OrderMutationPayload {
+  expected_updated_at?: string;
 }
 
 export interface BulkStatusUpdate {

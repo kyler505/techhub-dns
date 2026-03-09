@@ -80,11 +80,20 @@ export default function OrderDetailPage() {
     const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
         try {
-            await ordersApi.updateOrderStatus(order.id, { status: newStatus, reason });
+            await ordersApi.updateOrderStatus(order.id, {
+                status: newStatus,
+                reason,
+                expected_updated_at: order.updated_at,
+            });
             setTransitioningStatus(null);
             loadOrder();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to update status:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                loadOrder();
+                return;
+            }
             toast.error("Failed to update order status");
         }
     };
@@ -107,11 +116,17 @@ export default function OrderDetailPage() {
         try {
             await ordersApi.tagOrder(order.id, {
                 tag_ids: tagIds,
-                technician: getUserName()
+                technician: getUserName(),
+                expected_updated_at: order.updated_at,
             });
             loadOrder();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to tag order:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                loadOrder();
+                return;
+            }
             toast.error("Failed to tag order");
         }
     };
@@ -120,11 +135,17 @@ export default function OrderDetailPage() {
         if (!order) return;
         try {
             await ordersApi.generatePicklist(order.id, {
-                generated_by: getUserName()
+                generated_by: getUserName(),
+                expected_updated_at: order.updated_at,
             });
             loadOrder();
         } catch (error: any) {
             console.error("Failed to generate picklist:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                loadOrder();
+                return;
+            }
             const message = error.response?.data?.error || "Failed to generate picklist";
             toast.error(message);
         }

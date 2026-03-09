@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
+import { observabilityApi, RuntimeSummaryResponse } from "../api/observability";
 import { CanopyOrdersBypassUploadResult, settingsApi, SystemSettings } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
 import { Badge } from "../components/ui/badge";
@@ -83,8 +84,10 @@ const parseCanopyOrdersBypassInput = (input: string) => {
 export default function Admin() {
     const { user, isAdmin, isLoading: authLoading } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+    const [runtimeSummary, setRuntimeSummary] = useState<RuntimeSummaryResponse | null>(null);
     const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
     const [loading, setLoading] = useState(true);
+    const [runtimeSummaryLoading, setRuntimeSummaryLoading] = useState(false);
 
     const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations" | "admins" | "flow">("overview");
 
@@ -119,6 +122,7 @@ export default function Admin() {
         }
 
         void loadSystemStatus();
+        void loadRuntimeSummary();
         void loadInflowWebhooks();
         void loadSystemSettings();
     }, [isAdmin]);
@@ -149,6 +153,19 @@ export default function Admin() {
         } catch (error) {
             console.error("Failed to load system settings:", error);
             toast.error("Failed to load notification settings.");
+        }
+    };
+
+    const loadRuntimeSummary = async () => {
+        setRuntimeSummaryLoading(true);
+        try {
+            const summary = await observabilityApi.getRuntimeSummary();
+            setRuntimeSummary(summary);
+        } catch (error) {
+            console.error("Failed to load runtime summary:", error);
+            toast.error("Failed to load runtime diagnostics.");
+        } finally {
+            setRuntimeSummaryLoading(false);
         }
     };
 
@@ -341,6 +358,43 @@ export default function Admin() {
         return Object.values(systemStatus);
     }, [systemStatus]);
 
+    const runtimeCards = useMemo(() => {
+        if (!runtimeSummary) return [];
+
+        return [
+            {
+                title: "Sessions",
+                value: runtimeSummary.workload.active_sessions,
+                details: `${runtimeSummary.workload.active_delivery_runs} active delivery runs`,
+            },
+            {
+                title: "Open Orders",
+                value: runtimeSummary.workload.open_orders,
+                details: runtimeSummary.inflow.active_webhook ? "Webhook active" : "Webhook inactive",
+            },
+            {
+                title: "Polling Mode",
+                value:
+                    runtimeSummary.inflow.effective_poll_interval_minutes === null
+                        ? "Off"
+                        : `${runtimeSummary.inflow.effective_poll_interval_minutes} min`,
+                details: runtimeSummary.inflow.active_webhook ? "Webhook backup mode" : "Primary polling mode",
+            },
+            {
+                title: "DB Pool",
+                value: `${runtimeSummary.database.pool_size ?? "-"}/${runtimeSummary.database.max_overflow ?? "-"}`,
+                details: `${runtimeSummary.database.database_backend.toUpperCase()} pool / overflow`,
+            },
+        ];
+    }, [runtimeSummary]);
+
+    const runtimeGeneratedLabel = useMemo(() => {
+        if (!runtimeSummary?.generated_at) return null;
+        const generated = new Date(runtimeSummary.generated_at);
+        if (Number.isNaN(generated.getTime())) return runtimeSummary.generated_at;
+        return generated.toLocaleString();
+    }, [runtimeSummary]);
+
     if (authLoading || loading) {
         return (
             <div className="container mx-auto py-6 space-y-4">
@@ -482,6 +536,91 @@ export default function Admin() {
                                     </Card>
                                 ))}
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <CardTitle className="text-base">Runtime Summary</CardTitle>
+                                <CardDescription>Live workload, polling, database, and admin throttle state.</CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {runtimeGeneratedLabel ? (
+                                    <span className="text-xs text-muted-foreground">Updated {runtimeGeneratedLabel}</span>
+                                ) : null}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void loadRuntimeSummary()}
+                                    disabled={runtimeSummaryLoading}
+                                    className="btn-lift"
+                                >
+                                    {runtimeSummaryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                    Refresh summary
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {runtimeSummary ? (
+                                <>
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                        {runtimeCards.map((item) => (
+                                            <div key={item.title} className="rounded-lg border bg-muted/30 p-4">
+                                                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{item.title}</div>
+                                                <div className="mt-2 text-2xl font-semibold text-foreground">{item.value}</div>
+                                                <div className="mt-1 text-xs text-muted-foreground">{item.details}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                        <div className="rounded-lg border bg-card p-4">
+                                            <div className="text-sm font-medium text-foreground">Integration Runtime</div>
+                                            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>Webhook ID</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.inflow.webhook_id ?? "None"}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>Last webhook event</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.inflow.last_webhook_received_at ? new Date(runtimeSummary.inflow.last_webhook_received_at).toLocaleString() : "Never"}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>CORS origins</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.app.cors_allowed_origins.join(", ")}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-lg border bg-card p-4">
+                                            <div className="text-sm font-medium text-foreground">Admin Throttles</div>
+                                            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>Window</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.rate_limits.window_seconds}s</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>Read limit</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.rate_limits.rules.admin_reads ?? 0}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>Write limit</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.rate_limits.rules.admin_writes ?? 0}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span>Active buckets</span>
+                                                    <span className="text-right text-foreground">{Object.keys(runtimeSummary.rate_limits.active_scopes).length}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="rounded-lg border border-dashed bg-card p-6 text-sm text-muted-foreground">
+                                    Runtime diagnostics unavailable.
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

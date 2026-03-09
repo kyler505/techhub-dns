@@ -7,18 +7,18 @@ from app.config import settings
 
 database_url = settings.database_url
 
-# SQLAlchemy QueuePool settings are process-local. Keep defaults conservative to
-# reduce contention when environments share a MySQL user.
+# SQLAlchemy QueuePool settings are process-local. Keep defaults conservative,
+# but allow a little headroom for a small internal team on one web worker.
 MYSQL_POOL_DEFAULTS = {
-    "pool_size": 2,
-    "max_overflow": 1,
+    "pool_size": 4,
+    "max_overflow": 2,
     "pool_timeout": 5,
     "pool_recycle": 3600,
 }
 
 MYSQL_POOL_LIMITS = {
-    "pool_size": (1, 8),
-    "max_overflow": (0, 8),
+    "pool_size": (1, 12),
+    "max_overflow": (0, 12),
     "pool_timeout": (2, 30),
     "pool_recycle": (300, 7200),
 }
@@ -45,7 +45,9 @@ def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int
 
 
 runtime_db_pool_settings = {
-    "database_backend": "sqlite" if str(database_url).strip().lower().startswith("sqlite") else "mysql",
+    "database_backend": "sqlite"
+    if str(database_url).strip().lower().startswith("sqlite")
+    else "mysql",
     "pool_size": None,
     "max_overflow": None,
     "pool_timeout": None,
