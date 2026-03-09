@@ -196,6 +196,8 @@ export default function OrderQAPage() {
                             1. Order Number <span className="text-red-600">*</span>
                         </label>
                         <input
+                            id="qa-order-number"
+                            name="orderNumber"
                             value={form.orderNumber}
                             readOnly
                             className="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 shadow-sm focus:outline-none"
@@ -257,6 +259,8 @@ export default function OrderQAPage() {
                         ].map((item) => (
                             <label key={item.id} className={`flex items-start gap-3 rounded-lg border p-4 transition-colors cursor-pointer ${item.checked ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-[#800000]'}`}>
                                 <input
+                                    id={item.id}
+                                    name={item.id}
                                     type="checkbox"
                                     checked={item.checked}
                                     onChange={item.setter}
@@ -291,6 +295,7 @@ export default function OrderQAPage() {
                             <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Delivery' ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                                 <input
                                     type="radio"
+                                    id="qa-method-delivery"
                                     name="qa-method"
                                     checked={form.method === "Delivery"}
                                     onChange={() => setForm((p) => ({ ...p, method: "Delivery" }))}
@@ -302,6 +307,7 @@ export default function OrderQAPage() {
                             <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Shipping' ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                                 <input
                                     type="radio"
+                                    id="qa-method-shipping"
                                     name="qa-method"
                                     checked={form.method === "Shipping"}
                                     onChange={() => setForm((p) => ({ ...p, method: "Shipping" }))}
