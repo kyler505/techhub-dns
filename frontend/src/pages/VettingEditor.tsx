@@ -111,6 +111,43 @@ const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
   return payload;
 };
 
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as {
+      message?: unknown;
+      response?: {
+        data?: {
+          error?: unknown;
+          message?: unknown;
+        };
+      };
+    };
+
+    const fromDataError = candidate.response?.data?.error;
+    if (typeof fromDataError === "string" && fromDataError.trim()) {
+      return fromDataError;
+    }
+
+    if (typeof fromDataError === "object" && fromDataError) {
+      const maybeMessage = (fromDataError as { message?: unknown }).message;
+      if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+        return maybeMessage;
+      }
+    }
+
+    const fromDataMessage = candidate.response?.data?.message;
+    if (typeof fromDataMessage === "string" && fromDataMessage.trim()) {
+      return fromDataMessage;
+    }
+
+    if (typeof candidate.message === "string" && candidate.message.trim()) {
+      return candidate.message;
+    }
+  }
+
+  return fallback;
+};
+
 export default function VettingEditor() {
   const { isAdmin, isLoading: authLoading, user } = useAuth();
   const [rows, setRows] = useState<VettingEditorRow[]>([]);
@@ -141,8 +178,8 @@ export default function VettingEditor() {
       try {
         const payload = await vettingEditorApi.getData();
         setRows(flattenPayload(payload));
-      } catch (error: any) {
-        const message = error?.response?.data?.error || "Failed to load vetting data.";
+      } catch (error: unknown) {
+        const message = getApiErrorMessage(error, "Failed to load vetting data.");
         toast.error("Failed to load Vetting Editor", { description: message });
         setRows([]);
       } finally {
@@ -169,9 +206,8 @@ export default function VettingEditor() {
       const payload = buildPayload(rows);
       await vettingEditorApi.saveData(payload);
       toast.success("Vetting data saved");
-    } catch (error: any) {
-      const fallback = error instanceof Error ? error.message : "Save failed.";
-      const message = error?.response?.data?.error || fallback;
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error, "Save failed.");
       toast.error("Failed to save Vetting Editor", { description: message });
     } finally {
       setSaving(false);
