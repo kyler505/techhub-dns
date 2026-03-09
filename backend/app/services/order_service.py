@@ -33,6 +33,11 @@ from app.utils.exceptions import (
     FileOperationError,
 )
 from app.config import settings
+from app.services.print_job_service import PrintJobService, emit_print_job_available
+from app.services.system_setting_service import (
+    SETTING_PICKLIST_AUTO_PRINT_ENABLED,
+    SystemSettingService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +188,8 @@ class OrderService:
                 f"Tagged by: {order.tagged_by}, current user: {generated_by}"
             )
 
+        is_first_picklist = order.picklist_generated_at is None
+
         picklist_dir = self._storage_path("picklists")
         picklist_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{order.inflow_order_id or order.id}.pdf"
@@ -224,8 +231,20 @@ class OrderService:
         order.picklist_path = picklist_path
         order.updated_at = datetime.utcnow()
 
+        queued_print_job = None
+        if is_first_picklist and SystemSettingService.get_setting(
+            self.db, SETTING_PICKLIST_AUTO_PRINT_ENABLED
+        ).lower() in {"true", "1", "yes", "on"}:
+            queued_print_job = PrintJobService(self.db).enqueue_picklist_print(
+                order,
+                trigger_source="automatic",
+                requested_by=generated_by,
+            )
+
         self.db.commit()
         self.db.refresh(order)
+        if queued_print_job is not None:
+            emit_print_job_available(queued_print_job)
 
         # Audit logging for picklist generation
         audit_service = AuditService(self.db)
@@ -489,6 +508,7 @@ class OrderService:
             self.db.query(Order)
             .options(
                 selectinload(Order.audit_logs),
+                selectinload(Order.print_jobs),
             )
             .filter(Order.id == order_id_str)
             .first()

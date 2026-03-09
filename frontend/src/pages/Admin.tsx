@@ -3,7 +3,12 @@ import { toast } from "sonner";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
 import { observabilityApi, RuntimeSummaryResponse } from "../api/observability";
-import { CanopyOrdersBypassUploadResult, settingsApi, SystemSettings } from "../api/settings";
+import {
+    CanopyOrdersBypassUploadResult,
+    PrintJobRecord,
+    settingsApi,
+    SystemSettings,
+} from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -81,6 +86,12 @@ const parseCanopyOrdersBypassInput = (input: string) => {
     return normalized;
 };
 
+const formatTimestamp = (value?: string | null) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+};
+
 export default function Admin() {
     const { user, isAdmin, isLoading: authLoading } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -111,6 +122,9 @@ export default function Admin() {
     const [togglingSettingKey, setTogglingSettingKey] = useState<string | null>(null);
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
     const [manualSyncing, setManualSyncing] = useState(false);
+    const [printJobs, setPrintJobs] = useState<PrintJobRecord[]>([]);
+    const [printJobsLoading, setPrintJobsLoading] = useState(false);
+    const [retryingPrintOrderId, setRetryingPrintOrderId] = useState<string | null>(null);
 
     const deleteCancelButtonRef = useRef<HTMLButtonElement | null>(null);
     const syncCancelButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -125,6 +139,7 @@ export default function Admin() {
         void loadRuntimeSummary();
         void loadInflowWebhooks();
         void loadSystemSettings();
+        void loadPrintJobs();
     }, [isAdmin]);
 
     const loadSystemStatus = async () => {
@@ -179,6 +194,19 @@ export default function Admin() {
         }
     };
 
+    const loadPrintJobs = async () => {
+        setPrintJobsLoading(true);
+        try {
+            const response = await settingsApi.getPrintJobs(undefined, 20);
+            setPrintJobs(response.jobs);
+        } catch (error) {
+            console.error("Failed to load print jobs:", error);
+            toast.error("Failed to load picklist print jobs.");
+        } finally {
+            setPrintJobsLoading(false);
+        }
+    };
+
     const handleToggleSetting = async (key: string, currentValue: string) => {
         const newValue = currentValue === "true" ? "false" : "true";
         try {
@@ -213,6 +241,22 @@ export default function Admin() {
             });
         } finally {
             setRegisteringWebhook(false);
+        }
+    };
+
+    const handleRetryPrintJob = async (orderId: string) => {
+        setRetryingPrintOrderId(orderId);
+        try {
+            await settingsApi.retryPicklistPrint(orderId);
+            toast.success("Picklist reprint queued");
+            await loadPrintJobs();
+        } catch (error: any) {
+            console.error("Failed to queue picklist reprint:", error);
+            toast.error("Failed to queue picklist reprint", {
+                description: error.response?.data?.error || "Please try again.",
+            });
+        } finally {
+            setRetryingPrintOrderId(null);
         }
     };
 
@@ -762,12 +806,135 @@ export default function Admin() {
                                 <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
                                     This triggers a backend sync and may take a moment depending on queue size.
                                 </div>
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Tag Request Upload (Bypass)</CardTitle>
+                            <Card>
+                                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <CardTitle className="text-base">Picklist Print Recovery</CardTitle>
+                                        <CardDescription>
+                                            Review recent picklist print jobs and manually retry failed attempts.
+                                        </CardDescription>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge
+                                            variant={getSetting(systemSettings, "picklist_auto_print_enabled").value === "true" ? "success" : "secondary"}
+                                        >
+                                            Auto-print {getSetting(systemSettings, "picklist_auto_print_enabled").value === "true" ? "on" : "off"}
+                                        </Badge>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                handleToggleSetting(
+                                                    "picklist_auto_print_enabled",
+                                                    getSetting(systemSettings, "picklist_auto_print_enabled").value,
+                                                )
+                                            }
+                                            disabled={togglingSettingKey === "picklist_auto_print_enabled"}
+                                        >
+                                            {togglingSettingKey === "picklist_auto_print_enabled" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : null}
+                                            Toggle
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={loadPrintJobs} disabled={printJobsLoading}>
+                                            {printJobsLoading ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <RefreshCw className="mr-2 h-4 w-4" />
+                                            )}
+                                            Refresh
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                                        The fixed ops desktop listens for `print_job_available` websocket events and falls back to polling the print queue.
+                                    </div>
+                                    <div className="rounded-lg border bg-card">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Order</TableHead>
+                                                    <TableHead>Source</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                    <TableHead className="hidden md:table-cell">Attempts</TableHead>
+                                                    <TableHead className="hidden md:table-cell">Created</TableHead>
+                                                    <TableHead className="hidden lg:table-cell">Last Error</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {printJobs.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                                                            No picklist print jobs yet.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    printJobs.map((job) => (
+                                                        <TableRow key={job.id}>
+                                                            <TableCell>
+                                                                <div className="text-sm font-medium text-foreground">
+                                                                    {job.order_inflow_order_id || job.order_id}
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground">{job.order_id}</div>
+                                                            </TableCell>
+                                                            <TableCell className="capitalize">{job.trigger_source}</TableCell>
+                                                            <TableCell>
+                                                                <Badge
+                                                                    variant={
+                                                                        job.status === "completed"
+                                                                            ? "success"
+                                                                            : job.status === "failed"
+                                                                                ? "destructive"
+                                                                                : "secondary"
+                                                                    }
+                                                                >
+                                                                    {job.status}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="hidden md:table-cell">{job.attempt_count}</TableCell>
+                                                            <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                                                {formatTimestamp(job.created_at)}
+                                                            </TableCell>
+                                                            <TableCell
+                                                                className="hidden max-w-[18rem] truncate text-sm text-muted-foreground lg:table-cell"
+                                                                title={job.last_error || undefined}
+                                                            >
+                                                                {job.last_error || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleRetryPrintJob(job.order_id)}
+                                                                    disabled={
+                                                                        retryingPrintOrderId === job.order_id ||
+                                                                        job.status === "pending" ||
+                                                                        job.status === "claimed"
+                                                                    }
+                                                                >
+                                                                    {retryingPrintOrderId === job.order_id ? (
+                                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                                    ) : null}
+                                                                    Retry Print
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base">Tag Request Upload (Bypass)</CardTitle>
                                 <CardDescription>Uploads order values, bypassing eligibility checks.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
