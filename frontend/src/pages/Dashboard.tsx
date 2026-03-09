@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
 import {
   analyticsApi,
@@ -101,6 +102,11 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
 }
 
 export default function Dashboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [workflowTrendDays, setWorkflowTrendDays] = useState<7 | 30>(() => {
+    const value = searchParams.get("workflowRange");
+    return value === "7" ? 7 : 30;
+  });
   // State for analytics data
   const [statusCounts, setStatusCounts] = useState<StatusCountsResponse>({});
   const [deliveryPerf, setDeliveryPerf] = useState<DeliveryPerformanceResponse>({
@@ -126,9 +132,37 @@ export default function Dashboard() {
   const socketReconnectTimeoutRef = useRef<number | null>(null);
   const lastSocketRefreshRef = useRef(0);
   const socketRefreshInFlightRef = useRef(false);
+  const workflowTrendDaysRef = useRef<7 | 30>(30);
+
+  useEffect(() => {
+    workflowTrendDaysRef.current = workflowTrendDays;
+  }, [workflowTrendDays]);
+
+  useEffect(() => {
+    const value = searchParams.get("workflowRange");
+    const next = value === "7" ? 7 : 30;
+    if (next !== workflowTrendDays) {
+      setWorkflowTrendDays(next);
+    }
+  }, [searchParams]);
+
+  const updateWorkflowTrendDays = useCallback(
+    (next: 7 | 30) => {
+      if (next === workflowTrendDays) {
+        return;
+      }
+
+      setWorkflowTrendDays(next);
+
+      const updated = new URLSearchParams(searchParams);
+      updated.set("workflowRange", String(next));
+      setSearchParams(updated, { replace: true });
+    },
+    [searchParams, setSearchParams, workflowTrendDays],
+  );
 
   // Fetch all analytics data
-  const fetchAnalytics = async (silent: boolean = false) => {
+  const fetchAnalytics = async (silent: boolean = false, trendDays: 7 | 30 = workflowTrendDaysRef.current) => {
     try {
       setError(null);
       if (!silent) {
@@ -146,7 +180,7 @@ export default function Dashboard() {
           completed_today: 0,
           ready_for_delivery: 0,
         })),
-        analyticsApi.getWorkflowDailyTrends(30).catch(() => ({ period: "day", data: [] })),
+        analyticsApi.getWorkflowDailyTrends(trendDays).catch(() => ({ period: "day", data: [] })),
         analyticsApi.getFulfilledTotals({ period: "month", months: 12 }).catch(() => ({ period: "month" as const, data: [] })),
         analyticsApi.getFulfilledTotals({ period: "year", years: 5 }).catch(() => ({ period: "year" as const, data: [] })),
         ordersApi.getOrders({ status: OrderStatus.DELIVERED }).catch(() => []),
@@ -208,6 +242,10 @@ export default function Dashboard() {
       window.clearInterval(interval);
     };
   }, [socketStatus]);
+
+  useEffect(() => {
+    fetchAnalytics(false, workflowTrendDays);
+  }, [workflowTrendDays]);
 
   // Setup Socket.IO for real-time updates
   useEffect(() => {
@@ -416,9 +454,31 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Orders Daily Workflow</CardTitle>
-            <p className="text-xs text-muted-foreground">Last 30 days</p>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Orders Daily Workflow</CardTitle>
+              <p className="text-xs text-muted-foreground">Last {workflowTrendDays} days</p>
+            </div>
+            <div className="flex items-center gap-1 rounded-md border p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={workflowTrendDays === 7 ? "default" : "ghost"}
+                  onClick={() => updateWorkflowTrendDays(7)}
+                  className="h-7 px-2"
+                >
+                  7d
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={workflowTrendDays === 30 ? "default" : "ghost"}
+                  onClick={() => updateWorkflowTrendDays(30)}
+                  className="h-7 px-2"
+                >
+                  30d
+                </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />

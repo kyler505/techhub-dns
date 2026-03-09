@@ -9,12 +9,17 @@ export function useStatusTransition() {
   const transitionStatus = async (
     orderId: string,
     newStatus: OrderStatus,
-    reason?: string
+    reason?: string,
+    expectedUpdatedAt?: string
   ) => {
     setLoading(true);
     setError(null);
     try {
-      await ordersApi.updateOrderStatus(orderId, { status: newStatus, reason });
+      await ordersApi.updateOrderStatus(orderId, {
+        status: newStatus,
+        reason,
+        expected_updated_at: expectedUpdatedAt,
+      });
       return true;
     } catch (err) {
       setError(err as Error);

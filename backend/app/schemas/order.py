@@ -5,7 +5,6 @@ from uuid import UUID
 from app.models.order import OrderStatus, ShippingWorkflowStatus
 
 
-
 class OrderBase(BaseModel):
     inflow_order_id: str
     recipient_name: Optional[str] = None
@@ -22,6 +21,7 @@ class OrderCreate(OrderBase):
 
 class PickStatusItem(BaseModel):
     """Individual item that was not fully picked"""
+
     product_id: str
     product_name: str
     ordered: int
@@ -30,6 +30,7 @@ class PickStatusItem(BaseModel):
 
 class PickStatus(BaseModel):
     """Pick status for an order - indicates if order is fully picked"""
+
     is_fully_picked: bool
     total_ordered: int
     total_picked: int
@@ -42,25 +43,30 @@ class OrderUpdate(BaseModel):
     delivery_location: Optional[str] = None
     assigned_deliverer: Optional[str] = None
     issue_reason: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
     reason: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class AssetTagUpdate(BaseModel):
     tag_ids: List[str] = Field(default_factory=list)
     technician: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class PicklistGenerationRequest(BaseModel):
     generated_by: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class QASubmission(BaseModel):
     responses: Dict[str, Any] = Field(default_factory=dict)
     technician: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class SignaturePlacement(BaseModel):
@@ -74,6 +80,7 @@ class SignaturePlacement(BaseModel):
 class SignatureData(BaseModel):
     signature_image: str  # Base64 encoded PNG
     placements: List[SignaturePlacement] = Field(default_factory=list)
+    expected_updated_at: Optional[datetime] = None
     # Backward compatibility (optional)
     page_number: Optional[int] = None
     position: Optional[Dict[str, float]] = None
@@ -111,11 +118,11 @@ class OrderResponse(OrderBase):
 
     model_config = {"from_attributes": True}
 
-    @field_serializer('status')
+    @field_serializer("status")
     def serialize_status(self, value):
         return value
 
-    @field_serializer('shipping_workflow_status')
+    @field_serializer("shipping_workflow_status")
     def serialize_shipping_workflow_status(self, value):
         return value
 
@@ -124,7 +131,6 @@ class OrderDetailResponse(OrderResponse):
     inflow_data: Optional[Dict[str, Any]] = None
     asset_tag_serials: Optional[List[Dict[str, Any]]] = None
     asset_tag_required: Optional[bool] = None
-
 
 
 class BulkStatusUpdate(BaseModel):
@@ -138,6 +144,7 @@ class ShippingWorkflowUpdateRequest(BaseModel):
     carrier_name: Optional[str] = None
     tracking_number: Optional[str] = None
     updated_by: Optional[str] = None
+    expected_updated_at: Optional[datetime] = None
 
 
 class ShippingWorkflowResponse(BaseModel):
