@@ -54,6 +54,8 @@ export default function Filters({
 
             <div className="w-full sm:w-auto sm:min-w-[300px]">
                 <input
+                    id="orders-search"
+                    name="ordersSearch"
                     type="text"
                     placeholder="Search orders"
                     value={search}
