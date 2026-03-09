@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
@@ -144,17 +144,22 @@ export default function Dashboard() {
     if (next !== workflowTrendDays) {
       setWorkflowTrendDays(next);
     }
-  }, [searchParams, workflowTrendDays]);
+  }, [searchParams]);
 
-  useEffect(() => {
-    const current = searchParams.get("workflowRange");
-    const next = String(workflowTrendDays);
-    if (current === next) return;
+  const updateWorkflowTrendDays = useCallback(
+    (next: 7 | 30) => {
+      if (next === workflowTrendDays) {
+        return;
+      }
 
-    const updated = new URLSearchParams(searchParams);
-    updated.set("workflowRange", next);
-    setSearchParams(updated, { replace: true });
-  }, [searchParams, setSearchParams, workflowTrendDays]);
+      setWorkflowTrendDays(next);
+
+      const updated = new URLSearchParams(searchParams);
+      updated.set("workflowRange", String(next));
+      setSearchParams(updated, { replace: true });
+    },
+    [searchParams, setSearchParams, workflowTrendDays],
+  );
 
   // Fetch all analytics data
   const fetchAnalytics = async (silent: boolean = false, trendDays: 7 | 30 = workflowTrendDaysRef.current) => {
@@ -455,24 +460,24 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">Last {workflowTrendDays} days</p>
             </div>
             <div className="flex items-center gap-1 rounded-md border p-1">
-              <Button
-                type="button"
-                size="sm"
-                variant={workflowTrendDays === 7 ? "default" : "ghost"}
-                onClick={() => setWorkflowTrendDays(7)}
-                className="h-7 px-2"
-              >
-                7d
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={workflowTrendDays === 30 ? "default" : "ghost"}
-                onClick={() => setWorkflowTrendDays(30)}
-                className="h-7 px-2"
-              >
-                30d
-              </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={workflowTrendDays === 7 ? "default" : "ghost"}
+                  onClick={() => updateWorkflowTrendDays(7)}
+                  className="h-7 px-2"
+                >
+                  7d
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={workflowTrendDays === 30 ? "default" : "ghost"}
+                  onClick={() => updateWorkflowTrendDays(30)}
+                  className="h-7 px-2"
+                >
+                  30d
+                </Button>
             </div>
           </CardHeader>
           <CardContent>
