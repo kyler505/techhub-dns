@@ -22,6 +22,15 @@ class DeliveryRunService:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _normalize_stale_timestamp(value: datetime) -> datetime:
+        normalized = (
+            value.astimezone(timezone.utc).replace(tzinfo=None)
+            if value.tzinfo
+            else value
+        )
+        return normalized.replace(microsecond=(normalized.microsecond // 1000) * 1000)
+
     def generate_run_name(self, run_time: datetime) -> str:
         """Generate a run name based on time and existing runs that day."""
         from app.utils.timezone import get_cst_datetime
@@ -36,44 +45,67 @@ class DeliveryRunService:
 
         if is_morning:
             # Morning: 00:00 to 11:59 CST
-            morning_start_cst = datetime.strptime(f"{date_str} 00:00:00", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone(cst_tz_offset))
-            morning_end_cst = datetime.strptime(f"{date_str} 11:59:59", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone(cst_tz_offset))
+            morning_start_cst = datetime.strptime(
+                f"{date_str} 00:00:00", "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone(cst_tz_offset))
+            morning_end_cst = datetime.strptime(
+                f"{date_str} 11:59:59", "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone(cst_tz_offset))
 
             # Convert to UTC for database query
             morning_start_utc = morning_start_cst.astimezone(timezone.utc)
             morning_end_utc = morning_end_cst.astimezone(timezone.utc)
 
-            existing_runs = self.db.query(DeliveryRun).filter(
-                and_(
-                    DeliveryRun.created_at >= morning_start_utc,
-                    DeliveryRun.created_at < run_time.replace(tzinfo=timezone.utc)
+            existing_runs = (
+                self.db.query(DeliveryRun)
+                .filter(
+                    and_(
+                        DeliveryRun.created_at >= morning_start_utc,
+                        DeliveryRun.created_at < run_time.replace(tzinfo=timezone.utc),
+                    )
                 )
-            ).count()
+                .count()
+            )
             run_number = existing_runs + 1
             return f"Morning Run {run_number}"
         else:
             # Afternoon: 12:00 CST onwards
-            afternoon_start_cst = datetime.strptime(f"{date_str} 12:00:00", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone(cst_tz_offset))
-            day_end_cst = datetime.strptime(f"{date_str} 23:59:59", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone(cst_tz_offset))
+            afternoon_start_cst = datetime.strptime(
+                f"{date_str} 12:00:00", "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone(cst_tz_offset))
+            day_end_cst = datetime.strptime(
+                f"{date_str} 23:59:59", "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone(cst_tz_offset))
 
             # Convert to UTC for database query
             afternoon_start_utc = afternoon_start_cst.astimezone(timezone.utc)
             day_end_utc = day_end_cst.astimezone(timezone.utc)
 
-            existing_runs = self.db.query(DeliveryRun).filter(
-                and_(
-                    DeliveryRun.created_at >= afternoon_start_utc,
-                    DeliveryRun.created_at < run_time.replace(tzinfo=timezone.utc)
+            existing_runs = (
+                self.db.query(DeliveryRun)
+                .filter(
+                    and_(
+                        DeliveryRun.created_at >= afternoon_start_utc,
+                        DeliveryRun.created_at < run_time.replace(tzinfo=timezone.utc),
+                    )
                 )
-            ).count()
+                .count()
+            )
             run_number = existing_runs + 1
             return f"Afternoon Run {run_number}"
 
     def check_vehicle_availability(self, vehicle: str) -> bool:
         """Return True if vehicle is available (no active run using it)"""
-        active = self.db.query(DeliveryRun).filter(
-            and_(DeliveryRun.vehicle == vehicle, DeliveryRun.status == DeliveryRunStatus.ACTIVE.value)
-        ).first()
+        active = (
+            self.db.query(DeliveryRun)
+            .filter(
+                and_(
+                    DeliveryRun.vehicle == vehicle,
+                    DeliveryRun.status == DeliveryRunStatus.ACTIVE.value,
+                )
+            )
+            .first()
+        )
         return active is None
 
     def _validate_vehicle(self, vehicle: str) -> str:
@@ -104,11 +136,20 @@ class DeliveryRunService:
         return (display_name or "").strip() or email.strip()
 
     def _get_active_checkout(self, vehicle: str) -> VehicleCheckout | None:
-        return self.db.query(VehicleCheckout).filter(
-            and_(VehicleCheckout.vehicle == vehicle, VehicleCheckout.checked_in_at.is_(None))
-        ).first()
+        return (
+            self.db.query(VehicleCheckout)
+            .filter(
+                and_(
+                    VehicleCheckout.vehicle == vehicle,
+                    VehicleCheckout.checked_in_at.is_(None),
+                )
+            )
+            .first()
+        )
 
-    def create_run_for_current_user(self, order_ids: Sequence[Union[UUID, str]], vehicle: str) -> DeliveryRun:
+    def create_run_for_current_user(
+        self, order_ids: Sequence[Union[UUID, str]], vehicle: str
+    ) -> DeliveryRun:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
         runner_display = self._format_actor_display(actor_email, actor_display_name)
@@ -118,7 +159,10 @@ class DeliveryRunService:
             raise ValidationError(
                 f"Vehicle {vehicle_norm} must be checked out before starting a delivery run",
                 field="vehicle",
-                details={"vehicle": vehicle_norm, "required_checkout_type": "delivery_run"},
+                details={
+                    "vehicle": vehicle_norm,
+                    "required_checkout_type": "delivery_run",
+                },
             )
 
         if (active_checkout.checked_out_by_user_id or "").strip() != actor_user_id:
@@ -131,7 +175,9 @@ class DeliveryRunService:
                 },
             )
 
-        checkout_type = (getattr(active_checkout, "checkout_type", "") or "").strip() or "delivery_run"
+        checkout_type = (
+            getattr(active_checkout, "checkout_type", "") or ""
+        ).strip() or "delivery_run"
         if checkout_type != "delivery_run":
             purpose = (active_checkout.purpose or "").strip() or None
             reason = "Vehicle is checked out for 'Other'"
@@ -149,9 +195,13 @@ class DeliveryRunService:
                 },
             )
 
-        return self.create_run(runner=runner_display, order_ids=order_ids, vehicle=vehicle_norm)
+        return self.create_run(
+            runner=runner_display, order_ids=order_ids, vehicle=vehicle_norm
+        )
 
-    def create_run(self, runner: str, order_ids: Sequence[Union[UUID, str]], vehicle: str) -> DeliveryRun:
+    def create_run(
+        self, runner: str, order_ids: Sequence[Union[UUID, str]], vehicle: str
+    ) -> DeliveryRun:
         """Create a delivery run and assign orders to it.
 
         Validates that orders are in Pre-Delivery and that the vehicle is available.
@@ -160,22 +210,34 @@ class DeliveryRunService:
 
         # Vehicle availability
         if not self.check_vehicle_availability(vehicle_norm):
-            raise ValidationError(f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle})
+            raise ValidationError(
+                f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle}
+            )
 
         # Convert order IDs to strings for MySQL compatibility
         order_ids_str = [str(oid) for oid in order_ids]
-        order_position_map = {order_id: index + 1 for index, order_id in enumerate(order_ids_str)}
+        order_position_map = {
+            order_id: index + 1 for index, order_id in enumerate(order_ids_str)
+        }
 
         # Validate orders
-        orders = self.db.query(Order).filter(Order.id.in_(order_ids_str)).with_for_update().all()
+        orders = (
+            self.db.query(Order)
+            .filter(Order.id.in_(order_ids_str))
+            .with_for_update()
+            .all()
+        )
         if len(orders) != len(order_ids_str):
-            raise ValidationError("One or more orders not found", details={"expected_count": len(order_ids), "found_count": len(orders)})
+            raise ValidationError(
+                "One or more orders not found",
+                details={"expected_count": len(order_ids), "found_count": len(orders)},
+            )
 
         for o in orders:
             if o.status != OrderStatus.PRE_DELIVERY.value:
                 raise ValidationError(
                     f"Order {o.inflow_order_id or o.id} not in Pre-Delivery",
-                    details={"order_id": str(o.id), "current_status": o.status}
+                    details={"order_id": str(o.id), "current_status": o.status},
                 )
 
         # Generate run name
@@ -188,7 +250,7 @@ class DeliveryRunService:
             runner=runner,
             vehicle=vehicle_norm,
             status=DeliveryRunStatus.ACTIVE.value,
-            start_time=run_time
+            start_time=run_time,
         )
         self.db.add(run)
         self.db.flush()  # ensure run.id available
@@ -208,7 +270,7 @@ class DeliveryRunService:
                 from_status=old_status,
                 to_status=OrderStatus.IN_DELIVERY.value,
                 reason=f"Added to delivery run: {run_name}",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow(),
             )
             self.db.add(audit_log)
 
@@ -226,8 +288,8 @@ class DeliveryRunService:
                 "vehicle": vehicle_norm,
                 "order_count": len(order_ids),
                 "order_ids": order_ids_str,
-                "run_name": run_name
-            }
+                "run_name": run_name,
+            },
         )
 
         return run
@@ -237,9 +299,15 @@ class DeliveryRunService:
         return self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).first()
 
     def get_active_runs_with_details(self) -> List[DeliveryRun]:
-        return self.db.query(DeliveryRun).filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value).all()
+        return (
+            self.db.query(DeliveryRun)
+            .filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value)
+            .all()
+        )
 
-    def get_all_run_details(self, status: Optional[List[str]] = None, vehicle: Optional[str] = None) -> List[DeliveryRun]:
+    def get_all_run_details(
+        self, status: Optional[List[str]] = None, vehicle: Optional[str] = None
+    ) -> List[DeliveryRun]:
         """Get all delivery runs, optionally filtered by status/vehicle."""
         query = self.db.query(DeliveryRun)
 
@@ -252,7 +320,9 @@ class DeliveryRunService:
 
         return query.order_by(DeliveryRun.created_at.desc()).all()
 
-    def _fulfill_orders_in_inflow(self, orders: List[Order], user_id: Optional[str]) -> tuple[List[dict], List[dict]]:
+    def _fulfill_orders_in_inflow(
+        self, orders: List[Order], user_id: Optional[str]
+    ) -> tuple[List[dict], List[dict]]:
         if not orders:
             return [], []
 
@@ -265,11 +335,13 @@ class DeliveryRunService:
             for order in orders:
                 inflow_sales_order_id = order.inflow_sales_order_id
                 if not inflow_sales_order_id:
-                    failures.append({
-                        "order_id": str(order.id),
-                        "inflow_order_id": order.inflow_order_id,
-                        "error": "missing_inflow_sales_order_id"
-                    })
+                    failures.append(
+                        {
+                            "order_id": str(order.id),
+                            "inflow_order_id": order.inflow_order_id,
+                            "error": "missing_inflow_sales_order_id",
+                        }
+                    )
                     continue
 
                 try:
@@ -277,20 +349,24 @@ class DeliveryRunService:
                         inflow_sales_order_id,
                         db=self.db,
                         user_id=user_id,
-                        only_picked_items=True  # Only fulfill items that were actually picked
+                        only_picked_items=True,  # Only fulfill items that were actually picked
                     )
-                    successes.append({
-                        "order_id": str(order.id),
-                        "inflow_order_id": order.inflow_order_id,
-                        "inflow_sales_order_id": inflow_sales_order_id
-                    })
+                    successes.append(
+                        {
+                            "order_id": str(order.id),
+                            "inflow_order_id": order.inflow_order_id,
+                            "inflow_sales_order_id": inflow_sales_order_id,
+                        }
+                    )
                 except Exception as exc:
-                    failures.append({
-                        "order_id": str(order.id),
-                        "inflow_order_id": order.inflow_order_id,
-                        "inflow_sales_order_id": inflow_sales_order_id,
-                        "error": str(exc)
-                    })
+                    failures.append(
+                        {
+                            "order_id": str(order.id),
+                            "inflow_order_id": order.inflow_order_id,
+                            "inflow_sales_order_id": inflow_sales_order_id,
+                            "error": str(exc),
+                        }
+                    )
 
             return successes, failures
 
@@ -314,7 +390,12 @@ class DeliveryRunService:
         from app.services.order_splitting import OrderSplittingService
 
         run_id_str = str(run_id)
-        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
+        run = (
+            self.db.query(DeliveryRun)
+            .filter(DeliveryRun.id == run_id_str)
+            .with_for_update()
+            .first()
+        )
         if not run:
             raise NotFoundError("DeliveryRun", str(run_id))
 
@@ -325,13 +406,8 @@ class DeliveryRunService:
             )
 
         if expected_updated_at is not None and run.updated_at is not None:
-            expected_utc = expected_updated_at
-            if expected_utc.tzinfo is not None:
-                expected_utc = expected_utc.astimezone(timezone.utc).replace(tzinfo=None)
-
-            current_utc = run.updated_at
-            if current_utc.tzinfo is not None:
-                current_utc = current_utc.astimezone(timezone.utc).replace(tzinfo=None)
+            expected_utc = self._normalize_stale_timestamp(expected_updated_at)
+            current_utc = self._normalize_stale_timestamp(run.updated_at)
 
             if expected_utc != current_utc:
                 raise ConflictError(
@@ -344,17 +420,21 @@ class DeliveryRunService:
                 )
 
         # Validate ALL orders are already delivered
-        undelivered_orders = [o for o in run.orders if o.status != OrderStatus.DELIVERED.value]
+        undelivered_orders = [
+            o for o in run.orders if o.status != OrderStatus.DELIVERED.value
+        ]
         if undelivered_orders:
             raise ValidationError(
                 f"Cannot finish delivery run: {len(undelivered_orders)} orders are not yet delivered",
                 details={
                     "undelivered_count": len(undelivered_orders),
-                    "undelivered_order_ids": [str(o.id) for o in undelivered_orders]
-                }
+                    "undelivered_order_ids": [str(o.id) for o in undelivered_orders],
+                },
             )
 
-        inflow_successes, inflow_failures = self._fulfill_orders_in_inflow(run.orders, user_id)
+        inflow_successes, inflow_failures = self._fulfill_orders_in_inflow(
+            run.orders, user_id
+        )
 
         audit_service = AuditService(self.db)
         if inflow_failures:
@@ -366,16 +446,16 @@ class DeliveryRunService:
                 audit_metadata={
                     "order_count": len(run.orders),
                     "fulfilled_orders": inflow_successes,
-                    "failed_orders": inflow_failures
-                }
+                    "failed_orders": inflow_failures,
+                },
             )
             self.db.commit()
             raise ValidationError(
                 "Cannot finish delivery run: inFlow fulfillment failed for one or more orders",
                 details={
                     "failed_orders": inflow_failures,
-                    "fulfilled_count": len(inflow_successes)
-                }
+                    "fulfilled_count": len(inflow_successes),
+                },
             )
 
         # Create remainder orders for partial picks (if user confirmed)
@@ -383,9 +463,7 @@ class DeliveryRunService:
         if create_remainders:
             splitting_service = OrderSplittingService(self.db)
             remainder_results = splitting_service.process_partial_fulfillments(
-                orders=run.orders,
-                user_id=user_id,
-                create_remainders=True
+                orders=run.orders, user_id=user_id, create_remainders=True
             )
 
         run.status = DeliveryRunStatus.COMPLETED.value
@@ -401,8 +479,8 @@ class DeliveryRunService:
                 "order_count": len(run.orders),
                 "completed_at": run.end_time.isoformat(),
                 "fulfilled_orders": inflow_successes,
-                "remainders_created": remainder_results.get("remainder_count", 0)
-            }
+                "remainders_created": remainder_results.get("remainder_count", 0),
+            },
         )
 
         self.db.commit()
@@ -428,7 +506,12 @@ class DeliveryRunService:
         run_id_str = str(run_id)
         order_id_str = str(order_id)
 
-        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
+        run = (
+            self.db.query(DeliveryRun)
+            .filter(DeliveryRun.id == run_id_str)
+            .with_for_update()
+            .first()
+        )
         if not run:
             raise NotFoundError("DeliveryRun", run_id_str)
 
@@ -439,13 +522,8 @@ class DeliveryRunService:
             )
 
         if expected_updated_at is not None and run.updated_at is not None:
-            expected_utc = expected_updated_at
-            if expected_utc.tzinfo is not None:
-                expected_utc = expected_utc.astimezone(timezone.utc).replace(tzinfo=None)
-
-            current_utc = run.updated_at
-            if current_utc.tzinfo is not None:
-                current_utc = current_utc.astimezone(timezone.utc).replace(tzinfo=None)
+            expected_utc = self._normalize_stale_timestamp(expected_updated_at)
+            current_utc = self._normalize_stale_timestamp(run.updated_at)
 
             if expected_utc != current_utc:
                 raise ConflictError(
@@ -457,14 +535,23 @@ class DeliveryRunService:
                     },
                 )
 
-        order = self.db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
         if not order:
             raise NotFoundError("Order", order_id_str)
 
         if str(order.delivery_run_id) != run_id_str:
             raise ValidationError(
                 "Order is not assigned to this run",
-                details={"order_id": order_id_str, "delivery_run_id": order.delivery_run_id, "run_id": run_id_str},
+                details={
+                    "order_id": order_id_str,
+                    "delivery_run_id": order.delivery_run_id,
+                    "run_id": run_id_str,
+                },
             )
 
         if order.status == OrderStatus.DELIVERED.value:
@@ -532,7 +619,12 @@ class DeliveryRunService:
         if not requested_order_ids:
             raise ValidationError("order_ids is required", field="order_ids")
 
-        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).with_for_update().first()
+        run = (
+            self.db.query(DeliveryRun)
+            .filter(DeliveryRun.id == run_id_str)
+            .with_for_update()
+            .first()
+        )
         if not run:
             raise NotFoundError("DeliveryRun", run_id_str)
 
@@ -543,13 +635,8 @@ class DeliveryRunService:
             )
 
         if expected_updated_at is not None and run.updated_at is not None:
-            expected_utc = expected_updated_at
-            if expected_utc.tzinfo is not None:
-                expected_utc = expected_utc.astimezone(timezone.utc).replace(tzinfo=None)
-
-            current_utc = run.updated_at
-            if current_utc.tzinfo is not None:
-                current_utc = current_utc.astimezone(timezone.utc).replace(tzinfo=None)
+            expected_utc = self._normalize_stale_timestamp(expected_updated_at)
+            current_utc = self._normalize_stale_timestamp(run.updated_at)
 
             if expected_utc != current_utc:
                 raise ConflictError(
@@ -570,7 +657,9 @@ class DeliveryRunService:
         run_order_ids = {str(order.id) for order in run_orders}
         requested_set = set(requested_order_ids)
 
-        if requested_set != run_order_ids or len(requested_order_ids) != len(run_order_ids):
+        if requested_set != run_order_ids or len(requested_order_ids) != len(
+            run_order_ids
+        ):
             raise ValidationError(
                 "order_ids must include all and only orders assigned to the run",
                 details={

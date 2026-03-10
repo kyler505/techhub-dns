@@ -58,6 +58,15 @@ class OrderService:
 
         return InflowService().requires_asset_tags(order.inflow_data)
 
+    @staticmethod
+    def _normalize_stale_timestamp(value: datetime) -> datetime:
+        normalized = (
+            value.astimezone(timezone.utc).replace(tzinfo=None)
+            if value.tzinfo
+            else value
+        )
+        return normalized.replace(microsecond=(normalized.microsecond // 1000) * 1000)
+
     def _resolve_actor_user_id(self, actor_identifier: Optional[str]) -> Optional[str]:
         if not actor_identifier:
             return None
@@ -546,16 +555,8 @@ class OrderService:
         if expected_updated_at is None or order.updated_at is None:
             return
 
-        expected = (
-            expected_updated_at.replace(tzinfo=None)
-            if expected_updated_at.tzinfo
-            else expected_updated_at
-        )
-        actual = (
-            order.updated_at.replace(tzinfo=None)
-            if order.updated_at.tzinfo
-            else order.updated_at
-        )
+        expected = self._normalize_stale_timestamp(expected_updated_at)
+        actual = self._normalize_stale_timestamp(order.updated_at)
 
         if actual == expected:
             return
