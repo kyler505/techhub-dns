@@ -39,7 +39,9 @@ interface OrderDetailProps {
   onRetryNotification: () => void;
   onTagOrder: (tagIds: string[]) => Promise<void>;
   onRequestTags: () => Promise<void>;
-  onGeneratePicklist: () => void;
+  onGeneratePicklist: () => Promise<void>;
+  generatingPicklist: boolean;
+  retryingNotification: boolean;
 }
 
 export default function OrderDetail({
@@ -50,6 +52,8 @@ export default function OrderDetail({
   onTagOrder,
   onRequestTags,
   onGeneratePicklist,
+  generatingPicklist,
+  retryingNotification,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
@@ -255,11 +259,17 @@ export default function OrderDetail({
               <Button
                 onClick={onGeneratePicklist}
                 disabled={
-                  (assetTagRequired && !order.tagged_at) || Boolean(order.picklist_generated_at)
+                  generatingPicklist ||
+                  (assetTagRequired && !order.tagged_at) ||
+                  Boolean(order.picklist_generated_at)
                 }
                 size="sm"
               >
-                {order.picklist_generated_at ? "Generated" : "Generate & Email"}
+                {order.picklist_generated_at
+                  ? "Generated"
+                  : generatingPicklist
+                    ? "Generating..."
+                    : "Generate & Email"}
               </Button>
             </div>
 
@@ -362,8 +372,8 @@ export default function OrderDetail({
                     <span className="font-medium">Error:</span>{" "}
                     {latestNotification.error_message}
                   </p>
-                  <Button onClick={onRetryNotification} className="mt-2" size="sm">
-                    Retry Notification
+                  <Button onClick={onRetryNotification} className="mt-2" size="sm" disabled={retryingNotification}>
+                    {retryingNotification ? "Retrying..." : "Retry Notification"}
                   </Button>
                 </div>
               )}

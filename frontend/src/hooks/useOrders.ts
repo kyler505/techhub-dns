@@ -10,7 +10,7 @@ export function useOrders(status?: OrderStatus, search?: string) {
   const wsDataReceived = useRef(false);
 
   // Use WebSocket for real-time updates
-  const { orders: wsOrders, loading: wsLoading, error: wsError } = useOrdersWebSocket();
+  const { orders: wsOrders, loading: wsLoading, error: wsError } = useOrdersWebSocket({ enableHttpFallback: true });
 
   // Track when WebSocket data is received
   useEffect(() => {

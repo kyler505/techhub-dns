@@ -20,7 +20,7 @@ from app.models.delivery_run import VehicleEnum
 from app.utils.exceptions import ValidationError
 from pydantic import ValidationError as PydanticValidationError
 
-bp = Blueprint('delivery_runs', __name__)
+bp = Blueprint("delivery_runs", __name__)
 bp.strict_slashes = False
 
 
@@ -34,23 +34,33 @@ def _broadcast_active_runs_sync(db_session: Session = None):
         runs = service.get_active_runs_with_details()
         payload = []
         for r in runs:
-            payload.append({
-                "id": str(r.id),
-                "runner": r.runner,
-                "vehicle": r.vehicle.value if hasattr(r.vehicle, 'value') else str(r.vehicle),
-                "status": r.status.value if hasattr(r.status, 'value') else str(r.status),
-                "start_time": r.start_time.isoformat() if r.start_time else None,
-                "order_ids": [str(o.id) for o in r.orders]
-            })
+            payload.append(
+                {
+                    "id": str(r.id),
+                    "runner": r.runner,
+                    "vehicle": r.vehicle.value
+                    if hasattr(r.vehicle, "value")
+                    else str(r.vehicle),
+                    "status": r.status.value
+                    if hasattr(r.status, "value")
+                    else str(r.status),
+                    "start_time": r.start_time.isoformat() if r.start_time else None,
+                    "order_ids": [str(o.id) for o in r.orders],
+                }
+            )
 
         # Emit via SocketIO to all connected clients
         # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
+
             # Dashboard listens to 'active_runs' and joins 'orders' room
-            socketio.emit('active_runs', {"type": "active_runs", "data": payload}, room='orders')
+            socketio.emit(
+                "active_runs", {"type": "active_runs", "data": payload}, room="orders"
+            )
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).error(f"Failed to broadcast active runs: {e}")
     finally:
         if db_session is not None:
@@ -68,10 +78,14 @@ def create_run():
         try:
             req = CreateDeliveryRunRequest(**data)
         except PydanticValidationError as exc:
-            raise ValidationError("Invalid create run request", details={"errors": exc.errors()})
+            raise ValidationError(
+                "Invalid create run request", details={"errors": exc.errors()}
+            )
 
         try:
-            run = service.create_run_for_current_user(order_ids=req.order_ids, vehicle=req.vehicle)
+            run = service.create_run_for_current_user(
+                order_ids=req.order_ids, vehicle=req.vehicle
+            )
 
             # Broadcast via SocketIO in background
             threading.Thread(target=_broadcast_active_runs_sync).start()
@@ -80,11 +94,15 @@ def create_run():
             # Trigger Teams notifications for orders in delivery
             try:
                 from app.services.teams_recipient_service import teams_recipient_service
+
                 teams_recipient_service.notify_orders_in_delivery(run.orders)
             except Exception as e:
                 # Log but don't fail the request
                 from app.api.routes.orders import logger as order_logger
-                order_logger.error(f"Failed to trigger Teams notifications for delivery run: {e}")
+
+                order_logger.error(
+                    f"Failed to trigger Teams notifications for delivery run: {e}"
+                )
 
             response = DeliveryRunResponse(
                 id=run.id,
@@ -94,9 +112,9 @@ def create_run():
                 status=run.status,
                 start_time=run.start_time,
                 end_time=run.end_time,
-                order_ids=[o.id for o in run.orders]
+                order_ids=[o.id for o in run.orders],
             )
-            return jsonify(response.model_dump())
+            return jsonify(response.model_dump(mode="json"))
         except ValueError as e:
             abort(400, description=str(e))
 
@@ -104,25 +122,29 @@ def create_run():
 @bp.route("", methods=["GET"])
 def get_runs():
     """Get delivery runs (optionally filtered by status)"""
-    status_filter = request.args.getlist('status')
-    vehicle = request.args.get('vehicle')
+    status_filter = request.args.getlist("status")
+    vehicle = request.args.get("vehicle")
 
     with get_db() as db:
         service = DeliveryRunService(db)
-        runs = service.get_all_run_details(status=status_filter if status_filter else None, vehicle=vehicle)
+        runs = service.get_all_run_details(
+            status=status_filter if status_filter else None, vehicle=vehicle
+        )
 
         result = []
         for r in runs:
-            result.append(DeliveryRunResponse(
-                id=r.id,
-                name=r.name,
-                runner=r.runner,
-                vehicle=r.vehicle,
-                status=r.status,
-                start_time=r.start_time,
-                end_time=r.end_time,
-                order_ids=[o.id for o in r.orders]
-            ).model_dump())
+            result.append(
+                DeliveryRunResponse(
+                    id=r.id,
+                    name=r.name,
+                    runner=r.runner,
+                    vehicle=r.vehicle,
+                    status=r.status,
+                    start_time=r.start_time,
+                    end_time=r.end_time,
+                    order_ids=[o.id for o in r.orders],
+                ).model_dump(mode="json")
+            )
         return jsonify(result)
 
 
@@ -134,16 +156,18 @@ def get_active_runs():
         runs = service.get_active_runs_with_details()
         result = []
         for r in runs:
-            result.append(DeliveryRunResponse(
-                id=r.id,
-                name=r.name,
-                runner=r.runner,
-                vehicle=r.vehicle,
-                status=r.status,
-                start_time=r.start_time,
-                end_time=r.end_time,
-                order_ids=[o.id for o in r.orders]
-            ).model_dump())
+            result.append(
+                DeliveryRunResponse(
+                    id=r.id,
+                    name=r.name,
+                    runner=r.runner,
+                    vehicle=r.vehicle,
+                    status=r.status,
+                    start_time=r.start_time,
+                    end_time=r.end_time,
+                    order_ids=[o.id for o in r.orders],
+                ).model_dump(mode="json")
+            )
         return jsonify(result)
 
 
@@ -152,8 +176,11 @@ def get_available_vehicles():
     """Get available vehicles"""
     with get_db() as db:
         service = DeliveryRunService(db)
-        vehicles = {v.value: service.check_vehicle_availability(v.value) for v in VehicleEnum}
+        vehicles = {
+            v.value: service.check_vehicle_availability(v.value) for v in VehicleEnum
+        }
         return jsonify(vehicles)
+
 
 @bp.route("/<uuid:run_id>", methods=["GET"])
 def get_run(run_id):
@@ -187,13 +214,15 @@ def get_run(run_id):
                 for o in sorted(
                     run.orders,
                     key=lambda order: (
-                        order.delivery_sequence if order.delivery_sequence is not None else 999999,
+                        order.delivery_sequence
+                        if order.delivery_sequence is not None
+                        else 999999,
                         order.updated_at or order.created_at,
                     ),
                 )
-            ]
+            ],
         )
-        return jsonify(response.model_dump())
+        return jsonify(response.model_dump(mode="json"))
 
 
 @bp.route("/<run_id>/finish", methods=["PUT"])
@@ -204,7 +233,9 @@ def finish_run(run_id):
     try:
         req = FinishDeliveryRunRequest(**data)
     except PydanticValidationError as exc:
-        raise ValidationError("Invalid finish run request", details={"errors": exc.errors()})
+        raise ValidationError(
+            "Invalid finish run request", details={"errors": exc.errors()}
+        )
 
     with get_db() as db:
         service = DeliveryRunService(db)
@@ -227,9 +258,9 @@ def finish_run(run_id):
                 status=run.status,
                 start_time=run.start_time,
                 end_time=run.end_time,
-                order_ids=[o.id for o in run.orders]
+                order_ids=[o.id for o in run.orders],
             )
-            return jsonify(response.model_dump())
+            return jsonify(response.model_dump(mode="json"))
         except ValueError as e:
             abort(400, description=str(e))
 
@@ -243,7 +274,9 @@ def recall_run_order(run_id, order_id):
     try:
         req = RecallDeliveryRunOrderRequest(**data)
     except PydanticValidationError as exc:
-        raise ValidationError("Invalid recall request", details={"errors": exc.errors()})
+        raise ValidationError(
+            "Invalid recall request", details={"errors": exc.errors()}
+        )
 
     with get_db() as db:
         service = DeliveryRunService(db)
@@ -267,7 +300,7 @@ def recall_run_order(run_id, order_id):
             end_time=run.end_time,
             order_ids=[o.id for o in run.orders],
         )
-        return jsonify(response.model_dump())
+        return jsonify(response.model_dump(mode="json"))
 
 
 @bp.route("/<run_id>/orders/reorder", methods=["PUT"])
@@ -279,7 +312,9 @@ def reorder_run_orders(run_id):
     try:
         req = ReorderDeliveryRunOrdersRequest(**data)
     except PydanticValidationError as exc:
-        raise ValidationError("Invalid reorder request", details={"errors": exc.errors()})
+        raise ValidationError(
+            "Invalid reorder request", details={"errors": exc.errors()}
+        )
 
     with get_db() as db:
         service = DeliveryRunService(db)
@@ -301,7 +336,7 @@ def reorder_run_orders(run_id):
             end_time=run.end_time,
             order_ids=[o.id for o in run.orders],
         )
-        return jsonify(response.model_dump())
+        return jsonify(response.model_dump(mode="json"))
 
 
 # SocketIO event handlers will be registered in main.py

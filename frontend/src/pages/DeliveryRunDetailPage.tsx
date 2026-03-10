@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "../components/ui/input";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { OrderStatus } from "../types/order";
+import { isValidOrderId } from "../utils/orderIds";
 
 type DeliveryDetailLocationState = {
   from?: string;
@@ -385,11 +386,17 @@ export default function DeliveryRunDetailPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link to={`/orders/${order.id}`}>
-                        <Button variant="outline" size="sm">
+                      {isValidOrderId(order.id) ? (
+                        <Link to={`/orders/${order.id}`}>
+                          <Button variant="outline" size="sm">
+                            View Order
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Button variant="outline" size="sm" disabled>
                           View Order
                         </Button>
-                      </Link>
+                      )}
                       {isSignable ? (
                         <>
                           <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
@@ -521,11 +528,17 @@ export default function DeliveryRunDetailPage() {
                       <span className="text-xs font-medium text-accent">Not yet in delivery</span>
                     ) : null}
 
-                    <Link to={`/orders/${order.id}`}>
-                      <Button variant="outline" size="sm">
+                    {isValidOrderId(order.id) ? (
+                      <Link to={`/orders/${order.id}`}>
+                        <Button variant="outline" size="sm">
+                          View Details
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled>
                         View Details
                       </Button>
-                    </Link>
+                    )}
 
                     {reorderMode ? (
                       <>

@@ -10,6 +10,7 @@ from app.models.vehicle_checkout import VehicleCheckout
 from app.models.user import User
 from app.models.session import Session
 from app.models.system_setting import SystemSetting
+from app.models.print_job import PrintJob
 
 __all__ = [
     "Order",
@@ -28,4 +29,5 @@ __all__ = [
     "User",
     "Session",
     "SystemSetting",
+    "PrintJob",
 ]

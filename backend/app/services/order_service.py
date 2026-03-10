@@ -3,7 +3,7 @@ import json
 import logging
 import shutil
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
@@ -33,6 +33,11 @@ from app.utils.exceptions import (
     FileOperationError,
 )
 from app.config import settings
+from app.services.print_job_service import PrintJobService, emit_print_job_available
+from app.services.system_setting_service import (
+    SETTING_PICKLIST_AUTO_PRINT_ENABLED,
+    SystemSettingService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,27 @@ logger = logging.getLogger(__name__)
 class OrderService:
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    def _requires_asset_tags(self, order: Order) -> bool:
+        if not order.inflow_data:
+            return True
+
+        from app.services.inflow_service import InflowService
+
+        return InflowService().requires_asset_tags(order.inflow_data)
+
+    @staticmethod
+    def _normalize_stale_timestamp(value: datetime) -> datetime:
+        normalized = (
+            value.astimezone(timezone.utc).replace(tzinfo=None)
+            if value.tzinfo
+            else value
+        )
+        return normalized.replace(microsecond=(normalized.microsecond // 1000) * 1000)
 
     def _resolve_actor_user_id(self, actor_identifier: Optional[str]) -> Optional[str]:
         if not actor_identifier:
@@ -78,8 +104,11 @@ class OrderService:
         self.db.add(history_entry)
 
     def _prep_steps_complete(self, order: Order) -> bool:
+        tagging_complete = (not self._requires_asset_tags(order)) or bool(
+            order.tagged_at
+        )
         complete = bool(
-            order.tagged_at and order.picklist_generated_at and order.qa_completed_at
+            tagging_complete and order.picklist_generated_at and order.qa_completed_at
         )
         if not complete:
             steps = self._get_incomplete_steps(order)
@@ -91,7 +120,7 @@ class OrderService:
         if not order.inflow_data:
             return False
 
-        shipping_addr_obj = order.inflow_data.get("shippingAddress", {})
+        shipping_addr_obj = self._as_dict(order.inflow_data.get("shippingAddress"))
         city = (
             shipping_addr_obj.get("city", "").strip()
             if shipping_addr_obj.get("city")
@@ -167,7 +196,7 @@ class OrderService:
 
         self.assert_not_stale(order, expected_updated_at)
 
-        if not order.tagged_at:
+        if self._requires_asset_tags(order) and not order.tagged_at:
             raise ValidationError(
                 "Asset tagging must be completed before generating a picklist"
             )
@@ -182,6 +211,8 @@ class OrderService:
                 f"Asset tagging and picklist generation must be performed by the same user. "
                 f"Tagged by: {order.tagged_by}, current user: {generated_by}"
             )
+
+        is_first_picklist = order.picklist_generated_at is None
 
         picklist_dir = self._storage_path("picklists")
         picklist_dir.mkdir(parents=True, exist_ok=True)
@@ -224,8 +255,20 @@ class OrderService:
         order.picklist_path = picklist_path
         order.updated_at = datetime.utcnow()
 
+        queued_print_job = None
+        if is_first_picklist and SystemSettingService.get_setting(
+            self.db, SETTING_PICKLIST_AUTO_PRINT_ENABLED
+        ).lower() in {"true", "1", "yes", "on"}:
+            queued_print_job = PrintJobService(self.db).enqueue_picklist_print(
+                order,
+                trigger_source="automatic",
+                requested_by=generated_by,
+            )
+
         self.db.commit()
         self.db.refresh(order)
+        if queued_print_job is not None:
+            emit_print_job_available(queued_print_job)
 
         # Audit logging for picklist generation
         audit_service = AuditService(self.db)
@@ -473,7 +516,16 @@ class OrderService:
             query = query.filter(search_filter)
 
         total = query.count()
-        orders = query.order_by(Order.updated_at.desc()).offset(skip).limit(limit).all()
+        orders = (
+            query.order_by(
+                Order.updated_at.desc(),
+                Order.created_at.desc(),
+                Order.id.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
         return orders, total
 
@@ -489,6 +541,7 @@ class OrderService:
             self.db.query(Order)
             .options(
                 selectinload(Order.audit_logs),
+                selectinload(Order.print_jobs),
             )
             .filter(Order.id == order_id_str)
             .first()
@@ -502,16 +555,8 @@ class OrderService:
         if expected_updated_at is None or order.updated_at is None:
             return
 
-        expected = (
-            expected_updated_at.replace(tzinfo=None)
-            if expected_updated_at.tzinfo
-            else expected_updated_at
-        )
-        actual = (
-            order.updated_at.replace(tzinfo=None)
-            if order.updated_at.tzinfo
-            else order.updated_at
-        )
+        expected = self._normalize_stale_timestamp(expected_updated_at)
+        actual = self._normalize_stale_timestamp(order.updated_at)
 
         if actual == expected:
             return
@@ -758,7 +803,7 @@ class OrderService:
             raise ValidationError("Order number is required", field="orderNumber")
 
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_addr_obj = inflow_data.get("shippingAddress", {})
+        shipping_addr_obj = self._as_dict(inflow_data.get("shippingAddress"))
         address1 = shipping_addr_obj.get("address1", "")
         address2 = shipping_addr_obj.get("address2", "")
 
@@ -1010,7 +1055,7 @@ class OrderService:
     ) -> Order:
         """Update an existing order with new inflow data."""
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_address_obj = inflow_data.get("shippingAddress", {})
+        shipping_address_obj = self._as_dict(inflow_data.get("shippingAddress"))
         email = inflow_data.get("email", "")
 
         existing_order.inflow_data = inflow_data
@@ -1059,7 +1104,7 @@ class OrderService:
     ) -> Order:
         """Create a new order from inflow data."""
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_address_obj = inflow_data.get("shippingAddress", {})
+        shipping_address_obj = self._as_dict(inflow_data.get("shippingAddress"))
         email = inflow_data.get("email", "")
 
         # Check if customer is flagged as a "problem customer" from notes
@@ -1117,7 +1162,7 @@ class OrderService:
 
         # Extract order remarks and shipping addresses
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_addr_obj = inflow_data.get("shippingAddress", {})
+        shipping_addr_obj = self._as_dict(inflow_data.get("shippingAddress"))
         address1 = shipping_addr_obj.get("address1", "")
         address2 = shipping_addr_obj.get("address2", "")
 

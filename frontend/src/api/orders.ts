@@ -1,5 +1,6 @@
 import apiClient from "./client";
 import { Order, OrderDetail, OrderStatus, OrderStatusUpdate, BulkStatusUpdate, AuditLog, ShippingWorkflowStatus } from "../types/order";
+import { normalizeExpectedUpdatedAt } from "./expectedUpdatedAt";
 
 export const ordersApi = {
   getOrders: async (params?: { status?: OrderStatus; search?: string }): Promise<Order[]> => {
@@ -20,7 +21,7 @@ export const ordersApi = {
   updateOrderStatus: async (orderId: string, update: OrderStatusUpdate, changedBy?: string): Promise<Order> => {
     const response = await apiClient.patch<Order>(
       `/orders/${orderId}/status`,
-      update,
+      normalizeExpectedUpdatedAt(update),
       {
         params: changedBy ? { changed_by: changedBy } : undefined,
       }
@@ -51,12 +52,15 @@ export const ordersApi = {
   },
 
   tagOrder: async (orderId: string, payload: { tag_ids: string[]; technician?: string; expected_updated_at?: string }) => {
-    const response = await apiClient.post<Order>(`/orders/${orderId}/tag`, payload);
+    const response = await apiClient.post<Order>(`/orders/${orderId}/tag`, normalizeExpectedUpdatedAt(payload));
     return response.data;
   },
 
   generatePicklist: async (orderId: string, payload?: { generated_by?: string; expected_updated_at?: string }) => {
-    const response = await apiClient.post<Order>(`/orders/${orderId}/picklist`, payload || {});
+    const response = await apiClient.post<Order>(
+      `/orders/${orderId}/picklist`,
+      normalizeExpectedUpdatedAt(payload || {}),
+    );
     return response.data;
   },
 
@@ -64,7 +68,7 @@ export const ordersApi = {
     orderId: string,
     payload: { responses: Record<string, any>; technician?: string; expected_updated_at?: string }
   ) => {
-    const response = await apiClient.post<Order>(`/orders/${orderId}/qa`, payload);
+    const response = await apiClient.post<Order>(`/orders/${orderId}/qa`, normalizeExpectedUpdatedAt(payload));
     return response.data;
   },
 
@@ -75,7 +79,10 @@ export const ordersApi = {
     page_number?: number;
     position?: { x: number; y: number }
   }) => {
-    const response = await apiClient.post<{ success: boolean; message: string; bundled_document_path?: string }>(`/orders/${orderId}/sign`, signatureData);
+    const response = await apiClient.post<{ success: boolean; message: string; bundled_document_path?: string }>(
+      `/orders/${orderId}/sign`,
+      signatureData ? normalizeExpectedUpdatedAt(signatureData) : signatureData,
+    );
     return response.data;
   },
 
@@ -89,7 +96,7 @@ export const ordersApi = {
       expected_updated_at?: string;
     }
   ): Promise<Order> => {
-    const response = await apiClient.patch<Order>(`/orders/${orderId}/shipping-workflow`, payload);
+    const response = await apiClient.patch<Order>(`/orders/${orderId}/shipping-workflow`, normalizeExpectedUpdatedAt(payload));
     return response.data;
   },
 
