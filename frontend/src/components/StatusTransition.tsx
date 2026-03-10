@@ -16,6 +16,7 @@ interface StatusTransitionProps {
   onConfirm: (reason?: string) => void;
   onCancel: () => void;
   requireReason?: boolean;
+  submitting?: boolean;
 }
 
 export default function StatusTransition({
@@ -24,6 +25,7 @@ export default function StatusTransition({
   onConfirm,
   onCancel,
   requireReason = false,
+  submitting = false,
 }: StatusTransitionProps) {
   const [reason, setReason] = useState("");
   const [reasonTouched, setReasonTouched] = useState(false);
@@ -34,7 +36,7 @@ export default function StatusTransition({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setReasonTouched(true);
-    if (reasonInvalid) return;
+    if (reasonInvalid || submitting) return;
     onConfirm(reason || undefined);
   };
 
@@ -42,7 +44,7 @@ export default function StatusTransition({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onCancel();
+        if (!open && !submitting) onCancel();
       }}
     >
       <DialogContent className="sm:max-w-md">
@@ -76,6 +78,7 @@ export default function StatusTransition({
                 className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 rows={3}
                 required
+                disabled={submitting}
                 placeholder="Enter reason for this status change..."
                 aria-invalid={showReasonError}
               />
@@ -86,11 +89,11 @@ export default function StatusTransition({
           )}
 
           <DialogFooter className="mt-6 gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={reasonInvalid}>
-              Confirm
+            <Button type="submit" disabled={reasonInvalid || submitting}>
+              {submitting ? "Updating..." : "Confirm"}
             </Button>
           </DialogFooter>
         </form>

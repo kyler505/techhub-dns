@@ -21,6 +21,9 @@ export default function OrderDetailPage() {
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
     const [notifications, setNotifications] = useState<TeamsNotification[]>([]);
     const [loading, setLoading] = useState(true);
+    const [generatingPicklist, setGeneratingPicklist] = useState(false);
+    const [retryingNotification, setRetryingNotification] = useState(false);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
         requireReason: boolean;
@@ -90,6 +93,7 @@ export default function OrderDetailPage() {
 
     const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
+        setUpdatingStatus(true);
         try {
             await ordersApi.updateOrderStatus(order.id, {
                 status: newStatus,
@@ -106,17 +110,22 @@ export default function OrderDetailPage() {
                 return;
             }
             toast.error("Failed to update order status");
+        } finally {
+            setUpdatingStatus(false);
         }
     };
 
     const handleRetryNotification = async () => {
         if (!order) return;
+        setRetryingNotification(true);
         try {
             await ordersApi.retryNotification(order.id);
             loadOrder();
         } catch (error) {
             console.error("Failed to retry notification:", error);
             toast.error("Failed to retry notification");
+        } finally {
+            setRetryingNotification(false);
         }
     };
 
@@ -144,6 +153,7 @@ export default function OrderDetailPage() {
 
     const handleGeneratePicklist = async () => {
         if (!order) return;
+        setGeneratingPicklist(true);
         try {
             await ordersApi.generatePicklist(order.id, {
                 generated_by: getUserName(),
@@ -159,6 +169,8 @@ export default function OrderDetailPage() {
             }
             const message = extractApiErrorMessage(error, "Failed to generate picklist");
             toast.error(message);
+        } finally {
+            setGeneratingPicklist(false);
         }
     };
 
@@ -213,6 +225,8 @@ export default function OrderDetailPage() {
                 onTagOrder={handleTagOrder}
                 onRequestTags={handleRequestTags}
                 onGeneratePicklist={handleGeneratePicklist}
+                generatingPicklist={generatingPicklist}
+                retryingNotification={retryingNotification}
             />
             {transitioningStatus && (
                 <StatusTransition
@@ -223,6 +237,7 @@ export default function OrderDetailPage() {
                         performStatusChange(transitioningStatus.newStatus, reason)
                     }
                     onCancel={() => setTransitioningStatus(null)}
+                    submitting={updatingStatus}
                 />
             )}
         </div>
