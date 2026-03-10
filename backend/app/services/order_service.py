@@ -50,6 +50,14 @@ class OrderService:
     def _as_dict(value: Any) -> Dict[str, Any]:
         return value if isinstance(value, dict) else {}
 
+    def _requires_asset_tags(self, order: Order) -> bool:
+        if not order.inflow_data:
+            return True
+
+        from app.services.inflow_service import InflowService
+
+        return InflowService().requires_asset_tags(order.inflow_data)
+
     def _resolve_actor_user_id(self, actor_identifier: Optional[str]) -> Optional[str]:
         if not actor_identifier:
             return None
@@ -87,8 +95,11 @@ class OrderService:
         self.db.add(history_entry)
 
     def _prep_steps_complete(self, order: Order) -> bool:
+        tagging_complete = (not self._requires_asset_tags(order)) or bool(
+            order.tagged_at
+        )
         complete = bool(
-            order.tagged_at and order.picklist_generated_at and order.qa_completed_at
+            tagging_complete and order.picklist_generated_at and order.qa_completed_at
         )
         if not complete:
             steps = self._get_incomplete_steps(order)
@@ -176,7 +187,7 @@ class OrderService:
 
         self.assert_not_stale(order, expected_updated_at)
 
-        if not order.tagged_at:
+        if self._requires_asset_tags(order) and not order.tagged_at:
             raise ValidationError(
                 "Asset tagging must be completed before generating a picklist"
             )
