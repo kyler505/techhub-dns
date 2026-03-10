@@ -122,7 +122,7 @@ def get_orders():
         # Enrich orders with pick_status for Pre-Delivery queue visibility
         result = []
         for o in orders:
-            order_dict = OrderResponse.model_validate(o).model_dump()
+            order_dict = OrderResponse.model_validate(o).model_dump(mode="json")
 
             # Compute pick_status from inflow_data if available
             if o.inflow_data:
@@ -219,7 +219,9 @@ def get_tag_request_candidates():
             ):
                 continue
 
-            needing_request.append(OrderResponse.model_validate(order).model_dump())
+            needing_request.append(
+                OrderResponse.model_validate(order).model_dump(mode="json")
+            )
             if len(needing_request) >= limit:
                 break
 
@@ -234,7 +236,9 @@ def get_order(order_id):
         order = service.get_order_detail(order_id)
         if not order:
             abort(404, description="Order not found")
-        response_data = OrderDetailResponse.model_validate(order).model_dump()
+        response_data = OrderDetailResponse.model_validate(order).model_dump(
+            mode="json"
+        )
         if order.inflow_data:
             inflow_service = InflowService()
             response_data["asset_tag_required"] = inflow_service.requires_asset_tags(
@@ -281,7 +285,7 @@ def update_order(order_id):
 
         db.commit()
         db.refresh(order)
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(OrderResponse.model_validate(order).model_dump(mode="json"))
 
 
 @bp.route("/<uuid:order_id>/status", methods=["PATCH"])
@@ -310,7 +314,7 @@ def update_order_status(order_id):
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(OrderResponse.model_validate(order).model_dump(mode="json"))
 
 
 @bp.route("/bulk-transition", methods=["POST"])
@@ -338,7 +342,9 @@ def bulk_transition_status():
         # Broadcast order updates via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify([OrderResponse.model_validate(o).model_dump() for o in orders])
+        return jsonify(
+            [OrderResponse.model_validate(o).model_dump(mode="json") for o in orders]
+        )
 
 
 @bp.route("/<uuid:order_id>/audit", methods=["GET"])
@@ -379,7 +385,7 @@ def tag_order(order_id):
         )
 
         threading.Thread(target=_broadcast_orders_sync).start()
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(OrderResponse.model_validate(order).model_dump(mode="json"))
 
 
 @bp.route("/<uuid:order_id>/picklist", methods=["POST"])
@@ -404,7 +410,7 @@ def generate_picklist(order_id):
         )
 
         threading.Thread(target=_broadcast_orders_sync).start()
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(OrderResponse.model_validate(order).model_dump(mode="json"))
 
 
 @bp.route("/<uuid:order_id>/qa", methods=["POST"])
@@ -430,7 +436,7 @@ def submit_qa(order_id):
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(OrderResponse.model_validate(order).model_dump(mode="json"))
 
 
 @bp.route("/<uuid:order_id>/picklist", methods=["GET"])
@@ -583,7 +589,7 @@ def update_shipping_workflow(order_id):
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(OrderResponse.model_validate(order).model_dump(mode="json"))
 
 
 @bp.route("/<uuid:order_id>/shipping-workflow", methods=["GET"])
