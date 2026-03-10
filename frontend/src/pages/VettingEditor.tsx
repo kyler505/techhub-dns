@@ -18,6 +18,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { extractApiErrorMessage } from "../utils/apiErrors";
 
 type VettingEditorRow = {
   id: string;
@@ -142,7 +143,7 @@ export default function VettingEditor() {
         const payload = await vettingEditorApi.getData();
         setRows(flattenPayload(payload));
       } catch (error: any) {
-        const message = error?.response?.data?.error || "Failed to load vetting data.";
+        const message = extractApiErrorMessage(error, "Failed to load vetting data.");
         toast.error("Failed to load Vetting Editor", { description: message });
         setRows([]);
       } finally {
@@ -170,8 +171,7 @@ export default function VettingEditor() {
       await vettingEditorApi.saveData(payload);
       toast.success("Vetting data saved");
     } catch (error: any) {
-      const fallback = error instanceof Error ? error.message : "Save failed.";
-      const message = error?.response?.data?.error || fallback;
+      const message = extractApiErrorMessage(error, "Save failed.");
       toast.error("Failed to save Vetting Editor", { description: message });
     } finally {
       setSaving(false);
