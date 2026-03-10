@@ -7,6 +7,8 @@ Provides endpoints for checking backend feature statuses.
 import json
 import os
 import re
+from io import BytesIO
+from pathlib import Path
 from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request, send_file
@@ -85,6 +87,48 @@ def _require_print_agent() -> None:
     provided_token = auth_header.removeprefix("Bearer ").strip()
     if provided_token != configured_token:
         raise PermissionError("Invalid bearer token")
+
+
+def _send_picklist_pdf(file_path: str, download_name: str):
+    if file_path.startswith("http"):
+        from app.services.sharepoint_service import get_sharepoint_service
+
+        pdf_bytes = get_sharepoint_service().download_file("picklists", download_name)
+        if not pdf_bytes:
+            return jsonify({"error": "Picklist file not found"}), 404
+
+        pdf_stream = BytesIO(pdf_bytes)
+        pdf_stream.seek(0)
+        return send_file(
+            pdf_stream,
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=download_name,
+        )
+
+    path = Path(file_path)
+    if path.exists():
+        return send_file(
+            path.resolve(),
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=path.name,
+        )
+
+    from app.services.sharepoint_service import get_sharepoint_service
+
+    pdf_bytes = get_sharepoint_service().download_file("picklists", download_name)
+    if not pdf_bytes:
+        return jsonify({"error": "Picklist file not found"}), 404
+
+    pdf_stream = BytesIO(pdf_bytes)
+    pdf_stream.seek(0)
+    return send_file(
+        pdf_stream,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=download_name,
+    )
 
 
 COMPATIBILITY_EDITOR_STATUS_VALUES = (
@@ -1082,9 +1126,9 @@ def get_print_job_file(job_id: str):
     try:
         job = PrintJobService(db).get_job(job_id)
         file_path = job.file_path or ""
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({"error": "Picklist file not found"}), 404
-        return send_file(file_path, mimetype="application/pdf", as_attachment=False)
+        order = job.order
+        download_name = f"{(order.inflow_order_id if order else None) or job.id}.pdf"
+        return _send_picklist_pdf(file_path, download_name)
     finally:
         db.close()
 
