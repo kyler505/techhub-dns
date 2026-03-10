@@ -1,5 +1,3 @@
-import json
-
 from flask import Blueprint, request, jsonify, abort, send_file, current_app
 from flask_socketio import emit
 from sqlalchemy import or_, func
@@ -72,6 +70,76 @@ def _order_list_item_json(order, pick_status_data=None) -> str:
                 exc,
             )
     return response_model.model_dump_json()
+
+
+def _serialize_utc_datetime(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    return value.isoformat().replace("+00:00", "") + "Z"
+
+
+def _serialize_order_list_item(order, pick_status_data=None) -> dict:
+    latest_job = getattr(order, "latest_picklist_print_job", None)
+    latest_job_payload = None
+    if latest_job is not None:
+        latest_job_payload = {
+            "id": str(latest_job.id),
+            "status": latest_job.status,
+            "trigger_source": latest_job.trigger_source,
+            "requested_by": latest_job.requested_by,
+            "attempt_count": latest_job.attempt_count,
+            "created_at": _serialize_utc_datetime(latest_job.created_at),
+            "completed_at": _serialize_utc_datetime(latest_job.completed_at),
+            "last_error": latest_job.last_error,
+        }
+
+    return {
+        "id": str(order.id),
+        "inflow_order_id": order.inflow_order_id,
+        "inflow_sales_order_id": order.inflow_sales_order_id,
+        "recipient_name": order.recipient_name,
+        "recipient_contact": order.recipient_contact,
+        "delivery_location": order.delivery_location,
+        "po_number": order.po_number,
+        "status": order.status,
+        "assigned_deliverer": order.assigned_deliverer,
+        "issue_reason": order.issue_reason,
+        "tagged_at": _serialize_utc_datetime(order.tagged_at),
+        "tagged_by": order.tagged_by,
+        "tag_data": order.tag_data,
+        "picklist_generated_at": _serialize_utc_datetime(order.picklist_generated_at),
+        "picklist_generated_by": order.picklist_generated_by,
+        "picklist_path": order.picklist_path,
+        "delivery_run_id": order.delivery_run_id,
+        "delivery_sequence": order.delivery_sequence,
+        "qa_completed_at": _serialize_utc_datetime(order.qa_completed_at),
+        "qa_completed_by": order.qa_completed_by,
+        "qa_data": order.qa_data,
+        "qa_path": order.qa_path,
+        "qa_method": order.qa_method,
+        "signature_captured_at": _serialize_utc_datetime(order.signature_captured_at),
+        "signed_picklist_path": order.signed_picklist_path,
+        "order_details_path": order.order_details_path,
+        "order_details_generated_at": _serialize_utc_datetime(
+            order.order_details_generated_at
+        ),
+        "shipping_workflow_status": order.shipping_workflow_status,
+        "shipping_workflow_status_updated_at": _serialize_utc_datetime(
+            order.shipping_workflow_status_updated_at
+        ),
+        "shipping_workflow_status_updated_by": order.shipping_workflow_status_updated_by,
+        "shipped_to_carrier_at": _serialize_utc_datetime(order.shipped_to_carrier_at),
+        "shipped_to_carrier_by": order.shipped_to_carrier_by,
+        "carrier_name": order.carrier_name,
+        "tracking_number": order.tracking_number,
+        "parent_order_id": order.parent_order_id,
+        "has_remainder": order.has_remainder,
+        "remainder_order_id": order.remainder_order_id,
+        "created_at": _serialize_utc_datetime(order.created_at),
+        "updated_at": _serialize_utc_datetime(order.updated_at),
+        "pick_status": pick_status_data,
+        "latest_picklist_print_job": latest_job_payload,
+    }
 
 
 def _broadcast_orders_sync(db_session: Session = None):
@@ -152,7 +220,7 @@ def get_orders():
             OrderStatus.PRE_DELIVERY,
             OrderStatus.IN_DELIVERY,
         }
-        result_json = []
+        result = []
         for o in orders:
             pick_status_data = None
 
@@ -167,15 +235,9 @@ def get_orders():
                         exc,
                     )
 
-            result_json.append(_order_list_item_json(o, pick_status_data))
+            result.append(_serialize_order_list_item(o, pick_status_data))
 
-        return current_app.response_class(
-            response=json.dumps(
-                current_app.json.loads(f"[{','.join(result_json)}]"), default=str
-            ),
-            status=200,
-            mimetype="application/json",
-        )
+        return jsonify(result)
 
 
 @bp.route("/resolve", methods=["GET"])

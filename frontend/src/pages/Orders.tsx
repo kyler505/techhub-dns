@@ -84,13 +84,15 @@ export default function Orders() {
 
             // Handle array of statuses by fetching each and combining
             if (Array.isArray(statusFilter)) {
-                const orderPromises = statusFilter.map(status =>
-                    ordersApi.getOrders({
-                        status,
-                        search: searchQuery || undefined,
-                    })
-                );
-                const results = await Promise.all(orderPromises);
+                const results = [];
+                for (const status of statusFilter) {
+                    results.push(
+                        await ordersApi.getOrders({
+                            status,
+                            search: searchQuery || undefined,
+                        })
+                    );
+                }
                 shouldApply = latestRequestId.current === requestId;
                 // Combine and sort by updated_at descending
                 if (shouldApply) {
