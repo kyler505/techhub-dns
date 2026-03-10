@@ -58,6 +58,15 @@ def _order_detail_response_json(order) -> dict:
     )
 
 
+def _order_list_item_json(order, pick_status_data=None) -> str:
+    response_model = OrderResponse.model_validate(order)
+    if pick_status_data is not None:
+        response_model = response_model.model_copy(
+            update={"pick_status": PickStatus.model_validate(pick_status_data)}
+        )
+    return response_model.model_dump_json()
+
+
 def _broadcast_orders_sync(db_session: Session = None):
     """Send current orders to all connected clients (sync version)."""
     if db_session is None:
@@ -132,15 +141,14 @@ def get_orders():
         )
 
         # Enrich orders with pick_status for Pre-Delivery queue visibility
-        result = []
+        result_json = []
         for o in orders:
-            order_dict = _order_response_json(o)
+            pick_status_data = None
 
             # Compute pick_status from inflow_data if available
             if o.inflow_data:
                 try:
                     pick_status_data = inflow_service.get_pick_status(o.inflow_data)
-                    order_dict["pick_status"] = pick_status_data
                 except Exception as exc:
                     logger.warning(
                         "Failed to compute pick_status for order %s: %s",
@@ -148,10 +156,10 @@ def get_orders():
                         exc,
                     )
 
-            result.append(order_dict)
+            result_json.append(_order_list_item_json(o, pick_status_data))
 
         return current_app.response_class(
-            response=json.dumps(result),
+            response=f"[{','.join(result_json)}]",
             status=200,
             mimetype="application/json",
         )
