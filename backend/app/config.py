@@ -1,7 +1,7 @@
 import json
 from typing import Optional, List, Any
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -193,21 +193,29 @@ class Settings(BaseSettings):
     canopyorders_dav_root_path: str = "/dav"
     canopyorders_base_dir: str = "/content/canopyorders"
 
-    # Shared WebDAV credentials
+    # Shared WebDAV credentials (canonical)
     webdav_username: Optional[str] = None
     webdav_password: Optional[str] = None
+
+    # Canopy Orders-specific aliases (backward-compatible)
+    canopyorders_username: Optional[str] = None
+    canopyorders_password: Optional[str] = None
     canopyorders_password_secret_name: str = "ehanson-webdav"
     canopyorders_user_agent: str = "Cyberduck/9.0.0 (Windows 10/10.0) (x86_64) (WebDAV)"
     canopyorders_teams_workflow_url: Optional[str] = None
     canopyorders_teams_shared_secret: Optional[str] = None
 
-    # Vetting Editor
+    # Vetting Editor (env-only, no Key Vault integration)
     vetting_editor_download_url: Optional[str] = None
     vetting_editor_upload_url: Optional[str] = None
+    vetting_editor_webdav_username: Optional[str] = None
+    vetting_editor_webdav_password: Optional[str] = None
 
-    # Compatibility Editor Staging
+    # Compatibility Editor Staging (env-only, no Key Vault integration)
     compatibility_editor_staging_download_url: Optional[str] = None
     compatibility_editor_staging_upload_url: Optional[str] = None
+    compatibility_editor_staging_webdav_username: Optional[str] = None
+    compatibility_editor_staging_webdav_password: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env", case_sensitive=False, extra="ignore"
