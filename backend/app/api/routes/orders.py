@@ -61,9 +61,16 @@ def _order_detail_response_json(order) -> dict:
 def _order_list_item_json(order, pick_status_data=None) -> str:
     response_model = OrderResponse.model_validate(order)
     if pick_status_data is not None:
-        response_model = response_model.model_copy(
-            update={"pick_status": PickStatus.model_validate(pick_status_data)}
-        )
+        try:
+            response_model = response_model.model_copy(
+                update={"pick_status": PickStatus.model_validate(pick_status_data)}
+            )
+        except Exception as exc:
+            logger.warning(
+                "Skipping invalid pick_status for order %s: %s",
+                getattr(order, "inflow_order_id", None) or getattr(order, "id", None),
+                exc,
+            )
     return response_model.model_dump_json()
 
 
@@ -159,7 +166,9 @@ def get_orders():
             result_json.append(_order_list_item_json(o, pick_status_data))
 
         return current_app.response_class(
-            response=f"[{','.join(result_json)}]",
+            response=json.dumps(
+                current_app.json.loads(f"[{','.join(result_json)}]"), default=str
+            ),
             status=200,
             mimetype="application/json",
         )
