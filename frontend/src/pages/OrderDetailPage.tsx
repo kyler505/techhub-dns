@@ -8,43 +8,7 @@ import { settingsApi } from "../api/settings";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
-
-function getApiErrorMessage(error: unknown, fallback: string): string {
-    if (typeof error === "object" && error !== null && "response" in error) {
-        const candidate = error as {
-            response?: {
-                data?: {
-                    error?: unknown;
-                    message?: unknown;
-                };
-            };
-            message?: unknown;
-        };
-        const fromDataError = candidate.response?.data?.error;
-        if (typeof fromDataError === "string" && fromDataError.trim()) {
-            return fromDataError;
-        }
-        if (typeof fromDataError === "object" && fromDataError !== null && "message" in fromDataError) {
-            const fromNestedMessage = (fromDataError as { message?: unknown }).message;
-            if (typeof fromNestedMessage === "string" && fromNestedMessage.trim()) {
-                return fromNestedMessage;
-            }
-        }
-        const fromDataMessage = candidate.response?.data?.message;
-        if (typeof fromDataMessage === "string" && fromDataMessage.trim()) {
-            return fromDataMessage;
-        }
-        if (typeof candidate.message === "string" && candidate.message.trim()) {
-            return candidate.message;
-        }
-    }
-
-    if (error instanceof Error && error.message.trim()) {
-        return error.message;
-    }
-
-    return fallback;
-}
+import { extractApiErrorMessage } from "../utils/apiErrors";
 
 export default function OrderDetailPage() {
     const { orderId } = useParams<{ orderId: string }>();
@@ -183,7 +147,7 @@ export default function OrderDetailPage() {
                 loadOrder();
                 return;
             }
-            const message = getApiErrorMessage(error, "Failed to generate picklist");
+            const message = extractApiErrorMessage(error, "Failed to generate picklist");
             toast.error(message);
         }
     };
@@ -204,7 +168,7 @@ export default function OrderDetailPage() {
             }
             await loadOrder();
         } catch (error: any) {
-            const message = error?.response?.data?.error || "Failed to request tags";
+            const message = extractApiErrorMessage(error, "Failed to request tags");
             toast.error(message);
         }
     };

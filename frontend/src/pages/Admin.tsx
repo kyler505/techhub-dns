@@ -32,6 +32,7 @@ import {
 } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
+import { extractApiErrorMessage } from "../utils/apiErrors";
 
 interface FeatureStatus {
     name: string;
@@ -237,7 +238,7 @@ export default function Admin() {
         } catch (error: any) {
             console.error("Failed to update setting:", error);
             toast.error("Failed to update setting", {
-                description: error.response?.data?.error || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
         } finally {
             setTogglingSettingKey(null);
@@ -257,7 +258,7 @@ export default function Admin() {
         } catch (error: any) {
             console.error("Failed to register webhook:", error);
             toast.error("Failed to register webhook", {
-                description: error.response?.data?.detail || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
         } finally {
             setRegisteringWebhook(false);
@@ -273,7 +274,7 @@ export default function Admin() {
         } catch (error: any) {
             console.error("Failed to queue picklist reprint:", error);
             toast.error("Failed to queue picklist reprint", {
-                description: error.response?.data?.error || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
         } finally {
             setRetryingPrintOrderId(null);
@@ -290,7 +291,7 @@ export default function Admin() {
         } catch (error: any) {
             console.error("Failed to delete webhook:", error);
             toast.error("Failed to delete webhook", {
-                description: error.response?.data?.detail || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
             return false;
         } finally {
@@ -312,7 +313,7 @@ export default function Admin() {
                 toast.error("Test email failed", { description: result.error || result.message || undefined });
             }
         } catch (error: any) {
-            toast.error("Test email failed", { description: error.response?.data?.error || "Please try again." });
+            toast.error("Test email failed", { description: extractApiErrorMessage(error, "Please try again.") });
         } finally {
             setTestingService(null);
         }
@@ -333,7 +334,7 @@ export default function Admin() {
             }
         } catch (error: any) {
             toast.error("Test Teams message failed", {
-                description: error.response?.data?.error || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
         } finally {
             setTestingService(null);
@@ -351,7 +352,7 @@ export default function Admin() {
             }
         } catch (error: any) {
             toast.error("Inflow connection failed", {
-                description: error.response?.data?.error || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
         } finally {
             setTestingService(null);
@@ -369,7 +370,7 @@ export default function Admin() {
             }
         } catch (error: any) {
             toast.error("SharePoint connection failed", {
-                description: error.response?.data?.error || "Please try again.",
+                description: extractApiErrorMessage(error, "Please try again."),
             });
         } finally {
             setTestingService(null);
@@ -396,7 +397,7 @@ export default function Admin() {
                 toast.error("Upload failed", { description: message });
             }
         } catch (error: any) {
-            const message = error?.response?.data?.error || error?.message || "Upload failed";
+            const message = extractApiErrorMessage(error, "Upload failed");
             setCanopyBypassError(message);
             toast.error("Upload failed", { description: message });
         } finally {
@@ -513,7 +514,7 @@ export default function Admin() {
             const res = await apiClient.post("/system/sync");
             toast.success("Manual sync completed", { description: res.data?.message || undefined });
         } catch (error: any) {
-            toast.error("Manual sync failed", { description: error?.response?.data?.error || "Please try again." });
+            toast.error("Manual sync failed", { description: extractApiErrorMessage(error, "Please try again.") });
         } finally {
             setManualSyncing(false);
         }

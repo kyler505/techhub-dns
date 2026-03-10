@@ -26,6 +26,7 @@ import {
   type CompatibilityStatus,
   compatibilityEditorStagingApi,
 } from "../api/compatibilityEditorStaging";
+import { extractApiErrorMessage } from "../utils/apiErrors";
 
 type EditingCell = {
   computerKey: string;
@@ -180,7 +181,7 @@ export default function CompatibilityEditorStaging() {
         setPayload(result);
         setInitialSnapshot(JSON.stringify(result));
       } catch (error: any) {
-        const message = error?.response?.data?.error || error?.message || "Failed to load compatibility editor data.";
+        const message = extractApiErrorMessage(error, "Failed to load compatibility editor data.");
         toast.error(message);
       } finally {
         setLoading(false);
@@ -529,7 +530,7 @@ export default function CompatibilityEditorStaging() {
       setInitialSnapshot(JSON.stringify(payload));
       toast.success("Compatibility Editor Staging saved.");
     } catch (error: any) {
-      const message = error?.response?.data?.error || error?.message || "Failed to save compatibility editor data.";
+      const message = extractApiErrorMessage(error, "Failed to save compatibility editor data.");
       toast.error(message);
     } finally {
       setSaving(false);

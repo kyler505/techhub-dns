@@ -7,6 +7,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
+import { extractApiErrorMessage } from "../../utils/apiErrors";
 import {
     Table,
     TableBody,
@@ -39,7 +40,7 @@ export default function AdminsTab() {
             setData(res);
             setDraft(res.admins || []);
         } catch (e: any) {
-            const msg = e?.response?.data?.error || e?.message || "Failed to load admin allowlist";
+            const msg = extractApiErrorMessage(e, "Failed to load admin allowlist");
             setError(msg);
             toast.error("Failed to load admins", { description: msg });
         } finally {
@@ -94,7 +95,7 @@ export default function AdminsTab() {
             });
         } catch (e: any) {
             const status = e?.response?.status;
-            const msg = e?.response?.data?.error || e?.message || "Failed to update admin allowlist";
+            const msg = extractApiErrorMessage(e, "Failed to update admin allowlist");
             if (status === 409) {
                 toast.error("Admin allowlist is read-only", { description: msg });
             } else {
