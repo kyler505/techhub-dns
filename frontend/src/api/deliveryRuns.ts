@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import { normalizeExpectedUpdatedAt } from "./expectedUpdatedAt";
 
 export interface CreateDeliveryRunRequest {
   order_ids: string[];
@@ -52,10 +53,10 @@ export const deliveryRunsApi = {
   ): Promise<DeliveryRunResponse> => {
     const response = await apiClient.put<DeliveryRunResponse>(
       `/delivery-runs/${runId}/finish`,
-      {
+      normalizeExpectedUpdatedAt({
         create_remainders: createRemainders,
         expected_updated_at: expectedUpdatedAt ?? undefined,
-      }
+      })
     );
     return response.data;
   },
@@ -68,10 +69,10 @@ export const deliveryRunsApi = {
   ): Promise<DeliveryRunResponse> => {
     const response = await apiClient.put<DeliveryRunResponse>(
       `/delivery-runs/${runId}/orders/${orderId}/recall`,
-      {
+      normalizeExpectedUpdatedAt({
         reason,
         expected_updated_at: expectedUpdatedAt ?? undefined,
-      } satisfies RecallOrderRequest
+      } satisfies RecallOrderRequest)
     );
     return response.data;
   },
@@ -81,10 +82,13 @@ export const deliveryRunsApi = {
     orderIds: string[],
     expectedUpdatedAt?: string | null
   ): Promise<DeliveryRunResponse> => {
-    const response = await apiClient.put<DeliveryRunResponse>(`/delivery-runs/${runId}/orders/reorder`, {
-      order_ids: orderIds,
-      expected_updated_at: expectedUpdatedAt ?? undefined,
-    });
+    const response = await apiClient.put<DeliveryRunResponse>(
+      `/delivery-runs/${runId}/orders/reorder`,
+      normalizeExpectedUpdatedAt({
+        order_ids: orderIds,
+        expected_updated_at: expectedUpdatedAt ?? undefined,
+      }),
+    );
     return response.data;
   },
 
