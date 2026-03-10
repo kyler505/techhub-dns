@@ -148,12 +148,16 @@ def get_orders():
         )
 
         # Enrich orders with pick_status for Pre-Delivery queue visibility
+        include_pick_status = status_enum in {
+            OrderStatus.PRE_DELIVERY,
+            OrderStatus.IN_DELIVERY,
+        }
         result_json = []
         for o in orders:
             pick_status_data = None
 
             # Compute pick_status from inflow_data if available
-            if o.inflow_data:
+            if include_pick_status and o.inflow_data:
                 try:
                     pick_status_data = inflow_service.get_pick_status(o.inflow_data)
                 except Exception as exc:

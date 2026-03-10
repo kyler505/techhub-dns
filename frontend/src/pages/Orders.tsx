@@ -46,6 +46,7 @@ export default function Orders() {
     // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
+    const latestRequestId = useRef(0);
 
     // Track WebSocket updates and refetch when orders change
     useEffect(() => {
@@ -74,7 +75,10 @@ export default function Orders() {
     }, [statusFilter, debouncedSearch]);
 
     const loadOrders = async () => {
+        const requestId = latestRequestId.current + 1;
+        latestRequestId.current = requestId;
         setLoading(true);
+        let shouldApply = true;
         try {
             const searchQuery = debouncedSearch.trim();
 
@@ -87,21 +91,32 @@ export default function Orders() {
                     })
                 );
                 const results = await Promise.all(orderPromises);
+                shouldApply = latestRequestId.current === requestId;
                 // Combine and sort by updated_at descending
-                const combined = results.flat().sort(compareOrderListPriority);
-                setOrders(combined);
+                if (shouldApply) {
+                    const combined = results.flat().sort(compareOrderListPriority);
+                    setOrders(combined);
+                }
             } else {
                 const data = await ordersApi.getOrders({
                     status: statusFilter || undefined,
                     search: searchQuery || undefined,
                 });
-                setOrders(data);
+                shouldApply = latestRequestId.current === requestId;
+                if (shouldApply) {
+                    setOrders(data);
+                }
             }
         } catch (error) {
-            console.error("Failed to load orders:", error);
+            shouldApply = latestRequestId.current === requestId;
+            if (shouldApply) {
+                console.error("Failed to load orders:", error);
+            }
         } finally {
-            setLoading(false);
-            setIsInitialLoad(false);
+            if (shouldApply && latestRequestId.current === requestId) {
+                setLoading(false);
+                setIsInitialLoad(false);
+            }
         }
     };
 

@@ -36,7 +36,7 @@ class InflowService:
             self._headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "Accept": "application/json;version=2024-03-12"
+                "Accept": "application/json;version=2024-03-12",
             }
         return self._headers
 
@@ -95,57 +95,86 @@ class InflowService:
         lines = order.get("lines", [])
         pick_lines = order.get("pickLines", [])
 
+        if not isinstance(lines, list):
+            lines = []
+        if not isinstance(pick_lines, list):
+            pick_lines = []
+
         # Build map of required quantities and product names by product ID
         required = {}
         product_names = {}
         for line in lines:
+            if not isinstance(line, dict):
+                continue
             pid = line.get("productId")
+            if pid is not None:
+                pid = str(pid)
             qty = 0
             try:
-                qty = float(line.get("quantity", {}).get("standardQuantity", 0) or 0)
+                quantity = line.get("quantity")
+                quantity_dict = quantity if isinstance(quantity, dict) else {}
+                qty = float(quantity_dict.get("standardQuantity", 0) or 0)
             except (ValueError, TypeError):
                 pass
             if pid and qty > 0:
                 required[pid] = required.get(pid, 0) + qty
                 # Try to get product name from line description or product data
                 if pid not in product_names:
-                    product_names[pid] = line.get("description") or line.get("product", {}).get("name") or pid
+                    product = line.get("product")
+                    product_dict = product if isinstance(product, dict) else {}
+                    product_names[pid] = str(
+                        line.get("description") or product_dict.get("name") or pid
+                    )
 
         # Build map of picked quantities
         picked = {}
         for line in pick_lines:
+            if not isinstance(line, dict):
+                continue
             pid = line.get("productId")
+            if pid is not None:
+                pid = str(pid)
             qty = 0
             try:
-                qty = float(line.get("quantity", {}).get("standardQuantity", 0) or 0)
+                quantity = line.get("quantity")
+                quantity_dict = quantity if isinstance(quantity, dict) else {}
+                qty = float(quantity_dict.get("standardQuantity", 0) or 0)
             except (ValueError, TypeError):
                 pass
             if pid and qty > 0:
                 picked[pid] = picked.get(pid, 0) + qty
                 # Also capture product name from pick lines if available
                 if pid not in product_names:
-                    product_names[pid] = line.get("description") or line.get("product", {}).get("name") or pid
+                    product = line.get("product")
+                    product_dict = product if isinstance(product, dict) else {}
+                    product_names[pid] = str(
+                        line.get("description") or product_dict.get("name") or pid
+                    )
 
         # Calculate totals and missing items
         total_ordered = sum(required.values())
-        total_picked = sum(min(picked.get(pid, 0), req_qty) for pid, req_qty in required.items())
+        total_picked = sum(
+            min(picked.get(pid, 0), req_qty) for pid, req_qty in required.items()
+        )
 
         missing_items = []
         for pid, req_qty in required.items():
             picked_qty = picked.get(pid, 0)
             if picked_qty < (req_qty - 0.0001):
-                missing_items.append({
-                    "product_id": pid,
-                    "product_name": product_names.get(pid, pid),
-                    "ordered": int(req_qty),
-                    "picked": int(picked_qty)
-                })
+                missing_items.append(
+                    {
+                        "product_id": pid,
+                        "product_name": str(product_names.get(pid, pid)),
+                        "ordered": int(req_qty),
+                        "picked": int(picked_qty),
+                    }
+                )
 
         return {
             "is_fully_picked": len(missing_items) == 0,
             "total_ordered": int(total_ordered),
             "total_picked": int(total_picked),
-            "missing_items": missing_items
+            "missing_items": missing_items,
         }
 
     def _get_api_key(self) -> str:
@@ -156,7 +185,13 @@ class InflowService:
 
         # Priority 2: Azure Key Vault with Service Principal
         if settings.azure_key_vault_url:
-            if not all([settings.azure_tenant_id, settings.azure_client_id, settings.azure_client_secret]):
+            if not all(
+                [
+                    settings.azure_tenant_id,
+                    settings.azure_client_id,
+                    settings.azure_client_secret,
+                ]
+            ):
                 raise ValueError(
                     "Azure Key Vault configured but Service Principal credentials missing. "
                     "Set AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET."
@@ -171,7 +206,9 @@ class InflowService:
                     client_id=settings.azure_client_id,
                     client_secret=settings.azure_client_secret,
                 )
-                kv_client = SecretClient(vault_url=settings.azure_key_vault_url, credential=credential)
+                kv_client = SecretClient(
+                    vault_url=settings.azure_key_vault_url, credential=credential
+                )
                 secret = kv_client.get_secret("inflow-API-key-new")
                 logger.info("Retrieved Inflow API key from Azure Key Vault")
                 return secret.value
@@ -188,7 +225,7 @@ class InflowService:
         count: int = 100,
         skip: int = 0,
         sort: str = "orderDate",
-        sort_desc: bool = True
+        sort_desc: bool = True,
     ) -> List[Dict[str, Any]]:
         """Fetch orders from Inflow API"""
         url = f"{self.base_url}/{self.company_id}/sales-orders"
@@ -199,7 +236,7 @@ class InflowService:
             "count": str(count),
             "skip": str(skip),
             "sort": sort,
-            "sortDesc": str(sort_desc).lower()
+            "sortDesc": str(sort_desc).lower(),
         }
 
         if inventory_status:
@@ -229,19 +266,14 @@ class InflowService:
         return None
 
     async def sync_recent_started_orders(
-        self,
-        max_pages: int = 3,
-        per_page: int = 100,
-        target_matches: int = 100
+        self, max_pages: int = 3, per_page: int = 100, target_matches: int = 100
     ) -> List[Dict[str, Any]]:
         """Sync recent unfulfilled orders, filtering for 'started' status AND pickLines"""
         matches = []
 
         for page in range(max_pages):
             orders = await self.fetch_orders(
-                inventory_status="unfulfilled",
-                count=per_page,
-                skip=page * per_page
+                inventory_status="unfulfilled", count=per_page, skip=page * per_page
             )
 
             # Filter for 'started' status AND pickLines exist
@@ -262,10 +294,7 @@ class InflowService:
 
     def is_started_and_picked(self, order: Dict[str, Any]) -> bool:
         """Check if order has started status AND has pickLines (ready for TechHub)"""
-        return (
-            self.is_strict_started(order) and
-            bool(order.get("pickLines"))
-        )
+        return self.is_strict_started(order) and bool(order.get("pickLines"))
 
     async def get_order_by_id(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
         """Fetch a specific order by sales order ID (UUID)."""
@@ -281,7 +310,9 @@ class InflowService:
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 404:
                     return None
-                logger.error(f"Failed to fetch order {sales_order_id}: {e.response.status_code} - {e.response.text}")
+                logger.error(
+                    f"Failed to fetch order {sales_order_id}: {e.response.status_code} - {e.response.text}"
+                )
                 raise
 
             data = response.json()
@@ -292,7 +323,13 @@ class InflowService:
                 return data[0] if data else None
             return data
 
-    async def fulfill_sales_order(self, sales_order_id: str, db: Session = None, user_id: str = None, only_picked_items: bool = False) -> Dict[str, Any]:
+    async def fulfill_sales_order(
+        self,
+        sales_order_id: str,
+        db: Session = None,
+        user_id: str = None,
+        only_picked_items: bool = False,
+    ) -> Dict[str, Any]:
         """
         Fulfill a sales order by ensuring pickLines, packLines, and shipLines are populated.
         Based on inFlow docs: inventoryStatus becomes fulfilled when all products are in pickLines
@@ -315,7 +352,9 @@ class InflowService:
         # Require actual pickLines - don't create them artificially
         if not order.get("pickLines"):
             order_number = order.get("orderNumber") or sales_order_id
-            raise ValueError(f"Order {order_number} has no pickLines - items were not picked from inventory")
+            raise ValueError(
+                f"Order {order_number} has no pickLines - items were not picked from inventory"
+            )
 
         if not order.get("customerId"):
             raise ValueError("Sales order missing customerId; cannot fulfill")
@@ -339,27 +378,41 @@ class InflowService:
         if not order.get("packLines"):
             pack_lines = []
             # If only_picked_items is True, use pickLines instead of lines (for partial order fulfillment)
-            source_lines = order.get("pickLines", []) if only_picked_items else order.get("lines", [])
+            source_lines = (
+                order.get("pickLines", [])
+                if only_picked_items
+                else order.get("lines", [])
+            )
 
             for line in source_lines:
                 if not positive_quantity(line):
                     continue
-                pack_lines.append({
-                    "salesOrderPackLineId": str(uuid.uuid4()),
-                    "productId": line.get("productId"),
-                    "quantity": line.get("quantity"),
-                    "description": line.get("description"),
-                    "containerNumber": container_number,
-                })
+                pack_lines.append(
+                    {
+                        "salesOrderPackLineId": str(uuid.uuid4()),
+                        "productId": line.get("productId"),
+                        "quantity": line.get("quantity"),
+                        "description": line.get("description"),
+                        "containerNumber": container_number,
+                    }
+                )
             order["packLines"] = pack_lines
 
         if not order.get("shipLines") and order.get("packLines"):
-            order["shipLines"] = [{
-                "salesOrderShipLineId": str(uuid.uuid4()),
-                "carrier": "TechHub",
-                "containers": list({line.get("containerNumber") for line in order["packLines"] if line.get("containerNumber")}),
-                "shippedDate": now,
-            }]
+            order["shipLines"] = [
+                {
+                    "salesOrderShipLineId": str(uuid.uuid4()),
+                    "carrier": "TechHub",
+                    "containers": list(
+                        {
+                            line.get("containerNumber")
+                            for line in order["packLines"]
+                            if line.get("containerNumber")
+                        }
+                    ),
+                    "shippedDate": now,
+                }
+            ]
 
             # Check if order is fully picked (skip this check if only_picked_items=True)
             if not only_picked_items:
@@ -379,8 +432,8 @@ class InflowService:
                             description=msg,
                             audit_metadata={
                                 "reason": "partial_pick",
-                                "inflow_order_number": order.get("orderNumber")
-                            }
+                                "inflow_order_number": order.get("orderNumber"),
+                            },
                         )
 
                     # Return success structure but indicate skipped
@@ -388,7 +441,7 @@ class InflowService:
                         "salesOrderId": sales_order_id,
                         "orderNumber": order_number,
                         "status": "skipped",
-                        "message": msg
+                        "message": msg,
                     }
 
         # Proceed with fulfillment (either fully picked, or only_picked_items=True)
@@ -416,13 +469,15 @@ class InflowService:
                     "pick_lines_count": len(order.get("pickLines", [])),
                     "pack_lines_count": len(order.get("packLines", [])),
                     "ship_lines_count": len(order.get("shipLines", [])),
-                    "only_picked_items": only_picked_items
-                }
+                    "only_picked_items": only_picked_items,
+                },
             )
 
         return result
 
-    async def register_webhook(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
+    async def register_webhook(
+        self, webhook_url: str, events: List[str]
+    ) -> Dict[str, Any]:
         """
         Register a webhook with Inflow API.
 
@@ -446,7 +501,7 @@ class InflowService:
         event_mapping = {
             "orderCreated": "salesOrder.created",
             "orderUpdated": "salesOrder.updated",
-            "orderStatusChanged": "salesOrder.updated"
+            "orderStatusChanged": "salesOrder.updated",
         }
 
         # Map events to Inflow's format, fallback to original if no mapping exists
@@ -456,7 +511,7 @@ class InflowService:
         payload = {
             "webHookSubscriptionId": webhook_subscription_id,
             "url": webhook_url,
-            "events": mapped_events
+            "events": mapped_events,
         }
 
         async with httpx.AsyncClient() as client:
@@ -465,10 +520,14 @@ class InflowService:
                 response = await client.put(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"Webhook registered successfully: {result.get('id', 'unknown')}")
+                logger.info(
+                    f"Webhook registered successfully: {result.get('id', 'unknown')}"
+                )
                 return result
             except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to register webhook: {e.response.status_code} - {e.response.text}")
+                logger.error(
+                    f"Failed to register webhook: {e.response.status_code} - {e.response.text}"
+                )
                 raise
             except Exception as e:
                 logger.error(f"Error registering webhook: {e}", exc_info=True)
@@ -497,7 +556,9 @@ class InflowService:
                 else:
                     return []
             except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to list webhooks: {e.response.status_code} - {e.response.text}")
+                logger.error(
+                    f"Failed to list webhooks: {e.response.status_code} - {e.response.text}"
+                )
                 raise
             except Exception as e:
                 logger.error(f"Error listing webhooks: {e}", exc_info=True)
@@ -525,17 +586,16 @@ class InflowService:
                 if e.response.status_code == 404:
                     logger.warning(f"Webhook {webhook_id} not found")
                     return False
-                logger.error(f"Failed to delete webhook: {e.response.status_code} - {e.response.text}")
+                logger.error(
+                    f"Failed to delete webhook: {e.response.status_code} - {e.response.text}"
+                )
                 raise
             except Exception as e:
                 logger.error(f"Error deleting webhook: {e}", exc_info=True)
                 raise
 
     def verify_webhook_signature(
-        self,
-        payload: bytes,
-        signature: str,
-        secret: Optional[str] = None
+        self, payload: bytes, signature: str, secret: Optional[str] = None
     ) -> bool:
         """
         Verify webhook signature using configured secret.
@@ -547,18 +607,29 @@ class InflowService:
         Returns:
             True if signature is valid
         """
-        from app.utils.webhook_security import verify_webhook_signature as verify_signature
+        from app.utils.webhook_security import (
+            verify_webhook_signature as verify_signature,
+        )
+
         secret_to_use = secret or settings.inflow_webhook_secret
-        return verify_signature(payload, signature, secret_to_use) if secret_to_use else True
+        return (
+            verify_signature(payload, signature, secret_to_use)
+            if secret_to_use
+            else True
+        )
 
     def _normalize_category_name(self, name: str) -> str:
         return " ".join(name.lower().replace("-", " ").split())
 
-    def _is_asset_tag_required_line(self, category_name: Optional[str], unit_price: float) -> bool:
+    def _is_asset_tag_required_line(
+        self, category_name: Optional[str], unit_price: float
+    ) -> bool:
         if unit_price <= 500:
             return False
 
-        normalized = self._normalize_category_name(category_name) if category_name else ""
+        normalized = (
+            self._normalize_category_name(category_name) if category_name else ""
+        )
         return (
             normalized.startswith("desktops ")
             or normalized.startswith("laptops ")
@@ -661,7 +732,9 @@ class InflowService:
         cache[key] = result
         return result
 
-    def _extract_product_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> str:
+    def _extract_product_name(
+        self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None
+    ) -> str:
         product = line.get("product", {})
         return (
             product.get("name")
@@ -672,11 +745,15 @@ class InflowService:
             or "Unknown Product"
         )
 
-    def _extract_category_id(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def _extract_category_id(
+        self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         product = line.get("product", {})
         return product.get("categoryId") or (fallback or {}).get("category_id")
 
-    def _extract_category_name(self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def _extract_category_name(
+        self, line: Dict[str, Any], fallback: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         product = line.get("product", {})
         category = product.get("category", {})
         return category.get("name") or (fallback or {}).get("category_name")
@@ -692,7 +769,9 @@ class InflowService:
                     response = client.get(url, headers=self.headers)
                     response.raise_for_status()
                 except httpx.HTTPStatusError as exc:
-                    logger.warning(f"Failed to fetch inflow categories from {endpoint}: {exc}")
+                    logger.warning(
+                        f"Failed to fetch inflow categories from {endpoint}: {exc}"
+                    )
                     continue
 
                 data = response.json()
@@ -722,7 +801,11 @@ class InflowService:
                 or category.get("id")
                 or category.get("category_id")
             )
-            name = category.get("name") or category.get("categoryName") or category.get("label")
+            name = (
+                category.get("name")
+                or category.get("categoryName")
+                or category.get("label")
+            )
             if category_id and name:
                 category_map[str(category_id)] = name
 
@@ -765,8 +848,7 @@ class InflowService:
 
         def has_serials(source: List[Dict[str, Any]]) -> bool:
             return any(
-                bool(line.get("quantity", {}).get("serialNumbers"))
-                for line in source
+                bool(line.get("quantity", {}).get("serialNumbers")) for line in source
             )
 
         pick_lines_have_serials = has_serials(pick_lines)
@@ -814,21 +896,29 @@ class InflowService:
 
             raw_price = line.get("unitPrice")
             try:
-                unit_price = float(raw_price) if raw_price is not None else float(
-                    line_unit_price_by_product.get(product_id or "", 0)
+                unit_price = (
+                    float(raw_price)
+                    if raw_price is not None
+                    else float(line_unit_price_by_product.get(product_id or "", 0))
                 )
             except (TypeError, ValueError):
-                unit_price = float(line_unit_price_by_product.get(product_id or "", 0) or 0)
+                unit_price = float(
+                    line_unit_price_by_product.get(product_id or "", 0) or 0
+                )
 
             if not self._is_asset_tag_required_line(category_name, unit_price):
                 continue
 
-            serial_numbers = list(line.get("quantity", {}).get("serialNumbers", []) or [])
+            serial_numbers = list(
+                line.get("quantity", {}).get("serialNumbers", []) or []
+            )
             if not serial_numbers and product_id in line_serials_by_product:
                 serial_numbers = list(line_serials_by_product.get(product_id, []))
 
             if product_id in index_by_product:
-                asset_tag_serials[index_by_product[product_id]]["serials"].extend(serial_numbers)
+                asset_tag_serials[index_by_product[product_id]]["serials"].extend(
+                    serial_numbers
+                )
                 continue
 
             entry = {
@@ -854,7 +944,7 @@ class InflowService:
         count: int = 100,
         skip: int = 0,
         sort: str = "orderDate",
-        sort_desc: bool = True
+        sort_desc: bool = True,
     ) -> List[Dict[str, Any]]:
         """Fetch orders from Inflow API (sync version)"""
         url = f"{self.base_url}/{self.company_id}/sales-orders"
@@ -865,7 +955,7 @@ class InflowService:
             "count": str(count),
             "skip": str(skip),
             "sort": sort,
-            "sortDesc": str(sort_desc).lower()
+            "sortDesc": str(sort_desc).lower(),
         }
 
         if inventory_status:
@@ -894,19 +984,14 @@ class InflowService:
         return None
 
     def sync_recent_started_orders_sync(
-        self,
-        max_pages: int = 3,
-        per_page: int = 100,
-        target_matches: int = 100
+        self, max_pages: int = 3, per_page: int = 100, target_matches: int = 100
     ) -> List[Dict[str, Any]]:
         """Sync recent unfulfilled orders (sync version)"""
         matches = []
 
         for page in range(max_pages):
             orders = self.fetch_orders_sync(
-                inventory_status="unfulfilled",
-                count=per_page,
-                skip=page * per_page
+                inventory_status="unfulfilled", count=per_page, skip=page * per_page
             )
 
             for order in orders:
@@ -923,7 +1008,9 @@ class InflowService:
     def get_order_by_id_sync(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
         """Fetch a specific order by sales order ID (sync version)"""
         url = f"{self.base_url}/{self.company_id}/sales-orders/{sales_order_id}"
-        params = {"include": "pickLines.product,shipLines,packLines.product,lines.product,lines"}
+        params = {
+            "include": "pickLines.product,shipLines,packLines.product,lines.product,lines"
+        }
 
         with httpx.Client() as client:
             try:
@@ -941,7 +1028,9 @@ class InflowService:
                 return data[0] if data else None
             return data
 
-    def fulfill_sales_order_sync(self, sales_order_id: str, db: Session = None, user_id: str = None) -> Dict[str, Any]:
+    def fulfill_sales_order_sync(
+        self, sales_order_id: str, db: Session = None, user_id: str = None
+    ) -> Dict[str, Any]:
         """Fulfill a sales order (sync version)"""
         from app.services.audit_service import AuditService
 
@@ -975,22 +1064,32 @@ class InflowService:
             for line in order.get("lines", []):
                 if not positive_quantity(line):
                     continue
-                pack_lines.append({
-                    "salesOrderPackLineId": str(uuid.uuid4()),
-                    "productId": line.get("productId"),
-                    "quantity": line.get("quantity"),
-                    "description": line.get("description"),
-                    "containerNumber": container_number,
-                })
+                pack_lines.append(
+                    {
+                        "salesOrderPackLineId": str(uuid.uuid4()),
+                        "productId": line.get("productId"),
+                        "quantity": line.get("quantity"),
+                        "description": line.get("description"),
+                        "containerNumber": container_number,
+                    }
+                )
             order["packLines"] = pack_lines
 
         if not order.get("shipLines") and order.get("packLines"):
-            order["shipLines"] = [{
-                "salesOrderShipLineId": str(uuid.uuid4()),
-                "carrier": "TechHub",
-                "containers": list({line.get("containerNumber") for line in order["packLines"] if line.get("containerNumber")}),
-                "shippedDate": now,
-            }]
+            order["shipLines"] = [
+                {
+                    "salesOrderShipLineId": str(uuid.uuid4()),
+                    "carrier": "TechHub",
+                    "containers": list(
+                        {
+                            line.get("containerNumber")
+                            for line in order["packLines"]
+                            if line.get("containerNumber")
+                        }
+                    ),
+                    "shippedDate": now,
+                }
+            ]
 
         # Check if order is fully picked
         is_fully_picked = self._is_fully_picked(order)
@@ -1009,8 +1108,8 @@ class InflowService:
                     description=msg,
                     audit_metadata={
                         "reason": "partial_pick",
-                        "inflow_order_number": order.get("orderNumber")
-                    }
+                        "inflow_order_number": order.get("orderNumber"),
+                    },
                 )
 
             # Return success structure but indicate skipped
@@ -1018,7 +1117,7 @@ class InflowService:
                 "salesOrderId": sales_order_id,
                 "orderNumber": order_number,
                 "status": "skipped",
-                "message": msg
+                "message": msg,
             }
 
         url = f"{self.base_url}/{self.company_id}/sales-orders"
@@ -1039,13 +1138,15 @@ class InflowService:
                         "inflow_order_number": order.get("orderNumber"),
                         "pick_lines_count": len(order.get("pickLines", [])),
                         "pack_lines_count": len(order.get("packLines", [])),
-                        "ship_lines_count": len(order.get("shipLines", []))
-                    }
+                        "ship_lines_count": len(order.get("shipLines", [])),
+                    },
                 )
 
             return result
 
-    def register_webhook_sync(self, webhook_url: str, events: List[str]) -> Dict[str, Any]:
+    def register_webhook_sync(
+        self, webhook_url: str, events: List[str]
+    ) -> Dict[str, Any]:
         """Register a webhook with Inflow API (sync version)"""
         url = f"{self.base_url}/{self.company_id}/webhooks"
         webhook_subscription_id = str(uuid.uuid4())
@@ -1053,7 +1154,7 @@ class InflowService:
         event_mapping = {
             "orderCreated": "salesOrder.created",
             "orderUpdated": "salesOrder.updated",
-            "orderStatusChanged": "salesOrder.updated"
+            "orderStatusChanged": "salesOrder.updated",
         }
 
         mapped_events = [event_mapping.get(e, e) for e in events]
@@ -1062,14 +1163,16 @@ class InflowService:
         payload = {
             "webHookSubscriptionId": webhook_subscription_id,
             "url": webhook_url,
-            "events": mapped_events
+            "events": mapped_events,
         }
 
         with httpx.Client() as client:
             response = client.put(url, json=payload, headers=self.headers)
             response.raise_for_status()
             result = response.json()
-            logger.info(f"Webhook registered successfully: {result.get('id', 'unknown')}")
+            logger.info(
+                f"Webhook registered successfully: {result.get('id', 'unknown')}"
+            )
             return result
 
     def list_webhooks_sync(self) -> List[Dict[str, Any]]:
