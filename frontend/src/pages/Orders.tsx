@@ -25,6 +25,7 @@ export default function Orders() {
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
     const navigate = useNavigate();
 
     const compareOrderListPriority = (left: Order, right: Order): number => {
@@ -143,6 +144,7 @@ export default function Orders() {
         reason?: string
     ) => {
         const currentOrder = orders.find((o) => o.id === orderId);
+        setUpdatingStatus(true);
         try {
             await ordersApi.updateOrderStatus(orderId, {
                 status: newStatus,
@@ -159,6 +161,8 @@ export default function Orders() {
                 return;
             }
             toast.error("Failed to update order status");
+        } finally {
+            setUpdatingStatus(false);
         }
     };
 
@@ -232,6 +236,7 @@ export default function Orders() {
                         performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
                     }
                     onCancel={() => setTransitioningOrder(null)}
+                    submitting={updatingStatus}
                 />
             )}
         </div>

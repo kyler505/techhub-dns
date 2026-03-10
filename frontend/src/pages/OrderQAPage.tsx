@@ -68,6 +68,7 @@ export default function OrderQAPage() {
 
     const [order, setOrder] = useState<Order | null>(null);
     const [loading, setLoading] = useState(true);
+    const [submittingQa, setSubmittingQa] = useState(false);
     const [form, setForm] = useState<QAFormState>(() => defaultForm(""));
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
@@ -79,6 +80,7 @@ export default function OrderQAPage() {
 
     const loadOrder = async (id: string) => {
         setLoading(true);
+        setSubmittingQa(true);
         try {
             const data = await ordersApi.getOrder(id);
             setOrder(data);
@@ -159,6 +161,8 @@ export default function OrderQAPage() {
                 return;
             }
             toast.error("Failed to submit QA checklist. Please try again.");
+        } finally {
+            setSubmittingQa(false);
         }
     };
 
@@ -323,6 +327,7 @@ export default function OrderQAPage() {
                     <button
                         type="button"
                         onClick={() => navigate(-1)}
+                        disabled={submittingQa}
                         className="text-sm font-medium text-gray-600 hover:text-gray-900 px-4 py-2"
                     >
                         Cancel
@@ -331,13 +336,13 @@ export default function OrderQAPage() {
                     <button
                         type="button"
                         onClick={submitQA}
-                        disabled={!isFormComplete(form)}
+                        disabled={submittingQa || !isFormComplete(form)}
                         className={`rounded-md px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors ${isFormComplete(form)
                             ? 'bg-[#800000] hover:bg-[#660000]'
                             : 'bg-gray-300 cursor-not-allowed'
                             }`}
                     >
-                        Submit QA Checklist
+                        {submittingQa ? 'Submitting...' : 'Submit QA Checklist'}
                     </button>
                 </div>
             </div>
