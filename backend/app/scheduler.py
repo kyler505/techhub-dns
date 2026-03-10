@@ -247,7 +247,7 @@ def auto_register_inflow_webhook() -> None:
                     url=target_url,
                     events=settings.inflow_webhook_events,
                     status=WebhookStatus.active,
-                    secret=result.get("secret"),
+                    secret=result.get("secret") or settings.inflow_webhook_secret,
                 )
             )
             db.commit()
