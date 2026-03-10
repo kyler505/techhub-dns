@@ -1,7 +1,7 @@
 import json
 from typing import Optional, List, Any
 
-from pydantic import field_validator, model_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -192,12 +192,6 @@ class Settings(BaseSettings):
     canopyorders_store_base: Optional[str] = None
     canopyorders_dav_root_path: str = "/dav"
     canopyorders_base_dir: str = "/content/canopyorders"
-
-    # Shared WebDAV credentials (canonical)
-    webdav_username: Optional[str] = None
-    webdav_password: Optional[str] = None
-
-    # Canopy Orders-specific aliases (backward-compatible)
     canopyorders_username: Optional[str] = None
     canopyorders_password: Optional[str] = None
     canopyorders_password_secret_name: str = "ehanson-webdav"
@@ -239,6 +233,5 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
-
 
 settings = Settings()
