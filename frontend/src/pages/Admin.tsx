@@ -202,7 +202,7 @@ export default function Admin() {
     }, [printJobs]);
     const printJobStats = useMemo(() => {
         const pending = printJobSummaries.filter((job) => job.latest_status === "pending" || job.latest_status === "claimed").length;
-        const failed = printJobSummaries.filter((job) => job.failed_jobs > 0).length;
+        const failed = printJobSummaries.filter((job) => job.latest_status === "failed").length;
         const completed = printJobSummaries.filter((job) => job.completed_jobs > 0).length;
         return {
             total: printJobSummaries.length,
@@ -951,8 +951,8 @@ export default function Admin() {
                                                 Needs Attention
                                             </div>
                                             <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.failed}</div>
-                                             <p className="mt-1 text-xs text-muted-foreground">Orders with one or more failed print attempts that can be retried.</p>
-                                        </div>
+                                             <p className="mt-1 text-xs text-muted-foreground">Orders whose latest print attempt failed and still need a retry.</p>
+                                         </div>
                                     </div>
 
                                     <div className="flex flex-col gap-3 border-y bg-muted/20 px-6 py-4 text-sm sm:flex-row sm:items-center sm:justify-between">
