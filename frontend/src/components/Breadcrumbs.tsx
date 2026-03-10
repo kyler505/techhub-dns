@@ -12,7 +12,6 @@ const LABELS: Record<string, string> = {
   golf_cart: "Golf Cart",
   shipping: "Shipping",
   "vetting-editor": "Vetting Editor",
-  "compatibility-editor-staging": "Compatibility Editor",
   admin: "Admin",
   sessions: "Sessions",
   runs: "Runs",

@@ -205,12 +205,6 @@ class Settings(BaseSettings):
     vetting_editor_webdav_username: Optional[str] = None
     vetting_editor_webdav_password: Optional[str] = None
 
-    # Compatibility Editor Staging (env-only, no Key Vault integration)
-    compatibility_editor_staging_download_url: Optional[str] = None
-    compatibility_editor_staging_upload_url: Optional[str] = None
-    compatibility_editor_staging_webdav_username: Optional[str] = None
-    compatibility_editor_staging_webdav_password: Optional[str] = None
-
     model_config = SettingsConfigDict(
         env_file=".env", case_sensitive=False, extra="ignore"
     )
@@ -233,5 +227,6 @@ class Settings(BaseSettings):
                     pass
             return [item.strip() for item in raw.split(",") if item.strip()]
         return value
+
 
 settings = Settings()

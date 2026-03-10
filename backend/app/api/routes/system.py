@@ -72,6 +72,7 @@ _VETTING_EDITOR_DOWNLOAD_HEADERS = {
     "Pragma": "no-cache",
 }
 
+<<<<<<< HEAD
 PRINT_AGENT_CLAIM_TIMEOUT_SECONDS = 300
 
 
@@ -130,29 +131,6 @@ def _send_picklist_pdf(file_path: str, download_name: str):
         download_name=download_name,
     )
 
-
-COMPATIBILITY_EDITOR_STATUS_VALUES = (
-    "Compatible",
-    "Incompatible",
-    "Partially Compatible",
-)
-COMPATIBILITY_EDITOR_DETAIL_STATUS_VALUES = (
-    "Functional",
-    "Partially Functional",
-    "Non-functional",
-    "N/A",
-)
-COMPATIBILITY_EDITOR_DETAIL_FIELDS = (
-    "display",
-    "charging",
-    "usbDetection",
-    "ethernet",
-    "audio",
-    "sdCard",
-)
-
-_COMPATIBILITY_EDITOR_TIMEOUT = _VETTING_EDITOR_TIMEOUT
-_COMPATIBILITY_EDITOR_DOWNLOAD_HEADERS = dict(_VETTING_EDITOR_DOWNLOAD_HEADERS)
 
 
 def _normalize_vetting_editor_section_name(section_name: str) -> str:
@@ -389,6 +367,7 @@ def _upload_vetting_editor_json(
     return False
 
 
+<<<<<<< HEAD
 def _get_compatibility_editor_staging_auth() -> tuple[str, str]:
     username = (settings.compatibility_editor_staging_webdav_username or "").strip()
     password = settings.compatibility_editor_staging_webdav_password
@@ -752,6 +731,8 @@ def _upload_compatibility_editor_staging_json(
     return False
 
 
+=======
+>>>>>>> parent of affa472 (add compatibility editor staging web integration)
 def _to_utc_iso_z(value: Optional[datetime]) -> Optional[str]:
     if value is None:
         return None
@@ -1229,6 +1210,7 @@ def save_vetting_editor_data():
     return jsonify({"success": True})
 
 
+<<<<<<< HEAD
 @bp.route("/compatibility-editor-staging", methods=["GET"])
 @require_admin
 def get_compatibility_editor_staging_data():
@@ -1315,6 +1297,8 @@ def save_compatibility_editor_staging_data():
     return jsonify({"success": True})
 
 
+=======
+>>>>>>> parent of affa472 (add compatibility editor staging web integration)
 # ============ Testing Endpoints ============
 
 
