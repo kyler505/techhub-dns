@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, request, jsonify, abort, send_file, current_app
 from flask_socketio import emit
 from sqlalchemy import or_, func
@@ -148,7 +150,11 @@ def get_orders():
 
             result.append(order_dict)
 
-        return jsonify(result)
+        return current_app.response_class(
+            response=json.dumps(result),
+            status=200,
+            mimetype="application/json",
+        )
 
 
 @bp.route("/resolve", methods=["GET"])
