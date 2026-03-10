@@ -513,6 +513,8 @@ class InflowService:
             "url": webhook_url,
             "events": mapped_events,
         }
+        if settings.inflow_webhook_secret:
+            payload["secret"] = settings.inflow_webhook_secret
 
         async with httpx.AsyncClient() as client:
             try:
@@ -1165,6 +1167,8 @@ class InflowService:
             "url": webhook_url,
             "events": mapped_events,
         }
+        if settings.inflow_webhook_secret:
+            payload["secret"] = settings.inflow_webhook_secret
 
         with httpx.Client() as client:
             response = client.put(url, json=payload, headers=self.headers)
