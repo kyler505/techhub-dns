@@ -10,6 +10,7 @@ import { SkeletonTable } from "../components/Skeleton";
 import { PackageSearch } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 import { toast } from "sonner";
+import { isValidOrderId } from "../utils/orderIds";
 
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -20,6 +21,7 @@ export default function Orders() {
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [transitioningOrder, setTransitioningOrder] = useState<{
         orderId: string;
+        currentStatus: OrderStatus;
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
@@ -90,9 +92,15 @@ export default function Orders() {
     };
 
     const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
+        const currentStatus = orders.find((order) => order.id === orderId)?.status;
+        if (!currentStatus) {
+            toast.error("Order status is unavailable. Reload the list and try again.");
+            return;
+        }
+
         const requireReason = newStatus === OrderStatus.ISSUE;
         if (requireReason && reason === undefined) {
-            setTransitioningOrder({ orderId, newStatus, requireReason: true });
+            setTransitioningOrder({ orderId, currentStatus, newStatus, requireReason: true });
         } else {
             performStatusChange(orderId, newStatus, reason);
         }
@@ -123,7 +131,11 @@ export default function Orders() {
         }
     };
 
-    const handleViewDetail = (orderId: string) => {
+    const handleViewDetail = (orderId?: string) => {
+        if (!isValidOrderId(orderId)) {
+            toast.error("Order details are unavailable for this row");
+            return;
+        }
         navigate(`/orders/${orderId}`);
     };
 
@@ -182,9 +194,7 @@ export default function Orders() {
             )}
             {transitioningOrder && (
                 <StatusTransition
-                    currentStatus={
-                        orders.find((o) => o.id === transitioningOrder.orderId)?.status || OrderStatus.PRE_DELIVERY
-                    }
+                    currentStatus={transitioningOrder.currentStatus}
                     newStatus={transitioningOrder.newStatus}
                     requireReason={transitioningOrder.requireReason}
                     onConfirm={(reason) =>
