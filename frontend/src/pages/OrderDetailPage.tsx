@@ -9,9 +9,12 @@ import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 import { extractApiErrorMessage } from "../utils/apiErrors";
+import { isValidOrderId } from "../utils/orderIds";
 
 export default function OrderDetailPage() {
-    const { orderId } = useParams<{ orderId: string }>();
+    const { orderId: rawOrderId } = useParams<{ orderId: string }>();
+    const orderId = isValidOrderId(rawOrderId) ? rawOrderId : null;
+    const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
     const { user } = useAuth();
     const [order, setOrder] = useState<OrderDetail | null>(null);
@@ -46,8 +49,15 @@ export default function OrderDetailPage() {
     useEffect(() => {
         if (orderId) {
             loadOrder();
+            return;
         }
-    }, [orderId]);
+        if (invalidOrderId) {
+            setLoading(false);
+            setOrder(null);
+            setAuditLogs([]);
+            setNotifications([]);
+        }
+    }, [invalidOrderId, orderId]);
 
     const loadOrder = async () => {
         if (!orderId) return;
@@ -176,6 +186,10 @@ export default function OrderDetailPage() {
 
     if (loading) {
         return <div className="p-4">Loading...</div>;
+    }
+
+    if (invalidOrderId) {
+        return <div className="p-4">Invalid order link</div>;
     }
 
     if (!order) {

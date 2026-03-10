@@ -29,22 +29,36 @@ export default function OrderTable({
     const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+    const compareText = (left: unknown, right: unknown): number => {
+        const leftText = typeof left === "string" ? left : "";
+        const rightText = typeof right === "string" ? right : "";
+        return leftText.localeCompare(rightText);
+    };
+
+    const compareDate = (left: unknown, right: unknown): number => {
+        const leftTime = typeof left === "string" ? Date.parse(left) : Number.NaN;
+        const rightTime = typeof right === "string" ? Date.parse(right) : Number.NaN;
+        const safeLeft = Number.isNaN(leftTime) ? 0 : leftTime;
+        const safeRight = Number.isNaN(rightTime) ? 0 : rightTime;
+        return safeLeft - safeRight;
+    };
+
     const sortedOrders = useMemo(() => {
         const copy = [...orders];
         copy.sort((a, b) => {
             const direction = sortDir === "asc" ? 1 : -1;
             switch (sortKey) {
                 case "id":
-                    return direction * (a.inflow_order_id || a.id).localeCompare(b.inflow_order_id || b.id);
+                    return direction * compareText(a.inflow_order_id || a.id, b.inflow_order_id || b.id);
                 case "recipient":
-                    return direction * (a.recipient_name || "").localeCompare(b.recipient_name || "");
+                    return direction * compareText(a.recipient_name, b.recipient_name);
                 case "location":
-                    return direction * formatDeliveryLocation(a).localeCompare(formatDeliveryLocation(b));
+                    return direction * compareText(formatDeliveryLocation(a), formatDeliveryLocation(b));
                 case "status":
-                    return direction * a.status.localeCompare(b.status);
+                    return direction * compareText(a.status, b.status);
                 case "date":
                 default:
-                    return direction * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                    return direction * compareDate(a.created_at, b.created_at);
             }
         });
         return copy;
@@ -153,9 +167,9 @@ export default function OrderTable({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {sortedOrders.map((order) => (
+                    {sortedOrders.map((order, index) => (
                         <TableRow
-                            key={order.id}
+                            key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`}
                             tabIndex={0}
                             role="link"
                             onClick={(e) => onRowClick(e, order.id)}
