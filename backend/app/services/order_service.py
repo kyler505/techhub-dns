@@ -507,7 +507,16 @@ class OrderService:
             query = query.filter(search_filter)
 
         total = query.count()
-        orders = query.order_by(Order.updated_at.desc()).offset(skip).limit(limit).all()
+        orders = (
+            query.order_by(
+                Order.updated_at.desc(),
+                Order.created_at.desc(),
+                Order.id.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
         return orders, total
 

@@ -27,6 +27,22 @@ export default function Orders() {
     } | null>(null);
     const navigate = useNavigate();
 
+    const compareOrderListPriority = (left: Order, right: Order): number => {
+        const updatedAtDelta = Date.parse(right.updated_at) - Date.parse(left.updated_at);
+        if (!Number.isNaN(updatedAtDelta) && updatedAtDelta !== 0) {
+            return updatedAtDelta;
+        }
+
+        const createdAtDelta = Date.parse(right.created_at) - Date.parse(left.created_at);
+        if (!Number.isNaN(createdAtDelta) && createdAtDelta !== 0) {
+            return createdAtDelta;
+        }
+
+        const leftKey = left.inflow_order_id || left.id || "";
+        const rightKey = right.inflow_order_id || right.id || "";
+        return rightKey.localeCompare(leftKey);
+    };
+
     // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
@@ -72,9 +88,7 @@ export default function Orders() {
                 );
                 const results = await Promise.all(orderPromises);
                 // Combine and sort by updated_at descending
-                const combined = results.flat().sort((a, b) =>
-                    new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-                );
+                const combined = results.flat().sort(compareOrderListPriority);
                 setOrders(combined);
             } else {
                 const data = await ordersApi.getOrders({
