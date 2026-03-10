@@ -99,6 +99,25 @@ const getPrintJobBadgeVariant = (status: string): "success" | "destructive" | "s
     return "secondary";
 };
 
+interface PrintJobOrderSummary {
+    order_id: string;
+    order_inflow_order_id?: string | null;
+    latest_job_id: string;
+    latest_status: string;
+    latest_trigger_source: string;
+    latest_requested_by?: string | null;
+    latest_created_at?: string | null;
+    latest_completed_at?: string | null;
+    latest_claimed_at?: string | null;
+    latest_claim_expires_at?: string | null;
+    latest_error?: string | null;
+    total_jobs: number;
+    failed_jobs: number;
+    completed_jobs: number;
+    active_jobs: number;
+    max_attempt_count: number;
+}
+
 export default function Admin() {
     const { user, isAdmin, isLoading: authLoading } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -138,17 +157,60 @@ export default function Admin() {
 
     const autoPrintSetting = getSetting(systemSettings, "picklist_auto_print_enabled");
     const autoPrintEnabled = autoPrintSetting.value === "true";
+    const printJobSummaries = useMemo<PrintJobOrderSummary[]>(() => {
+        const grouped = new Map<string, PrintJobRecord[]>();
+        for (const job of printJobs) {
+            const existing = grouped.get(job.order_id);
+            if (existing) {
+                existing.push(job);
+            } else {
+                grouped.set(job.order_id, [job]);
+            }
+        }
+
+        return Array.from(grouped.values()).map((jobs) => {
+            const sortedJobs = [...jobs].sort((left, right) => {
+                const leftTime = left.created_at ? Date.parse(left.created_at) : 0;
+                const rightTime = right.created_at ? Date.parse(right.created_at) : 0;
+                return rightTime - leftTime;
+            });
+            const latestJob = sortedJobs[0];
+            const failedJobs = sortedJobs.filter((job) => job.status === "failed");
+            const completedJobs = sortedJobs.filter((job) => job.status === "completed");
+            const activeJobs = sortedJobs.filter((job) => job.status === "pending" || job.status === "claimed");
+            const latestErrorJob = failedJobs[0] ?? sortedJobs.find((job) => job.last_error) ?? latestJob;
+
+            return {
+                order_id: latestJob.order_id,
+                order_inflow_order_id: latestJob.order_inflow_order_id,
+                latest_job_id: latestJob.id,
+                latest_status: latestJob.status,
+                latest_trigger_source: latestJob.trigger_source,
+                latest_requested_by: latestJob.requested_by,
+                latest_created_at: latestJob.created_at,
+                latest_completed_at: latestJob.completed_at,
+                latest_claimed_at: latestJob.claimed_at,
+                latest_claim_expires_at: latestJob.claim_expires_at,
+                latest_error: latestErrorJob?.last_error,
+                total_jobs: sortedJobs.length,
+                failed_jobs: failedJobs.length,
+                completed_jobs: completedJobs.length,
+                active_jobs: activeJobs.length,
+                max_attempt_count: Math.max(...sortedJobs.map((job) => job.attempt_count || 0), 0),
+            };
+        });
+    }, [printJobs]);
     const printJobStats = useMemo(() => {
-        const pending = printJobs.filter((job) => job.status === "pending" || job.status === "claimed").length;
-        const failed = printJobs.filter((job) => job.status === "failed").length;
-        const completed = printJobs.filter((job) => job.status === "completed").length;
+        const pending = printJobSummaries.filter((job) => job.latest_status === "pending" || job.latest_status === "claimed").length;
+        const failed = printJobSummaries.filter((job) => job.failed_jobs > 0).length;
+        const completed = printJobSummaries.filter((job) => job.completed_jobs > 0).length;
         return {
-            total: printJobs.length,
+            total: printJobSummaries.length,
             pending,
             failed,
             completed,
         };
-    }, [printJobs]);
+    }, [printJobSummaries]);
 
     useEffect(() => {
         if (!isAdmin) {
@@ -872,8 +934,8 @@ export default function Admin() {
                                     <div className="grid gap-3 px-6 pt-6 md:grid-cols-3">
                                         <div className="rounded-xl border bg-background/70 p-4">
                                             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Queued View</div>
-                                            <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.total}</div>
-                                            <p className="mt-1 text-xs text-muted-foreground">Recent picklist print jobs in the recovery queue.</p>
+                                             <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.total}</div>
+                                             <p className="mt-1 text-xs text-muted-foreground">Recent orders represented in the picklist print queue.</p>
                                         </div>
                                         <div className="rounded-xl border bg-background/70 p-4">
                                             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -889,7 +951,7 @@ export default function Admin() {
                                                 Needs Attention
                                             </div>
                                             <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.failed}</div>
-                                            <p className="mt-1 text-xs text-muted-foreground">Failed jobs can be retried without regenerating the picklist.</p>
+                                             <p className="mt-1 text-xs text-muted-foreground">Orders with one or more failed print attempts that can be retried.</p>
                                         </div>
                                     </div>
 
@@ -928,66 +990,75 @@ export default function Admin() {
                                                             </TableCell>
                                                         </TableRow>
                                                     ) : (
-                                                        printJobs.map((job) => {
-                                                            const isActive = job.status === "pending" || job.status === "claimed";
-                                                            const canRetry = !isActive;
+                                                         printJobSummaries.map((job) => {
+                                                             const isActive = job.latest_status === "pending" || job.latest_status === "claimed";
+                                                             const canRetry = !isActive;
 
-                                                            return (
-                                                                <TableRow key={job.id} className="align-top">
-                                                                    <TableCell className="space-y-1 py-4">
-                                                                        <div className="font-medium text-foreground">
-                                                                            {job.order_inflow_order_id || job.order_id}
+                                                             return (
+                                                                 <TableRow key={job.order_id} className="align-top">
+                                                                     <TableCell className="space-y-1 py-4">
+                                                                         <div className="font-medium text-foreground">
+                                                                             {job.order_inflow_order_id || job.order_id}
                                                                         </div>
                                                                         <div className="font-mono text-[11px] text-muted-foreground">
                                                                             {job.order_id}
                                                                         </div>
-                                                                        <div className="flex flex-wrap gap-2 pt-1 md:hidden">
-                                                                            <Badge variant="outline" className="capitalize">
-                                                                                {job.trigger_source}
-                                                                            </Badge>
-                                                                            <span className="text-xs text-muted-foreground">
-                                                                                {job.attempt_count} attempt{job.attempt_count === 1 ? "" : "s"}
-                                                                            </span>
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="py-4">
-                                                                        <div className="flex items-center gap-2">
-                                                                            {job.status === "completed" ? (
-                                                                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                                                                            ) : job.status === "failed" ? (
-                                                                                <AlertCircle className="h-4 w-4 text-destructive" />
-                                                                            ) : (
-                                                                                <Clock className="h-4 w-4 text-amber-600" />
-                                                                            )}
-                                                                            <Badge variant={getPrintJobBadgeVariant(job.status)}>{job.status}</Badge>
-                                                                        </div>
-                                                                        <div className="mt-2 text-xs text-muted-foreground lg:hidden">
-                                                                            {formatTimestamp(job.created_at)}
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="hidden py-4 md:table-cell">
-                                                                        <Badge variant="outline" className="capitalize">
-                                                                            {job.trigger_source}
-                                                                        </Badge>
-                                                                    </TableCell>
-                                                                    <TableCell className="hidden py-4 text-sm text-muted-foreground md:table-cell">
-                                                                        {job.attempt_count}
-                                                                    </TableCell>
-                                                                    <TableCell className="hidden py-4 text-sm text-muted-foreground lg:table-cell">
-                                                                        {formatTimestamp(job.created_at)}
-                                                                    </TableCell>
-                                                                    <TableCell className="hidden max-w-[18rem] py-4 text-sm text-muted-foreground xl:table-cell">
-                                                                        <div className="line-clamp-2" title={job.last_error || undefined}>
-                                                                            {job.last_error || "No reported error"}
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="py-4 text-right">
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant={job.status === "failed" ? "default" : "outline"}
-                                                                            className="btn-lift"
-                                                                            onClick={() => handleRetryPrintJob(job.order_id)}
-                                                                            disabled={retryingPrintOrderId === job.order_id || !canRetry}
+                                                                         <div className="flex flex-wrap gap-2 pt-1 md:hidden">
+                                                                             <Badge variant="outline" className="capitalize">
+                                                                                 {job.latest_trigger_source}
+                                                                             </Badge>
+                                                                             <span className="text-xs text-muted-foreground">
+                                                                                 {job.total_jobs} job{job.total_jobs === 1 ? "" : "s"}
+                                                                             </span>
+                                                                             {job.failed_jobs > 0 ? (
+                                                                                 <span className="text-xs text-destructive">
+                                                                                     {job.failed_jobs} fail{job.failed_jobs === 1 ? "" : "s"}
+                                                                                 </span>
+                                                                             ) : null}
+                                                                         </div>
+                                                                     </TableCell>
+                                                                     <TableCell className="py-4">
+                                                                         <div className="flex items-center gap-2">
+                                                                             {job.latest_status === "completed" ? (
+                                                                                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                                                             ) : job.latest_status === "failed" ? (
+                                                                                 <AlertCircle className="h-4 w-4 text-destructive" />
+                                                                             ) : (
+                                                                                 <Clock className="h-4 w-4 text-amber-600" />
+                                                                             )}
+                                                                             <Badge variant={getPrintJobBadgeVariant(job.latest_status)}>{job.latest_status}</Badge>
+                                                                         </div>
+                                                                         <div className="mt-2 text-xs text-muted-foreground lg:hidden">
+                                                                             {formatTimestamp(job.latest_created_at)}
+                                                                         </div>
+                                                                     </TableCell>
+                                                                     <TableCell className="hidden py-4 md:table-cell">
+                                                                         <Badge variant="outline" className="capitalize">
+                                                                             {job.latest_trigger_source}
+                                                                         </Badge>
+                                                                     </TableCell>
+                                                                     <TableCell className="hidden py-4 text-sm text-muted-foreground md:table-cell">
+                                                                         <div>{job.max_attempt_count} attempt{job.max_attempt_count === 1 ? "" : "s"}</div>
+                                                                         <div className="text-xs text-muted-foreground">{job.total_jobs} total job{job.total_jobs === 1 ? "" : "s"}</div>
+                                                                         {job.failed_jobs > 0 ? (
+                                                                             <div className="text-xs text-destructive">{job.failed_jobs} failed</div>
+                                                                         ) : null}
+                                                                     </TableCell>
+                                                                     <TableCell className="hidden py-4 text-sm text-muted-foreground lg:table-cell">
+                                                                         {formatTimestamp(job.latest_created_at)}
+                                                                     </TableCell>
+                                                                     <TableCell className="hidden max-w-[18rem] py-4 text-sm text-muted-foreground xl:table-cell">
+                                                                         <div className="line-clamp-2" title={job.latest_error || undefined}>
+                                                                             {job.latest_error || "No reported error"}
+                                                                         </div>
+                                                                     </TableCell>
+                                                                     <TableCell className="py-4 text-right">
+                                                                         <Button
+                                                                             size="sm"
+                                                                             variant={job.latest_status === "failed" ? "default" : "outline"}
+                                                                             className="btn-lift"
+                                                                             onClick={() => handleRetryPrintJob(job.order_id)}
+                                                                             disabled={retryingPrintOrderId === job.order_id || !canRetry}
                                                                         >
                                                                             {retryingPrintOrderId === job.order_id ? (
                                                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
