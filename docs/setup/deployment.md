@@ -154,6 +154,20 @@ Recommended behavior:
 If you do not want polling fallback, set `SCHEDULER_ENABLED=false` and rely on
 webhooks only.
 
+### Alternative: Scheduled Task for Dev
+
+If `dev` does not need a persistent Always-on task, use a PythonAnywhere hourly
+scheduled task instead of `run_scheduler.py`.
+
+Command:
+
+```bash
+cd /home/username/techhub-dns-dev/backend && /home/username/techhub-dns-dev/backend/.venv/bin/python run_sync_once.py
+```
+
+Use this for lower-priority environments where hourly catch-up sync is good
+enough. Keep `prod` on the Always-on `run_scheduler.py` worker.
+
 ### Verify Deployment
 
 Visit `https://username.pythonanywhere.com` - you should see the React frontend.

@@ -81,6 +81,7 @@ pytest -q tests/test_error_handling.py -k "validation"   # run a single test by 
 - PythonAnywhere logs: `~/logs/<domain>.error.log`, `~/logs/<domain>.server.log`.
 - Do not run `scripts/deploy.sh` locally; it assumes PythonAnywhere paths and hard-resets to `origin/main`.
 
+
 ## PythonAnywhere SSH Key Usage
 
 - For PythonAnywhere SSH/SCP commands, use the explicit local key:
