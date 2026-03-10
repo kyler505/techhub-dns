@@ -72,6 +72,12 @@ class Settings(BaseSettings):
         "teams-queue"  # Relative to sharepoint_folder_path
     )
 
+    # Shared WebDAV credentials for imported editor workflows
+    webdav_username: Optional[str] = None
+    webdav_password: Optional[str] = None
+    vetting_editor_webdav_username: Optional[str] = None
+    vetting_editor_webdav_password: Optional[str] = None
+
     # ===========================================
     # TAMU Entra ID Authentication (SAML + Service Principal)
     # ===========================================
