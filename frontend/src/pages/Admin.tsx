@@ -31,7 +31,7 @@ import {
     TableRow,
 } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { AlertTriangle, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
 
 interface FeatureStatus {
     name: string;
@@ -92,6 +92,12 @@ const formatTimestamp = (value?: string | null) => {
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 };
 
+const getPrintJobBadgeVariant = (status: string): "success" | "destructive" | "secondary" => {
+    if (status === "completed") return "success";
+    if (status === "failed") return "destructive";
+    return "secondary";
+};
+
 export default function Admin() {
     const { user, isAdmin, isLoading: authLoading } = useAuth();
     const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -128,6 +134,20 @@ export default function Admin() {
 
     const deleteCancelButtonRef = useRef<HTMLButtonElement | null>(null);
     const syncCancelButtonRef = useRef<HTMLButtonElement | null>(null);
+
+    const autoPrintSetting = getSetting(systemSettings, "picklist_auto_print_enabled");
+    const autoPrintEnabled = autoPrintSetting.value === "true";
+    const printJobStats = useMemo(() => {
+        const pending = printJobs.filter((job) => job.status === "pending" || job.status === "claimed").length;
+        const failed = printJobs.filter((job) => job.status === "failed").length;
+        const completed = printJobs.filter((job) => job.status === "completed").length;
+        return {
+            total: printJobs.length,
+            pending,
+            failed,
+            completed,
+        };
+    }, [printJobs]);
 
     useEffect(() => {
         if (!isAdmin) {
@@ -809,125 +829,178 @@ export default function Admin() {
                                 </CardContent>
                             </Card>
 
-                            <Card>
-                                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <CardTitle className="text-base">Picklist Print Recovery</CardTitle>
-                                        <CardDescription>
-                                            Review recent picklist print jobs and manually retry failed attempts.
-                                        </CardDescription>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge
-                                            variant={getSetting(systemSettings, "picklist_auto_print_enabled").value === "true" ? "success" : "secondary"}
-                                        >
-                                            Auto-print {getSetting(systemSettings, "picklist_auto_print_enabled").value === "true" ? "on" : "off"}
-                                        </Badge>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                handleToggleSetting(
-                                                    "picklist_auto_print_enabled",
-                                                    getSetting(systemSettings, "picklist_auto_print_enabled").value,
-                                                )
-                                            }
-                                            disabled={togglingSettingKey === "picklist_auto_print_enabled"}
-                                        >
-                                            {togglingSettingKey === "picklist_auto_print_enabled" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : null}
-                                            Toggle
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={loadPrintJobs} disabled={printJobsLoading}>
-                                            {printJobsLoading ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="mr-2 h-4 w-4" />
-                                            )}
-                                            Refresh
-                                        </Button>
+                            <Card className="overflow-hidden border-border/70 bg-card/95">
+                                <CardHeader className="gap-4 border-b bg-gradient-to-r from-muted/50 via-background to-background">
+                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                        <div className="space-y-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <CardTitle className="text-base tracking-tight">Picklist Print Recovery</CardTitle>
+                                                <Badge variant={autoPrintEnabled ? "success" : "secondary"}>
+                                                    Auto-print {autoPrintEnabled ? "active" : "paused"}
+                                                </Badge>
+                                            </div>
+                                            <CardDescription className="max-w-2xl">
+                                                Monitor the fixed ops print queue, spot failed jobs quickly, and manually requeue a picklist when the first attempt needs help.
+                                            </CardDescription>
+                                        </div>
+                                        <div className="flex flex-col items-stretch gap-2 sm:flex-row lg:items-center">
+                                            <Button
+                                                variant={autoPrintEnabled ? "outline" : "default"}
+                                                size="sm"
+                                                className="btn-lift"
+                                                onClick={() => handleToggleSetting("picklist_auto_print_enabled", autoPrintSetting.value)}
+                                                disabled={togglingSettingKey === "picklist_auto_print_enabled"}
+                                            >
+                                                {togglingSettingKey === "picklist_auto_print_enabled" ? (
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                ) : null}
+                                                {autoPrintEnabled ? "Pause auto-print" : "Enable auto-print"}
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={loadPrintJobs} disabled={printJobsLoading}>
+                                                {printJobsLoading ? (
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                                )}
+                                                Refresh queue
+                                            </Button>
+                                        </div>
                                     </div>
                                 </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                                        The fixed ops desktop listens for `print_job_available` websocket events and falls back to polling the print queue.
+                                <CardContent className="space-y-5 p-0">
+                                    <div className="grid gap-3 px-6 pt-6 md:grid-cols-3">
+                                        <div className="rounded-xl border bg-background/70 p-4">
+                                            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Queued View</div>
+                                            <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.total}</div>
+                                            <p className="mt-1 text-xs text-muted-foreground">Recent picklist print jobs in the recovery queue.</p>
+                                        </div>
+                                        <div className="rounded-xl border bg-background/70 p-4">
+                                            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                                <Clock className="h-3.5 w-3.5" />
+                                                Active
+                                            </div>
+                                            <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.pending}</div>
+                                            <p className="mt-1 text-xs text-muted-foreground">Jobs waiting for the desktop agent or currently printing.</p>
+                                        </div>
+                                        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+                                            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-destructive">
+                                                <AlertCircle className="h-3.5 w-3.5" />
+                                                Needs Attention
+                                            </div>
+                                            <div className="mt-3 text-2xl font-semibold text-foreground">{printJobStats.failed}</div>
+                                            <p className="mt-1 text-xs text-muted-foreground">Failed jobs can be retried without regenerating the picklist.</p>
+                                        </div>
                                     </div>
-                                    <div className="rounded-lg border bg-card">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Order</TableHead>
-                                                    <TableHead>Source</TableHead>
-                                                    <TableHead>Status</TableHead>
-                                                    <TableHead className="hidden md:table-cell">Attempts</TableHead>
-                                                    <TableHead className="hidden md:table-cell">Created</TableHead>
-                                                    <TableHead className="hidden lg:table-cell">Last Error</TableHead>
-                                                    <TableHead className="text-right">Actions</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {printJobs.length === 0 ? (
+
+                                    <div className="flex flex-col gap-3 border-y bg-muted/20 px-6 py-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="font-medium text-foreground">Fixed ops desktop workflow</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                The desktop agent wakes on `print_job_available`, then claims jobs over HTTP with polling as backup.
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                            {printJobStats.completed} completed in this recent queue snapshot
+                                        </div>
+                                    </div>
+
+                                    <div className="px-6 pb-6">
+                                        <div className="overflow-hidden rounded-xl border bg-background/80">
+                                            <Table>
+                                                <TableHeader>
                                                     <TableRow>
-                                                        <TableCell colSpan={7} className="text-sm text-muted-foreground">
-                                                            No picklist print jobs yet.
-                                                        </TableCell>
+                                                        <TableHead>Order</TableHead>
+                                                        <TableHead>Status</TableHead>
+                                                        <TableHead className="hidden md:table-cell">Source</TableHead>
+                                                        <TableHead className="hidden md:table-cell">Attempts</TableHead>
+                                                        <TableHead className="hidden lg:table-cell">Created</TableHead>
+                                                        <TableHead className="hidden xl:table-cell">Last Error</TableHead>
+                                                        <TableHead className="text-right">Actions</TableHead>
                                                     </TableRow>
-                                                ) : (
-                                                    printJobs.map((job) => (
-                                                        <TableRow key={job.id}>
-                                                            <TableCell>
-                                                                <div className="text-sm font-medium text-foreground">
-                                                                    {job.order_inflow_order_id || job.order_id}
-                                                                </div>
-                                                                <div className="text-xs text-muted-foreground">{job.order_id}</div>
-                                                            </TableCell>
-                                                            <TableCell className="capitalize">{job.trigger_source}</TableCell>
-                                                            <TableCell>
-                                                                <Badge
-                                                                    variant={
-                                                                        job.status === "completed"
-                                                                            ? "success"
-                                                                            : job.status === "failed"
-                                                                                ? "destructive"
-                                                                                : "secondary"
-                                                                    }
-                                                                >
-                                                                    {job.status}
-                                                                </Badge>
-                                                            </TableCell>
-                                                            <TableCell className="hidden md:table-cell">{job.attempt_count}</TableCell>
-                                                            <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                                                                {formatTimestamp(job.created_at)}
-                                                            </TableCell>
-                                                            <TableCell
-                                                                className="hidden max-w-[18rem] truncate text-sm text-muted-foreground lg:table-cell"
-                                                                title={job.last_error || undefined}
-                                                            >
-                                                                {job.last_error || "-"}
-                                                            </TableCell>
-                                                            <TableCell className="text-right">
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() => handleRetryPrintJob(job.order_id)}
-                                                                    disabled={
-                                                                        retryingPrintOrderId === job.order_id ||
-                                                                        job.status === "pending" ||
-                                                                        job.status === "claimed"
-                                                                    }
-                                                                >
-                                                                    {retryingPrintOrderId === job.order_id ? (
-                                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                                    ) : null}
-                                                                    Retry Print
-                                                                </Button>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {printJobs.length === 0 ? (
+                                                        <TableRow>
+                                                            <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                                                                No picklist print jobs yet.
                                                             </TableCell>
                                                         </TableRow>
-                                                    ))
-                                                )}
-                                            </TableBody>
-                                        </Table>
+                                                    ) : (
+                                                        printJobs.map((job) => {
+                                                            const isActive = job.status === "pending" || job.status === "claimed";
+                                                            const canRetry = !isActive;
+
+                                                            return (
+                                                                <TableRow key={job.id} className="align-top">
+                                                                    <TableCell className="space-y-1 py-4">
+                                                                        <div className="font-medium text-foreground">
+                                                                            {job.order_inflow_order_id || job.order_id}
+                                                                        </div>
+                                                                        <div className="font-mono text-[11px] text-muted-foreground">
+                                                                            {job.order_id}
+                                                                        </div>
+                                                                        <div className="flex flex-wrap gap-2 pt-1 md:hidden">
+                                                                            <Badge variant="outline" className="capitalize">
+                                                                                {job.trigger_source}
+                                                                            </Badge>
+                                                                            <span className="text-xs text-muted-foreground">
+                                                                                {job.attempt_count} attempt{job.attempt_count === 1 ? "" : "s"}
+                                                                            </span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="py-4">
+                                                                        <div className="flex items-center gap-2">
+                                                                            {job.status === "completed" ? (
+                                                                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                                                            ) : job.status === "failed" ? (
+                                                                                <AlertCircle className="h-4 w-4 text-destructive" />
+                                                                            ) : (
+                                                                                <Clock className="h-4 w-4 text-amber-600" />
+                                                                            )}
+                                                                            <Badge variant={getPrintJobBadgeVariant(job.status)}>{job.status}</Badge>
+                                                                        </div>
+                                                                        <div className="mt-2 text-xs text-muted-foreground lg:hidden">
+                                                                            {formatTimestamp(job.created_at)}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="hidden py-4 md:table-cell">
+                                                                        <Badge variant="outline" className="capitalize">
+                                                                            {job.trigger_source}
+                                                                        </Badge>
+                                                                    </TableCell>
+                                                                    <TableCell className="hidden py-4 text-sm text-muted-foreground md:table-cell">
+                                                                        {job.attempt_count}
+                                                                    </TableCell>
+                                                                    <TableCell className="hidden py-4 text-sm text-muted-foreground lg:table-cell">
+                                                                        {formatTimestamp(job.created_at)}
+                                                                    </TableCell>
+                                                                    <TableCell className="hidden max-w-[18rem] py-4 text-sm text-muted-foreground xl:table-cell">
+                                                                        <div className="line-clamp-2" title={job.last_error || undefined}>
+                                                                            {job.last_error || "No reported error"}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="py-4 text-right">
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant={job.status === "failed" ? "default" : "outline"}
+                                                                            className="btn-lift"
+                                                                            onClick={() => handleRetryPrintJob(job.order_id)}
+                                                                            disabled={retryingPrintOrderId === job.order_id || !canRetry}
+                                                                        >
+                                                                            {retryingPrintOrderId === job.order_id ? (
+                                                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                                            ) : null}
+                                                                            Retry Print
+                                                                        </Button>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>
