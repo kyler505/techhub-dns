@@ -43,23 +43,54 @@ export default function OrderTable({
         return safeLeft - safeRight;
     };
 
+    const compareStableOrderKey = (left: Order, right: Order): number => {
+        return compareText(left.inflow_order_id || left.id, right.inflow_order_id || right.id);
+    };
+
+    const compareWithFallback = (primary: number, left: Order, right: Order): number => {
+        if (primary !== 0) {
+            return primary;
+        }
+
+        const updatedAtComparison = compareDate(left.updated_at, right.updated_at);
+        if (updatedAtComparison !== 0) {
+            return updatedAtComparison;
+        }
+
+        const createdAtComparison = compareDate(left.created_at, right.created_at);
+        if (createdAtComparison !== 0) {
+            return createdAtComparison;
+        }
+
+        return compareStableOrderKey(left, right);
+    };
+
     const sortedOrders = useMemo(() => {
         const copy = [...orders];
         copy.sort((a, b) => {
             const direction = sortDir === "asc" ? 1 : -1;
+            let comparison = 0;
+
             switch (sortKey) {
                 case "id":
-                    return direction * compareText(a.inflow_order_id || a.id, b.inflow_order_id || b.id);
+                    comparison = compareStableOrderKey(a, b);
+                    break;
                 case "recipient":
-                    return direction * compareText(a.recipient_name, b.recipient_name);
+                    comparison = compareText(a.recipient_name, b.recipient_name);
+                    break;
                 case "location":
-                    return direction * compareText(formatDeliveryLocation(a), formatDeliveryLocation(b));
+                    comparison = compareText(formatDeliveryLocation(a), formatDeliveryLocation(b));
+                    break;
                 case "status":
-                    return direction * compareText(a.status, b.status);
+                    comparison = compareText(a.status, b.status);
+                    break;
                 case "date":
                 default:
-                    return direction * compareDate(a.created_at, b.created_at);
+                    comparison = compareDate(a.created_at, b.created_at);
+                    break;
             }
+
+            return direction * compareWithFallback(comparison, a, b);
         });
         return copy;
     }, [orders, sortKey, sortDir]);
