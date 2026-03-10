@@ -648,7 +648,7 @@ export default function CompatibilityEditorStaging() {
               No matrix entries match the current filters.
             </div>
           ) : (
-            <div className="overflow-auto overscroll-x-contain rounded-lg border">
+            <div className="overflow-auto rounded-lg border">
               <table className="w-full min-w-[960px] border-collapse text-sm">
                 <thead>
                   <tr className="bg-muted/40">
