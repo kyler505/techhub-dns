@@ -32,6 +32,7 @@ PUBLIC_ROUTES = [
     "/auth/",  # All auth routes
     "/health",
     "/api/inflow/webhook",  # Inflow webhook callbacks
+    "/api/system/print-agent/",  # Fixed desktop print agent token auth
 ]
 
 STATIC_ROUTE_PREFIXES = (

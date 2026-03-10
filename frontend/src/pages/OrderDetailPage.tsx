@@ -8,15 +8,22 @@ import { settingsApi } from "../api/settings";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
+import { extractApiErrorMessage } from "../utils/apiErrors";
+import { isValidOrderId } from "../utils/orderIds";
 
 export default function OrderDetailPage() {
-    const { orderId } = useParams<{ orderId: string }>();
+    const { orderId: rawOrderId } = useParams<{ orderId: string }>();
+    const orderId = isValidOrderId(rawOrderId) ? rawOrderId : null;
+    const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
     const { user } = useAuth();
     const [order, setOrder] = useState<OrderDetail | null>(null);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
     const [notifications, setNotifications] = useState<TeamsNotification[]>([]);
     const [loading, setLoading] = useState(true);
+    const [generatingPicklist, setGeneratingPicklist] = useState(false);
+    const [retryingNotification, setRetryingNotification] = useState(false);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
         requireReason: boolean;
@@ -45,8 +52,15 @@ export default function OrderDetailPage() {
     useEffect(() => {
         if (orderId) {
             loadOrder();
+            return;
         }
-    }, [orderId]);
+        if (invalidOrderId) {
+            setLoading(false);
+            setOrder(null);
+            setAuditLogs([]);
+            setNotifications([]);
+        }
+    }, [invalidOrderId, orderId]);
 
     const loadOrder = async () => {
         if (!orderId) return;
@@ -79,6 +93,7 @@ export default function OrderDetailPage() {
 
     const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
+        setUpdatingStatus(true);
         try {
             await ordersApi.updateOrderStatus(order.id, {
                 status: newStatus,
@@ -95,17 +110,22 @@ export default function OrderDetailPage() {
                 return;
             }
             toast.error("Failed to update order status");
+        } finally {
+            setUpdatingStatus(false);
         }
     };
 
     const handleRetryNotification = async () => {
         if (!order) return;
+        setRetryingNotification(true);
         try {
             await ordersApi.retryNotification(order.id);
             loadOrder();
         } catch (error) {
             console.error("Failed to retry notification:", error);
             toast.error("Failed to retry notification");
+        } finally {
+            setRetryingNotification(false);
         }
     };
 
@@ -133,6 +153,7 @@ export default function OrderDetailPage() {
 
     const handleGeneratePicklist = async () => {
         if (!order) return;
+        setGeneratingPicklist(true);
         try {
             await ordersApi.generatePicklist(order.id, {
                 generated_by: getUserName(),
@@ -146,8 +167,10 @@ export default function OrderDetailPage() {
                 loadOrder();
                 return;
             }
-            const message = error.response?.data?.error || "Failed to generate picklist";
+            const message = extractApiErrorMessage(error, "Failed to generate picklist");
             toast.error(message);
+        } finally {
+            setGeneratingPicklist(false);
         }
     };
 
@@ -167,7 +190,7 @@ export default function OrderDetailPage() {
             }
             await loadOrder();
         } catch (error: any) {
-            const message = error?.response?.data?.error || "Failed to request tags";
+            const message = extractApiErrorMessage(error, "Failed to request tags");
             toast.error(message);
         }
     };
@@ -175,6 +198,10 @@ export default function OrderDetailPage() {
 
     if (loading) {
         return <div className="p-4">Loading...</div>;
+    }
+
+    if (invalidOrderId) {
+        return <div className="p-4">Invalid order link</div>;
     }
 
     if (!order) {
@@ -198,6 +225,8 @@ export default function OrderDetailPage() {
                 onTagOrder={handleTagOrder}
                 onRequestTags={handleRequestTags}
                 onGeneratePicklist={handleGeneratePicklist}
+                generatingPicklist={generatingPicklist}
+                retryingNotification={retryingNotification}
             />
             {transitioningStatus && (
                 <StatusTransition
@@ -208,6 +237,7 @@ export default function OrderDetailPage() {
                         performStatusChange(transitioningStatus.newStatus, reason)
                     }
                     onCancel={() => setTransitioningStatus(null)}
+                    submitting={updatingStatus}
                 />
             )}
         </div>

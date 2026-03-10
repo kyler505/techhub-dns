@@ -5,10 +5,13 @@ Provides endpoints for checking backend feature statuses.
 """
 
 import json
+import os
 import re
+from io import BytesIO
+from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from typing import Dict, Any, cast, Optional, Sequence
 from datetime import datetime, timezone
 import requests
@@ -25,6 +28,11 @@ from app.models.order import Order
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.api.auth_middleware import get_current_user_email, require_admin
 from app.services.audit_service import AuditService
+from app.services.print_job_service import (
+    PrintJobService,
+    emit_orders_update,
+    emit_print_job_available,
+)
 import logging
 
 bp = Blueprint("system", __name__, url_prefix="/api/system")
@@ -63,6 +71,65 @@ _VETTING_EDITOR_DOWNLOAD_HEADERS = {
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
 }
+
+PRINT_AGENT_CLAIM_TIMEOUT_SECONDS = 300
+
+
+def _require_print_agent() -> None:
+    configured_token = (settings.picklist_print_agent_token or "").strip()
+    if not configured_token:
+        raise RuntimeError("Picklist print agent token is not configured")
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise PermissionError("Missing bearer token")
+
+    provided_token = auth_header.removeprefix("Bearer ").strip()
+    if provided_token != configured_token:
+        raise PermissionError("Invalid bearer token")
+
+
+def _send_picklist_pdf(file_path: str, download_name: str):
+    if file_path.startswith("http"):
+        from app.services.sharepoint_service import get_sharepoint_service
+
+        pdf_bytes = get_sharepoint_service().download_file("picklists", download_name)
+        if not pdf_bytes:
+            return jsonify({"error": "Picklist file not found"}), 404
+
+        pdf_stream = BytesIO(pdf_bytes)
+        pdf_stream.seek(0)
+        return send_file(
+            pdf_stream,
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=download_name,
+        )
+
+    path = Path(file_path)
+    if path.exists():
+        return send_file(
+            path.resolve(),
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=path.name,
+        )
+
+    from app.services.sharepoint_service import get_sharepoint_service
+
+    pdf_bytes = get_sharepoint_service().download_file("picklists", download_name)
+    if not pdf_bytes:
+        return jsonify({"error": "Picklist file not found"}), 404
+
+    pdf_stream = BytesIO(pdf_bytes)
+    pdf_stream.seek(0)
+    return send_file(
+        pdf_stream,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=download_name,
+    )
+
 
 COMPATIBILITY_EDITOR_STATUS_VALUES = (
     "Compatible",
@@ -950,6 +1017,164 @@ def update_admins():
                 "updated_by": updated_by,
             }
         )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@bp.route("/print-jobs", methods=["GET"])
+@require_admin
+def list_print_jobs():
+    status = (request.args.get("status") or "").strip() or None
+    limit_raw = (request.args.get("limit") or "25").strip()
+    try:
+        limit = max(1, min(int(limit_raw), 100))
+    except ValueError:
+        limit = 25
+
+    db = get_db_session()
+    try:
+        jobs = PrintJobService(db).list_jobs(status=status, limit=limit)
+        return jsonify({"jobs": [PrintJobService.serialize_job(job) for job in jobs]})
+    finally:
+        db.close()
+
+
+@bp.route("/orders/<order_id>/print-jobs", methods=["GET"])
+@require_admin
+def list_order_print_jobs(order_id: str):
+    db = get_db_session()
+    try:
+        jobs = PrintJobService(db).get_order_jobs(order_id)
+        return jsonify({"jobs": [PrintJobService.serialize_job(job) for job in jobs]})
+    finally:
+        db.close()
+
+
+@bp.route("/orders/<order_id>/reprint-picklist", methods=["POST"])
+@require_admin
+def reprint_picklist(order_id: str):
+    db = get_db_session()
+    try:
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if not order:
+            return jsonify({"error": "Order not found"}), 404
+        if not order.picklist_path:
+            return jsonify(
+                {"error": "Picklist has not been generated for this order"}
+            ), 409
+
+        requested_by = get_current_user_email()
+        job = PrintJobService(db).enqueue_picklist_print(
+            order,
+            trigger_source="manual",
+            requested_by=requested_by,
+        )
+        db.commit()
+
+        emit_print_job_available(job)
+        emit_orders_update("Picklist print job queued")
+
+        return jsonify({"success": True, "job": PrintJobService.serialize_job(job)})
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@bp.route("/print-agent/claim-next", methods=["POST"])
+def claim_next_print_job():
+    try:
+        _require_print_agent()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 401
+
+    db = get_db_session()
+    try:
+        service = PrintJobService(db)
+        job = service.claim_next_pending_job(
+            claim_timeout_seconds=PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
+        )
+        if not job:
+            db.commit()
+            return jsonify({"job": None})
+
+        db.commit()
+        payload = PrintJobService.serialize_job(job)
+        payload["download_url"] = f"/api/system/print-agent/jobs/{job.id}/file"
+        return jsonify({"job": payload})
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@bp.route("/print-agent/jobs/<job_id>/file", methods=["GET"])
+def get_print_job_file(job_id: str):
+    try:
+        _require_print_agent()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 401
+
+    db = get_db_session()
+    try:
+        job = PrintJobService(db).get_job(job_id)
+        file_path = job.file_path or ""
+        order = job.order
+        download_name = f"{(order.inflow_order_id if order else None) or job.id}.pdf"
+        return _send_picklist_pdf(file_path, download_name)
+    finally:
+        db.close()
+
+
+@bp.route("/print-agent/jobs/<job_id>/complete", methods=["POST"])
+def complete_print_job(job_id: str):
+    try:
+        _require_print_agent()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 401
+
+    db = get_db_session()
+    try:
+        job = PrintJobService(db).mark_completed(job_id)
+        db.commit()
+        emit_orders_update("Picklist print job completed")
+        return jsonify({"success": True, "job": PrintJobService.serialize_job(job)})
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@bp.route("/print-agent/jobs/<job_id>/fail", methods=["POST"])
+def fail_print_job(job_id: str):
+    try:
+        _require_print_agent()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 401
+
+    payload = request.get_json(silent=True) or {}
+    error_message = str(payload.get("error") or "Unknown print failure")
+
+    db = get_db_session()
+    try:
+        job = PrintJobService(db).mark_failed(job_id, error_message=error_message)
+        db.commit()
+        emit_orders_update("Picklist print job failed")
+        return jsonify({"success": True, "job": PrintJobService.serialize_job(job)})
     except Exception:
         db.rollback()
         raise

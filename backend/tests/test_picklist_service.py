@@ -3,7 +3,8 @@
 
 import sys
 import os
-sys.path.append('.')
+
+sys.path.append(".")
 
 from pathlib import Path
 import json
@@ -18,39 +19,27 @@ SAMPLE_INFLOW_DATA = {
         "address1": "123 Main St",
         "city": "College Station",
         "state": "TX",
-        "postalCode": "77843"
+        "postalCode": "77843",
     },
     "orderRemarks": "Please deliver to ACAD 101",
-    "customFields": {
-        "custom4": "UIN12345"
-    },
+    "customFields": {"custom4": "UIN12345"},
     "pickLines": [
         {
             "productId": "prod-001",
             "product": {
                 "name": "Dell Laptop",
                 "sku": "LAPTOP-001",
-                "trackSerials": True
+                "trackSerials": True,
             },
-            "quantity": {
-                "standardQuantity": "2",
-                "serialNumbers": ["SN001", "SN002"]
-            }
+            "quantity": {"standardQuantity": "2", "serialNumbers": ["SN001", "SN002"]},
         },
         {
             "productId": "prod-002",
-            "product": {
-                "name": "USB Keyboard",
-                "sku": "KB-001",
-                "trackSerials": False
-            },
-            "quantity": {
-                "standardQuantity": "3",
-                "serialNumbers": []
-            }
-        }
+            "product": {"name": "USB Keyboard", "sku": "KB-001", "trackSerials": False},
+            "quantity": {"standardQuantity": "3", "serialNumbers": []},
+        },
     ],
-    "packLines": []
+    "packLines": [],
 }
 
 # Sample data with some items already shipped
@@ -59,18 +48,16 @@ SAMPLE_INFLOW_DATA_PARTIAL_SHIPPED = {
     "packLines": [
         {
             "productId": "prod-001",
-            "quantity": {
-                "standardQuantity": "1",
-                "serialNumbers": ["SN001"]
-            }
+            "quantity": {"standardQuantity": "1", "serialNumbers": ["SN001"]},
         }
-    ]
+    ],
 }
 
 
 def test_picklist_service_import():
     """Test that PicklistService can be imported"""
     from app.services.picklist_service import PicklistService
+
     assert PicklistService is not None
     print("[PASS] PicklistService import test passed")
 
@@ -150,9 +137,46 @@ def test_generate_picklist_pdf():
     assert output_path.exists(), "PDF file should be created"
     assert output_path.stat().st_size > 0, "PDF file should not be empty"
 
-    print(f"[PASS] generate_picklist_pdf test passed (file size: {output_path.stat().st_size} bytes)")
+    print(
+        f"[PASS] generate_picklist_pdf test passed (file size: {output_path.stat().st_size} bytes)"
+    )
 
     # Clean up
+    output_path.unlink(missing_ok=True)
+
+
+def test_generate_picklist_pdf_with_numeric_values():
+    """Test PDF generation tolerates numeric quantities and serials."""
+    from app.services.picklist_service import PicklistService
+
+    temp_dir = Path("storage/temp")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = temp_dir / "test_picklist_numeric_values.pdf"
+
+    if output_path.exists():
+        output_path.unlink()
+
+    inflow_data = json.loads(json.dumps(SAMPLE_INFLOW_DATA))
+    inflow_data["shippingAddress"] = None
+    inflow_data["customFields"] = None
+    inflow_data["pickLines"][0]["quantity"] = {
+        "standardQuantity": 2.0,
+        "serialNumbers": [1001, 1002],
+    }
+
+    service = PicklistService()
+    service.generate_picklist_pdf(inflow_data, str(output_path))
+
+    assert output_path.exists(), "PDF file should be created for numeric input"
+    assert output_path.stat().st_size > 0, (
+        "PDF file should not be empty for numeric input"
+    )
+
+    print(
+        f"[PASS] generate_picklist_pdf numeric-values test passed (file size: {output_path.stat().st_size} bytes)"
+    )
+
     output_path.unlink(missing_ok=True)
 
 
@@ -181,6 +205,7 @@ if __name__ == "__main__":
 
     # Integration tests
     test_generate_picklist_pdf()
+    test_generate_picklist_pdf_with_numeric_values()
 
     print()
     print("[SUCCESS] All PicklistService tests passed!")

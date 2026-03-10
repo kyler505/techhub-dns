@@ -26,6 +26,7 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { useAuth } from "../../contexts/AuthContext";
+import { isValidOrderId } from "../../utils/orderIds";
 import { useOrdersWebSocket } from "../../hooks/useOrdersWebSocket";
 import { useVehicleStatuses } from "../../hooks/useVehicleStatuses";
 import type { User } from "../../contexts/AuthContext";
@@ -428,7 +429,11 @@ export default function DeliveryDispatchPage() {
     setPendingStartPriority(null);
   };
 
-  const handleViewDetail = (orderId: string) => {
+  const handleViewDetail = (orderId?: string) => {
+    if (!isValidOrderId(orderId)) {
+      toast.error("Order details are unavailable for this row.");
+      return;
+    }
     navigate(`/orders/${orderId}`);
   };
 

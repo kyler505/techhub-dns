@@ -10,6 +10,7 @@ import { SkeletonTable } from "../components/Skeleton";
 import { PackageSearch } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 import { toast } from "sonner";
+import { isValidOrderId } from "../utils/orderIds";
 
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -20,14 +21,33 @@ export default function Orders() {
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [transitioningOrder, setTransitioningOrder] = useState<{
         orderId: string;
+        currentStatus: OrderStatus;
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
     const navigate = useNavigate();
+
+    const compareOrderListPriority = (left: Order, right: Order): number => {
+        const updatedAtDelta = Date.parse(right.updated_at) - Date.parse(left.updated_at);
+        if (!Number.isNaN(updatedAtDelta) && updatedAtDelta !== 0) {
+            return updatedAtDelta;
+        }
+
+        const createdAtDelta = Date.parse(right.created_at) - Date.parse(left.created_at);
+        if (!Number.isNaN(createdAtDelta) && createdAtDelta !== 0) {
+            return createdAtDelta;
+        }
+
+        const leftKey = left.inflow_order_id || left.id || "";
+        const rightKey = right.inflow_order_id || right.id || "";
+        return rightKey.localeCompare(leftKey);
+    };
 
     // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
+    const latestRequestId = useRef(0);
 
     // Track WebSocket updates and refetch when orders change
     useEffect(() => {
@@ -56,43 +76,63 @@ export default function Orders() {
     }, [statusFilter, debouncedSearch]);
 
     const loadOrders = async () => {
+        const requestId = latestRequestId.current + 1;
+        latestRequestId.current = requestId;
         setLoading(true);
+        let shouldApply = true;
         try {
             const searchQuery = debouncedSearch.trim();
 
             // Handle array of statuses by fetching each and combining
             if (Array.isArray(statusFilter)) {
-                const orderPromises = statusFilter.map(status =>
-                    ordersApi.getOrders({
-                        status,
-                        search: searchQuery || undefined,
-                    })
-                );
-                const results = await Promise.all(orderPromises);
+                const results = [];
+                for (const status of statusFilter) {
+                    results.push(
+                        await ordersApi.getOrders({
+                            status,
+                            search: searchQuery || undefined,
+                        })
+                    );
+                }
+                shouldApply = latestRequestId.current === requestId;
                 // Combine and sort by updated_at descending
-                const combined = results.flat().sort((a, b) =>
-                    new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-                );
-                setOrders(combined);
+                if (shouldApply) {
+                    const combined = results.flat().sort(compareOrderListPriority);
+                    setOrders(combined);
+                }
             } else {
                 const data = await ordersApi.getOrders({
                     status: statusFilter || undefined,
                     search: searchQuery || undefined,
                 });
-                setOrders(data);
+                shouldApply = latestRequestId.current === requestId;
+                if (shouldApply) {
+                    setOrders(data);
+                }
             }
         } catch (error) {
-            console.error("Failed to load orders:", error);
+            shouldApply = latestRequestId.current === requestId;
+            if (shouldApply) {
+                console.error("Failed to load orders:", error);
+            }
         } finally {
-            setLoading(false);
-            setIsInitialLoad(false);
+            if (shouldApply && latestRequestId.current === requestId) {
+                setLoading(false);
+                setIsInitialLoad(false);
+            }
         }
     };
 
     const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
+        const currentStatus = orders.find((order) => order.id === orderId)?.status;
+        if (!currentStatus) {
+            toast.error("Order status is unavailable. Reload the list and try again.");
+            return;
+        }
+
         const requireReason = newStatus === OrderStatus.ISSUE;
         if (requireReason && reason === undefined) {
-            setTransitioningOrder({ orderId, newStatus, requireReason: true });
+            setTransitioningOrder({ orderId, currentStatus, newStatus, requireReason: true });
         } else {
             performStatusChange(orderId, newStatus, reason);
         }
@@ -104,6 +144,7 @@ export default function Orders() {
         reason?: string
     ) => {
         const currentOrder = orders.find((o) => o.id === orderId);
+        setUpdatingStatus(true);
         try {
             await ordersApi.updateOrderStatus(orderId, {
                 status: newStatus,
@@ -120,10 +161,16 @@ export default function Orders() {
                 return;
             }
             toast.error("Failed to update order status");
+        } finally {
+            setUpdatingStatus(false);
         }
     };
 
-    const handleViewDetail = (orderId: string) => {
+    const handleViewDetail = (orderId?: string) => {
+        if (!isValidOrderId(orderId)) {
+            toast.error("Order details are unavailable for this row");
+            return;
+        }
         navigate(`/orders/${orderId}`);
     };
 
@@ -182,15 +229,14 @@ export default function Orders() {
             )}
             {transitioningOrder && (
                 <StatusTransition
-                    currentStatus={
-                        orders.find((o) => o.id === transitioningOrder.orderId)?.status || OrderStatus.PRE_DELIVERY
-                    }
+                    currentStatus={transitioningOrder.currentStatus}
                     newStatus={transitioningOrder.newStatus}
                     requireReason={transitioningOrder.requireReason}
                     onConfirm={(reason) =>
                         performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
                     }
                     onCancel={() => setTransitioningOrder(null)}
+                    submitting={updatingStatus}
                 />
             )}
         </div>

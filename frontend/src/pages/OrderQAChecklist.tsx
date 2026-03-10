@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
+import { isValidOrderId } from "../utils/orderIds";
 
 type SavedQAChecklist = {
     orderId: string; // internal id
@@ -20,6 +21,22 @@ const storageKey = (orderId: string) => `order-qa-checklist-v2:${orderId}`;
 
 export default function OrderQAChecklist() {
     const navigate = useNavigate();
+
+    const openOrder = (orderId?: string) => {
+        if (!isValidOrderId(orderId)) {
+            toast.error("Order details are unavailable for this row");
+            return;
+        }
+        navigate(`/orders/${orderId}`);
+    };
+
+    const openQa = (orderId?: string) => {
+        if (!isValidOrderId(orderId)) {
+            toast.error("QA form is unavailable for this row");
+            return;
+        }
+        navigate(`/orders/${orderId}/qa`);
+    };
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [loadingOrders, setLoadingOrders] = useState(true);
@@ -118,7 +135,7 @@ export default function OrderQAChecklist() {
                                         <tr key={o.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="px-3 py-2 text-sm text-slate-700">
                                                 <button
-                                                    onClick={() => navigate(`/orders/${o.id}`)}
+                                                    onClick={() => openOrder(o.id)}
                                                     className="text-slate-700 hover:text-slate-900 hover:underline"
                                                 >
                                                     {o.inflow_order_id}
@@ -129,7 +146,7 @@ export default function OrderQAChecklist() {
                                             <td className="px-3 py-2 text-sm">
                                                 <button
                                                     type="button"
-                                                    onClick={() => navigate(`/orders/${o.id}/qa`)}
+                                                    onClick={() => openQa(o.id)}
                                                     className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2 btn-lift"
                                                 >
                                                     {qaButtonLabel}

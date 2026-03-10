@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { OrderSummary } from "../types/websocket";
 
-export function useOrdersWebSocket(socketUrl?: string) {
+interface UseOrdersWebSocketOptions {
+  socketUrl?: string;
+  enableHttpFallback?: boolean;
+}
+
+export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions) {
+  const socketUrl = typeof options === "string" ? options : options?.socketUrl;
+  const enableHttpFallback = typeof options === "string" ? false : options?.enableHttpFallback ?? false;
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +38,11 @@ export function useOrdersWebSocket(socketUrl?: string) {
   };
 
   useEffect(() => {
-    // Initial HTTP fetch as fallback
-    fetchOrders();
+    if (enableHttpFallback) {
+      fetchOrders();
+    } else {
+      setLoading(false);
+    }
 
     // Build Socket.IO URL from current host
     const baseUrl = socketUrl || `${window.location.protocol}//${window.location.host}`;
@@ -95,7 +105,7 @@ export function useOrdersWebSocket(socketUrl?: string) {
         socketRef.current = null;
       }
     };
-  }, [socketUrl]);
+  }, [enableHttpFallback, socketUrl]);
 
   return { orders, loading, error, refetch: fetchOrders };
 }

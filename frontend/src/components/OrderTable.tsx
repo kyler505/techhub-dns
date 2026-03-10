@@ -29,23 +29,68 @@ export default function OrderTable({
     const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+    const compareText = (left: unknown, right: unknown): number => {
+        const leftText = typeof left === "string" ? left : "";
+        const rightText = typeof right === "string" ? right : "";
+        return leftText.localeCompare(rightText);
+    };
+
+    const compareDate = (left: unknown, right: unknown): number => {
+        const leftTime = typeof left === "string" ? Date.parse(left) : Number.NaN;
+        const rightTime = typeof right === "string" ? Date.parse(right) : Number.NaN;
+        const safeLeft = Number.isNaN(leftTime) ? 0 : leftTime;
+        const safeRight = Number.isNaN(rightTime) ? 0 : rightTime;
+        return safeLeft - safeRight;
+    };
+
+    const compareStableOrderKey = (left: Order, right: Order): number => {
+        return compareText(left.inflow_order_id || left.id, right.inflow_order_id || right.id);
+    };
+
+    const compareWithFallback = (primary: number, left: Order, right: Order): number => {
+        if (primary !== 0) {
+            return primary;
+        }
+
+        const updatedAtComparison = compareDate(left.updated_at, right.updated_at);
+        if (updatedAtComparison !== 0) {
+            return updatedAtComparison;
+        }
+
+        const createdAtComparison = compareDate(left.created_at, right.created_at);
+        if (createdAtComparison !== 0) {
+            return createdAtComparison;
+        }
+
+        return compareStableOrderKey(left, right);
+    };
+
     const sortedOrders = useMemo(() => {
         const copy = [...orders];
         copy.sort((a, b) => {
             const direction = sortDir === "asc" ? 1 : -1;
+            let comparison = 0;
+
             switch (sortKey) {
                 case "id":
-                    return direction * (a.inflow_order_id || a.id).localeCompare(b.inflow_order_id || b.id);
+                    comparison = compareStableOrderKey(a, b);
+                    break;
                 case "recipient":
-                    return direction * (a.recipient_name || "").localeCompare(b.recipient_name || "");
+                    comparison = compareText(a.recipient_name, b.recipient_name);
+                    break;
                 case "location":
-                    return direction * formatDeliveryLocation(a).localeCompare(formatDeliveryLocation(b));
+                    comparison = compareText(formatDeliveryLocation(a), formatDeliveryLocation(b));
+                    break;
                 case "status":
-                    return direction * a.status.localeCompare(b.status);
+                    comparison = compareText(a.status, b.status);
+                    break;
                 case "date":
                 default:
-                    return direction * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                    comparison = compareDate(a.created_at, b.created_at);
+                    break;
             }
+
+            return direction * compareWithFallback(comparison, a, b);
         });
         return copy;
     }, [orders, sortKey, sortDir]);
@@ -153,9 +198,9 @@ export default function OrderTable({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {sortedOrders.map((order) => (
+                    {sortedOrders.map((order, index) => (
                         <TableRow
-                            key={order.id}
+                            key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`}
                             tabIndex={0}
                             role="link"
                             onClick={(e) => onRowClick(e, order.id)}

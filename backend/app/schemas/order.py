@@ -1,8 +1,18 @@
 from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from app.models.order import OrderStatus, ShippingWorkflowStatus
+
+
+def _serialize_datetime_utc(value):
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            value = value.replace(tzinfo=timezone.utc)
+
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    return value
 
 
 class OrderBase(BaseModel):
@@ -86,6 +96,27 @@ class SignatureData(BaseModel):
     position: Optional[Dict[str, float]] = None
 
 
+class PrintJobSummary(BaseModel):
+    id: UUID
+    document_type: str
+    status: str
+    trigger_source: str
+    requested_by: Optional[str] = None
+    attempt_count: int = 0
+    claimed_at: Optional[datetime] = None
+    claim_expires_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_datetimes(self, value):
+        return _serialize_datetime_utc(value)
+
+
 class OrderResponse(OrderBase):
     id: UUID
     inflow_sales_order_id: Optional[str] = None
@@ -112,6 +143,7 @@ class OrderResponse(OrderBase):
     carrier_name: Optional[str] = None
     tracking_number: Optional[str] = None
     pick_status: Optional[PickStatus] = None
+    latest_picklist_print_job: Optional[PrintJobSummary] = None
     delivery_run_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
@@ -125,6 +157,10 @@ class OrderResponse(OrderBase):
     @field_serializer("shipping_workflow_status")
     def serialize_shipping_workflow_status(self, value):
         return value
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_datetimes(self, value):
+        return _serialize_datetime_utc(value)
 
 
 class OrderDetailResponse(OrderResponse):
@@ -155,3 +191,7 @@ class ShippingWorkflowResponse(BaseModel):
     shipped_to_carrier_by: Optional[str] = None
     carrier_name: Optional[str] = None
     tracking_number: Optional[str] = None
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_datetimes(self, value):
+        return _serialize_datetime_utc(value)

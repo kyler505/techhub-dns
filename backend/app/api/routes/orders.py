@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, abort, send_file
+from flask import Blueprint, request, jsonify, abort, send_file, current_app
 from flask_socketio import emit
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
@@ -44,6 +44,102 @@ logger = logging.getLogger(__name__)
 
 # Simple in-memory broadcaster for SocketIO clients
 _order_clients = set()
+
+
+def _order_response_json(order) -> dict:
+    return current_app.json.loads(OrderResponse.model_validate(order).model_dump_json())
+
+
+def _order_detail_response_json(order) -> dict:
+    return current_app.json.loads(
+        OrderDetailResponse.model_validate(order).model_dump_json()
+    )
+
+
+def _order_list_item_json(order, pick_status_data=None) -> str:
+    response_model = OrderResponse.model_validate(order)
+    if pick_status_data is not None:
+        try:
+            response_model = response_model.model_copy(
+                update={"pick_status": PickStatus.model_validate(pick_status_data)}
+            )
+        except Exception as exc:
+            logger.warning(
+                "Skipping invalid pick_status for order %s: %s",
+                getattr(order, "inflow_order_id", None) or getattr(order, "id", None),
+                exc,
+            )
+    return response_model.model_dump_json()
+
+
+def _serialize_utc_datetime(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    return value.isoformat().replace("+00:00", "") + "Z"
+
+
+def _serialize_order_list_item(order, pick_status_data=None) -> dict:
+    latest_job = getattr(order, "latest_picklist_print_job", None)
+    latest_job_payload = None
+    if latest_job is not None:
+        latest_job_payload = {
+            "id": str(latest_job.id),
+            "status": latest_job.status,
+            "trigger_source": latest_job.trigger_source,
+            "requested_by": latest_job.requested_by,
+            "attempt_count": latest_job.attempt_count,
+            "created_at": _serialize_utc_datetime(latest_job.created_at),
+            "completed_at": _serialize_utc_datetime(latest_job.completed_at),
+            "last_error": latest_job.last_error,
+        }
+
+    return {
+        "id": str(order.id),
+        "inflow_order_id": order.inflow_order_id,
+        "inflow_sales_order_id": order.inflow_sales_order_id,
+        "recipient_name": order.recipient_name,
+        "recipient_contact": order.recipient_contact,
+        "delivery_location": order.delivery_location,
+        "po_number": order.po_number,
+        "status": order.status,
+        "assigned_deliverer": order.assigned_deliverer,
+        "issue_reason": order.issue_reason,
+        "tagged_at": _serialize_utc_datetime(order.tagged_at),
+        "tagged_by": order.tagged_by,
+        "tag_data": order.tag_data,
+        "picklist_generated_at": _serialize_utc_datetime(order.picklist_generated_at),
+        "picklist_generated_by": order.picklist_generated_by,
+        "picklist_path": order.picklist_path,
+        "delivery_run_id": order.delivery_run_id,
+        "delivery_sequence": order.delivery_sequence,
+        "qa_completed_at": _serialize_utc_datetime(order.qa_completed_at),
+        "qa_completed_by": order.qa_completed_by,
+        "qa_data": order.qa_data,
+        "qa_path": order.qa_path,
+        "qa_method": order.qa_method,
+        "signature_captured_at": _serialize_utc_datetime(order.signature_captured_at),
+        "signed_picklist_path": order.signed_picklist_path,
+        "order_details_path": order.order_details_path,
+        "order_details_generated_at": _serialize_utc_datetime(
+            order.order_details_generated_at
+        ),
+        "shipping_workflow_status": order.shipping_workflow_status,
+        "shipping_workflow_status_updated_at": _serialize_utc_datetime(
+            order.shipping_workflow_status_updated_at
+        ),
+        "shipping_workflow_status_updated_by": order.shipping_workflow_status_updated_by,
+        "shipped_to_carrier_at": _serialize_utc_datetime(order.shipped_to_carrier_at),
+        "shipped_to_carrier_by": order.shipped_to_carrier_by,
+        "carrier_name": order.carrier_name,
+        "tracking_number": order.tracking_number,
+        "parent_order_id": order.parent_order_id,
+        "has_remainder": order.has_remainder,
+        "remainder_order_id": order.remainder_order_id,
+        "created_at": _serialize_utc_datetime(order.created_at),
+        "updated_at": _serialize_utc_datetime(order.updated_at),
+        "pick_status": pick_status_data,
+        "latest_picklist_print_job": latest_job_payload,
+    }
 
 
 def _broadcast_orders_sync(db_session: Session = None):
@@ -120,15 +216,18 @@ def get_orders():
         )
 
         # Enrich orders with pick_status for Pre-Delivery queue visibility
+        include_pick_status = status_enum in {
+            OrderStatus.PRE_DELIVERY,
+            OrderStatus.IN_DELIVERY,
+        }
         result = []
         for o in orders:
-            order_dict = OrderResponse.model_validate(o).model_dump()
+            pick_status_data = None
 
             # Compute pick_status from inflow_data if available
-            if o.inflow_data:
+            if include_pick_status and o.inflow_data:
                 try:
                     pick_status_data = inflow_service.get_pick_status(o.inflow_data)
-                    order_dict["pick_status"] = pick_status_data
                 except Exception as exc:
                     logger.warning(
                         "Failed to compute pick_status for order %s: %s",
@@ -136,7 +235,7 @@ def get_orders():
                         exc,
                     )
 
-            result.append(order_dict)
+            result.append(_serialize_order_list_item(o, pick_status_data))
 
         return jsonify(result)
 
@@ -219,7 +318,7 @@ def get_tag_request_candidates():
             ):
                 continue
 
-            needing_request.append(OrderResponse.model_validate(order).model_dump())
+            needing_request.append(_order_response_json(order))
             if len(needing_request) >= limit:
                 break
 
@@ -234,7 +333,7 @@ def get_order(order_id):
         order = service.get_order_detail(order_id)
         if not order:
             abort(404, description="Order not found")
-        response_data = OrderDetailResponse.model_validate(order).model_dump()
+        response_data = _order_detail_response_json(order)
         if order.inflow_data:
             inflow_service = InflowService()
             response_data["asset_tag_required"] = inflow_service.requires_asset_tags(
@@ -281,7 +380,7 @@ def update_order(order_id):
 
         db.commit()
         db.refresh(order)
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/<uuid:order_id>/status", methods=["PATCH"])
@@ -310,7 +409,7 @@ def update_order_status(order_id):
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/bulk-transition", methods=["POST"])
@@ -338,7 +437,7 @@ def bulk_transition_status():
         # Broadcast order updates via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify([OrderResponse.model_validate(o).model_dump() for o in orders])
+        return jsonify([_order_response_json(o) for o in orders])
 
 
 @bp.route("/<uuid:order_id>/audit", methods=["GET"])
@@ -379,7 +478,7 @@ def tag_order(order_id):
         )
 
         threading.Thread(target=_broadcast_orders_sync).start()
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/<uuid:order_id>/picklist", methods=["POST"])
@@ -404,7 +503,7 @@ def generate_picklist(order_id):
         )
 
         threading.Thread(target=_broadcast_orders_sync).start()
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/<uuid:order_id>/qa", methods=["POST"])
@@ -430,7 +529,7 @@ def submit_qa(order_id):
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/<uuid:order_id>/picklist", methods=["GET"])
@@ -583,7 +682,7 @@ def update_shipping_workflow(order_id):
         # Broadcast order update via SocketIO
         threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(OrderResponse.model_validate(order).model_dump())
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/<uuid:order_id>/shipping-workflow", methods=["GET"])
