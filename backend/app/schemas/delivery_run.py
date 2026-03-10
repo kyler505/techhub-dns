@@ -1,9 +1,19 @@
 from pydantic import BaseModel, Field, field_serializer, field_validator
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from app.models.delivery_run import VehicleEnum, DeliveryRunStatus
+
+
+def _serialize_datetime_utc(value):
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            value = value.replace(tzinfo=timezone.utc)
+
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    return value
 
 
 class CreateDeliveryRunRequest(BaseModel):
@@ -12,12 +22,12 @@ class CreateDeliveryRunRequest(BaseModel):
     order_ids: List[UUID]
     vehicle: str
 
-    @field_validator('vehicle')
+    @field_validator("vehicle")
     @classmethod
     def validate_vehicle(cls, v):
-        allowed_vehicles = ['van', 'golf_cart']
+        allowed_vehicles = ["van", "golf_cart"]
         if v not in allowed_vehicles:
-            raise ValueError(f'Vehicle must be one of: {allowed_vehicles}')
+            raise ValueError(f"Vehicle must be one of: {allowed_vehicles}")
         return v
 
 
@@ -32,6 +42,10 @@ class DeliveryRunResponse(BaseModel):
     order_ids: List[UUID] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_datetimes(self, value):
+        return _serialize_datetime_utc(value)
 
 
 class FinishDeliveryRunRequest(BaseModel):
@@ -59,6 +73,10 @@ class OrderSummary(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_datetimes(self, value):
+        return _serialize_datetime_utc(value)
+
 
 class DeliveryRunDetailResponse(BaseModel):
     id: UUID
@@ -72,3 +90,7 @@ class DeliveryRunDetailResponse(BaseModel):
     orders: List[OrderSummary] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_datetimes(self, value):
+        return _serialize_datetime_utc(value)
