@@ -46,6 +46,10 @@ class OrderService:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
     def _resolve_actor_user_id(self, actor_identifier: Optional[str]) -> Optional[str]:
         if not actor_identifier:
             return None
@@ -96,7 +100,7 @@ class OrderService:
         if not order.inflow_data:
             return False
 
-        shipping_addr_obj = order.inflow_data.get("shippingAddress", {})
+        shipping_addr_obj = self._as_dict(order.inflow_data.get("shippingAddress"))
         city = (
             shipping_addr_obj.get("city", "").strip()
             if shipping_addr_obj.get("city")
@@ -778,7 +782,7 @@ class OrderService:
             raise ValidationError("Order number is required", field="orderNumber")
 
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_addr_obj = inflow_data.get("shippingAddress", {})
+        shipping_addr_obj = self._as_dict(inflow_data.get("shippingAddress"))
         address1 = shipping_addr_obj.get("address1", "")
         address2 = shipping_addr_obj.get("address2", "")
 
@@ -1030,7 +1034,7 @@ class OrderService:
     ) -> Order:
         """Update an existing order with new inflow data."""
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_address_obj = inflow_data.get("shippingAddress", {})
+        shipping_address_obj = self._as_dict(inflow_data.get("shippingAddress"))
         email = inflow_data.get("email", "")
 
         existing_order.inflow_data = inflow_data
@@ -1079,7 +1083,7 @@ class OrderService:
     ) -> Order:
         """Create a new order from inflow data."""
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_address_obj = inflow_data.get("shippingAddress", {})
+        shipping_address_obj = self._as_dict(inflow_data.get("shippingAddress"))
         email = inflow_data.get("email", "")
 
         # Check if customer is flagged as a "problem customer" from notes
@@ -1137,7 +1141,7 @@ class OrderService:
 
         # Extract order remarks and shipping addresses
         order_remarks = inflow_data.get("orderRemarks", "")
-        shipping_addr_obj = inflow_data.get("shippingAddress", {})
+        shipping_addr_obj = self._as_dict(inflow_data.get("shippingAddress"))
         address1 = shipping_addr_obj.get("address1", "")
         address2 = shipping_addr_obj.get("address2", "")
 
