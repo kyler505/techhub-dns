@@ -3,7 +3,7 @@ import json
 import logging
 import shutil
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
