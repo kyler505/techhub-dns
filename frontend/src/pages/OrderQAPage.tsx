@@ -80,7 +80,6 @@ export default function OrderQAPage() {
 
     const loadOrder = async (id: string) => {
         setLoading(true);
-        setSubmittingQa(true);
         try {
             const data = await ordersApi.getOrder(id);
             setOrder(data);
