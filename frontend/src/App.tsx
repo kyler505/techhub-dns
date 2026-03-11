@@ -24,7 +24,6 @@ const Login = lazy(() => import("./pages/Login"));
 const Sessions = lazy(() => import("./pages/Sessions"));
 const TagRequest = lazy(() => import("./pages/TagRequest"));
 const VettingEditor = lazy(() => import("./pages/VettingEditor"));
-const CompatibilityEditorStaging = lazy(() => import("./pages/CompatibilityEditorStaging"));
 
 const prefetchRoutes = () => {
     void import("./pages/Dashboard");
@@ -101,7 +100,6 @@ function AppContent() {
                                         <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
                                         <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
                                         <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
-                                        <Route path="/compatibility-editor-staging" element={<ProtectedRoute><CompatibilityEditorStaging /></ProtectedRoute>} />
                                         <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
                                         <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
                                             <Route index element={<Navigate to="dispatch" replace />} />
