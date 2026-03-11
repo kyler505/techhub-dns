@@ -20,6 +20,7 @@ import {
   getWorkflowDailyTrendsQueryOptions,
   getYearlyFulfilledTotalsQueryOptions,
 } from "../queries/analytics";
+import { shouldThrowToBoundary } from "../utils/apiErrors";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -118,12 +119,30 @@ export default function Dashboard() {
   const workflowTrendDaysRef = useRef<7 | 30>(30);
   const queryClient = useQueryClient();
 
-  const statusCountsQuery = useQuery(getOrderStatusCountsQueryOptions());
-  const deliveryPerformanceQuery = useQuery(getDeliveryPerformanceQueryOptions());
-  const workflowDailyTrendsQuery = useQuery(getWorkflowDailyTrendsQueryOptions(workflowTrendDays));
-  const monthlyFulfilledTotalsQuery = useQuery(getMonthlyFulfilledTotalsQueryOptions());
-  const yearlyFulfilledTotalsQuery = useQuery(getYearlyFulfilledTotalsQueryOptions());
-  const deliveredOrdersQuery = useQuery(getDeliveredOrdersQueryOptions());
+  const statusCountsQuery = useQuery({
+    ...getOrderStatusCountsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const deliveryPerformanceQuery = useQuery({
+    ...getDeliveryPerformanceQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const workflowDailyTrendsQuery = useQuery({
+    ...getWorkflowDailyTrendsQueryOptions(workflowTrendDays),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const monthlyFulfilledTotalsQuery = useQuery({
+    ...getMonthlyFulfilledTotalsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const yearlyFulfilledTotalsQuery = useQuery({
+    ...getYearlyFulfilledTotalsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const deliveredOrdersQuery = useQuery({
+    ...getDeliveredOrdersQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
 
   const statusCounts = statusCountsQuery.data ?? {};
   const deliveryPerf = deliveryPerformanceQuery.data ?? {

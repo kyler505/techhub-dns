@@ -46,3 +46,23 @@ export function extractApiErrorMessage(error: unknown, fallback: string): string
 
   return fallback;
 }
+
+export function shouldThrowToBoundary(error: unknown): boolean {
+  if (typeof error === "object" && error !== null && "response" in error) {
+    const candidate = error as {
+      response?: {
+        status?: unknown;
+      };
+      request?: unknown;
+    };
+
+    const status = candidate.response?.status;
+    if (typeof status === "number") {
+      return status >= 500;
+    }
+
+    return candidate.request !== undefined;
+  }
+
+  return error instanceof Error;
+}
