@@ -12,6 +12,7 @@ import {
   getPriorityActionSelection,
   type DeliveryRunPriorityPurpose,
 } from "./vehiclePriority";
+import { formatToCentralTime } from "../../utils/timezone";
 
 type VehicleCheckoutHistoryItem = ListVehicleCheckoutsResponse["items"][number];
 
@@ -54,9 +55,7 @@ function formatCheckoutType(checkoutType: VehicleCheckoutHistoryItem["checkout_t
 
 function formatTimestamp(isoDate: string | null | undefined): string {
   if (!isoDate) return "No timestamp";
-  const parsed = new Date(isoDate);
-  if (Number.isNaN(parsed.getTime())) return "No timestamp";
-  return parsed.toLocaleString();
+  return formatToCentralTime(isoDate);
 }
 
 function formatRunLabel(run: DeliveryRunResponse): string {

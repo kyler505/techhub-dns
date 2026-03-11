@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 
 from app.database import get_db_session
 from app.models.system_setting import SystemSetting
+from app.utils.timezone import to_utc_iso_z
 
 # Notification Toggles
 SETTING_EMAIL_ENABLED = "email_notifications_enabled"
@@ -91,9 +92,7 @@ class SystemSettingService:
                 result[key] = {
                     "value": setting.value if setting else defaults["value"],
                     "description": defaults["description"],
-                    "updated_at": setting.updated_at.isoformat()
-                    if setting and setting.updated_at
-                    else None,
+                    "updated_at": to_utc_iso_z(setting.updated_at) if setting else None,
                     "updated_by": setting.updated_by if setting else None,
                 }
             return result

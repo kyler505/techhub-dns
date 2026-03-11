@@ -32,6 +32,7 @@ from app.utils.exceptions import (
     StatusTransitionError,
     FileOperationError,
 )
+from app.utils.timezone import to_utc_iso_z
 from app.config import settings
 from app.services.print_job_service import PrintJobService, emit_print_job_available
 from app.services.system_setting_service import (
@@ -409,7 +410,7 @@ class OrderService:
         qa_payload = {
             "order_id": str(order.id),
             "inflow_order_id": order.inflow_order_id,
-            "submitted_at": datetime.utcnow().isoformat(),
+            "submitted_at": to_utc_iso_z(datetime.utcnow()),
             "submitted_by": technician,
             "responses": qa_data,
         }
@@ -565,15 +566,15 @@ class OrderService:
             "Stale order update blocked: order_id=%s inflow_order_id=%s expected_updated_at=%s actual_updated_at=%s",
             order.id,
             order.inflow_order_id,
-            expected.isoformat(),
-            actual.isoformat(),
+            to_utc_iso_z(expected),
+            to_utc_iso_z(actual),
         )
         raise ConflictError(
             "Order has been updated by another user. Refresh and try again.",
             details={
                 "order_id": str(order.id),
-                "expected_updated_at": expected.isoformat(),
-                "actual_updated_at": actual.isoformat(),
+                "expected_updated_at": to_utc_iso_z(expected),
+                "actual_updated_at": to_utc_iso_z(actual),
             },
         )
 

@@ -7,6 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { ordersApi } from "../api/orders";
 import { getOrderDetailQueryOptions, invalidateOrderQueries } from "../queries/orders";
 import type { OrderDetail } from "../types/order";
+import { formatToCentralTime } from "../utils/timezone";
 
 type QAMethod = "Delivery" | "Shipping";
 
@@ -201,7 +202,7 @@ export default function OrderQAPage() {
                         </p>
                         {lastSavedAt && (
                             <p className="text-xs text-gray-500 mt-1">
-                                Previously submitted: {new Date(lastSavedAt).toLocaleString()}
+                                Previously submitted: {formatToCentralTime(lastSavedAt)}
                             </p>
                         )}
                     </div>

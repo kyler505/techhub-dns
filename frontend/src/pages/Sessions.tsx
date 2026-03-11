@@ -14,6 +14,7 @@ import {
     revokeSession as revokeSessionRequest,
     sessionsQueryKeys,
 } from '../queries/sessions';
+import { formatToCentralTime } from '../utils/timezone';
 
 export default function Sessions() {
     const { user, logout } = useAuth();
@@ -60,9 +61,9 @@ export default function Sessions() {
         await revokeAllSessionsMutation.mutateAsync();
     };
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString();
-    };
+const formatDate = (dateString: string) => {
+    return formatToCentralTime(dateString);
+};
 
     const parseUserAgent = (ua: string | null): string => {
         if (!ua) return 'Unknown device';
