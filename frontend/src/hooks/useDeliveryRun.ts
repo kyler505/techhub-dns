@@ -1,35 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
-import { deliveryRunsApi, type DeliveryRunDetailResponse } from "../api/deliveryRuns";
+import { useQuery } from "@tanstack/react-query";
+
+import { getDeliveryRunDetailQueryOptions } from "../queries/deliveryRuns";
 
 export function useDeliveryRun(runId: string | undefined) {
-  const [run, setRun] = useState<DeliveryRunDetailResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    ...getDeliveryRunDetailQueryOptions(runId ?? ""),
+    enabled: Boolean(runId),
+  });
 
-  const fetchRun = useCallback(async () => {
-    if (!runId) {
-      setRun(null);
-      setError("Missing delivery run ID");
-      setLoading(false);
-      return;
-    }
+  return {
+    run: query.data ?? null,
+    loading: query.isPending,
+    error: !runId ? "Missing delivery run ID" : query.isError ? "Failed to load delivery run details" : null,
+    refetch: async () => {
+      if (!runId) {
+        return;
+      }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await deliveryRunsApi.getRun(runId);
-      setRun(data);
-    } catch {
-      setError("Failed to load delivery run details");
-    } finally {
-      setLoading(false);
-    }
-  }, [runId]);
-
-  useEffect(() => {
-    void fetchRun();
-  }, [fetchRun]);
-
-  return { run, loading, error, refetch: fetchRun };
+      await query.refetch();
+    },
+  };
 }
