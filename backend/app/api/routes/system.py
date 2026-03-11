@@ -172,8 +172,10 @@ _VETTING_EDITOR_SECTION_BY_NORMALIZED_NAME.update(
 
 
 def _get_vetting_editor_auth() -> tuple[str, str]:
-    username = (settings.webdav_username or "").strip()
-    password = settings.webdav_password
+    username = (
+        settings.webdav_username or settings.vetting_editor_webdav_username or ""
+    ).strip()
+    password = settings.webdav_password or settings.vetting_editor_webdav_password
     if not username or not password:
         raise RuntimeError(
             "Vetting editor credentials are not configured (WEBDAV_USERNAME and WEBDAV_PASSWORD)."

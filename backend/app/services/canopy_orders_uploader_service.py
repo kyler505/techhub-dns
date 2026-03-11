@@ -17,7 +17,7 @@ class CanopyOrdersUploaderService:
         self.store_base = settings.canopyorders_store_base
         self.dav_root_path = settings.canopyorders_dav_root_path
         self.base_dir = settings.canopyorders_base_dir
-        self.username = settings.webdav_username
+        self.username = settings.canopyorders_username
         self.user_agent = settings.canopyorders_user_agent
         self.teams_workflow_url = settings.canopyorders_teams_workflow_url
         self.teams_shared_secret = settings.canopyorders_teams_shared_secret
@@ -31,7 +31,7 @@ class CanopyOrdersUploaderService:
         return self._webdav_password
 
     def _get_webdav_password(self) -> str:
-        env_password = getattr(settings, "webdav_password", None)
+        env_password = getattr(settings, "canopyorders_password", None)
         if env_password is not None:
             env_password_str = str(env_password)
             if env_password_str.strip():
@@ -71,13 +71,13 @@ class CanopyOrdersUploaderService:
             except Exception as e:
                 raise ValueError(
                     "Failed to get Canopy Orders WebDAV password from Key Vault. "
-                    "Alternatively, set WEBDAV_PASSWORD. "
+                    "Alternatively, set CANOPYORDERS_PASSWORD. "
                     f"Details: {e}"
                 )
 
         raise ValueError(
             "Canopy Orders WebDAV password is not configured. "
-            "Set WEBDAV_PASSWORD, or configure AZURE_KEY_VAULT_URL and "
+            "Set CANOPYORDERS_PASSWORD, or configure AZURE_KEY_VAULT_URL and "
             "CANOPYORDERS_PASSWORD_SECRET_NAME."
         )
 
