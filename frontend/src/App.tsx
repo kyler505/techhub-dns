@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { AnimatePresence, motion } from "framer-motion";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AppShellErrorBoundary, RouteContentErrorBoundary } from "./components/error-boundaries/AppErrorBoundaries";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/Skeleton";
@@ -56,10 +57,12 @@ function AppContent() {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
                 <Suspense fallback={<Skeleton className="w-96 h-96 rounded-lg" />}>
-                    <Routes>
-                        <Route path="/login" element={<Login />} />
-                        <Route path="*" element={<Navigate to="/login" state={{ from: location }} replace />} />
-                    </Routes>
+                    <RouteContentErrorBoundary>
+                        <Routes>
+                            <Route path="/login" element={<Login />} />
+                            <Route path="*" element={<Navigate to="/login" state={{ from: location }} replace />} />
+                        </Routes>
+                    </RouteContentErrorBoundary>
                 </Suspense>
             </div>
         );
@@ -79,42 +82,44 @@ function AppContent() {
 					<SyncHealthBanner />
 
                     <div className="p-6 lg:p-8">
-                        <Suspense fallback={
-                            <div className="space-y-4">
-                                <Skeleton className="h-8 w-64" />
-                                <Skeleton className="h-64 w-full rounded-lg" />
-                            </div>
-                        }>
-                            <AnimatePresence mode="wait">
-                                <motion.div
-                                    key={location.pathname}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -8 }}
-                                    transition={{ duration: 0.2 }}
-                                >
-                                    <Routes location={location}>
-                                        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                                        <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-                                        <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
-                                        <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
-                                        <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
-                                        <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
-                                        <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
-                                        <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
-                                            <Route index element={<Navigate to="dispatch" replace />} />
-                                            <Route path="dispatch" element={<DeliveryDispatchPage />} />
-                                            <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
-                                        </Route>
-                                        <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
-                                        <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
-                                        <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-                                        <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
-                                        <Route path="/login" element={<Navigate to="/" replace />} />
-                                    </Routes>
-                                </motion.div>
-                            </AnimatePresence>
-                        </Suspense>
+                        <RouteContentErrorBoundary>
+                            <Suspense fallback={
+                                <div className="space-y-4">
+                                    <Skeleton className="h-8 w-64" />
+                                    <Skeleton className="h-64 w-full rounded-lg" />
+                                </div>
+                            }>
+                                <AnimatePresence mode="wait">
+                                    <motion.div
+                                        key={location.pathname}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -8 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        <Routes location={location}>
+                                            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                                            <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+                                            <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+                                            <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
+                                            <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
+                                            <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
+                                            <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
+                                            <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
+                                                <Route index element={<Navigate to="dispatch" replace />} />
+                                                <Route path="dispatch" element={<DeliveryDispatchPage />} />
+                                                <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
+                                            </Route>
+                                            <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
+                                            <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
+                                            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                                            <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
+                                            <Route path="/login" element={<Navigate to="/" replace />} />
+                                        </Routes>
+                                    </motion.div>
+                                </AnimatePresence>
+                            </Suspense>
+                        </RouteContentErrorBoundary>
                     </div>
                 </main>
 
@@ -136,9 +141,11 @@ function AppContent() {
 function App() {
     return (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            <AuthProvider>
-                <AppContent />
-            </AuthProvider>
+            <AppShellErrorBoundary>
+                <AuthProvider>
+                    <AppContent />
+                </AuthProvider>
+            </AppShellErrorBoundary>
         </BrowserRouter>
     );
 }
