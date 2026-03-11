@@ -4,70 +4,66 @@
  * Allows users to view and manage their active login sessions.
  */
 
-import { useState, useEffect } from 'react';
-import { useAuth, Session } from '../contexts/AuthContext';
-import axios from 'axios';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { useAuth } from '../contexts/AuthContext';
+import {
+    getSessionsQueryOptions,
+    revokeAllOtherSessions as revokeAllOtherSessionsRequest,
+    revokeSession as revokeSessionRequest,
+    sessionsQueryKeys,
+} from '../queries/sessions';
+import { formatToCentralTime } from '../utils/timezone';
 
 export default function Sessions() {
     const { user, logout } = useAuth();
-    const [sessions, setSessions] = useState<Session[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
 
-    const fetchSessions = async () => {
-        try {
-            const response = await axios.get('/auth/sessions', {
-                withCredentials: true,
-                headers: {
-                    'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    'Pragma': 'no-cache'
-                },
-                params: { _t: Date.now() }
-            });
+    const sessionsQuery = useQuery({
+        ...getSessionsQueryOptions(),
+        retry: false,
+    });
 
-            const data = response.data as unknown;
-            if (!data || typeof data !== 'object' || !Array.isArray((data as any).sessions)) {
-                throw new Error('Invalid sessions response');
-            }
+    const sessions = sessionsQuery.data ?? [];
+    const isLoading = sessionsQuery.isPending;
 
-            setSessions((data as any).sessions);
+    const revokeSessionMutation = useMutation({
+        mutationFn: revokeSessionRequest,
+        onSuccess: async () => {
             setError(null);
-        } catch (err) {
-            setError('Failed to load sessions');
-            setSessions([]); // Reset to empty array on error
-            console.error('Failed to load sessions:', err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSessions();
-    }, []);
-
-    const revokeSession = async (sessionId: string) => {
-        try {
-            await axios.post('/auth/sessions/revoke', { session_id: sessionId }, { withCredentials: true });
-            await fetchSessions();
-        } catch (err) {
+            await queryClient.invalidateQueries({ queryKey: sessionsQueryKeys.all });
+        },
+        onError: (err) => {
             setError('Failed to revoke session');
             console.error('Failed to revoke session:', err);
-        }
+        },
+    });
+
+    const revokeAllSessionsMutation = useMutation({
+        mutationFn: revokeAllOtherSessionsRequest,
+        onSuccess: async () => {
+            setError(null);
+            await queryClient.invalidateQueries({ queryKey: sessionsQueryKeys.all });
+        },
+        onError: (err) => {
+            setError('Failed to revoke sessions');
+            console.error('Failed to revoke sessions:', err);
+        },
+    });
+
+    const revokeSession = async (sessionId: string) => {
+        await revokeSessionMutation.mutateAsync(sessionId);
     };
 
     const revokeAllOtherSessions = async () => {
-        try {
-            await axios.post('/auth/sessions/revoke_all', {}, { withCredentials: true });
-            await fetchSessions();
-        } catch (err) {
-            setError('Failed to revoke sessions');
-            console.error('Failed to revoke sessions:', err);
-        }
+        await revokeAllSessionsMutation.mutateAsync();
     };
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString();
-    };
+const formatDate = (dateString: string) => {
+    return formatToCentralTime(dateString);
+};
 
     const parseUserAgent = (ua: string | null): string => {
         if (!ua) return 'Unknown device';
@@ -88,6 +84,9 @@ export default function Sessions() {
         );
     }
 
+    const isMutating = revokeSessionMutation.isPending || revokeAllSessionsMutation.isPending;
+    const effectiveError = error ?? (sessionsQuery.isError ? 'Failed to load sessions' : null);
+
     return (
         <div className="max-w-4xl mx-auto p-6">
             <div className="mb-8">
@@ -97,9 +96,9 @@ export default function Sessions() {
                 </p>
             </div>
 
-            {error && (
+            {effectiveError && (
                 <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
-                    {error}
+                    {effectiveError}
                 </div>
             )}
 
@@ -130,6 +129,7 @@ export default function Sessions() {
                         {!session.is_current && (
                             <button
                                 onClick={() => revokeSession(session.id)}
+                                disabled={isMutating}
                                 className="text-sm text-red-600 hover:text-red-800 font-medium"
                             >
                                 Sign out
@@ -152,6 +152,7 @@ export default function Sessions() {
                 <div className="mt-6 flex gap-4">
                     <button
                         onClick={revokeAllOtherSessions}
+                        disabled={isMutating}
                         className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800"
                     >
                         Sign out of all other sessions

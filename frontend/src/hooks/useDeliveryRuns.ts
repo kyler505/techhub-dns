@@ -1,47 +1,23 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { io, Socket } from "socket.io-client";
 
-export type DeliveryRun = {
-  id: string;
-  name?: string;
-  runner: string;
-  vehicle: string;
-  status: string;
-  start_time: string | null;
-  order_ids: string[];
-};
+import { deliveryRunsQueryKeys, getActiveDeliveryRunsQueryOptions, type ActiveDeliveryRun } from "../queries/deliveryRuns";
+
+export type DeliveryRun = ActiveDeliveryRun;
 
 export function useDeliveryRuns(socketUrl?: string) {
-  const [runs, setRuns] = useState<DeliveryRun[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [socketError, setSocketError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const queryClient = useQueryClient();
 
-  // Fetch delivery runs via HTTP as fallback
-  const fetchRuns = async () => {
-    try {
-      setError(null);
-      setLoading(true);
-      const response = await fetch('/api/delivery-runs/active');
-      if (response.ok) {
-        const data = await response.json();
-        setRuns(data);
-      } else {
-        console.warn("HTTP fallback failed:", response.status);
-        setRuns([]);
-      }
-      setLoading(false);
-    } catch (err) {
-      console.error("Failed to fetch delivery runs via HTTP:", err);
-      setError("Failed to load delivery runs");
-      setLoading(false);
-    }
-  };
+  const query = useQuery(getActiveDeliveryRunsQueryOptions());
+
+  const runs = query.data ?? [];
+  const loading = query.isPending && runs.length === 0;
+  const error = query.isError ? "Failed to load delivery runs" : socketError;
 
   useEffect(() => {
-    // Initial HTTP fetch as fallback
-    fetchRuns();
-
     // Build Socket.IO URL from current host
     const baseUrl = socketUrl || `${window.location.protocol}//${window.location.host}`;
 
@@ -72,7 +48,7 @@ export function useDeliveryRuns(socketUrl?: string) {
 
     socket.on("connect", () => {
       console.debug("DeliveryRuns Socket.IO connected");
-      setError(null);
+      setSocketError(null);
       // Join delivery-runs namespace/room
       socket.emit("join", { room: "delivery-runs" });
     });
@@ -80,8 +56,7 @@ export function useDeliveryRuns(socketUrl?: string) {
     socket.on("active_runs", (payload: { type: string; data: DeliveryRun[] }) => {
       try {
         if (payload.type === "active_runs") {
-          setRuns(payload.data || []);
-          setLoading(false);
+          queryClient.setQueryData(deliveryRunsQueryKeys.active(), payload.data || []);
         }
       } catch (e) {
         console.warn("Failed to parse Socket.IO message", e);
@@ -94,7 +69,7 @@ export function useDeliveryRuns(socketUrl?: string) {
 
     socket.on("connect_error", (err) => {
       console.debug("DeliveryRuns Socket.IO error (expected if backend not running)", err);
-      setError("Socket.IO connection failed - using cached data");
+      setSocketError("Socket.IO connection failed - using cached data");
     });
 
     return () => {
@@ -102,9 +77,16 @@ export function useDeliveryRuns(socketUrl?: string) {
       if (currentSocket) {
         currentSocket.disconnect();
         socketRef.current = null;
-      }
-    };
-  }, [socketUrl]);
+        }
+      };
+  }, [queryClient, socketUrl]);
 
-  return { runs, loading, error, refetch: fetchRuns };
+  return {
+    runs,
+    loading,
+    error,
+    refetch: async () => {
+      await query.refetch();
+    },
+  };
 }

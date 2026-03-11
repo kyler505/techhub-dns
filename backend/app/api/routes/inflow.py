@@ -21,6 +21,7 @@ from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.config import settings
 from app.api.auth_middleware import require_admin
 from app.utils.exceptions import DNSApiError
+from app.utils.timezone import to_utc_iso_z
 
 logger = logging.getLogger(__name__)
 
@@ -477,9 +478,7 @@ def test_webhook():
                     "success": True,
                     "message": "Webhook endpoint is configured",
                     "webhook_url": webhook.url,
-                    "last_received_at": webhook.last_received_at.isoformat()
-                    if webhook.last_received_at
-                    else None,
+                    "last_received_at": to_utc_iso_z(webhook.last_received_at),
                 }
             )
     except Exception as e:

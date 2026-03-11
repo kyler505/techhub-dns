@@ -12,6 +12,7 @@ import { Input } from "../components/ui/input";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { OrderStatus } from "../types/order";
 import { isValidOrderId } from "../utils/orderIds";
+import { formatToCentralTime } from "../utils/timezone";
 
 type DeliveryDetailLocationState = {
   from?: string;
@@ -26,7 +27,7 @@ function formatVehicleName(vehicle: string): string {
 
 function formatDateTime(dateString: string | null | undefined): string {
   if (!dateString) return "Not started";
-  return new Date(dateString).toLocaleString();
+  return formatToCentralTime(dateString);
 }
 
 function getRunStatusVariant(status: string) {

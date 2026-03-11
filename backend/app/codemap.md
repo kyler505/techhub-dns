@@ -1,0 +1,29 @@
+# backend/app/
+
+## Responsibility
+
+- Hosts the Flask-powered API, background scheduler wiring, and shared helpers that keep the TechHub Delivery Workflow backend cohesive.
+- Provides entry points (`main.py`, `run_scheduler.py`) that bootstrap configuration/DB, register middleware, wire Socket.IO, serve the SPA, and launch APScheduler-driven integrations.
+
+## Design Patterns & Architecture
+
+- **Configuration + Bootstrapping:** `config.Settings` uses `pydantic-settings` to centralize environment-aware defaults (CORS, auth, Inflow/SharePoint, scheduler toggles) while `database.py` creates the SQLAlchemy engine/session with bounded pool settings and exposes helpers like `get_db_session` and `get_runtime_db_pool_settings` for runtime introspection.
+- **Flask Composition:** `main.py` builds the `Flask` app, applies `ProxyFix`, configures CORS/Socket.IO with `settings.get_cors_allowed_origins()`, registers error handlers (`api.middleware`), auth middleware (`api.auth_middleware`), and Socket.IO events (`api.socket_events`) before mounting every blueprint under `/api/*` (orders, inflow, audit, delivery runs, sharepoint, auth, system, analytics, observability, vehicle checkouts).
+- **Background Work:** `scheduler.py` encapsulates APScheduler jobs (`sync_inflow_orders`, `webhook_health_check`, `auto_register_inflow_webhook`) that reuse the same services/models as the request path, while `backend/run_scheduler.py` guards startup with `settings.scheduler_enabled`, handles SIGINT/SIGTERM, and runs `start_scheduler`/`auto_register_inflow_webhook` for job orchestration.
+- **Error & Auth Middleware:** Custom `DNSApiError` serialization goes through `api.middleware.register_error_handlers`, and authentication/permission guards live in `api.auth_middleware`, keeping route handlers focused on domain logic.
+- **Socket & Push Notifications:** `app.api.socket_events` registers connect/disconnect/join/leave logic on the same Socket.IO instance that route/service layers can reuse (e.g., `api.vehicle_status_events` broadcasts through `main.socketio`).
+
+## Data & Control Flow
+
+1. **Request processing:** HTTP requests hit Flask blueprints in `app/api/routes/*` where each route: validates payloads/queries with `schemas` (orders, inflow, analytics, vehicle checkout, error), delegates to `services` (order_service, inflow_service, analytics_service, etc.), and returns Pydantic responses. Services use SQLAlchemy models (`models/order`, `models/vehicle_checkout`, etc.) through sessions from `database.SessionLocal` or the `api.dependencies.get_database` context manager.
+2. **Database lifecycle:** `database.get_db_session` is called by health checks (`main.health`), scheduler jobs, and services; `get_runtime_db_pool_settings` surfaces pool presets for logging (startup + health). The `Base` declarative class and modules under `models/` keep schema definitions centralized and are imported lazily to avoid circular references.
+3. **Socket + background triggers:** Services broadcast updates through `vehicle_status_events.broadcast_vehicle_status_update_sync` and `api.socket_events`, using the `socketio` instance defined in `main` to emit to rooms (e.g., `fleet`). Scheduler jobs (`sync_inflow_orders`) reuse services and may trigger `_broadcast_orders_sync` from `api.routes.orders` to push real-time updates.
+4. **Scheduler + webhook lifecycle:** `scheduler.start_scheduler` reads `settings.inflow_polling_sync_enabled`/`inflow_webhook_enabled` to decide polling cadence, then enqueues jobs that call `InflowService`, `OrderService`, and manipulate `models.inflow_webhook`. Auto-registration uses service helpers to reconcile remote webhooks before persisting their active status in `models.inflow_webhook`.
+
+## Integration Points
+
+- **API subpackage:** `app/api/routes/*` define Flask blueprints (`orders`, `inflow`, `audit`, `delivery_runs`, `sharepoint`, `auth`, `system`, `analytics`, `observability`, `vehicle_checkouts`) that are all registered by `main.py` under `/api`. They share the middleware (error handling + auth) and can import `api.dependencies`, `api.socket_events`, and `api.vehicle_status_events` for cross-cutting concerns.
+- **Models, Schemas, Services:** Domain models under `models/` represent persistent entities (orders, vehicle checkouts, audit logs, system settings, teams notifications). `services/` coordinate those models plus external APIs (SharePoint, Inflow, email, PDF generation, maintenance tasks) and rely on `schemas/` for shape validation/serialization and `utils/` for helpers (exceptions, timezone normalization, idempotency, PDF helpers, building mappers, webhook security). Services also load `templates/` (e.g., `order_details.html`, `tamu_logo.png`) when generating PDFs/emails.
+- **Utils & Templates:** Common helpers under `utils/` (e.g., `exceptions.py` for `DNSApiError`, `timezone.py`, `pdf_helpers.py`, `webhook_security.py`, `idempotency.py`) are reused by services and middleware. Templates (HTML/PDF assets) live in `templates/` and are referenced by services like `email_service`, `pdf_service`, and `order_service` for outgoing communications.
+- **Scheduler & Socket Integration:** The scheduler runner (`scheduler.py`, `run_scheduler.py`) uses the same services/models/api modules as the web entry point, while Socket.IO (`main.socketio`) is wired in `main.py` and consumed by vehicle updates/background broadcasts so that real-time clients stay in sync.
+- **Deployment surface:** `main.py` also handles static SPA serving (prefers `frontend/dist`, falls back to JSON hint when missing), the `/health` route with DB connectivity checks, and `/api` root metadata, tying Flask to the frontend bundle and operational checks.

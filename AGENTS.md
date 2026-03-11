@@ -160,6 +160,15 @@ mysql -h <db-host> -u <db-user> -p <db-name>   # enter password when prompted
 
 ## Working Agreements
 - Keep changes minimal and follow existing patterns; avoid formatting-only churn.
+- New feature work and hotfix work must start in a dedicated git worktree, not the default workspace.
+- If already in the correct feature/hotfix worktree, continue there; otherwise create or switch to an isolated worktree before making code changes.
+- Prefer the `using-git-worktrees` skill for setup. Reuse an existing repo convention for worktree location when present; otherwise ask once before creating a new worktree directory.
+- Keep repository cartography current when architecture, boundaries, or integrations change.
+- Use the root `codemap.md` as the repo atlas and folder-level `codemap.md` files as the first-pass index before reading source files.
+- After feature or structural changes, run `python3 ~/.config/opencode/skills/cartography/scripts/cartographer.py changes --root ./` and update only the affected `codemap.md` files.
+- If a change adds a new tracked subsystem or shifts repo shape materially, update the root `codemap.md` atlas too.
+- After cartography edits, run `python3 ~/.config/opencode/skills/cartography/scripts/cartographer.py update --root ./` to refresh `.slim/cartography.json`.
+- Keep cartography updates in the same PR/change set as the code they describe; treat codemaps as orientation aids, not a replacement for reading source.
 - Frontend TS is strict; do not leave unused imports/locals/params (prefix intentionally-unused with `_`).
 - Frontend changes: `cd frontend && npm run lint && npm run build`.
 - Backend error-handling changes: `cd backend && python tests/test_error_handling.py`.

@@ -14,6 +14,7 @@ from app.models.print_job import (
 )
 from app.services.audit_service import AuditService
 from app.utils.exceptions import ConflictError, NotFoundError, ValidationError
+from app.utils.timezone import to_utc_iso_z
 
 PRINT_JOB_ROOM = "print_jobs"
 PRINT_JOB_AVAILABLE_EVENT = "print_job_available"
@@ -36,14 +37,12 @@ class PrintJobService:
             "requested_by": job.requested_by,
             "file_path": job.file_path,
             "attempt_count": job.attempt_count,
-            "claimed_at": job.claimed_at.isoformat() if job.claimed_at else None,
-            "claim_expires_at": job.claim_expires_at.isoformat()
-            if job.claim_expires_at
-            else None,
-            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "claimed_at": to_utc_iso_z(job.claimed_at),
+            "claim_expires_at": to_utc_iso_z(job.claim_expires_at),
+            "completed_at": to_utc_iso_z(job.completed_at),
             "last_error": job.last_error,
-            "created_at": job.created_at.isoformat() if job.created_at else None,
-            "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+            "created_at": to_utc_iso_z(job.created_at),
+            "updated_at": to_utc_iso_z(job.updated_at),
         }
 
     def enqueue_picklist_print(
@@ -257,6 +256,6 @@ def emit_orders_update(message: str = "Print jobs updated") -> None:
 
     socketio.emit(
         "orders_update",
-        {"message": message, "timestamp": datetime.utcnow().isoformat()},
+        {"message": message, "timestamp": to_utc_iso_z(datetime.utcnow())},
         room="orders",
     )
