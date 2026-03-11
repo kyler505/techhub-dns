@@ -14,7 +14,7 @@ import {
     invalidateOrderQueries,
 } from "../queries/orders";
 import { OrderStatus } from "../types/order";
-import { extractApiErrorMessage } from "../utils/apiErrors";
+import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
 import { isValidOrderId } from "../utils/orderIds";
 
 export default function OrderDetailPage() {
@@ -36,11 +36,13 @@ export default function OrderDetailPage() {
     const orderQuery = useQuery({
         ...getOrderDetailQueryOptions(orderId ?? ""),
         enabled: Boolean(orderId),
+        throwOnError: shouldThrowToBoundary,
     });
 
     const auditQuery = useQuery({
         ...getOrderAuditQueryOptions(orderId ?? ""),
         enabled: Boolean(orderId),
+        throwOnError: shouldThrowToBoundary,
     });
 
     const order = orderQuery.data ?? null;

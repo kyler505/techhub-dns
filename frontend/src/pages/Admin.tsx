@@ -34,6 +34,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
 import { extractApiErrorMessage } from "../utils/apiErrors";
+import { shouldThrowToBoundary } from "../utils/apiErrors";
 import { ordersQueryKeys } from "../queries/orders";
 import { formatToCentralTime } from "../utils/timezone";
 
@@ -181,6 +182,7 @@ export default function Admin() {
     const runtimeSummaryQuery = useQuery({
         queryKey: adminQueryKeys.runtimeSummary(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<RuntimeSummaryResponse> => {
             try {
                 return await observabilityApi.getRuntimeSummary();
@@ -195,6 +197,7 @@ export default function Admin() {
     const systemSettingsQuery = useQuery({
         queryKey: adminQueryKeys.systemSettings(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<SystemSettings> => {
             try {
                 return await settingsApi.getSettings();
@@ -209,6 +212,7 @@ export default function Admin() {
     const inflowWebhooksQuery = useQuery({
         queryKey: adminQueryKeys.inflowWebhooks(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<WebhookResponse[]> => {
             try {
                 const response = await inflowApi.listWebhooks();
@@ -224,6 +228,7 @@ export default function Admin() {
     const printJobsQuery = useQuery({
         queryKey: adminQueryKeys.printJobs(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<PrintJobRecord[]> => {
             try {
                 const response = await settingsApi.getPrintJobs(undefined, 20);
