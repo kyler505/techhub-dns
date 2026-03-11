@@ -10,6 +10,12 @@ interface BoundaryProps {
   children: ReactNode;
 }
 
+interface SectionBoundaryProps extends BoundaryProps {
+  title: string;
+  message: string;
+  resetKeys?: unknown[];
+}
+
 export function AppShellErrorBoundary({ children }: BoundaryProps) {
   const location = useLocation();
 
@@ -66,6 +72,38 @@ export function RouteContentErrorBoundary({ children }: BoundaryProps) {
               message="Try the page again. If the problem persists, head back to the dashboard and retry the workflow from there."
               onRetry={resetBoundary}
               onNavigateHome={() => navigate("/")}
+            />
+          )}
+        >
+          {children}
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
+  );
+}
+
+export function SectionErrorBoundary({ children, title, message, resetKeys = [] }: SectionBoundaryProps) {
+  const location = useLocation();
+
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onError={(error, errorInfo) => {
+            void reportFrontendError(error, errorInfo, {
+              boundary: "section",
+              title,
+              pathname: location.pathname,
+            });
+          }}
+          onReset={reset}
+          resetKeys={[location.pathname, ...resetKeys]}
+          fallback={({ error, reset: resetBoundary }) => (
+            <ErrorFallback
+              error={error}
+              title={title}
+              message={message}
+              onRetry={resetBoundary}
             />
           )}
         >
