@@ -35,6 +35,7 @@ from app.utils.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.utils.timezone import to_utc_iso_z
 from app.api.auth_middleware import get_current_user_email
 import logging
 
@@ -75,7 +76,7 @@ def _order_list_item_json(order, pick_status_data=None) -> str:
 def _serialize_utc_datetime(value: Optional[datetime]) -> Optional[str]:
     if value is None:
         return None
-    return value.isoformat().replace("+00:00", "") + "Z"
+    return to_utc_iso_z(value)
 
 
 def _serialize_order_list_item(order, pick_status_data=None) -> dict:
@@ -160,9 +161,7 @@ def _broadcast_orders_sync(db_session: Session = None):
                     "inflow_order_id": order.inflow_order_id,
                     "recipient_name": order.recipient_name,
                     "status": order.status,
-                    "updated_at": order.updated_at.isoformat()
-                    if order.updated_at
-                    else None,
+                    "updated_at": _serialize_utc_datetime(order.updated_at),
                     "delivery_location": order.delivery_location,
                     "assigned_deliverer": order.assigned_deliverer,
                 }

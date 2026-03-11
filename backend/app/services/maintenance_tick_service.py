@@ -19,6 +19,7 @@ from app.services.maintenance_service import (
     archive_system_audit_logs_bounded,
     purge_sessions_batched,
 )
+from app.utils.timezone import to_utc_iso_z
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,9 @@ def schedule_maintenance_tick_if_needed() -> None:
     if not getattr(settings, "maintenance_tick_enabled", True):
         return
 
-    min_interval = int(getattr(settings, "maintenance_tick_min_interval_seconds", 60) or 60)
+    min_interval = int(
+        getattr(settings, "maintenance_tick_min_interval_seconds", 60) or 60
+    )
     min_interval = max(1, min(min_interval, 3600))
 
     global _LAST_TICK_SCHEDULED_MONOTONIC
@@ -96,7 +99,9 @@ def _run_tick_on_close_best_effort() -> None:
         logger.exception("Maintenance tick crashed")
 
 
-def run_maintenance_tick(db: DbSession, *, now: Optional[datetime] = None) -> MaintenanceTickResult:
+def run_maintenance_tick(
+    db: DbSession, *, now: Optional[datetime] = None
+) -> MaintenanceTickResult:
     """Run due maintenance jobs with DB-persisted state.
 
     Intended to be called from response.on_close and from scriptable tests.
@@ -110,22 +115,32 @@ def run_maintenance_tick(db: DbSession, *, now: Optional[datetime] = None) -> Ma
     return MaintenanceTickResult(sessions=sessions, audit=audit)
 
 
-def _run_purge_sessions_job(db: DbSession, *, tick_now: datetime) -> MaintenanceJobResult:
+def _run_purge_sessions_job(
+    db: DbSession, *, tick_now: datetime
+) -> MaintenanceJobResult:
     if not _job_is_due(
         db,
         last_success_key=SETTING_SESSIONS_LAST_SUCCESS,
         pending_key=SETTING_SESSIONS_PENDING,
         tick_now=tick_now,
-        interval_hours=int(getattr(settings, "maintenance_sessions_purge_interval_hours", 24) or 24),
+        interval_hours=int(
+            getattr(settings, "maintenance_sessions_purge_interval_hours", 24) or 24
+        ),
     ):
-        return MaintenanceJobResult(ran=False, acquired_lock=False, processed=0, pending=False, error=None)
+        return MaintenanceJobResult(
+            ran=False, acquired_lock=False, processed=0, pending=False, error=None
+        )
 
     lock_name = "maintenance:purge_sessions"
     with _advisory_lock(db, lock_name) as acquired:
         if not acquired:
-            return MaintenanceJobResult(ran=False, acquired_lock=False, processed=0, pending=True, error=None)
+            return MaintenanceJobResult(
+                ran=False, acquired_lock=False, processed=0, pending=True, error=None
+            )
 
-        batch_size = int(getattr(settings, "maintenance_sessions_purge_batch_size", 5000) or 5000)
+        batch_size = int(
+            getattr(settings, "maintenance_sessions_purge_batch_size", 5000) or 5000
+        )
         batch_size = max(1, min(batch_size, 50_000))
         purge_now_naive = tick_now.replace(tzinfo=None)
 
@@ -133,7 +148,7 @@ def _run_purge_sessions_job(db: DbSession, *, tick_now: datetime) -> Maintenance
             deleted = purge_sessions_batched(db, now=purge_now_naive, limit=batch_size)
             pending = _has_sessions_to_purge(db, purge_now_naive)
             _set_setting(db, SETTING_SESSIONS_PENDING, "true" if pending else "false")
-            _set_setting(db, SETTING_SESSIONS_LAST_SUCCESS, tick_now.isoformat())
+            _set_setting(db, SETTING_SESSIONS_LAST_SUCCESS, to_utc_iso_z(tick_now))
             _set_setting(db, SETTING_SESSIONS_LAST_ERROR, "")
             return MaintenanceJobResult(
                 ran=True,
@@ -146,32 +161,44 @@ def _run_purge_sessions_job(db: DbSession, *, tick_now: datetime) -> Maintenance
             db.rollback()
             message = _truncate_error(f"{type(exc).__name__}: {exc}")
             _set_setting(db, SETTING_SESSIONS_LAST_ERROR, message)
-            return MaintenanceJobResult(ran=True, acquired_lock=True, processed=0, pending=True, error=message)
+            return MaintenanceJobResult(
+                ran=True, acquired_lock=True, processed=0, pending=True, error=message
+            )
 
 
-def _run_archive_audit_job(db: DbSession, *, tick_now: datetime) -> MaintenanceJobResult:
+def _run_archive_audit_job(
+    db: DbSession, *, tick_now: datetime
+) -> MaintenanceJobResult:
     if not _job_is_due(
         db,
         last_success_key=SETTING_AUDIT_LAST_SUCCESS,
         pending_key=SETTING_AUDIT_PENDING,
         tick_now=tick_now,
-        interval_hours=int(getattr(settings, "maintenance_audit_archive_interval_hours", 24) or 24),
+        interval_hours=int(
+            getattr(settings, "maintenance_audit_archive_interval_hours", 24) or 24
+        ),
     ):
-        return MaintenanceJobResult(ran=False, acquired_lock=False, processed=0, pending=False, error=None)
+        return MaintenanceJobResult(
+            ran=False, acquired_lock=False, processed=0, pending=False, error=None
+        )
 
     lock_name = "maintenance:archive_system_audit_logs"
     with _advisory_lock(db, lock_name) as acquired:
         if not acquired:
-            return MaintenanceJobResult(ran=False, acquired_lock=False, processed=0, pending=True, error=None)
+            return MaintenanceJobResult(
+                ran=False, acquired_lock=False, processed=0, pending=True, error=None
+            )
 
-        max_batches = int(getattr(settings, "maintenance_audit_archive_max_batches_per_tick", 3) or 3)
+        max_batches = int(
+            getattr(settings, "maintenance_audit_archive_max_batches_per_tick", 3) or 3
+        )
         max_batches = max(1, min(max_batches, 100))
 
         try:
             result = archive_system_audit_logs_bounded(db, max_batches=max_batches)
             pending = bool(result.has_more)
             _set_setting(db, SETTING_AUDIT_PENDING, "true" if pending else "false")
-            _set_setting(db, SETTING_AUDIT_LAST_SUCCESS, tick_now.isoformat())
+            _set_setting(db, SETTING_AUDIT_LAST_SUCCESS, to_utc_iso_z(tick_now))
             _set_setting(db, SETTING_AUDIT_LAST_ERROR, "")
             return MaintenanceJobResult(
                 ran=True,
@@ -184,7 +211,9 @@ def _run_archive_audit_job(db: DbSession, *, tick_now: datetime) -> MaintenanceJ
             db.rollback()
             message = _truncate_error(f"{type(exc).__name__}: {exc}")
             _set_setting(db, SETTING_AUDIT_LAST_ERROR, message)
-            return MaintenanceJobResult(ran=True, acquired_lock=True, processed=0, pending=True, error=message)
+            return MaintenanceJobResult(
+                ran=True, acquired_lock=True, processed=0, pending=True, error=message
+            )
 
 
 def _job_is_due(
@@ -197,7 +226,12 @@ def _job_is_due(
 ) -> bool:
     interval_hours = max(1, min(int(interval_hours or 24), 24 * 365))
 
-    pending = (_get_setting(db, pending_key) or "").strip().lower() in ("true", "1", "yes", "on")
+    pending = (_get_setting(db, pending_key) or "").strip().lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
     if pending:
         return True
 
@@ -212,7 +246,9 @@ def _job_is_due(
 def _has_sessions_to_purge(db: DbSession, purge_now: datetime) -> bool:
     row = (
         db.query(UserSession.id)
-        .filter((UserSession.revoked_at.isnot(None)) | (UserSession.expires_at < purge_now))
+        .filter(
+            (UserSession.revoked_at.isnot(None)) | (UserSession.expires_at < purge_now)
+        )
         .limit(1)
         .first()
     )
@@ -228,7 +264,9 @@ def _advisory_lock(db: DbSession, lock_name: str):
 
     acquired = False
     try:
-        value = db.execute(text("SELECT GET_LOCK(:name, 0)"), {"name": lock_name}).scalar()
+        value = db.execute(
+            text("SELECT GET_LOCK(:name, 0)"), {"name": lock_name}
+        ).scalar()
         acquired = int(value or 0) == 1
     except Exception:
         logger.exception("Failed to acquire advisory lock %s", lock_name)
