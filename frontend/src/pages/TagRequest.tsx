@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, UploadCloud } from "lucide-react";
 import { settingsApi } from "../api/settings";
@@ -185,7 +185,7 @@ export default function TagRequest() {
         await candidatesQuery.refetch();
     };
 
-    useMemo(() => {
+    useEffect(() => {
         setSelectedCandidates((prev) => {
             if (prev.length === 0) return prev;
             const present = new Set(candidates.map((candidate) => candidate.inflow_order_id).filter(Boolean));
