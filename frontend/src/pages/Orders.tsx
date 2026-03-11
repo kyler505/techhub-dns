@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Order, OrderStatus } from "../types/order";
-import { ordersApi } from "../api/orders";
+import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
@@ -9,13 +9,15 @@ import { Card, CardContent } from "../components/ui/card";
 import { SkeletonTable } from "../components/Skeleton";
 import { PackageSearch } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
+import { ordersApi } from "../api/orders";
+import {
+    getOrdersListQueryOptions,
+    invalidateOrderQueries,
+} from "../queries/orders";
 import { toast } from "sonner";
 import { isValidOrderId } from "../utils/orderIds";
 
 export default function Orders() {
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -25,29 +27,51 @@ export default function Orders() {
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
-    const [updatingStatus, setUpdatingStatus] = useState(false);
     const navigate = useNavigate();
-
-    const compareOrderListPriority = (left: Order, right: Order): number => {
-        const updatedAtDelta = Date.parse(right.updated_at) - Date.parse(left.updated_at);
-        if (!Number.isNaN(updatedAtDelta) && updatedAtDelta !== 0) {
-            return updatedAtDelta;
-        }
-
-        const createdAtDelta = Date.parse(right.created_at) - Date.parse(left.created_at);
-        if (!Number.isNaN(createdAtDelta) && createdAtDelta !== 0) {
-            return createdAtDelta;
-        }
-
-        const leftKey = left.inflow_order_id || left.id || "";
-        const rightKey = right.inflow_order_id || right.id || "";
-        return rightKey.localeCompare(leftKey);
-    };
+    const queryClient = useQueryClient();
 
     // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
-    const latestRequestId = useRef(0);
+
+    const ordersQuery = useQuery(
+        getOrdersListQueryOptions({
+            status: statusFilter,
+            search: debouncedSearch,
+        })
+    );
+
+    const orders = ordersQuery.data ?? [];
+    const loading = ordersQuery.isPending || ordersQuery.isFetching;
+    const isInitialLoad = ordersQuery.isPending && orders.length === 0;
+
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ orderId, newStatus, reason, expectedUpdatedAt }: {
+            orderId: string;
+            newStatus: OrderStatus;
+            reason?: string;
+            expectedUpdatedAt?: string;
+        }) =>
+            ordersApi.updateOrderStatus(orderId, {
+                status: newStatus,
+                reason,
+                expected_updated_at: expectedUpdatedAt,
+            }),
+        onSuccess: async (_data, variables) => {
+            setTransitioningOrder(null);
+            await invalidateOrderQueries(queryClient, variables.orderId);
+        },
+        onError: async (error: any, variables) => {
+            console.error("Failed to update status:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest queue.");
+                await invalidateOrderQueries(queryClient, variables.orderId);
+                return;
+            }
+
+            toast.error("Failed to update order status");
+        },
+    });
 
     // Track WebSocket updates and refetch when orders change
     useEffect(() => {
@@ -55,11 +79,11 @@ export default function Orders() {
             const updateTime = Date.now();
             // Only refetch if this is a new update (not the initial connection)
             if (lastWebSocketUpdate.current > 0) {
-                loadOrders();
+                void invalidateOrderQueries(queryClient);
             }
             lastWebSocketUpdate.current = updateTime;
         }
-    }, [websocketOrders]);
+    }, [queryClient, websocketOrders]);
 
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
@@ -70,58 +94,6 @@ export default function Orders() {
             window.clearTimeout(timeoutId);
         };
     }, [search]);
-
-    useEffect(() => {
-        loadOrders();
-    }, [statusFilter, debouncedSearch]);
-
-    const loadOrders = async () => {
-        const requestId = latestRequestId.current + 1;
-        latestRequestId.current = requestId;
-        setLoading(true);
-        let shouldApply = true;
-        try {
-            const searchQuery = debouncedSearch.trim();
-
-            // Handle array of statuses by fetching each and combining
-            if (Array.isArray(statusFilter)) {
-                const results = [];
-                for (const status of statusFilter) {
-                    results.push(
-                        await ordersApi.getOrders({
-                            status,
-                            search: searchQuery || undefined,
-                        })
-                    );
-                }
-                shouldApply = latestRequestId.current === requestId;
-                // Combine and sort by updated_at descending
-                if (shouldApply) {
-                    const combined = results.flat().sort(compareOrderListPriority);
-                    setOrders(combined);
-                }
-            } else {
-                const data = await ordersApi.getOrders({
-                    status: statusFilter || undefined,
-                    search: searchQuery || undefined,
-                });
-                shouldApply = latestRequestId.current === requestId;
-                if (shouldApply) {
-                    setOrders(data);
-                }
-            }
-        } catch (error) {
-            shouldApply = latestRequestId.current === requestId;
-            if (shouldApply) {
-                console.error("Failed to load orders:", error);
-            }
-        } finally {
-            if (shouldApply && latestRequestId.current === requestId) {
-                setLoading(false);
-                setIsInitialLoad(false);
-            }
-        }
-    };
 
     const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
         const currentStatus = orders.find((order) => order.id === orderId)?.status;
@@ -144,25 +116,15 @@ export default function Orders() {
         reason?: string
     ) => {
         const currentOrder = orders.find((o) => o.id === orderId);
-        setUpdatingStatus(true);
         try {
-            await ordersApi.updateOrderStatus(orderId, {
-                status: newStatus,
+            await updateStatusMutation.mutateAsync({
+                orderId,
                 reason,
-                expected_updated_at: currentOrder?.updated_at,
+                newStatus,
+                expectedUpdatedAt: currentOrder?.updated_at,
             });
-            setTransitioningOrder(null);
-            loadOrders();
-        } catch (error: any) {
-            console.error("Failed to update status:", error);
-            if (error?.response?.status === 409) {
-                toast.error("Order changed by another user. Reloaded the latest queue.");
-                loadOrders();
-                return;
-            }
-            toast.error("Failed to update order status");
-        } finally {
-            setUpdatingStatus(false);
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
@@ -194,6 +156,10 @@ export default function Orders() {
                 </Card>
             </div>
         );
+    }
+
+    if (ordersQuery.isError && orders.length === 0) {
+        return <div className="p-4">Failed to load orders</div>;
     }
 
     return (
@@ -236,7 +202,7 @@ export default function Orders() {
                         performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
                     }
                     onCancel={() => setTransitioningOrder(null)}
-                    submitting={updatingStatus}
+                    submitting={updateStatusMutation.isPending}
                 />
             )}
         </div>

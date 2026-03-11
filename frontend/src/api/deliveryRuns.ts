@@ -36,6 +36,11 @@ export interface DeliveryRunDetailResponse extends DeliveryRunResponse {
 }
 
 export const deliveryRunsApi = {
+  getActiveRuns: async (): Promise<Array<DeliveryRunResponse & { order_ids: string[] }>> => {
+    const response = await apiClient.get<Array<DeliveryRunResponse & { order_ids: string[] }>>("/delivery-runs/active");
+    return response.data;
+  },
+
   createRun: async (request: CreateDeliveryRunRequest): Promise<DeliveryRunResponse> => {
     const response = await apiClient.post<DeliveryRunResponse>("/delivery-runs", request);
     return response.data;
