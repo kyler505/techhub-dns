@@ -125,15 +125,18 @@ def inflow_webhook():
         )
 
         with get_db() as db:
-            secrets = [
-                w.secret
+            secrets: list[str] = [
+                str(w.secret)
                 for w in db.query(InflowWebhook)
                 .filter(InflowWebhook.status == WebhookStatus.active)
                 .all()
                 if w.secret
             ]
-            if not secrets and settings.inflow_webhook_secret:
-                secrets = [settings.inflow_webhook_secret]
+            if (
+                settings.inflow_webhook_secret
+                and settings.inflow_webhook_secret not in secrets
+            ):
+                secrets.append(settings.inflow_webhook_secret)
 
             if signature and secrets:
                 logger.info(
