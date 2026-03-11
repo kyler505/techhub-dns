@@ -11,6 +11,7 @@ import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import WorkflowDailyLineChart from "../components/charts/WorkflowDailyLineChart";
 import FulfilledTotalsBarChart from "../components/charts/FulfilledTotalsBarChart";
 import { Activity, Package, CheckCircle2, Truck } from "lucide-react";
+import { SectionErrorBoundary } from "../components/error-boundaries/AppErrorBoundaries";
 import {
   analyticsQueryKeys,
   getDeliveredOrdersQueryOptions,
@@ -20,6 +21,7 @@ import {
   getWorkflowDailyTrendsQueryOptions,
   getYearlyFulfilledTotalsQueryOptions,
 } from "../queries/analytics";
+import { shouldThrowToBoundary } from "../utils/apiErrors";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -118,12 +120,30 @@ export default function Dashboard() {
   const workflowTrendDaysRef = useRef<7 | 30>(30);
   const queryClient = useQueryClient();
 
-  const statusCountsQuery = useQuery(getOrderStatusCountsQueryOptions());
-  const deliveryPerformanceQuery = useQuery(getDeliveryPerformanceQueryOptions());
-  const workflowDailyTrendsQuery = useQuery(getWorkflowDailyTrendsQueryOptions(workflowTrendDays));
-  const monthlyFulfilledTotalsQuery = useQuery(getMonthlyFulfilledTotalsQueryOptions());
-  const yearlyFulfilledTotalsQuery = useQuery(getYearlyFulfilledTotalsQueryOptions());
-  const deliveredOrdersQuery = useQuery(getDeliveredOrdersQueryOptions());
+  const statusCountsQuery = useQuery({
+    ...getOrderStatusCountsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const deliveryPerformanceQuery = useQuery({
+    ...getDeliveryPerformanceQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const workflowDailyTrendsQuery = useQuery({
+    ...getWorkflowDailyTrendsQueryOptions(workflowTrendDays),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const monthlyFulfilledTotalsQuery = useQuery({
+    ...getMonthlyFulfilledTotalsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const yearlyFulfilledTotalsQuery = useQuery({
+    ...getYearlyFulfilledTotalsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const deliveredOrdersQuery = useQuery({
+    ...getDeliveredOrdersQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
 
   const statusCounts = statusCountsQuery.data ?? {};
   const deliveryPerf = deliveryPerformanceQuery.data ?? {
@@ -354,7 +374,12 @@ export default function Dashboard() {
             </span>
           </CardHeader>
           <CardContent>
-            <LiveDeliveryDashboard />
+            <SectionErrorBoundary
+              title="Live delivery widget failed"
+              message="Try the live status panel again. The rest of the dashboard is still available."
+            >
+              <LiveDeliveryDashboard />
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
 
@@ -456,7 +481,13 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+            <SectionErrorBoundary
+              title="Workflow chart failed"
+              message="Try reloading this chart. The rest of the dashboard data is still available."
+              resetKeys={[workflowTrendDays]}
+            >
+              <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
       </div>
@@ -468,7 +499,12 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">Last 12 months</p>
           </CardHeader>
           <CardContent>
-            <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+            <SectionErrorBoundary
+              title="Monthly totals chart failed"
+              message="Try reloading the monthly fulfilled totals chart."
+            >
+              <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
 
@@ -478,7 +514,12 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">Last 5 years</p>
           </CardHeader>
           <CardContent>
-            <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
+            <SectionErrorBoundary
+              title="Yearly totals chart failed"
+              message="Try reloading the yearly fulfilled totals chart."
+            >
+              <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
       </div>
