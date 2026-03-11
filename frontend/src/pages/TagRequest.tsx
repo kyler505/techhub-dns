@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, UploadCloud } from "lucide-react";
-import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { getTagRequestCandidatesQueryOptions, ordersQueryKeys } from "../queries/orders";
 
 type TagRequestCandidate = {
     id: string;
@@ -74,14 +75,69 @@ type StatusState = {
 export default function TagRequest() {
     const [status, setStatus] = useState<StatusState | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
 
-    const [candidates, setCandidates] = useState<TagRequestCandidate[]>([]);
-    const [candidatesLoading, setCandidatesLoading] = useState(false);
-    const [candidatesError, setCandidatesError] = useState<string | null>(null);
     const [candidatesSearch, setCandidatesSearch] = useState("");
     const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
+    const queryClient = useQueryClient();
+
+    const candidatesQuery = useQuery({
+        ...getTagRequestCandidatesQueryOptions({ limit: 1000 }),
+        select: (result) => result
+            .map(parseTagRequestCandidate)
+            .filter((candidate): candidate is TagRequestCandidate => candidate !== null),
+    });
+
+    const candidates = candidatesQuery.data ?? [];
+    const candidatesLoading = candidatesQuery.isPending || candidatesQuery.isFetching;
+    const candidatesError = candidatesQuery.isError ? "Failed to load picked orders. Please refresh." : null;
+
+    const uploadMutation = useMutation({
+        mutationFn: (orders: string[]) => settingsApi.uploadCanopyOrders(orders),
+        onSuccess: async (response) => {
+            if (response.success) {
+                setStatus({
+                    type: "success",
+                    message: "Orders uploaded to Canopy.",
+                    uploadedUrl: response.uploaded_url,
+                    filename: response.filename,
+                    count: response.count,
+                    teamsNotified: response.teams_notified,
+                    updatedOrders: response.updated_orders,
+                    missingOrders: response.missing_orders,
+                    eligibleOrders: response.eligible_orders,
+                    ineligibleOrders: response.ineligible_orders,
+                });
+                setSelectedCandidates([]);
+                await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: ordersQueryKeys.tagRequestCandidates() }),
+                    queryClient.invalidateQueries({ queryKey: ordersQueryKeys.lists() }),
+                ]);
+                return;
+            }
+
+            setStatus({
+                type: "error",
+                message: response.error || "Upload failed.",
+            });
+        },
+        onError: (err: any) => {
+            const responseData = err?.response?.data as unknown;
+            const record = responseData && typeof responseData === "object" ? (responseData as Record<string, unknown>) : null;
+
+            const missingOrders = parseStringArray(record?.missing_orders);
+            const ineligibleOrders = parseIneligibleOrders(record?.ineligible_orders);
+            const backendError = typeof record?.error === "string" && record.error.trim() ? record.error.trim() : null;
+
+            setStatus({
+                type: "error",
+                message: backendError || "Upload failed.",
+                missingOrders,
+                ineligibleOrders,
+                eligibleOrders: parseStringArray(record?.eligible_orders),
+            });
+        },
+    });
 
     const selectedOrders = useMemo(
         () => Array.from(new Set(selectedCandidates)).filter(Boolean).sort(),
@@ -126,41 +182,16 @@ export default function TagRequest() {
     };
 
     const loadCandidates = async () => {
-        setCandidatesLoading(true);
-        setCandidatesError(null);
-        try {
-            const result = (await ordersApi.getTagRequestCandidates({ limit: 1000 })) as unknown;
-
-            if (!Array.isArray(result)) {
-                setCandidates([]);
-                setCandidatesError("Failed to load picked orders. Please refresh.");
-                return;
-            }
-
-            const parsed = result
-                .map(parseTagRequestCandidate)
-                .filter((candidate): candidate is TagRequestCandidate => candidate !== null);
-            setCandidates(parsed);
-            setSelectedCandidates((prev) => {
-                if (prev.length === 0) return prev;
-                const present = new Set(parsed.map((candidate) => candidate.inflow_order_id).filter(Boolean));
-                return prev.filter((candidateId) => present.has(candidateId));
-            });
-        } catch (err: any) {
-            const maybeError = err?.response?.data?.error;
-            setCandidatesError(
-                typeof maybeError === "string" && maybeError.trim()
-                    ? maybeError
-                    : "Failed to load picked orders. Please refresh."
-            );
-        } finally {
-            setCandidatesLoading(false);
-        }
+        await candidatesQuery.refetch();
     };
 
-    useEffect(() => {
-        void loadCandidates();
-    }, []);
+    useMemo(() => {
+        setSelectedCandidates((prev) => {
+            if (prev.length === 0) return prev;
+            const present = new Set(candidates.map((candidate) => candidate.inflow_order_id).filter(Boolean));
+            return prev.filter((candidateId) => present.has(candidateId));
+        });
+    }, [candidates]);
 
     const toggleCandidateSelected = (inflowOrderId: string, checked: boolean) => {
         setSelectedCandidates((prev) => {
@@ -174,48 +205,11 @@ export default function TagRequest() {
     const handleUpload = async () => {
         if (selectedOrders.length === 0) return;
 
-        setSubmitting(true);
         setStatus(null);
         try {
-            const response = await settingsApi.uploadCanopyOrders(selectedOrders);
-            if (response.success) {
-                setStatus({
-                    type: "success",
-                    message: "Orders uploaded to Canopy.",
-                    uploadedUrl: response.uploaded_url,
-                    filename: response.filename,
-                    count: response.count,
-                    teamsNotified: response.teams_notified,
-                    updatedOrders: response.updated_orders,
-                    missingOrders: response.missing_orders,
-                    eligibleOrders: response.eligible_orders,
-                    ineligibleOrders: response.ineligible_orders,
-                });
-                setSelectedCandidates([]);
-                void loadCandidates();
-            } else {
-                setStatus({
-                    type: "error",
-                    message: response.error || "Upload failed.",
-                });
-            }
-        } catch (err: any) {
-            const responseData = err?.response?.data as unknown;
-            const record = responseData && typeof responseData === "object" ? (responseData as Record<string, unknown>) : null;
-
-            const missingOrders = parseStringArray(record?.missing_orders);
-            const ineligibleOrders = parseIneligibleOrders(record?.ineligible_orders);
-            const backendError = typeof record?.error === "string" && record.error.trim() ? record.error.trim() : null;
-
-            setStatus({
-                type: "error",
-                message: backendError || "Upload failed.",
-                missingOrders,
-                ineligibleOrders,
-                eligibleOrders: parseStringArray(record?.eligible_orders),
-            });
-        } finally {
-            setSubmitting(false);
+            await uploadMutation.mutateAsync(selectedOrders);
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
@@ -467,11 +461,11 @@ export default function TagRequest() {
                             <Button
                                 type="button"
                                 onClick={() => setConfirmOpen(true)}
-                                disabled={selectedCount === 0 || submitting}
+                                disabled={selectedCount === 0 || uploadMutation.isPending}
                                 className="btn-lift"
                             >
                                 <UploadCloud className="mr-2 h-4 w-4" />
-                                {submitting ? "Uploading..." : "Upload orders"}
+                                {uploadMutation.isPending ? "Uploading..." : "Upload orders"}
                             </Button>
                         </div>
                     </CardContent>
@@ -494,7 +488,7 @@ export default function TagRequest() {
                             type="button"
                             variant="outline"
                             onClick={() => setConfirmOpen(false)}
-                            disabled={submitting}
+                            disabled={uploadMutation.isPending}
                         >
                             Cancel
                         </Button>
@@ -504,7 +498,7 @@ export default function TagRequest() {
                                 setConfirmOpen(false);
                                 void handleUpload();
                             }}
-                            disabled={submitting}
+                            disabled={uploadMutation.isPending}
                         >
                             Upload now
                         </Button>

@@ -115,6 +115,7 @@ export interface TagData {
 export interface OrderDetail extends Order {
   inflow_data?: Record<string, any>;
   asset_tag_required?: boolean;
+  teams_notifications?: TeamsNotification[];
 }
 
 export interface AssetTagSerial {
