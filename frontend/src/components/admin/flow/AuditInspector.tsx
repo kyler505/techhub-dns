@@ -2,6 +2,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 
 import type { SystemAuditItem } from "../../../api/observability";
 import type { AuditLog } from "../../../types/order";
+import { formatToCentralTime } from "../../../utils/timezone";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
@@ -70,7 +71,7 @@ export default function AuditInspector({
                     <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                             <Badge variant="secondary">{selectedEvent.action}</Badge>
-                            <span className="text-xs text-muted-foreground">{new Date(selectedEvent.timestamp).toLocaleString()}</span>
+                            <span className="text-xs text-muted-foreground">{formatToCentralTime(selectedEvent.timestamp)}</span>
                         </div>
                         <div className="text-sm font-medium text-foreground">
                             {selectedEvent.entity_type} <span className="font-mono">{selectedEvent.entity_id}</span>
@@ -156,7 +157,7 @@ export default function AuditInspector({
                             .map((log) => (
                                 <div key={log.id} className="rounded-lg border bg-card p-3">
                                     <div className="flex items-center justify-between gap-2">
-                                        <div className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</div>
+                                        <div className="text-xs text-muted-foreground">{formatToCentralTime(log.timestamp)}</div>
                                         <Badge variant={toCanonicalStatus(log.to_status) === "ISSUE" ? "destructive" : "secondary"}>{log.to_status}</Badge>
                                     </div>
                                     <div className="mt-1 text-sm text-foreground">

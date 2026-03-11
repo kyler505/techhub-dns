@@ -27,6 +27,7 @@ from app.models.system_setting import SystemSetting
 from app.models.order import Order
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.api.auth_middleware import get_current_user_email, require_admin
+from app.utils.timezone import to_utc_iso_z
 from app.services.audit_service import AuditService
 from app.services.print_job_service import (
     PrintJobService,
@@ -783,12 +784,7 @@ def _upload_compatibility_editor_staging_json(
 
 
 def _to_utc_iso_z(value: Optional[datetime]) -> Optional[str]:
-    if value is None:
-        return None
-    dt = value
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return to_utc_iso_z(value)
 
 
 def _normalize_admin_emails(raw_emails: list[str]) -> list[str]:
@@ -870,9 +866,7 @@ def update_system_setting(key: str):
         {
             "key": setting.key,
             "value": setting.value,
-            "updated_at": setting.updated_at.isoformat()
-            if setting.updated_at is not None
-            else None,
+            "updated_at": _to_utc_iso_z(setting.updated_at),
             "updated_by": setting.updated_by,
         }
     )
@@ -1741,7 +1735,7 @@ def upload_canopy_orders():
     db = get_db_session()
     try:
         sent_by = get_current_user_email() or "system"
-        sent_at = datetime.utcnow().isoformat()
+        sent_at = _to_utc_iso_z(datetime.utcnow())
         request_metadata = {
             "canopyorders_request_sent_at": sent_at,
             "canopyorders_request_filename": result.get("filename"),
@@ -1865,7 +1859,7 @@ def upload_canopy_orders_bypass():
         db = get_db_session()
         try:
             sent_by = get_current_user_email() or "system"
-            sent_at = datetime.utcnow().isoformat()
+            sent_at = _to_utc_iso_z(datetime.utcnow())
             request_metadata = {
                 "canopyorders_request_sent_at": sent_at,
                 "canopyorders_request_filename": result.get("filename"),

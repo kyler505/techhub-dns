@@ -8,6 +8,7 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 from app.config import settings
+from app.utils.timezone import to_utc_iso_z
 
 
 class Session(Base):
@@ -29,14 +30,18 @@ class Session(Base):
         user_agent: Browser/device info
         ip_address: Client IP address
     """
+
     __tablename__ = "sessions"
 
-    __table_args__ = (
-        Index("ix_sessions_user_id_created_at", "user_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_sessions_user_id_created_at", "user_id", "created_at"),)
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False, index=True)
     last_seen_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -50,7 +55,9 @@ class Session(Base):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if not self.expires_at:
-            self.expires_at = datetime.utcnow() + timedelta(hours=settings.session_max_age_hours)
+            self.expires_at = datetime.utcnow() + timedelta(
+                hours=settings.session_max_age_hours
+            )
 
     def is_valid(self) -> bool:
         """Check if session is still valid (not expired, not revoked)."""
@@ -68,9 +75,9 @@ class Session(Base):
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
-            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+            "created_at": to_utc_iso_z(self.created_at),
+            "expires_at": to_utc_iso_z(self.expires_at),
+            "last_seen_at": to_utc_iso_z(self.last_seen_at),
             "user_agent": self.user_agent,
             "ip_address": self.ip_address,
             "is_current": False,  # Set by caller

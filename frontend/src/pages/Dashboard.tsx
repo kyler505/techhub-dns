@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
-import {
-  analyticsApi,
-  StatusCountsResponse,
-  DeliveryPerformanceResponse,
-  WorkflowDailyTrendDataPoint,
-  FulfilledTotalDataPoint,
-} from "../api/analytics";
-import { ordersApi } from "../api/orders";
-import { Order, OrderStatus } from "../types/order";
+import { Order } from "../types/order";
 import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
 import WorkflowDailyLineChart from "../components/charts/WorkflowDailyLineChart";
 import FulfilledTotalsBarChart from "../components/charts/FulfilledTotalsBarChart";
 import { Activity, Package, CheckCircle2, Truck } from "lucide-react";
+import {
+  analyticsQueryKeys,
+  getDeliveredOrdersQueryOptions,
+  getDeliveryPerformanceQueryOptions,
+  getMonthlyFulfilledTotalsQueryOptions,
+  getOrderStatusCountsQueryOptions,
+  getWorkflowDailyTrendsQueryOptions,
+  getYearlyFulfilledTotalsQueryOptions,
+} from "../queries/analytics";
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -107,32 +109,64 @@ export default function Dashboard() {
     const value = searchParams.get("workflowRange");
     return value === "7" ? 7 : 30;
   });
-  // State for analytics data
-  const [statusCounts, setStatusCounts] = useState<StatusCountsResponse>({});
-  const [deliveryPerf, setDeliveryPerf] = useState<DeliveryPerformanceResponse>({
-    active_runs: 0,
-    completed_today: 0,
-    ready_for_delivery: 0,
-  });
-  const [workflowDailyTrends, setWorkflowDailyTrends] = useState<WorkflowDailyTrendDataPoint[]>([]);
-  const [monthlyFulfilledTotals, setMonthlyFulfilledTotals] = useState<FulfilledTotalDataPoint[]>([]);
-  const [yearlyFulfilledTotals, setYearlyFulfilledTotals] = useState<FulfilledTotalDataPoint[]>([]);
-  const [completedTodayOrders, setCompletedTodayOrders] = useState<Order[]>([]);
-  // Loading states
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [perfLoading, setPerfLoading] = useState(true);
-  const [trendsLoading, setTrendsLoading] = useState(true);
-  const [completedLoading, setCompletedLoading] = useState(true);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
-
-  // Error states
-  const [error, setError] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const socketReconnectTimeoutRef = useRef<number | null>(null);
   const lastSocketRefreshRef = useRef(0);
   const socketRefreshInFlightRef = useRef(false);
   const workflowTrendDaysRef = useRef<7 | 30>(30);
+  const queryClient = useQueryClient();
+
+  const statusCountsQuery = useQuery(getOrderStatusCountsQueryOptions());
+  const deliveryPerformanceQuery = useQuery(getDeliveryPerformanceQueryOptions());
+  const workflowDailyTrendsQuery = useQuery(getWorkflowDailyTrendsQueryOptions(workflowTrendDays));
+  const monthlyFulfilledTotalsQuery = useQuery(getMonthlyFulfilledTotalsQueryOptions());
+  const yearlyFulfilledTotalsQuery = useQuery(getYearlyFulfilledTotalsQueryOptions());
+  const deliveredOrdersQuery = useQuery(getDeliveredOrdersQueryOptions());
+
+  const statusCounts = statusCountsQuery.data ?? {};
+  const deliveryPerf = deliveryPerformanceQuery.data ?? {
+    active_runs: 0,
+    completed_today: 0,
+    ready_for_delivery: 0,
+  };
+  const workflowDailyTrends = workflowDailyTrendsQuery.data?.data ?? [];
+  const monthlyFulfilledTotals = monthlyFulfilledTotalsQuery.data?.data ?? [];
+  const yearlyFulfilledTotals = yearlyFulfilledTotalsQuery.data?.data ?? [];
+
+  const completedTodayOrders = useMemo((): Order[] => {
+    const deliveredOrders = deliveredOrdersQuery.data ?? [];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    return deliveredOrders
+      .filter((order) => {
+        if (!order.signature_captured_at) return false;
+        const signatureDate = new Date(order.signature_captured_at);
+        signatureDate.setHours(0, 0, 0, 0);
+        return signatureDate.getTime() === todayStart.getTime();
+      })
+      .sort((a, b) => {
+        const aTime = a.signature_captured_at ? new Date(a.signature_captured_at).getTime() : 0;
+        const bTime = b.signature_captured_at ? new Date(b.signature_captured_at).getTime() : 0;
+        return bTime - aTime;
+      });
+  }, [deliveredOrdersQuery.data]);
+
+  const statusLoading = statusCountsQuery.isPending;
+  const perfLoading = deliveryPerformanceQuery.isPending;
+  const trendsLoading = workflowDailyTrendsQuery.isPending || monthlyFulfilledTotalsQuery.isPending || yearlyFulfilledTotalsQuery.isPending;
+  const completedLoading = deliveredOrdersQuery.isPending;
+  const error =
+    statusCountsQuery.isError
+    || deliveryPerformanceQuery.isError
+    || workflowDailyTrendsQuery.isError
+    || monthlyFulfilledTotalsQuery.isError
+    || yearlyFulfilledTotalsQuery.isError
+    || deliveredOrdersQuery.isError
+      ? "Failed to load dashboard data"
+      : null;
 
   useEffect(() => {
     workflowTrendDaysRef.current = workflowTrendDays;
@@ -161,64 +195,12 @@ export default function Dashboard() {
     [searchParams, setSearchParams, workflowTrendDays],
   );
 
-  // Fetch all analytics data
-  const fetchAnalytics = async (silent: boolean = false, trendDays: 7 | 30 = workflowTrendDaysRef.current) => {
-    try {
-      setError(null);
-      if (!silent) {
-        setStatusLoading(true);
-        setPerfLoading(true);
-        setTrendsLoading(true);
-        setCompletedLoading(true);
-      }
-
-      // Fetch all data in parallel
-      const [counts, perf, dailyTrends, monthlyTotals, yearlyTotals, deliveredOrders] = await Promise.all([
-        analyticsApi.getOrderStatusCounts().catch(() => ({})),
-        analyticsApi.getDeliveryPerformance().catch(() => ({
-          active_runs: 0,
-          completed_today: 0,
-          ready_for_delivery: 0,
-        })),
-        analyticsApi.getWorkflowDailyTrends(trendDays).catch(() => ({ period: "day", data: [] })),
-        analyticsApi.getFulfilledTotals({ period: "month", months: 12 }).catch(() => ({ period: "month" as const, data: [] })),
-        analyticsApi.getFulfilledTotals({ period: "year", years: 5 }).catch(() => ({ period: "year" as const, data: [] })),
-        ordersApi.getOrders({ status: OrderStatus.DELIVERED }).catch(() => []),
-      ]);
-
-      setStatusCounts(counts);
-      setDeliveryPerf(perf);
-      setWorkflowDailyTrends(dailyTrends.data || []);
-      setMonthlyFulfilledTotals(monthlyTotals.data || []);
-      setYearlyFulfilledTotals(yearlyTotals.data || []);
-
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const completedToday = (deliveredOrders || [])
-        .filter((order) => {
-          if (!order.signature_captured_at) return false;
-          const signatureDate = new Date(order.signature_captured_at);
-          signatureDate.setHours(0, 0, 0, 0);
-          return signatureDate.getTime() === todayStart.getTime();
-        })
-        .sort((a, b) => {
-          const aTime = a.signature_captured_at ? new Date(a.signature_captured_at).getTime() : 0;
-          const bTime = b.signature_captured_at ? new Date(b.signature_captured_at).getTime() : 0;
-          return bTime - aTime;
-        });
-      setCompletedTodayOrders(completedToday);
-    } catch (err) {
-      console.error("Failed to fetch analytics:", err);
-      setError("Failed to load dashboard data");
-    } finally {
-      if (!silent) {
-        setStatusLoading(false);
-        setPerfLoading(false);
-        setTrendsLoading(false);
-        setCompletedLoading(false);
-      }
-    }
-  };
+  const refetchDashboardData = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: analyticsQueryKeys.all }),
+      queryClient.invalidateQueries({ queryKey: getDeliveredOrdersQueryOptions().queryKey }),
+    ]);
+  }, [queryClient]);
 
   const refreshFromSocket = () => {
     const now = Date.now();
@@ -227,7 +209,7 @@ export default function Dashboard() {
     }
     socketRefreshInFlightRef.current = true;
     lastSocketRefreshRef.current = now;
-    fetchAnalytics(true).finally(() => {
+    refetchDashboardData().finally(() => {
       socketRefreshInFlightRef.current = false;
     });
   };
@@ -235,23 +217,16 @@ export default function Dashboard() {
   useEffect(() => {
     const intervalMs = socketStatus === "connected" ? 15 * 60 * 1000 : 60 * 1000;
     const interval = window.setInterval(() => {
-      fetchAnalytics(true);
+      void refetchDashboardData();
     }, intervalMs);
 
     return () => {
       window.clearInterval(interval);
     };
-  }, [socketStatus]);
-
-  useEffect(() => {
-    fetchAnalytics(false, workflowTrendDays);
-  }, [workflowTrendDays]);
+  }, [refetchDashboardData, socketStatus]);
 
   // Setup Socket.IO for real-time updates
   useEffect(() => {
-    // Initial data fetch
-    fetchAnalytics();
-
     // Build Socket.IO URL
     const baseUrl = `${window.location.protocol}//${window.location.host}`;
 
@@ -333,9 +308,9 @@ export default function Dashboard() {
           currentSocket.disconnect();
           socketRef.current = null;
         }
-      } catch (e) {}
+      } catch (_e) {}
     };
-  }, []);
+  }, [refetchDashboardData]);
 
   const formatSignatureTime = (timestamp?: string) => {
     if (!timestamp) return "-";

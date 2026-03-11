@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 
 import type { SystemAuditItem } from "../../../api/observability";
+import { formatToCentralTime } from "../../../utils/timezone";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
@@ -35,7 +36,7 @@ export default function AuditTimeline({
             <CardHeader>
                 <CardTitle className="text-base">Timeline</CardTitle>
                 <CardDescription>
-                    Showing {timeline.length} event{timeline.length === 1 ? "" : "s"} since {new Date(sinceMillis).toLocaleString()}.
+                    Showing {timeline.length} event{timeline.length === 1 ? "" : "s"} since {formatToCentralTime(new Date(sinceMillis).toISOString())}.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -52,7 +53,7 @@ export default function AuditTimeline({
                 ) : (
                     <div className="space-y-2 max-h-[520px] overflow-auto pr-2">
                         {timeline.map((row) => {
-                            const ts = new Date(row.timestamp).toLocaleString();
+                            const ts = formatToCentralTime(row.timestamp);
                             const isOrder = normalize(row.entity_type) === "order";
                             const isSelected = selectedEventId === row.id;
                             return (
