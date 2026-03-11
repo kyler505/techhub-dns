@@ -34,8 +34,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
 import { extractApiErrorMessage } from "../utils/apiErrors";
+import { shouldThrowToBoundary } from "../utils/apiErrors";
 import { ordersQueryKeys } from "../queries/orders";
 import { formatToCentralTime } from "../utils/timezone";
+import { SectionErrorBoundary } from "../components/error-boundaries/AppErrorBoundaries";
 
 interface FeatureStatus {
     name: string;
@@ -181,6 +183,7 @@ export default function Admin() {
     const runtimeSummaryQuery = useQuery({
         queryKey: adminQueryKeys.runtimeSummary(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<RuntimeSummaryResponse> => {
             try {
                 return await observabilityApi.getRuntimeSummary();
@@ -195,6 +198,7 @@ export default function Admin() {
     const systemSettingsQuery = useQuery({
         queryKey: adminQueryKeys.systemSettings(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<SystemSettings> => {
             try {
                 return await settingsApi.getSettings();
@@ -209,6 +213,7 @@ export default function Admin() {
     const inflowWebhooksQuery = useQuery({
         queryKey: adminQueryKeys.inflowWebhooks(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<WebhookResponse[]> => {
             try {
                 const response = await inflowApi.listWebhooks();
@@ -224,6 +229,7 @@ export default function Admin() {
     const printJobsQuery = useQuery({
         queryKey: adminQueryKeys.printJobs(),
         enabled: adminQueriesEnabled,
+        throwOnError: shouldThrowToBoundary,
         queryFn: async (): Promise<PrintJobRecord[]> => {
             try {
                 const response = await settingsApi.getPrintJobs(undefined, 20);
@@ -728,6 +734,10 @@ export default function Admin() {
                     </TabsList>
 
                 <TabsContent value="overview" className="mt-4 space-y-6">
+                    <SectionErrorBoundary
+                        title="Runtime diagnostics failed"
+                        message="Try reloading the runtime summary panel. The rest of the admin screen is still available."
+                    >
                     <Card>
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
@@ -853,6 +863,7 @@ export default function Admin() {
                             )}
                         </CardContent>
                     </Card>
+                    </SectionErrorBoundary>
                 </TabsContent>
 
                 <TabsContent value="notifications" className="mt-4 space-y-6">
@@ -995,6 +1006,10 @@ export default function Admin() {
                                 </CardContent>
                             </Card>
 
+                            <SectionErrorBoundary
+                                title="Print recovery panel failed"
+                                message="Try reloading the print queue panel. The rest of the admin tools are still available."
+                            >
                             <Card className="overflow-hidden border-border/70 bg-card/95">
                                 <CardHeader className="gap-4 border-b bg-gradient-to-r from-muted/50 via-background to-background">
                                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1249,9 +1264,14 @@ export default function Admin() {
                                     </div>
                                 ) : null}
                             </CardContent>
-                        </Card>
-                    </div>
+                            </Card>
+                            </SectionErrorBoundary>
+                        </div>
 
+                    <SectionErrorBoundary
+                        title="Webhook management failed"
+                        message="Try reloading the webhook management panel. Other admin tools are still available."
+                    >
                     <Card>
                         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
@@ -1331,40 +1351,51 @@ export default function Admin() {
                             )}
                         </CardContent>
                     </Card>
+                    </SectionErrorBoundary>
                 </TabsContent>
 
                 <TabsContent value="flow" className="mt-4 space-y-6">
-                    <Suspense
-                        fallback={
-                            <Card>
-                                <CardContent className="p-6">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Loading flow...
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        }
+                    <SectionErrorBoundary
+                        title="Flow tools failed"
+                        message="Try reloading the flow admin tools."
                     >
-                        <FlowTab />
-                    </Suspense>
+                        <Suspense
+                            fallback={
+                                <Card>
+                                    <CardContent className="p-6">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Loading flow...
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            }
+                        >
+                            <FlowTab />
+                        </Suspense>
+                    </SectionErrorBoundary>
                 </TabsContent>
 
                 <TabsContent value="admins" className="mt-4 space-y-6">
-                    <Suspense
-                        fallback={
-                            <Card>
-                                <CardContent className="p-6">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Loading admins...
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        }
+                    <SectionErrorBoundary
+                        title="Admin access tools failed"
+                        message="Try reloading the admin access tools."
                     >
-                        <AdminsTab />
-                    </Suspense>
+                        <Suspense
+                            fallback={
+                                <Card>
+                                    <CardContent className="p-6">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Loading admins...
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            }
+                        >
+                            <AdminsTab />
+                        </Suspense>
+                    </SectionErrorBoundary>
                 </TabsContent>
             </Tabs>
 

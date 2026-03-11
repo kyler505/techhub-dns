@@ -1,9 +1,10 @@
 import base64
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy import and_, func, inspect, or_, select, union_all
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,7 @@ from app.models.user import User
 
 
 bp = Blueprint("observability", __name__)
+logger = logging.getLogger(__name__)
 
 
 _SENSITIVE_COLUMN_TOKENS = (
@@ -153,6 +155,43 @@ def _truncate_string(value: Optional[str], *, max_len: int) -> Optional[str]:
     return value[: max_len - 12] + "...<truncated>"
 
 
+def _parse_frontend_error_payload(raw_payload: Any) -> dict[str, Any]:
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
+    context = payload.get("context")
+    context_dict = context if isinstance(context, dict) else {}
+
+    return {
+        "type": _truncate_string(
+            str(payload.get("type") or "react_error_boundary"), max_len=100
+        ),
+        "name": _truncate_string(str(payload.get("name") or "Error"), max_len=200),
+        "message": _truncate_string(str(payload.get("message") or ""), max_len=2000),
+        "stack": _truncate_string(
+            payload.get("stack") if isinstance(payload.get("stack"), str) else None,
+            max_len=8000,
+        ),
+        "component_stack": _truncate_string(
+            payload.get("component_stack")
+            if isinstance(payload.get("component_stack"), str)
+            else None,
+            max_len=8000,
+        ),
+        "context": _truncate_json(
+            context_dict, max_depth=3, max_items=20, max_string_len=500
+        ),
+        "url": _truncate_string(
+            payload.get("url") if isinstance(payload.get("url"), str) else None,
+            max_len=1000,
+        ),
+        "user_agent": _truncate_string(
+            payload.get("user_agent")
+            if isinstance(payload.get("user_agent"), str)
+            else request.headers.get("User-Agent"),
+            max_len=1000,
+        ),
+    }
+
+
 def _encode_cursor(ts: datetime, row_id: str) -> str:
     payload = f"{_to_iso_z(ts) or ''}|{row_id}"
     return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
@@ -199,6 +238,29 @@ def _system_audit_select(model):
         model.old_value.label("old_value"),
         model.new_value.label("new_value"),
     )
+
+
+@bp.route("/frontend-error", methods=["POST"])
+def ingest_frontend_error():
+    """Accept authenticated frontend crash reports for server-side logging."""
+
+    payload = _parse_frontend_error_payload(request.get_json(silent=True))
+    logger.error(
+        "Frontend error boundary crash: type=%s name=%s user=%s path=%s message=%s context=%s",
+        payload["type"],
+        payload["name"],
+        getattr(g, "user_email", None) or getattr(g, "user_id", None) or "anonymous",
+        payload["url"],
+        payload["message"],
+        payload["context"],
+        extra={
+            "frontend_error": {
+                **payload,
+                "reported_at": _to_iso_z(datetime.now(timezone.utc)),
+            }
+        },
+    )
+    return jsonify({"accepted": True}), 202
 
 
 @bp.route("/table-stats", methods=["GET"])
