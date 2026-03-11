@@ -8,7 +8,7 @@ from uuid import UUID
 from typing import Union
 
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
-from app.utils.timezone import is_morning_in_cst, get_date_in_cst
+from app.utils.timezone import get_date_in_cst, is_morning_in_cst, to_utc_iso_z
 from sqlalchemy import func
 from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
@@ -414,8 +414,8 @@ class DeliveryRunService:
                     "Delivery run has changed since it was loaded. Refresh and try again.",
                     details={
                         "run_id": run_id_str,
-                        "expected_updated_at": expected_utc.isoformat(),
-                        "current_updated_at": current_utc.isoformat(),
+                        "expected_updated_at": to_utc_iso_z(expected_utc),
+                        "current_updated_at": to_utc_iso_z(current_utc),
                     },
                 )
 
@@ -477,7 +477,7 @@ class DeliveryRunService:
             description="Delivery run completed",
             audit_metadata={
                 "order_count": len(run.orders),
-                "completed_at": run.end_time.isoformat(),
+                "completed_at": to_utc_iso_z(run.end_time),
                 "fulfilled_orders": inflow_successes,
                 "remainders_created": remainder_results.get("remainder_count", 0),
             },
@@ -530,8 +530,8 @@ class DeliveryRunService:
                     "Delivery run has changed since it was loaded. Refresh and try again.",
                     details={
                         "run_id": run_id_str,
-                        "expected_updated_at": expected_utc.isoformat(),
-                        "current_updated_at": current_utc.isoformat(),
+                        "expected_updated_at": to_utc_iso_z(expected_utc),
+                        "current_updated_at": to_utc_iso_z(current_utc),
                     },
                 )
 
@@ -643,8 +643,8 @@ class DeliveryRunService:
                     "Delivery run has changed since it was loaded. Refresh and try again.",
                     details={
                         "run_id": run_id_str,
-                        "expected_updated_at": expected_utc.isoformat(),
-                        "current_updated_at": current_utc.isoformat(),
+                        "expected_updated_at": to_utc_iso_z(expected_utc),
+                        "current_updated_at": to_utc_iso_z(current_utc),
                     },
                 )
 

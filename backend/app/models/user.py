@@ -7,6 +7,7 @@ from sqlalchemy import Column, DateTime, String
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.utils.timezone import to_utc_iso_z
 
 
 class User(Base):
@@ -23,6 +24,7 @@ class User(Base):
         created_at: First login timestamp
         last_login_at: Most recent login timestamp
     """
+
     __tablename__ = "users"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -35,7 +37,9 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Relationships
-    sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship(
+        "Session", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -47,6 +51,6 @@ class User(Base):
             "email": self.email,
             "display_name": self.display_name,
             "department": self.department,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
+            "created_at": to_utc_iso_z(self.created_at),
+            "last_login_at": to_utc_iso_z(self.last_login_at),
         }
