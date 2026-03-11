@@ -2,6 +2,7 @@ import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { reportFrontendError } from "../../lib/errorReporting";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ErrorFallback } from "./ErrorFallback";
 
@@ -16,6 +17,12 @@ export function AppShellErrorBoundary({ children }: BoundaryProps) {
     <QueryErrorResetBoundary>
       {({ reset }) => (
         <ErrorBoundary
+          onError={(error, errorInfo) => {
+            void reportFrontendError(error, errorInfo, {
+              boundary: "app-shell",
+              pathname: location.pathname,
+            });
+          }}
           onReset={reset}
           resetKeys={[location.pathname]}
           fallback={({ error, reset: resetBoundary }) => (
@@ -44,6 +51,12 @@ export function RouteContentErrorBoundary({ children }: BoundaryProps) {
     <QueryErrorResetBoundary>
       {({ reset }) => (
         <ErrorBoundary
+          onError={(error, errorInfo) => {
+            void reportFrontendError(error, errorInfo, {
+              boundary: "route-content",
+              pathname: location.pathname,
+            });
+          }}
           onReset={reset}
           resetKeys={[location.pathname]}
           fallback={({ error, reset: resetBoundary }) => (
