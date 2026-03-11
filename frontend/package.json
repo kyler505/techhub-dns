@@ -17,6 +17,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.1.5",
+    "@tanstack/react-query": "^5.90.21",
     "axios": "^1.6.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -31,11 +32,12 @@
     "react-pdf": "10.2.0",
     "react-router-dom": "^6.20.1",
     "recharts": "^3.7.0",
-    "sonner": "^1.7.4",
     "socket.io-client": "^4.8.3",
+    "sonner": "^1.7.4",
     "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.91.3",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",

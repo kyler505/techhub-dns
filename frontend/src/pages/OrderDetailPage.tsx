@@ -1,13 +1,19 @@
 import { useState, useEffect, useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import { OrderDetail, OrderStatus, AuditLog, TeamsNotification } from "../types/order";
 import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
+import {
+    getOrderAuditQueryOptions,
+    getOrderDetailQueryOptions,
+    invalidateOrderQueries,
+} from "../queries/orders";
+import { OrderStatus } from "../types/order";
 import { extractApiErrorMessage } from "../utils/apiErrors";
 import { isValidOrderId } from "../utils/orderIds";
 
@@ -17,21 +23,141 @@ export default function OrderDetailPage() {
     const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
     const { user } = useAuth();
-    const [order, setOrder] = useState<OrderDetail | null>(null);
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-    const [notifications, setNotifications] = useState<TeamsNotification[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [generatingPicklist, setGeneratingPicklist] = useState(false);
-    const [retryingNotification, setRetryingNotification] = useState(false);
-    const [updatingStatus, setUpdatingStatus] = useState(false);
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
+    const queryClient = useQueryClient();
 
     // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
+
+    const orderQuery = useQuery({
+        ...getOrderDetailQueryOptions(orderId ?? ""),
+        enabled: Boolean(orderId),
+    });
+
+    const auditQuery = useQuery({
+        ...getOrderAuditQueryOptions(orderId ?? ""),
+        enabled: Boolean(orderId),
+    });
+
+    const order = orderQuery.data ?? null;
+    const auditLogs = auditQuery.data ?? [];
+    const notifications = order?.teams_notifications ?? [];
+    const loading = orderQuery.isPending || auditQuery.isPending;
+
+    const refreshOrder = async (): Promise<void> => {
+        if (!orderId) {
+            return;
+        }
+
+        await invalidateOrderQueries(queryClient, orderId);
+    };
+
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ newStatus, reason, expectedUpdatedAt }: {
+            newStatus: OrderStatus;
+            reason?: string;
+            expectedUpdatedAt?: string;
+        }) => {
+            if (!orderId) {
+                throw new Error("Order id is required");
+            }
+
+            return ordersApi.updateOrderStatus(orderId, {
+                status: newStatus,
+                reason,
+                expected_updated_at: expectedUpdatedAt,
+            });
+        },
+        onSuccess: async () => {
+            setTransitioningStatus(null);
+            await refreshOrder();
+        },
+        onError: async (error: any) => {
+            console.error("Failed to update status:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                await refreshOrder();
+                return;
+            }
+
+            toast.error("Failed to update order status");
+        },
+    });
+
+    const retryNotificationMutation = useMutation({
+        mutationFn: () => {
+            if (!orderId) {
+                throw new Error("Order id is required");
+            }
+
+            return ordersApi.retryNotification(orderId);
+        },
+        onSuccess: async () => {
+            await refreshOrder();
+        },
+        onError: (error) => {
+            console.error("Failed to retry notification:", error);
+            toast.error("Failed to retry notification");
+        },
+    });
+
+    const tagOrderMutation = useMutation({
+        mutationFn: (tagIds: string[]) => {
+            if (!orderId || !order) {
+                throw new Error("Order is unavailable");
+            }
+
+            return ordersApi.tagOrder(orderId, {
+                tag_ids: tagIds,
+                technician: getUserName(),
+                expected_updated_at: order.updated_at,
+            });
+        },
+        onSuccess: async () => {
+            await refreshOrder();
+        },
+        onError: async (error: any) => {
+            console.error("Failed to tag order:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                await refreshOrder();
+                return;
+            }
+
+            toast.error("Failed to tag order");
+        },
+    });
+
+    const generatePicklistMutation = useMutation({
+        mutationFn: () => {
+            if (!orderId || !order) {
+                throw new Error("Order is unavailable");
+            }
+
+            return ordersApi.generatePicklist(orderId, {
+                generated_by: getUserName(),
+                expected_updated_at: order.updated_at,
+            });
+        },
+        onSuccess: async () => {
+            await refreshOrder();
+        },
+        onError: async (error: any) => {
+            console.error("Failed to generate picklist:", error);
+            if (error?.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                await refreshOrder();
+                return;
+            }
+
+            const message = extractApiErrorMessage(error, "Failed to generate picklist");
+            toast.error(message);
+        },
+    });
 
     // Track WebSocket updates and refetch if this order might have changed
     useEffect(() => {
@@ -42,44 +168,18 @@ export default function OrderDetailPage() {
             if (lastWebSocketUpdate.current > 0) {
                 const orderUpdated = websocketOrders.some(wo => wo.id === orderId);
                 if (orderUpdated) {
-                    loadOrder();
+                    void refreshOrder();
                 }
             }
             lastWebSocketUpdate.current = updateTime;
         }
-    }, [websocketOrders, orderId]);
+    }, [orderId, websocketOrders]);
 
     useEffect(() => {
-        if (orderId) {
-            loadOrder();
+        if (invalidOrderId) {
             return;
         }
-        if (invalidOrderId) {
-            setLoading(false);
-            setOrder(null);
-            setAuditLogs([]);
-            setNotifications([]);
-        }
-    }, [invalidOrderId, orderId]);
-
-    const loadOrder = async () => {
-        if (!orderId) return;
-        setLoading(true);
-        try {
-            const [orderData, auditData] = await Promise.all([
-                ordersApi.getOrder(orderId),
-                ordersApi.getOrderAudit(orderId),
-            ]);
-            setOrder(orderData);
-            setAuditLogs(auditData);
-            // Notifications come from order detail response
-            setNotifications((orderData as any).teams_notifications || []);
-        } catch (error) {
-            console.error("Failed to load order:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [invalidOrderId]);
 
     const handleStatusChange = (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
@@ -93,39 +193,23 @@ export default function OrderDetailPage() {
 
     const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
-        setUpdatingStatus(true);
         try {
-            await ordersApi.updateOrderStatus(order.id, {
-                status: newStatus,
+            await updateStatusMutation.mutateAsync({
+                newStatus,
                 reason,
-                expected_updated_at: order.updated_at,
+                expectedUpdatedAt: order.updated_at,
             });
-            setTransitioningStatus(null);
-            loadOrder();
-        } catch (error: any) {
-            console.error("Failed to update status:", error);
-            if (error?.response?.status === 409) {
-                toast.error("Order changed by another user. Reloaded the latest details.");
-                loadOrder();
-                return;
-            }
-            toast.error("Failed to update order status");
-        } finally {
-            setUpdatingStatus(false);
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
     const handleRetryNotification = async () => {
         if (!order) return;
-        setRetryingNotification(true);
         try {
-            await ordersApi.retryNotification(order.id);
-            loadOrder();
-        } catch (error) {
-            console.error("Failed to retry notification:", error);
-            toast.error("Failed to retry notification");
-        } finally {
-            setRetryingNotification(false);
+            await retryNotificationMutation.mutateAsync();
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
@@ -134,43 +218,18 @@ export default function OrderDetailPage() {
     const handleTagOrder = async (tagIds: string[]) => {
         if (!order) return;
         try {
-            await ordersApi.tagOrder(order.id, {
-                tag_ids: tagIds,
-                technician: getUserName(),
-                expected_updated_at: order.updated_at,
-            });
-            loadOrder();
-        } catch (error: any) {
-            console.error("Failed to tag order:", error);
-            if (error?.response?.status === 409) {
-                toast.error("Order changed by another user. Reloaded the latest details.");
-                loadOrder();
-                return;
-            }
-            toast.error("Failed to tag order");
+            await tagOrderMutation.mutateAsync(tagIds);
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
     const handleGeneratePicklist = async () => {
         if (!order) return;
-        setGeneratingPicklist(true);
         try {
-            await ordersApi.generatePicklist(order.id, {
-                generated_by: getUserName(),
-                expected_updated_at: order.updated_at,
-            });
-            loadOrder();
-        } catch (error: any) {
-            console.error("Failed to generate picklist:", error);
-            if (error?.response?.status === 409) {
-                toast.error("Order changed by another user. Reloaded the latest details.");
-                loadOrder();
-                return;
-            }
-            const message = extractApiErrorMessage(error, "Failed to generate picklist");
-            toast.error(message);
-        } finally {
-            setGeneratingPicklist(false);
+            await generatePicklistMutation.mutateAsync();
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
@@ -188,7 +247,7 @@ export default function OrderDetailPage() {
                 toast.error(result.error || "Failed to request tags");
                 return;
             }
-            await loadOrder();
+            await refreshOrder();
         } catch (error: any) {
             const message = extractApiErrorMessage(error, "Failed to request tags");
             toast.error(message);
@@ -202,6 +261,10 @@ export default function OrderDetailPage() {
 
     if (invalidOrderId) {
         return <div className="p-4">Invalid order link</div>;
+    }
+
+    if (orderQuery.isError) {
+        return <div className="p-4">Failed to load order details</div>;
     }
 
     if (!order) {
@@ -225,8 +288,8 @@ export default function OrderDetailPage() {
                 onTagOrder={handleTagOrder}
                 onRequestTags={handleRequestTags}
                 onGeneratePicklist={handleGeneratePicklist}
-                generatingPicklist={generatingPicklist}
-                retryingNotification={retryingNotification}
+                generatingPicklist={generatePicklistMutation.isPending}
+                retryingNotification={retryNotificationMutation.isPending}
             />
             {transitioningStatus && (
                 <StatusTransition
@@ -237,7 +300,7 @@ export default function OrderDetailPage() {
                         performStatusChange(transitioningStatus.newStatus, reason)
                     }
                     onCancel={() => setTransitioningStatus(null)}
-                    submitting={updatingStatus}
+                    submitting={updateStatusMutation.isPending}
                 />
             )}
         </div>

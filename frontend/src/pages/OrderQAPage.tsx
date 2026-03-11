@@ -1,10 +1,12 @@
 
 import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import { Order } from "../types/order";
 import { ordersApi } from "../api/orders";
+import { getOrderDetailQueryOptions, invalidateOrderQueries } from "../queries/orders";
+import type { OrderDetail } from "../types/order";
 import { formatToCentralTime } from "../utils/timezone";
 
 type QAMethod = "Delivery" | "Shipping";
@@ -67,34 +69,34 @@ export default function OrderQAPage() {
     const { orderId } = useParams<{ orderId: string }>();
     const { user } = useAuth();
 
-    const [order, setOrder] = useState<Order | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [submittingQa, setSubmittingQa] = useState(false);
     const [form, setForm] = useState<QAFormState>(() => defaultForm(""));
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    const orderQuery = useQuery({
+        ...getOrderDetailQueryOptions(orderId ?? ""),
+        enabled: Boolean(orderId),
+        retry: false,
+    });
+
+    const order = orderQuery.data ?? null;
+    const loading = orderQuery.isPending;
 
     useEffect(() => {
-        if (orderId) {
-            loadOrder(orderId);
+        if (order) {
+            initializeForm(order);
         }
-    }, [orderId]);
+    }, [order]);
 
-    const loadOrder = async (id: string) => {
-        setLoading(true);
-        try {
-            const data = await ordersApi.getOrder(id);
-            setOrder(data);
-            initializeForm(data);
-        } catch (error) {
-            console.error("Failed to load order:", error);
+    useEffect(() => {
+        if (orderQuery.isError) {
+            console.error("Failed to load order:", orderQuery.error);
             toast.error("Failed to load order details.");
             navigate("/order-qa");
-        } finally {
-            setLoading(false);
         }
-    };
+    }, [navigate, orderQuery.error, orderQuery.isError]);
 
-    const initializeForm = (order: Order) => {
+    const initializeForm = (order: OrderDetail) => {
         const orderNumber = (order.inflow_order_id || order.id || "").toString();
         const savedRaw = localStorage.getItem(storageKey(order.id));
 
@@ -130,19 +132,15 @@ export default function OrderQAPage() {
         }
 
         try {
-            // Submit QA to backend
-            // Note: 'technician' is sent as empty string or whatever is in state,
-            // but backend will override it with the authenticated user.
-            await ordersApi.submitQa(order.id, {
+            await submitQaMutation.mutateAsync({
                 responses: {
                     ...form,
-                    qaSignature: user?.display_name || user?.email || "System", // Force auto-assign signature
+                    qaSignature: user?.display_name || user?.email || "System",
                 },
-                technician: user?.email || "system", // Fallback for types, backend ignores this for auth user
+                technician: user?.email || "system",
                 expected_updated_at: order.updated_at,
             });
 
-            // Also save locally for UI state (optional history)
             const payload: SavedQAChecklist = {
                 orderId: order.id,
                 inflowOrderId: order.inflow_order_id || order.id,
@@ -152,19 +150,36 @@ export default function OrderQAPage() {
             localStorage.setItem(storageKey(order.id), JSON.stringify(payload));
 
             toast.success("QA checklist submitted successfully!");
-            navigate("/order-qa"); // Go back to dashboard
-        } catch (error: any) {
-            console.error("Failed to submit QA:", error);
-            if (error?.response?.status === 409) {
-                toast.error("Order changed by another user. Reloaded the latest details.");
-                await loadOrder(order.id);
-                return;
-            }
-            toast.error("Failed to submit QA checklist. Please try again.");
-        } finally {
-            setSubmittingQa(false);
+            navigate("/order-qa");
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
+
+    const submitQaMutation = useMutation({
+        mutationFn: (payload: { responses: Record<string, unknown>; technician: string; expected_updated_at?: string }) => {
+            if (!order) {
+                throw new Error("Order is unavailable");
+            }
+
+            return ordersApi.submitQa(order.id, payload);
+        },
+        onSuccess: async () => {
+            if (orderId) {
+                await invalidateOrderQueries(queryClient, orderId);
+            }
+        },
+        onError: async (error: any) => {
+            console.error("Failed to submit QA:", error);
+            if (error?.response?.status === 409 && orderId) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                await invalidateOrderQueries(queryClient, orderId);
+                return;
+            }
+
+            toast.error("Failed to submit QA checklist. Please try again.");
+        },
+    });
 
     if (loading) {
         return (
@@ -327,7 +342,7 @@ export default function OrderQAPage() {
                     <button
                         type="button"
                         onClick={() => navigate(-1)}
-                        disabled={submittingQa}
+                        disabled={submitQaMutation.isPending}
                         className="text-sm font-medium text-gray-600 hover:text-gray-900 px-4 py-2"
                     >
                         Cancel
@@ -336,13 +351,13 @@ export default function OrderQAPage() {
                     <button
                         type="button"
                         onClick={submitQA}
-                        disabled={submittingQa || !isFormComplete(form)}
+                        disabled={submitQaMutation.isPending || !isFormComplete(form)}
                         className={`rounded-md px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors ${isFormComplete(form)
                             ? 'bg-[#800000] hover:bg-[#660000]'
                             : 'bg-gray-300 cursor-not-allowed'
                             }`}
                     >
-                        {submittingQa ? 'Submitting...' : 'Submit QA Checklist'}
+                        {submitQaMutation.isPending ? 'Submitting...' : 'Submit QA Checklist'}
                     </button>
                 </div>
             </div>

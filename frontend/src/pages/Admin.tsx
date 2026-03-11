@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, useEffect, lazy, Suspense } from "react";
+import { useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { inflowApi, WebhookResponse } from "../api/inflow";
 import { apiClient } from "../api/client";
@@ -33,6 +34,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
 import { extractApiErrorMessage } from "../utils/apiErrors";
+import { ordersQueryKeys } from "../queries/orders";
 import { formatToCentralTime } from "../utils/timezone";
 
 interface FeatureStatus {
@@ -50,6 +52,22 @@ interface SystemStatus {
     sharepoint: FeatureStatus;
     inflow_sync: FeatureStatus;
 }
+
+const adminQueryKeys = {
+    all: ["admin"] as const,
+    systemStatus: () => [...adminQueryKeys.all, "system-status"] as const,
+    runtimeSummary: () => [...adminQueryKeys.all, "runtime-summary"] as const,
+    systemSettings: () => [...adminQueryKeys.all, "system-settings"] as const,
+    inflowWebhooks: () => [...adminQueryKeys.all, "inflow-webhooks"] as const,
+    printJobs: () => [...adminQueryKeys.all, "print-jobs"] as const,
+};
+
+const FALLBACK_SYSTEM_STATUS: SystemStatus = {
+    saml_auth: { name: "TAMU SSO", enabled: false, configured: false, status: "disabled" },
+    graph_api: { name: "Microsoft Graph", enabled: false, configured: false, status: "disabled" },
+    sharepoint: { name: "SharePoint Storage", enabled: true, configured: true, status: "active" },
+    inflow_sync: { name: "Inflow Sync", enabled: true, configured: true, status: "active" },
+};
 
 const FlowTab = lazy(() => import("../components/admin/FlowTab"));
 const AdminsTab = lazy(() => import("../components/admin/AdminsTab"));
@@ -120,18 +138,10 @@ interface PrintJobOrderSummary {
 
 export default function Admin() {
     const { user, isAdmin, isLoading: authLoading } = useAuth();
-    const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
-    const [runtimeSummary, setRuntimeSummary] = useState<RuntimeSummaryResponse | null>(null);
-    const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [runtimeSummaryLoading, setRuntimeSummaryLoading] = useState(false);
+    const queryClient = useQueryClient();
 
     const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations" | "admins" | "flow">("overview");
 
-    // Inflow webhook state
-    const [inflowWebhooks, setInflowWebhooks] = useState<WebhookResponse[]>([]);
-    const [registeringWebhook, setRegisteringWebhook] = useState(false);
-    const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null);
     const [webhookToDelete, setWebhookToDelete] = useState<WebhookResponse | null>(null);
 
     // Testing state
@@ -145,15 +155,196 @@ export default function Admin() {
     const [canopyBypassResult, setCanopyBypassResult] = useState<CanopyOrdersBypassUploadResult | null>(null);
     const [canopyBypassError, setCanopyBypassError] = useState<string | null>(null);
 
-    const [togglingSettingKey, setTogglingSettingKey] = useState<string | null>(null);
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
     const [manualSyncing, setManualSyncing] = useState(false);
-    const [printJobs, setPrintJobs] = useState<PrintJobRecord[]>([]);
-    const [printJobsLoading, setPrintJobsLoading] = useState(false);
-    const [retryingPrintOrderId, setRetryingPrintOrderId] = useState<string | null>(null);
 
     const deleteCancelButtonRef = useRef<HTMLButtonElement | null>(null);
     const syncCancelButtonRef = useRef<HTMLButtonElement | null>(null);
+
+    const adminQueriesEnabled = isAdmin && !authLoading;
+
+    const systemStatusQuery = useQuery({
+        queryKey: adminQueryKeys.systemStatus(),
+        enabled: adminQueriesEnabled,
+        queryFn: async (): Promise<SystemStatus> => {
+            try {
+                const response = await apiClient.get<SystemStatus>("/system/status");
+                return response.data;
+            } catch (error) {
+                console.error("Failed to load system status:", error);
+                toast.error("Failed to load system status. Showing last-known defaults.");
+                return FALLBACK_SYSTEM_STATUS;
+            }
+        },
+    });
+
+    const runtimeSummaryQuery = useQuery({
+        queryKey: adminQueryKeys.runtimeSummary(),
+        enabled: adminQueriesEnabled,
+        queryFn: async (): Promise<RuntimeSummaryResponse> => {
+            try {
+                return await observabilityApi.getRuntimeSummary();
+            } catch (error) {
+                console.error("Failed to load runtime summary:", error);
+                toast.error("Failed to load runtime diagnostics.");
+                throw error;
+            }
+        },
+    });
+
+    const systemSettingsQuery = useQuery({
+        queryKey: adminQueryKeys.systemSettings(),
+        enabled: adminQueriesEnabled,
+        queryFn: async (): Promise<SystemSettings> => {
+            try {
+                return await settingsApi.getSettings();
+            } catch (error) {
+                console.error("Failed to load system settings:", error);
+                toast.error("Failed to load notification settings.");
+                throw error;
+            }
+        },
+    });
+
+    const inflowWebhooksQuery = useQuery({
+        queryKey: adminQueryKeys.inflowWebhooks(),
+        enabled: adminQueriesEnabled,
+        queryFn: async (): Promise<WebhookResponse[]> => {
+            try {
+                const response = await inflowApi.listWebhooks();
+                return response.webhooks;
+            } catch (error) {
+                console.error("Failed to load Inflow webhooks:", error);
+                toast.error("Failed to load Inflow webhooks.");
+                throw error;
+            }
+        },
+    });
+
+    const printJobsQuery = useQuery({
+        queryKey: adminQueryKeys.printJobs(),
+        enabled: adminQueriesEnabled,
+        queryFn: async (): Promise<PrintJobRecord[]> => {
+            try {
+                const response = await settingsApi.getPrintJobs(undefined, 20);
+                return response.jobs;
+            } catch (error) {
+                console.error("Failed to load print jobs:", error);
+                toast.error("Failed to load picklist print jobs.");
+                throw error;
+            }
+        },
+    });
+
+    const systemStatus = systemStatusQuery.data ?? null;
+    const runtimeSummary = runtimeSummaryQuery.data ?? null;
+    const systemSettings = systemSettingsQuery.data ?? null;
+    const inflowWebhooks = inflowWebhooksQuery.data ?? [];
+    const printJobs = printJobsQuery.data ?? [];
+    const loading =
+        adminQueriesEnabled
+        && (
+            systemStatusQuery.isPending
+            || runtimeSummaryQuery.isPending
+            || systemSettingsQuery.isPending
+            || inflowWebhooksQuery.isPending
+            || printJobsQuery.isPending
+        );
+    const runtimeSummaryLoading = runtimeSummaryQuery.isFetching;
+    const printJobsLoading = printJobsQuery.isFetching;
+
+    const toggleSettingMutation = useMutation({
+        mutationFn: ({ key, value }: { key: keyof SystemSettings; value: string }) => settingsApi.updateSetting(key, value, user?.email),
+        onSuccess: (_data, variables) => {
+            queryClient.setQueryData<SystemSettings | undefined>(adminQueryKeys.systemSettings(), (current) => {
+                if (!current) {
+                    return current;
+                }
+
+                return {
+                    ...current,
+                    [variables.key]: {
+                        ...current[variables.key],
+                        value: variables.value,
+                        updated_at: new Date().toISOString(),
+                        updated_by: user?.email ?? null,
+                    },
+                };
+            });
+            toast.success("Setting updated", { description: `${variables.key} = ${variables.value}` });
+        },
+        onError: (error: any) => {
+            console.error("Failed to update setting:", error);
+            toast.error("Failed to update setting", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        },
+    });
+
+    const registeringWebhook = false;
+    const registerWebhookMutation = useMutation({
+        mutationFn: async () => {
+            const defaults = await inflowApi.getWebhookDefaults();
+            return inflowApi.registerWebhook({
+                url: defaults.url || "",
+                events: defaults.events || [],
+            });
+        },
+        onSuccess: (webhook) => {
+            queryClient.setQueryData<WebhookResponse[] | undefined>(adminQueryKeys.inflowWebhooks(), (current = []) => {
+                const withoutExisting = current.filter((item) => item.webhook_id !== webhook.webhook_id);
+                return [webhook, ...withoutExisting];
+            });
+            toast.success("Inflow webhook registered");
+        },
+        onError: (error: any) => {
+            console.error("Failed to register webhook:", error);
+            toast.error("Failed to register webhook", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        },
+    });
+
+    const deletingWebhookId = null;
+    const deleteWebhookMutation = useMutation({
+        mutationFn: async (webhookId: string) => {
+            await inflowApi.deleteWebhook(webhookId);
+            return webhookId;
+        },
+        onSuccess: (webhookId) => {
+            queryClient.setQueryData<WebhookResponse[] | undefined>(adminQueryKeys.inflowWebhooks(), (current = []) =>
+                current.filter((item) => item.webhook_id !== webhookId)
+            );
+            toast.success("Webhook deleted");
+            setWebhookToDelete(null);
+        },
+        onError: (error: any) => {
+            console.error("Failed to delete webhook:", error);
+            toast.error("Failed to delete webhook", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        },
+    });
+
+    const retryPrintJobMutation = useMutation({
+        mutationFn: (orderId: string) => settingsApi.retryPicklistPrint(orderId),
+        onSuccess: (response) => {
+            queryClient.setQueryData<PrintJobRecord[] | undefined>(adminQueryKeys.printJobs(), (current = []) => {
+                const nextJobs = [response.job, ...current.filter((job) => job.id !== response.job.id)];
+                return nextJobs.slice(0, 20);
+            });
+            toast.success("Picklist reprint queued");
+        },
+        onError: (error: any) => {
+            console.error("Failed to queue picklist reprint:", error);
+            toast.error("Failed to queue picklist reprint", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        },
+    });
+
+    const togglingSettingKey = toggleSettingMutation.isPending ? String(toggleSettingMutation.variables?.key ?? "") : null;
+    const retryingPrintOrderId = retryPrintJobMutation.isPending ? retryPrintJobMutation.variables ?? null : null;
 
     const autoPrintSetting = getSetting(systemSettings, "picklist_auto_print_enabled");
     const autoPrintEnabled = autoPrintSetting.value === "true";
@@ -212,152 +403,57 @@ export default function Admin() {
         };
     }, [printJobSummaries]);
 
-    useEffect(() => {
-        if (!isAdmin) {
-            setLoading(false);
-            return;
-        }
-
-        void loadSystemStatus();
-        void loadRuntimeSummary();
-        void loadInflowWebhooks();
-        void loadSystemSettings();
-        void loadPrintJobs();
-    }, [isAdmin]);
-
     const loadSystemStatus = async () => {
-        setLoading(true);
-        try {
-            const response = await apiClient.get("/system/status");
-            setSystemStatus(response.data);
-        } catch (error) {
-            console.error("Failed to load system status:", error);
-            toast.error("Failed to load system status. Showing last-known defaults.");
-            setSystemStatus({
-                saml_auth: { name: "TAMU SSO", enabled: false, configured: false, status: "disabled" },
-                graph_api: { name: "Microsoft Graph", enabled: false, configured: false, status: "disabled" },
-                sharepoint: { name: "SharePoint Storage", enabled: true, configured: true, status: "active" },
-                inflow_sync: { name: "Inflow Sync", enabled: true, configured: true, status: "active" },
-            });
-        } finally {
-            setLoading(false);
-        }
+        await systemStatusQuery.refetch();
     };
 
     const loadSystemSettings = async () => {
-        try {
-            const settings = await settingsApi.getSettings();
-            setSystemSettings(settings);
-        } catch (error) {
-            console.error("Failed to load system settings:", error);
-            toast.error("Failed to load notification settings.");
-        }
+        await systemSettingsQuery.refetch();
     };
 
     const loadRuntimeSummary = async () => {
-        setRuntimeSummaryLoading(true);
-        try {
-            const summary = await observabilityApi.getRuntimeSummary();
-            setRuntimeSummary(summary);
-        } catch (error) {
-            console.error("Failed to load runtime summary:", error);
-            toast.error("Failed to load runtime diagnostics.");
-        } finally {
-            setRuntimeSummaryLoading(false);
-        }
+        await runtimeSummaryQuery.refetch();
     };
 
     const loadInflowWebhooks = async () => {
-        try {
-            const response = await inflowApi.listWebhooks();
-            setInflowWebhooks(response.webhooks);
-        } catch (error) {
-            console.error("Failed to load Inflow webhooks:", error);
-            toast.error("Failed to load Inflow webhooks.");
-        }
+        await inflowWebhooksQuery.refetch();
     };
 
     const loadPrintJobs = async () => {
-        setPrintJobsLoading(true);
-        try {
-            const response = await settingsApi.getPrintJobs(undefined, 20);
-            setPrintJobs(response.jobs);
-        } catch (error) {
-            console.error("Failed to load print jobs:", error);
-            toast.error("Failed to load picklist print jobs.");
-        } finally {
-            setPrintJobsLoading(false);
-        }
+        await printJobsQuery.refetch();
     };
 
-    const handleToggleSetting = async (key: string, currentValue: string) => {
+    const handleToggleSetting = async (key: keyof SystemSettings, currentValue: string) => {
         const newValue = currentValue === "true" ? "false" : "true";
         try {
-            setTogglingSettingKey(key);
-            await settingsApi.updateSetting(key, newValue, user?.email);
-            await loadSystemSettings();
-            toast.success("Setting updated", { description: `${key} = ${newValue}` });
-        } catch (error: any) {
-            console.error("Failed to update setting:", error);
-            toast.error("Failed to update setting", {
-                description: extractApiErrorMessage(error, "Please try again."),
-            });
-        } finally {
-            setTogglingSettingKey(null);
+            await toggleSettingMutation.mutateAsync({ key, value: newValue });
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
     const handleAutoRegisterWebhook = async () => {
-        setRegisteringWebhook(true);
         try {
-            const defaults = await inflowApi.getWebhookDefaults();
-            await inflowApi.registerWebhook({
-                url: defaults.url || "",
-                events: defaults.events || [],
-            });
-            toast.success("Inflow webhook registered");
-            await loadInflowWebhooks();
-        } catch (error: any) {
-            console.error("Failed to register webhook:", error);
-            toast.error("Failed to register webhook", {
-                description: extractApiErrorMessage(error, "Please try again."),
-            });
-        } finally {
-            setRegisteringWebhook(false);
+            await registerWebhookMutation.mutateAsync();
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
     const handleRetryPrintJob = async (orderId: string) => {
-        setRetryingPrintOrderId(orderId);
         try {
-            await settingsApi.retryPicklistPrint(orderId);
-            toast.success("Picklist reprint queued");
-            await loadPrintJobs();
-        } catch (error: any) {
-            console.error("Failed to queue picklist reprint:", error);
-            toast.error("Failed to queue picklist reprint", {
-                description: extractApiErrorMessage(error, "Please try again."),
-            });
-        } finally {
-            setRetryingPrintOrderId(null);
+            await retryPrintJobMutation.mutateAsync(orderId);
+        } catch {
+            // Handled by mutation callbacks.
         }
     };
 
-    const handleDeleteInflowWebhook = async (webhookId: string) => {
+    const handleDeleteInflowWebhook = async (webhookId: string): Promise<boolean> => {
         try {
-            setDeletingWebhookId(webhookId);
-            await inflowApi.deleteWebhook(webhookId);
-            toast.success("Webhook deleted");
-            await loadInflowWebhooks();
+            await deleteWebhookMutation.mutateAsync(webhookId);
             return true;
-        } catch (error: any) {
-            console.error("Failed to delete webhook:", error);
-            toast.error("Failed to delete webhook", {
-                description: extractApiErrorMessage(error, "Please try again."),
-            });
+        } catch {
             return false;
-        } finally {
-            setDeletingWebhookId(null);
         }
     };
 
@@ -573,6 +669,11 @@ export default function Admin() {
             toast.message("Manual sync started", { description: "Fetching recent Started orders from Inflow." });
             const res = await apiClient.post("/system/sync");
             toast.success("Manual sync completed", { description: res.data?.message || undefined });
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ordersQueryKeys.lists() }),
+                queryClient.invalidateQueries({ queryKey: adminQueryKeys.runtimeSummary() }),
+                queryClient.invalidateQueries({ queryKey: adminQueryKeys.systemStatus() }),
+            ]);
         } catch (error: any) {
             toast.error("Manual sync failed", { description: extractApiErrorMessage(error, "Please try again.") });
         } finally {
@@ -600,9 +701,13 @@ export default function Admin() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                            void loadSystemStatus();
-                            void loadSystemSettings();
-                            void loadInflowWebhooks();
+                            void Promise.all([
+                                loadSystemStatus(),
+                                loadSystemSettings(),
+                                loadInflowWebhooks(),
+                                loadRuntimeSummary(),
+                                loadPrintJobs(),
+                            ]);
                             toast.message("Refreshing admin data");
                         }}
                         className="btn-lift"
@@ -1158,7 +1263,7 @@ export default function Admin() {
                                 disabled={registeringWebhook}
                                 className="btn-lift"
                             >
-                                {registeringWebhook ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                {registerWebhookMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Register default webhook
                             </Button>
                         </CardHeader>
@@ -1293,7 +1398,7 @@ export default function Admin() {
                             type="button"
                             variant="outline"
                             onClick={() => setWebhookToDelete(null)}
-                            disabled={deletingWebhookId !== null}
+                            disabled={deleteWebhookMutation.isPending}
                         >
                             Cancel
                         </Button>
@@ -1301,9 +1406,9 @@ export default function Admin() {
                             type="button"
                             variant="destructive"
                             onClick={() => void confirmDeleteWebhook()}
-                            disabled={deletingWebhookId !== null}
+                            disabled={deleteWebhookMutation.isPending}
                         >
-                            {deletingWebhookId !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {deleteWebhookMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Delete
                         </Button>
                     </DialogFooter>
