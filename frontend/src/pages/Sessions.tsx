@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth, Session } from '../contexts/AuthContext';
 import axios from 'axios';
+import { formatToCentralTime } from '../utils/timezone';
 
 export default function Sessions() {
     const { user, logout } = useAuth();
@@ -65,9 +66,9 @@ export default function Sessions() {
         }
     };
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString();
-    };
+const formatDate = (dateString: string) => {
+    return formatToCentralTime(dateString);
+};
 
     const parseUserAgent = (ua: string | null): string => {
         if (!ua) return 'Unknown device';

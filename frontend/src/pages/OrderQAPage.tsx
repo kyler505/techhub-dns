@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { Order } from "../types/order";
 import { ordersApi } from "../api/orders";
+import { formatToCentralTime } from "../utils/timezone";
 
 type QAMethod = "Delivery" | "Shipping";
 
@@ -186,7 +187,7 @@ export default function OrderQAPage() {
                         </p>
                         {lastSavedAt && (
                             <p className="text-xs text-gray-500 mt-1">
-                                Previously submitted: {new Date(lastSavedAt).toLocaleString()}
+                                Previously submitted: {formatToCentralTime(lastSavedAt)}
                             </p>
                         )}
                     </div>

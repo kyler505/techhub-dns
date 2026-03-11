@@ -33,6 +33,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Trash2, Zap } from "lucide-react";
 import { extractApiErrorMessage } from "../utils/apiErrors";
+import { formatToCentralTime } from "../utils/timezone";
 
 interface FeatureStatus {
     name: string;
@@ -89,8 +90,7 @@ const parseCanopyOrdersBypassInput = (input: string) => {
 
 const formatTimestamp = (value?: string | null) => {
     if (!value) return "-";
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+    return formatToCentralTime(value);
 };
 
 const getPrintJobBadgeVariant = (status: string): "success" | "destructive" | "secondary" => {
@@ -517,9 +517,7 @@ export default function Admin() {
 
     const runtimeGeneratedLabel = useMemo(() => {
         if (!runtimeSummary?.generated_at) return null;
-        const generated = new Date(runtimeSummary.generated_at);
-        if (Number.isNaN(generated.getTime())) return runtimeSummary.generated_at;
-        return generated.toLocaleString();
+        return formatToCentralTime(runtimeSummary.generated_at);
     }, [runtimeSummary]);
 
     if (authLoading || loading) {
@@ -711,7 +709,7 @@ export default function Admin() {
                                                 </div>
                                                 <div className="flex items-center justify-between gap-3">
                                                     <span>Last webhook event</span>
-                                                    <span className="text-right text-foreground">{runtimeSummary.inflow.last_webhook_received_at ? new Date(runtimeSummary.inflow.last_webhook_received_at).toLocaleString() : "Never"}</span>
+                                                    <span className="text-right text-foreground">{runtimeSummary.inflow.last_webhook_received_at ? formatToCentralTime(runtimeSummary.inflow.last_webhook_received_at) : "Never"}</span>
                                                 </div>
                                                 <div className="flex items-center justify-between gap-3">
                                                     <span>CORS origins</span>

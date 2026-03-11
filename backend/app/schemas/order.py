@@ -1,16 +1,14 @@
 from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 from app.models.order import OrderStatus, ShippingWorkflowStatus
+from app.utils.timezone import to_utc_iso_z
 
 
 def _serialize_datetime_utc(value):
     if isinstance(value, datetime):
-        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
-            value = value.replace(tzinfo=timezone.utc)
-
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return to_utc_iso_z(value)
 
     return value
 

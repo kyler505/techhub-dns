@@ -18,6 +18,7 @@ from app.schemas.delivery_run import (
 )
 from app.models.delivery_run import VehicleEnum
 from app.utils.exceptions import ValidationError
+from app.utils.timezone import to_utc_iso_z
 from pydantic import ValidationError as PydanticValidationError
 
 bp = Blueprint("delivery_runs", __name__)
@@ -44,7 +45,7 @@ def _broadcast_active_runs_sync(db_session: Session = None):
                     "status": r.status.value
                     if hasattr(r.status, "value")
                     else str(r.status),
-                    "start_time": r.start_time.isoformat() if r.start_time else None,
+                    "start_time": to_utc_iso_z(r.start_time),
                     "order_ids": [str(o.id) for o in r.orders],
                 }
             )
