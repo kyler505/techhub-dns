@@ -98,7 +98,7 @@ export default function OrderQAChecklist() {
                             <input
                                 id="qa-checklist-search"
                                 name="qaChecklistSearch"
-                                className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#800000]"
+                                className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-maroon-700"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Search orders"
@@ -147,7 +147,7 @@ export default function OrderQAChecklist() {
                                                 <button
                                                     type="button"
                                                     onClick={() => openQa(o.id)}
-                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2 btn-lift"
+                                                    className="px-3 py-1.5 text-sm bg-maroon-700 text-white rounded hover:bg-maroon-800 flex items-center gap-2 btn-lift"
                                                 >
                                                     {qaButtonLabel}
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">

@@ -76,7 +76,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="shipped_count"
-          stroke="#0f766e"
+          stroke="hsl(var(--primary))"
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 5 }}
@@ -85,7 +85,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="delivered_count"
-          stroke="#0284c7"
+          stroke="hsl(var(--secondary))"
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 5 }}
@@ -94,7 +94,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="fulfilled_count"
-          stroke="#500000"
+          stroke="hsl(var(--accent))"
           strokeWidth={2.5}
           dot={false}
           activeDot={{ r: 5 }}
@@ -103,7 +103,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="picked_count"
-          stroke="#a16207"
+          stroke="hsl(var(--secondary))"
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 5 }}
