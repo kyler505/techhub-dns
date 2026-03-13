@@ -47,7 +47,7 @@ export default function FulfilledTotalsBarChart({ data, loading }: FulfilledTota
           labelFormatter={(label: ReactNode) => String(label)}
           formatter={(value: ReactNode) => [value, "Fulfilled"]}
         />
-        <Bar dataKey="fulfilled_count" fill="#500000" radius={[6, 6, 0, 0]} name="Fulfilled" />
+        <Bar dataKey="fulfilled_count" fill="hsl(var(--accent))" radius={[6, 6, 0, 0]} name="Fulfilled" />
       </BarChart>
     </ResponsiveContainer>
   );

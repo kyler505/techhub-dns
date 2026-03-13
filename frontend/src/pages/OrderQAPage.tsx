@@ -276,14 +276,14 @@ export default function OrderQAPage() {
                                 setter: () => setForm((p) => ({ ...p, verifyBoxesLabeledCorrectly: !p.verifyBoxesLabeledCorrectly }))
                             }
                         ].map((item) => (
-                            <label key={item.id} className={`flex items-start gap-3 rounded-lg border p-4 transition-colors cursor-pointer ${item.checked ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-[#800000]'}`}>
+                            <label key={item.id} className={`flex items-start gap-3 rounded-lg border p-4 transition-colors cursor-pointer ${item.checked ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:border-maroon-700'}`}>
                                 <input
                                     id={item.id}
                                     name={item.id}
                                     type="checkbox"
                                     checked={item.checked}
                                     onChange={item.setter}
-                                    className="mt-1 h-5 w-5 rounded border-gray-300 text-[#800000] focus:ring-[#800000]"
+                                    className="mt-1 h-5 w-5 rounded border-gray-300 text-maroon-700 focus:ring-maroon-700"
                                 />
                                 <span className={`text-sm ${item.checked ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
                                     {item.label}
@@ -311,7 +311,7 @@ export default function OrderQAPage() {
                             10. Method <span className="text-red-600">*</span>
                         </label>
                         <div className="grid grid-cols-2 gap-4">
-                            <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Delivery' ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+                            <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Delivery' ? 'bg-maroon-700 text-white border-maroon-700' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                                 <input
                                     type="radio"
                                     id="qa-method-delivery"
@@ -323,7 +323,7 @@ export default function OrderQAPage() {
                                 <span className="font-medium">Delivery</span>
                             </label>
 
-                            <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Shipping' ? 'bg-[#800000] text-white border-[#800000]' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+                            <label className={`flex items-center justify-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${form.method === 'Shipping' ? 'bg-maroon-700 text-white border-maroon-700' : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                                 <input
                                     type="radio"
                                     id="qa-method-shipping"
@@ -353,7 +353,7 @@ export default function OrderQAPage() {
                         onClick={submitQA}
                         disabled={submitQaMutation.isPending || !isFormComplete(form)}
                         className={`rounded-md px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors ${isFormComplete(form)
-                            ? 'bg-[#800000] hover:bg-[#660000]'
+                            ? 'bg-maroon-700 hover:bg-maroon-800'
                             : 'bg-gray-300 cursor-not-allowed'
                             }`}
                     >
