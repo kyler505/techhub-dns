@@ -733,7 +733,7 @@ function DocumentSigningPage() {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-background px-4 pb-8">
+        <div className="min-h-[100dvh] bg-gradient-to-b from-white/70 via-muted/20 to-background px-4 pb-8">
             <SignatureModal
                 open={modalOpen}
                 onOpenChange={setModalOpen}

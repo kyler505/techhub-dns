@@ -31,8 +31,8 @@ export default function OrdersBarChart({ data, loading }: OrdersBarChartProps) {
       <BarChart data={data} margin={{ top: 10, right: 24, left: 0, bottom: 5 }}>
         <defs>
           <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#500000" stopOpacity={0.9} />
-            <stop offset="100%" stopColor="#a61b1b" stopOpacity={0.9} />
+            <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.9} />
+            <stop offset="100%" stopColor="hsl(var(--accent) / 0.65)" stopOpacity={0.9} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="4 6" className="stroke-muted/40" />
