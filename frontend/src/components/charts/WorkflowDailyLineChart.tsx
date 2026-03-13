@@ -13,6 +13,13 @@ import {
 
 import type { WorkflowDailyTrendDataPoint } from "../../api/analytics";
 
+const WORKFLOW_LINE_COLORS = {
+  shipped: "#0f766e",
+  delivered: "#0284c7",
+  fulfilled: "#500000",
+  picked: "#a16207",
+} as const;
+
 interface WorkflowDailyLineChartProps {
   data: WorkflowDailyTrendDataPoint[];
   loading?: boolean;
@@ -76,7 +83,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="shipped_count"
-          stroke="hsl(var(--primary))"
+          stroke={WORKFLOW_LINE_COLORS.shipped}
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 5 }}
@@ -85,7 +92,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="delivered_count"
-          stroke="hsl(var(--secondary))"
+          stroke={WORKFLOW_LINE_COLORS.delivered}
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 5 }}
@@ -94,7 +101,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="fulfilled_count"
-          stroke="hsl(var(--accent))"
+          stroke={WORKFLOW_LINE_COLORS.fulfilled}
           strokeWidth={2.5}
           dot={false}
           activeDot={{ r: 5 }}
@@ -103,7 +110,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
         <Line
           type="monotone"
           dataKey="picked_count"
-          stroke="hsl(var(--secondary))"
+          stroke={WORKFLOW_LINE_COLORS.picked}
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 5 }}
