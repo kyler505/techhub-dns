@@ -44,6 +44,102 @@ interface Placement {
 }
 
 
+type PlacementOverlayProps = {
+    placement: Placement;
+    pageViewport: { width: number; height: number } | null;
+    scale: number;
+    isSelected: boolean;
+    isActiveDrag: boolean;
+    onPointerDown: (event: React.PointerEvent, id: string) => void;
+    onTouchStart: (event: React.TouchEvent, id: string) => void;
+    onResizePointerDown: (event: React.PointerEvent, id: string) => void;
+    onResizeTouchStart: (event: React.TouchEvent, id: string) => void;
+    onRemove: (id: string) => void;
+};
+
+const PlacementOverlay = memo(function PlacementOverlay({
+    placement,
+    pageViewport,
+    scale,
+    isSelected,
+    isActiveDrag,
+    onPointerDown,
+    onTouchStart,
+    onResizePointerDown,
+    onResizeTouchStart,
+    onRemove,
+}: PlacementOverlayProps) {
+    const style = useMemo(() => {
+        if (!pageViewport) return { display: 'none' } as const;
+
+        const xPx = placement.x * scale;
+        const yPx = (pageViewport.height - placement.y - placement.height) * scale;
+        const wPx = placement.width * scale;
+        const hPx = placement.height * scale;
+
+        return {
+            left: 0,
+            top: 0,
+            width: `${wPx}px`,
+            height: `${hPx}px`,
+            position: 'absolute' as const,
+            transform: `translate3d(${xPx}px, ${yPx}px, 0)`,
+            ...(isActiveDrag ? { willChange: 'transform' as const } : {}),
+        };
+    }, [isActiveDrag, pageViewport, placement, scale]);
+
+    if (!pageViewport) {
+        return null;
+    }
+
+    return (
+        <div
+            className={`group cursor-move touch-none select-none ${isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
+            style={{
+                ...style,
+                touchAction: 'none',
+            }}
+            onPointerDown={(e) => onPointerDown(e, placement.id)}
+            onTouchStart={(e) => onTouchStart(e, placement.id)}
+        >
+            <img
+                src={placement.dataUrl}
+                alt="Signature"
+                className="w-full h-full object-contain pointer-events-none"
+            />
+
+            {isSelected && (
+                <Button
+                    type="button"
+                    data-delete-button
+                    variant="destructive"
+                    size="icon"
+                    className="pointer-events-auto absolute -right-3 -top-3 z-20 h-7 w-7 rounded-full p-0 shadow-premium"
+                    onPointerDown={(e) => { e.stopPropagation(); }}
+                    onClick={(e) => { e.stopPropagation(); onRemove(placement.id); }}
+                >
+                    <X className="h-3 w-3" />
+                </Button>
+            )}
+
+            {isSelected && (
+                <div
+                    data-resize-handle
+                    className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
+                    onPointerDown={(e) => onResizePointerDown(e, placement.id)}
+                    onTouchStart={(e) => onResizeTouchStart(e, placement.id)}
+                    style={{ touchAction: 'none' }}
+                >
+                    <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 6L6 18" />
+                        <path d="M12 6h6v6" />
+                    </svg>
+                </div>
+            )}
+        </div>
+    );
+});
+
 type PdfPaneProps = {
     fileUrl: string;
     containerWidth: number | null;
@@ -295,10 +391,12 @@ function DocumentSigningPage() {
         setError(null);
     };
 
-    const removePlacement = (id: string) => {
-        setPlacements(prev => prev.filter(p => p.id !== id));
-        if (selectedPlacementId === id) setSelectedPlacementId(null);
-    };
+    const removePlacement = useCallback((id: string) => {
+        setPlacements((prev) => prev.filter(p => p.id !== id));
+        if (selectedPlacementId === id) {
+            setSelectedPlacementId(null);
+        }
+    }, [selectedPlacementId]);
 
     // --- Dragging Logic ---
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
@@ -470,7 +568,7 @@ function DocumentSigningPage() {
         });
     };
 
-    const handlePointerDown = (e: React.PointerEvent, id: string) => {
+    const handlePointerDown = useCallback((e: React.PointerEvent, id: string) => {
         const target = e.target as HTMLElement | null;
         if (target?.closest('[data-resize-handle], [data-delete-button]')) return;
         e.stopPropagation(); // Prevent PDF scrolling if possible? Or maybe just capture
@@ -494,9 +592,9 @@ function DocumentSigningPage() {
             initX: placement.x,
             initY: placement.y // stored as Bottom-Left
         };
-    };
+    }, [placements]);
 
-    const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
+    const handlePointerMove = useCallback((e: React.PointerEvent | PointerEvent) => {
         if (interactionTypeRef.current !== 'pointer') return;
         if (!dragStartRef.current && !resizeStartRef.current) return;
         if ('preventDefault' in e) {
@@ -504,9 +602,9 @@ function DocumentSigningPage() {
         }
 
         scheduleLatestMove(e.clientX, e.clientY);
-    };
+    }, []);
 
-    const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    const handleTouchStart = useCallback((e: React.TouchEvent, id: string) => {
         const target = e.target as HTMLElement | null;
         if (target?.closest('[data-resize-handle], [data-delete-button]')) return;
         if (interactionTypeRef.current === 'pointer') return;
@@ -529,9 +627,9 @@ function DocumentSigningPage() {
             initX: placement.x,
             initY: placement.y
         };
-    };
+    }, [placements]);
 
-    const handleTouchMove = (e: TouchEvent | React.TouchEvent) => {
+    const handleTouchMove = useCallback((e: TouchEvent | React.TouchEvent) => {
         if (interactionTypeRef.current !== 'touch') return;
         const touch = 'touches' in e ? (e.touches[0] || e.changedTouches[0]) : null;
         if (!touch) return;
@@ -540,7 +638,7 @@ function DocumentSigningPage() {
         }
 
         scheduleLatestMove(touch.clientX, touch.clientY);
-    };
+    }, []);
 
     const endInteraction = () => {
         dragStartRef.current = null;
@@ -567,7 +665,7 @@ function DocumentSigningPage() {
         detachTouchListeners();
     };
 
-    const handleResizePointerDown = (e: React.PointerEvent, id: string) => {
+    const handleResizePointerDown = useCallback((e: React.PointerEvent, id: string) => {
         e.stopPropagation();
         const placement = placements.find(p => p.id === id);
         if (!placement) return;
@@ -597,9 +695,9 @@ function DocumentSigningPage() {
             startHeight: placement.height,
             minSize
         };
-    };
+    }, [placements]);
 
-    const handleResizeTouchStart = (e: React.TouchEvent, id: string) => {
+    const handleResizeTouchStart = useCallback((e: React.TouchEvent, id: string) => {
         if (interactionTypeRef.current === 'pointer') return;
         const placement = placements.find(p => p.id === id);
         const touch = e.touches[0];
@@ -631,7 +729,7 @@ function DocumentSigningPage() {
             startHeight: placement.height,
             minSize
         };
-    };
+    }, [placements]);
 
     useEffect(() => {
         return () => {
@@ -640,6 +738,28 @@ function DocumentSigningPage() {
             detachTouchListeners();
         };
     }, []);
+
+    const placementOverlays = useMemo(() => {
+        if (!pageViewport) return null;
+        return placements.map((p) => {
+            const isActiveDrag = activeInteraction?.id === p.id && activeInteraction.mode === 'drag';
+            return (
+                <PlacementOverlay
+                    key={p.id}
+                    placement={p}
+                    pageViewport={pageViewport}
+                    scale={scale}
+                    isSelected={selectedPlacementId === p.id}
+                    isActiveDrag={isActiveDrag}
+                    onPointerDown={handlePointerDown}
+                    onTouchStart={handleTouchStart}
+                    onResizePointerDown={handleResizePointerDown}
+                    onResizeTouchStart={handleResizeTouchStart}
+                    onRemove={removePlacement}
+                />
+            );
+        });
+    }, [activeInteraction?.id, activeInteraction?.mode, handlePointerDown, handleResizePointerDown, handleResizeTouchStart, handleTouchStart, pageViewport, placements, removePlacement, scale, selectedPlacementId]);
 
     const saveSignedPdf = async () => {
         if (!order || placements.length === 0) {
@@ -696,30 +816,6 @@ function DocumentSigningPage() {
         } finally {
             setIsSaving(false);
         }
-    };
-
-    // Calculate DOM styles for a placement
-    const getPlacementStyle = (p: Placement, willChangeTransform: boolean) => {
-        if (!pageViewport) return { display: 'none' };
-
-        // Convert PDF Points (Bottom-Left) to DOM Pixels (Top-Left)
-        // xPx = xPt * scale
-        // yPx = (PageH - yPt - hPt) * scale
-
-        const xPx = p.x * scale;
-        const yPx = (pageViewport.height - p.y - p.height) * scale;
-        const wPx = p.width * scale;
-        const hPx = p.height * scale;
-
-        return {
-            left: 0,
-            top: 0,
-            width: `${wPx}px`,
-            height: `${hPx}px`,
-            position: 'absolute' as const,
-            transform: `translate3d(${xPx}px, ${yPx}px, 0)`,
-            ...(willChangeTransform ? { willChange: 'transform' as const } : {}),
-        };
     };
 
     // --- Render ---
@@ -803,58 +899,8 @@ function DocumentSigningPage() {
                                      onPageLoad={handlePageLoad}
                                  />
 
-                                 {/* Overlay Layer */}
-                                 {placements.map(p => (
-                                     <div
-                                         key={p.id}
-                                         className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
-                                         style={{
-                                             ...getPlacementStyle(
-                                                 p,
-                                                 activeInteraction?.id === p.id && activeInteraction.mode === 'drag'
-                                             ),
-                                             touchAction: 'none'
-                                         }}
-                                         onPointerDown={(e) => handlePointerDown(e, p.id)}
-                                         onTouchStart={(e) => handleTouchStart(e, p.id)}
-                                     >
-                                        <img
-                                            src={p.dataUrl}
-                                            alt="Signature"
-                                            className="w-full h-full object-contain pointer-events-none"
-                                        />
-
-                                        {/* Delete Button (visible on hover/select) */}
-                                        {(selectedPlacementId === p.id) && (
-                                            <Button
-                                                type="button"
-                                                data-delete-button
-                                                variant="destructive"
-                                                size="icon"
-                                                className="pointer-events-auto absolute -right-3 -top-3 z-20 h-7 w-7 rounded-full p-0 shadow-premium"
-                                                onPointerDown={(e) => { e.stopPropagation(); }}
-                                                onClick={(e) => { e.stopPropagation(); removePlacement(p.id); }}
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </Button>
-                                        )}
-
-                                         {(selectedPlacementId === p.id) && (
-                                             <div
-                                                 data-resize-handle
-                                                 className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
-                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
-                                                 onTouchStart={(e) => handleResizeTouchStart(e, p.id)}
-                                                 style={{ touchAction: 'none' }}
-                                             >
-                                                <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M18 6L6 18" />
-                                                    <path d="M12 6h6v6" />
-                                                </svg>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                                  {/* Overlay Layer */}
+                                  {placementOverlays}
 
                                 {/* Empty State Hint */}
                                 {placements.length === 0 && (
