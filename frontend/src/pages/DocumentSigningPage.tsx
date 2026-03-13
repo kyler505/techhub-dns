@@ -871,10 +871,20 @@ function DocumentSigningPage() {
                     </div>
 
                     {/* Mobile Floating Action Button */}
-                    <div className="sm:hidden fixed bottom-6 right-6">
+                    <div className="sm:hidden fixed bottom-4 right-4 flex flex-col items-end gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={useLastSignature}
+                            disabled={!reusableSignature.canUse}
+                            title={reusableSignature.canUse ? "Apply last saved signature" : reusableSignature.reason}
+                            className="min-h-[44px] min-w-[160px] text-xs font-semibold"
+                        >
+                            Use Last Signature
+                        </Button>
                         <Button
                             className="h-14 w-14 rounded-full p-0 shadow-premium"
                             onClick={openSignatureModal}
+                            aria-label="Add new signature"
                         >
                             <PenTool className="w-6 h-6 text-white" />
                         </Button>
