@@ -76,7 +76,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       className="group"
     >
-      <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-premium-hover hover:-translate-y-0.5 h-full">
+      <Card className="relative overflow-hidden" data-transition="card-hover">
         <div className={`absolute bottom-0 right-0 p-3 rounded-tl-2xl ${accentClasses[accent]} opacity-90 transition-transform duration-300 group-hover:scale-110`}>
           <Icon className="w-5 h-5" />
         </div>

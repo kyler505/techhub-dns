@@ -88,7 +88,7 @@
   /* Premium card styles */
   .card-premium {
     @apply bg-card text-card-foreground rounded-lg border shadow-sm;
-    @apply transition-all duration-200 ease-out;
+    transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.02);
   }
   
@@ -113,7 +113,8 @@
   .shimmer {
     background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted) / 0.5) 50%, hsl(var(--muted)) 75%);
     background-size: 200% 100%;
-    animation: shimmer 2s infinite;
+    animation: shimmer 1.6s linear infinite;
+    will-change: background-position;
   }
   
   /* Status indicators */
@@ -129,7 +130,7 @@
   
   /* Button hover lift */
   .btn-lift {
-    @apply transition-all duration-200;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
   
   .btn-lift:hover {
