@@ -31,8 +31,8 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
       <LineChart data={data} margin={{ top: 10, right: 24, left: 0, bottom: 5 }}>
         <defs>
           <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#500000" stopOpacity={0.9} />
-            <stop offset="100%" stopColor="#8b1c1c" stopOpacity={0.9} />
+            <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.9} />
+            <stop offset="100%" stopColor="hsl(var(--accent) / 0.7)" stopOpacity={0.9} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="4 6" className="stroke-muted/40" />
@@ -73,8 +73,8 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
           dataKey="count" 
           stroke="url(#lineGradient)" 
           strokeWidth={2.5}
-          dot={{ fill: "#500000", r: 4, strokeWidth: 2, stroke: "#fff" }}
-          activeDot={{ r: 6, stroke: "#500000", strokeWidth: 2 }}
+          dot={{ fill: "hsl(var(--accent))", r: 4, strokeWidth: 2, stroke: "#fff" }}
+          activeDot={{ r: 6, stroke: "hsl(var(--accent))", strokeWidth: 2 }}
           name="Delivered"
         />
       </LineChart>
