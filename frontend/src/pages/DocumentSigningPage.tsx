@@ -841,10 +841,13 @@ function DocumentSigningPage() {
                     scale={scale}
                     isSelected={selectedPlacementId === p.id}
                     isActiveDrag={isActiveDrag}
+                    instructionsId={PLACEMENT_INSTRUCTIONS_ID}
                     onPointerDown={handlePointerDown}
                     onTouchStart={handleTouchStart}
                     onResizePointerDown={handleResizePointerDown}
                     onResizeTouchStart={handleResizeTouchStart}
+                    onSelect={setSelectedPlacementId}
+                    onKeyDown={handlePlacementKeyDown}
                     onRemove={removePlacement}
                 />
             );
