@@ -83,28 +83,29 @@ export default function OrderQAChecklist() {
 
     return (
         <div className="p-4">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">QA Checklist Dashboard</h1>
+            <header className="mb-4">
+                <h1 className="text-2xl font-bold text-gray-900">QA Checklist Dashboard</h1>
+                <p className="text-sm text-muted-foreground">Monitor orders awaiting QA review.</p>
+            </header>
 
             <section className="bg-white shadow rounded-lg p-4 border border-gray-100 mb-6">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">
-                            Orders Needing QA
-                        </h2>
+                        <h2 className="text-lg font-semibold text-gray-900">Orders Needing QA</h2>
+                        <p className="text-xs text-muted-foreground">Filtered to QA status orders only.</p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                        <div className="flex items-center gap-2">
-                            <input
-                                id="qa-checklist-search"
-                                name="qaChecklistSearch"
-                                className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-maroon-700"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search orders"
-                                aria-label="Search"
-                            />
-                        </div>
+                        <label htmlFor="qa-checklist-search" className="sr-only">Search QA orders</label>
+                        <input
+                            id="qa-checklist-search"
+                            name="qaChecklistSearch"
+                            className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-maroon-700"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search orders"
+                            aria-label="Search orders needing QA"
+                        />
                     </div>
                 </div>
 
@@ -147,7 +148,7 @@ export default function OrderQAChecklist() {
                                                 <button
                                                     type="button"
                                                     onClick={() => openQa(o.id)}
-                                                    className="px-3 py-1.5 text-sm bg-maroon-700 text-white rounded hover:bg-maroon-800 flex items-center gap-2 btn-lift"
+                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2 btn-lift"
                                                 >
                                                     {qaButtonLabel}
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
