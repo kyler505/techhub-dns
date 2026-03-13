@@ -352,7 +352,9 @@ export default function Dashboard() {
       >
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Live metrics for QA, fulfillment, and delivery status.</p>
         </div>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Refreshed every 15 mins</p>
       </motion.div>
 
       {error && (
