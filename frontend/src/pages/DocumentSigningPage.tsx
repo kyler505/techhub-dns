@@ -1,4 +1,4 @@
- import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
@@ -50,10 +50,13 @@ type PlacementOverlayProps = {
     scale: number;
     isSelected: boolean;
     isActiveDrag: boolean;
+    instructionsId: string;
     onPointerDown: (event: React.PointerEvent, id: string) => void;
     onTouchStart: (event: React.TouchEvent, id: string) => void;
     onResizePointerDown: (event: React.PointerEvent, id: string) => void;
     onResizeTouchStart: (event: React.TouchEvent, id: string) => void;
+    onSelect: (id: string) => void;
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>, placement: Placement) => void;
     onRemove: (id: string) => void;
 };
 
@@ -63,10 +66,13 @@ const PlacementOverlay = memo(function PlacementOverlay({
     scale,
     isSelected,
     isActiveDrag,
+    instructionsId,
     onPointerDown,
     onTouchStart,
     onResizePointerDown,
     onResizeTouchStart,
+    onSelect,
+    onKeyDown,
     onRemove,
 }: PlacementOverlayProps) {
     const style = useMemo(() => {
@@ -94,18 +100,29 @@ const PlacementOverlay = memo(function PlacementOverlay({
 
     return (
         <div
-            className={`group cursor-move touch-none select-none ${isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
+            role="button"
+            tabIndex={0}
+            aria-label="Signature placement"
+            aria-describedby={instructionsId}
+            className={`group cursor-move touch-none select-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
             style={{
                 ...style,
                 touchAction: 'none',
             }}
-            onPointerDown={(e) => onPointerDown(e, placement.id)}
-            onTouchStart={(e) => onTouchStart(e, placement.id)}
+            onPointerDown={(e) => {
+                onSelect(placement.id);
+                onPointerDown(e, placement.id);
+            }}
+            onTouchStart={(e) => {
+                onSelect(placement.id);
+                onTouchStart(e, placement.id);
+            }}
+            onKeyDown={(event) => onKeyDown(event, placement)}
         >
             <img
                 src={placement.dataUrl}
                 alt="Signature"
-                className="w-full h-full object-contain pointer-events-none"
+                className="h-full w-full object-contain pointer-events-none"
             />
 
             {isSelected && (
@@ -114,27 +131,35 @@ const PlacementOverlay = memo(function PlacementOverlay({
                     data-delete-button
                     variant="destructive"
                     size="icon"
-                    className="pointer-events-auto absolute -right-3 -top-3 z-20 h-7 w-7 rounded-full p-0 shadow-premium"
-                    onPointerDown={(e) => { e.stopPropagation(); }}
-                    onClick={(e) => { e.stopPropagation(); onRemove(placement.id); }}
+                    aria-label="Remove signature"
+                    className="pointer-events-auto absolute -right-3 -top-3 z-20 h-9 w-9 rounded-full p-0 shadow-premium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive"
+                    onPointerDown={(e) => {
+                        e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(placement.id);
+                    }}
                 >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                 </Button>
             )}
 
             {isSelected && (
-                <div
+                <button
+                    type="button"
+                    aria-label="Resize signature"
                     data-resize-handle
-                    className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
+                    className="pointer-events-auto absolute -bottom-4 -left-4 z-20 flex h-10 w-10 cursor-nw-resize items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     onPointerDown={(e) => onResizePointerDown(e, placement.id)}
                     onTouchStart={(e) => onResizeTouchStart(e, placement.id)}
                     style={{ touchAction: 'none' }}
                 >
-                    <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M18 6L6 18" />
                         <path d="M12 6h6v6" />
                     </svg>
-                </div>
+                </button>
             )}
         </div>
     );
@@ -166,6 +191,9 @@ const PdfPane = memo(function PdfPane({ fileUrl, containerWidth, onPageLoad }: P
 });
 
 
+
+const PLACEMENT_INSTRUCTIONS_ID = "signature-placement-instructions";
+const MIN_PLACEMENT_SIZE_PT = 32;
 
 function DocumentSigningPage() {
     const [searchParams] = useSearchParams();
@@ -392,11 +420,73 @@ function DocumentSigningPage() {
     };
 
     const removePlacement = useCallback((id: string) => {
-        setPlacements((prev) => prev.filter(p => p.id !== id));
-        if (selectedPlacementId === id) {
-            setSelectedPlacementId(null);
+        setPlacements((prev) => prev.filter((p) => p.id !== id));
+        setSelectedPlacementId((prev) => (prev === id ? null : prev));
+    }, []);
+
+    const pxToPoints = useCallback((px: number) => {
+        const effectiveScale = scale && scale > 0 ? scale : 1;
+        return px / effectiveScale;
+    }, [scale]);
+
+    const movePlacement = useCallback((id: string, deltaX: number, deltaY: number) => {
+        setPlacements((prev) => prev.map((placement) => {
+            if (placement.id !== id) return placement;
+            return {
+                ...placement,
+                x: placement.x + deltaX,
+                y: placement.y + deltaY,
+            };
+        }));
+    }, []);
+
+    const resizePlacement = useCallback((id: string, delta: number) => {
+        setPlacements((prev) => prev.map((placement) => {
+            if (placement.id !== id) return placement;
+
+            const aspectRatio = placement.width / Math.max(placement.height, 0.1);
+            let nextWidth = placement.width + delta;
+            nextWidth = Math.max(nextWidth, MIN_PLACEMENT_SIZE_PT);
+            const nextHeight = Math.max(nextWidth / aspectRatio, MIN_PLACEMENT_SIZE_PT);
+
+            return {
+                ...placement,
+                width: nextWidth,
+                height: nextHeight,
+            };
+        }));
+    }, []);
+
+    const handlePlacementKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>, placement: Placement) => {
+        const key = event.key;
+        const moveStepPx = 8;
+        const movementStep = pxToPoints(moveStepPx);
+        const resizeStep = pxToPoints(moveStepPx);
+
+        if (key === "Delete" || key === "Backspace") {
+            event.preventDefault();
+            removePlacement(placement.id);
+            return;
         }
-    }, [selectedPlacementId]);
+
+        const arrowMoves: Record<string, { dx: number; dy: number }> = {
+            ArrowLeft: { dx: -movementStep, dy: 0 },
+            ArrowRight: { dx: movementStep, dy: 0 },
+            ArrowUp: { dx: 0, dy: movementStep },
+            ArrowDown: { dx: 0, dy: -movementStep },
+        };
+
+        if (key in arrowMoves) {
+            event.preventDefault();
+            const { dx, dy } = arrowMoves[key];
+            if (event.shiftKey) {
+                const direction = key === "ArrowLeft" || key === "ArrowDown" ? -resizeStep : resizeStep;
+                resizePlacement(placement.id, direction);
+            } else {
+                movePlacement(placement.id, dx, dy);
+            }
+        }
+    }, [movePlacement, pxToPoints, removePlacement, resizePlacement]);
 
     // --- Dragging Logic ---
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
@@ -887,6 +977,9 @@ function DocumentSigningPage() {
                             Drag to place • Resize from bottom-left • Tap Save when finished
                         </div>
                     </div>
+                    <p id={PLACEMENT_INSTRUCTIONS_ID} className="sr-only">
+                        Focus a signature placement, use arrow keys to move, hold shift plus arrow to resize, delete/backspace removes.
+                    </p>
                     <div
                         className="relative flex min-h-[500px] justify-center overflow-hidden bg-muted/30 p-4 select-none"
                         ref={viewerRef}
@@ -899,21 +992,108 @@ function DocumentSigningPage() {
                                      onPageLoad={handlePageLoad}
                                  />
 
+<<<<<<< HEAD
                                   {/* Overlay Layer */}
                                   {placementOverlays}
+=======
+                                 {/* Overlay Layer */}
+                                 {placements.map((p) => {
+                                     const isSelected = selectedPlacementId === p.id;
+                                     return (
+                                         <div
+                                             key={p.id}
+                                             role="button"
+                                             tabIndex={0}
+                                             aria-describedby={PLACEMENT_INSTRUCTIONS_ID}
+                                             aria-label="Signature placement"
+                                             className={`group cursor-move touch-none select-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${
+                                                 isSelected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""
+                                             }`}
+                                             style={{
+                                                 ...getPlacementStyle(
+                                                     p,
+                                                     activeInteraction?.id === p.id && activeInteraction.mode === "drag"
+                                                 ),
+                                                 touchAction: "none",
+                                             }}
+                                             onPointerDown={(e) => {
+                                                 handlePointerDown(e, p.id);
+                                                 setSelectedPlacementId(p.id);
+                                             }}
+                                             onTouchStart={(e) => {
+                                                 handleTouchStart(e, p.id);
+                                                 setSelectedPlacementId(p.id);
+                                             }}
+                                             onKeyDown={(event) => handlePlacementKeyDown(event, p)}
+                                         >
+                                             <img
+                                                 src={p.dataUrl}
+                                                 alt="Signature"
+                                                 className="w-full h-full object-contain pointer-events-none"
+                                             />
 
-                                {/* Empty State Hint */}
-                                {placements.length === 0 && (
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                                        <div className="rounded-full bg-foreground/85 px-4 py-2 text-sm text-background backdrop-blur-sm">
-                                            Tap "Add Signature" to draw or "Use Last Signature", then drag to place
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="self-center text-muted-foreground">No PDF Loaded</div>
-                        )}
+                                             {/* Delete Button (visible on hover/select) */}
+                                             {isSelected && (
+                                                 <Button
+                                                     type="button"
+                                                     data-delete-button
+                                                     variant="destructive"
+                                                     size="icon"
+                                                     aria-label="Remove signature"
+                                                     className="pointer-events-auto absolute -right-3 -top-3 z-20 h-9 w-9 rounded-full p-0 shadow-premium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive"
+                                                     onPointerDown={(e) => {
+                                                         e.stopPropagation();
+                                                     }}
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         removePlacement(p.id);
+                                                     }}
+                                                 >
+                                                     <X className="h-4 w-4" />
+                                                 </Button>
+                                             )}
+
+                                             {isSelected && (
+                                                 <button
+                                                     type="button"
+                                                     aria-label="Resize signature"
+                                                     data-resize-handle
+                                                     className="pointer-events-auto absolute -bottom-4 -left-4 z-20 flex h-10 w-10 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                                     onPointerDown={(e) => handleResizePointerDown(e, p.id)}
+                                                     onTouchStart={(e) => handleResizeTouchStart(e, p.id)}
+                                                     style={{ touchAction: "none" }}
+                                                 >
+                                                     <svg
+                                                         className="h-4 w-4 text-primary"
+                                                         viewBox="0 0 24 24"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         strokeWidth="2.5"
+                                                         strokeLinecap="round"
+                                                         strokeLinejoin="round"
+                                                     >
+                                                         <path d="M18 6L6 18" />
+                                                         <path d="M12 6h6v6" />
+                                                     </svg>
+                                                 </button>
+                                             )}
+                                         </div>
+                                     );
+                                 })}
+>>>>>>> feature/dev-audit-harden
+
+                                 {/* Empty State Hint */}
+                                 {placements.length === 0 && (
+                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                                         <div className="rounded-full bg-foreground/85 px-4 py-2 text-sm text-background backdrop-blur-sm">
+                                             Tap "Add Signature" to draw or "Use Last Signature", then drag to place
+                                         </div>
+                                     </div>
+                                 )}
+                             </div>
+                         ) : (
+                             <div className="self-center text-muted-foreground">No PDF Loaded</div>
+                         )}
                     </div>
 
                     {/* Mobile Floating Action Button */}
