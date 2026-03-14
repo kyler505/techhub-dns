@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Activity } from "lucide-react";
 import { TimeTrendDataPoint } from "../../api/analytics";
+import { CHART_HEIGHT_CLASS, CHART_TOOLTIP_STYLE } from "./chartTheme";
 
 interface OrdersLineChartProps {
   data: TimeTrendDataPoint[];
@@ -11,7 +12,7 @@ interface OrdersLineChartProps {
 export default function OrdersLineChart({ data, loading }: OrdersLineChartProps) {
   if (loading) {
     return (
-      <div className="w-full h-[300px] flex items-center justify-center bg-muted/20 rounded animate-pulse">
+      <div className={`flex w-full items-center justify-center rounded bg-muted/20 ${CHART_HEIGHT_CLASS}`}>
         <p className="text-muted-foreground">Loading chart...</p>
       </div>
     );
@@ -19,15 +20,16 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
 
   if (!data || data.length === 0) {
     return (
-      <div className="w-full h-[300px] flex flex-col items-center justify-center bg-muted/20 rounded">
-        <Activity className="h-6 w-6 text-slate-300 mb-2" />
+      <div className={`flex w-full flex-col items-center justify-center rounded bg-muted/20 ${CHART_HEIGHT_CLASS}`}>
+        <Activity className="mb-2 h-6 w-6 text-[hsl(var(--chart-empty))]" />
         <p className="text-muted-foreground">No data available</p>
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <div className={CHART_HEIGHT_CLASS}>
+      <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 10, right: 24, left: 0, bottom: 5 }}>
         <defs>
           <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
@@ -46,12 +48,7 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
         />
         <YAxis className="text-xs" />
         <Tooltip 
-          contentStyle={{ 
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px",
-            boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
-          }}
+          contentStyle={CHART_TOOLTIP_STYLE}
           labelFormatter={(label: ReactNode) => {
             if (typeof label !== "string" && typeof label !== "number") {
               return "";
@@ -73,11 +70,12 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
           dataKey="count" 
           stroke="url(#lineGradient)" 
           strokeWidth={2.5}
-          dot={{ fill: "hsl(var(--accent))", r: 4, strokeWidth: 2, stroke: "#fff" }}
+          dot={{ fill: "hsl(var(--accent))", r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }}
           activeDot={{ r: 6, stroke: "hsl(var(--accent))", strokeWidth: 2 }}
           name="Delivered"
         />
       </LineChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </div>
   );
 }

@@ -1,15 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
 import { Order } from "../types/order";
-import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
-import WorkflowDailyLineChart from "../components/charts/WorkflowDailyLineChart";
-import FulfilledTotalsBarChart from "../components/charts/FulfilledTotalsBarChart";
 import { Activity, Package, CheckCircle2, Truck } from "lucide-react";
 import { SectionErrorBoundary } from "../components/error-boundaries/AppErrorBoundaries";
 import {
@@ -22,6 +18,10 @@ import {
   getYearlyFulfilledTotalsQueryOptions,
 } from "../queries/analytics";
 import { shouldThrowToBoundary } from "../utils/apiErrors";
+
+const LiveDeliveryDashboard = lazy(() => import("../components/LiveDeliveryDashboard"));
+const WorkflowDailyLineChart = lazy(() => import("../components/charts/WorkflowDailyLineChart"));
+const FulfilledTotalsBarChart = lazy(() => import("../components/charts/FulfilledTotalsBarChart"));
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -70,14 +70,9 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className="group"
-    >
+    <div className="group">
       <Card className="relative overflow-hidden" data-transition="card-hover">
-        <div className={`absolute bottom-0 right-0 p-3 rounded-tl-2xl ${accentClasses[accent]} opacity-90 transition-transform duration-300 group-hover:scale-110`}>
+        <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
           <Icon className="w-5 h-5" />
         </div>
         <CardHeader className="pb-2 pt-4">
@@ -89,19 +84,13 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
           {loading ? (
             <Skeleton className="h-9 w-16" />
           ) : (
-            <motion.div
-              className="text-3xl font-bold text-foreground"
-              key={value}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "spring", stiffness: 320, damping: 22 }}
-            >
+            <div className="text-3xl font-bold text-foreground tabular-nums" key={value}>
               {animatedValue}
-            </motion.div>
+            </div>
           )}
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }
 
@@ -344,18 +333,13 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto py-8 space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Live metrics for QA, fulfillment, and delivery status.</p>
         </div>
         <p className="text-xs uppercase tracking-wider text-muted-foreground">Refreshed every 15 mins</p>
-      </motion.div>
+      </div>
 
       {error && (
         <div className="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4">
@@ -380,7 +364,9 @@ export default function Dashboard() {
               title="Live delivery widget failed"
               message="Try the live status panel again. The rest of the dashboard is still available."
             >
-              <LiveDeliveryDashboard />
+              <Suspense fallback={<Skeleton className="h-40 w-full rounded-lg" />}>
+                <LiveDeliveryDashboard />
+              </Suspense>
             </SectionErrorBoundary>
           </CardContent>
         </Card>
@@ -488,7 +474,9 @@ export default function Dashboard() {
               message="Try reloading this chart. The rest of the dashboard data is still available."
               resetKeys={[workflowTrendDays]}
             >
-              <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+              <Suspense fallback={<Skeleton className="h-72 w-full rounded-lg sm:h-80" />}>
+                <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+              </Suspense>
             </SectionErrorBoundary>
           </CardContent>
         </Card>
@@ -505,7 +493,9 @@ export default function Dashboard() {
               title="Monthly totals chart failed"
               message="Try reloading the monthly fulfilled totals chart."
             >
-              <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+              <Suspense fallback={<Skeleton className="h-72 w-full rounded-lg sm:h-80" />}>
+                <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+              </Suspense>
             </SectionErrorBoundary>
           </CardContent>
         </Card>
@@ -520,7 +510,9 @@ export default function Dashboard() {
               title="Yearly totals chart failed"
               message="Try reloading the yearly fulfilled totals chart."
             >
-              <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
+              <Suspense fallback={<Skeleton className="h-72 w-full rounded-lg sm:h-80" />}>
+                <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
+              </Suspense>
             </SectionErrorBoundary>
           </CardContent>
         </Card>

@@ -1,20 +1,16 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
 // pdf-lib is used server-side for PDF bundling
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
 import { ordersApi } from "../api/orders";
 import { OrderDetail } from "../types/order";
-import { SignatureModal } from "../components/SignatureModal";
 import { signatureCache, type LastSignature } from "../lib/signatureCache";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { PenTool, X } from "lucide-react";
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+const SignatureModal = lazy(() => import("../components/SignatureModal").then((module) => ({ default: module.SignatureModal })));
+const PdfPane = lazy(() => import("../components/document-signing/PdfPane"));
 
 const SIGNATURE_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
@@ -164,33 +160,6 @@ const PlacementOverlay = memo(function PlacementOverlay({
         </div>
     );
 });
-
-type PdfPaneProps = {
-    fileUrl: string;
-    containerWidth: number | null;
-    onPageLoad: (page: PDFPageProxy) => void;
-};
-
-const PdfPane = memo(function PdfPane({ fileUrl, containerWidth, onPageLoad }: PdfPaneProps) {
-    return (
-        <Document
-            file={fileUrl}
-            loading={<div className="p-10 text-muted-foreground">Loading PDF...</div>}
-            error={<div className="p-10 text-destructive">Failed to load PDF</div>}
-        >
-            <Page
-                pageNumber={1}
-                width={containerWidth || undefined}
-                onLoadSuccess={onPageLoad}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                className="bg-background"
-            />
-        </Document>
-    );
-});
-
-
 
 const PLACEMENT_INSTRUCTIONS_ID = "signature-placement-instructions";
 const MIN_PLACEMENT_SIZE_PT = 32;
@@ -923,11 +892,13 @@ function DocumentSigningPage() {
 
     return (
         <div className="min-h-[100dvh] bg-gradient-to-b from-white/70 via-muted/20 to-background px-4 pb-8">
-            <SignatureModal
-                open={modalOpen}
-                onOpenChange={setModalOpen}
-                onSave={handleModalSave}
-            />
+            <Suspense fallback={null}>
+                <SignatureModal
+                    open={modalOpen}
+                    onOpenChange={setModalOpen}
+                    onSave={handleModalSave}
+                />
+            </Suspense>
 
             <div className="max-w-6xl mx-auto pt-6">
                 <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -989,11 +960,13 @@ function DocumentSigningPage() {
                     >
                          {selectedPdfUrl ? (
                              <div className="relative shadow-premium ring-1 ring-border/50">
-                                 <PdfPane
-                                     fileUrl={selectedPdfUrl}
-                                     containerWidth={containerWidth}
-                                     onPageLoad={handlePageLoad}
-                                 />
+                                 <Suspense fallback={<div className="p-10 text-muted-foreground">Loading PDF...</div>}>
+                                     <PdfPane
+                                         fileUrl={selectedPdfUrl}
+                                         containerWidth={containerWidth}
+                                         onPageLoad={handlePageLoad}
+                                     />
+                                 </Suspense>
 
                                   {/* Overlay Layer */}
                                   {placementOverlays}
@@ -1001,7 +974,7 @@ function DocumentSigningPage() {
                                  {/* Empty State Hint */}
                                  {placements.length === 0 && (
                                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                                         <div className="rounded-full bg-foreground/85 px-4 py-2 text-sm text-background backdrop-blur-sm">
+                                         <div className="rounded-full bg-foreground/90 px-4 py-2 text-sm text-background shadow-sm">
                                              Tap "Add Signature" to draw or "Use Last Signature", then drag to place
                                          </div>
                                      </div>

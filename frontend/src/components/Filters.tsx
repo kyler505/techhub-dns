@@ -52,7 +52,7 @@ export default function Filters({
                 ))}
             </div>
 
-            <div className="w-full sm:w-auto sm:min-w-[300px]">
+            <div className="w-full sm:w-auto sm:min-w-[260px] lg:min-w-[300px]">
                 <input
                     id="orders-search"
                     name="ordersSearch"

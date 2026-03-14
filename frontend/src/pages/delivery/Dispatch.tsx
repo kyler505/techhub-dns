@@ -561,7 +561,7 @@ export default function DeliveryDispatchPage() {
                       <div className="flex items-start justify-between gap-2">
                          <button
                            type="button"
-                           className="-mx-1 inline-flex min-h-[40px] items-center rounded px-1 text-left text-sm font-medium text-foreground hover:underline"
+                            className="-mx-1 inline-flex min-h-[44px] items-center rounded-md px-2 text-left text-sm font-medium text-foreground hover:underline"
                            onClick={() => handleViewDetail(order.id)}
                          >
                            {order.inflow_order_id}
@@ -602,7 +602,7 @@ export default function DeliveryDispatchPage() {
                     type="button"
                     role="tab"
                     aria-selected={isActive}
-                    className={`min-h-9 rounded-md px-3 text-sm font-medium transition-colors ${
+                    className={`min-h-[44px] rounded-md px-3 text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-accent text-accent-foreground shadow-sm"
                         : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
