@@ -50,7 +50,7 @@ export default function DispatchOrderLane({
                   <div className="space-y-1">
                     <button
                       type="button"
-                      className="inline-flex min-h-8 items-center rounded text-left text-sm font-medium text-foreground hover:underline"
+                      className="inline-flex min-h-[44px] items-center rounded-md px-1.5 text-left text-sm font-medium text-foreground hover:underline"
                       onClick={() => onViewOrder(order.id)}
                     >
                       {order.inflow_order_id}
@@ -59,6 +59,7 @@ export default function DispatchOrderLane({
                     <div className="text-xs text-muted-foreground">{formatDeliveryLocation(order)}</div>
                   </div>
                   <Checkbox
+                    className="h-5 w-5"
                     checked={isSelected}
                     onChange={() => onToggleOrder(order.id)}
                     aria-label={`Select order ${order.inflow_order_id ?? order.id}`}

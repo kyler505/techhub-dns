@@ -12,13 +12,7 @@ import {
 } from "recharts";
 
 import type { WorkflowDailyTrendDataPoint } from "../../api/analytics";
-
-const WORKFLOW_LINE_COLORS = {
-  shipped: "#0f766e",
-  delivered: "#0284c7",
-  fulfilled: "#500000",
-  picked: "#a16207",
-} as const;
+import { CHART_COLORS, CHART_HEIGHT_CLASS, CHART_TOOLTIP_STYLE } from "./chartTheme";
 
 interface WorkflowDailyLineChartProps {
   data: WorkflowDailyTrendDataPoint[];
@@ -28,7 +22,7 @@ interface WorkflowDailyLineChartProps {
 export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyLineChartProps) {
   if (loading) {
     return (
-      <div className="flex h-[320px] w-full items-center justify-center rounded bg-muted/20 animate-pulse">
+      <div className={`flex w-full items-center justify-center rounded bg-muted/20 ${CHART_HEIGHT_CLASS}`}>
         <p className="text-muted-foreground">Loading chart...</p>
       </div>
     );
@@ -36,87 +30,84 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-[320px] w-full flex-col items-center justify-center rounded bg-muted/20">
-        <Activity className="mb-2 h-6 w-6 text-slate-300" />
+      <div className={`flex w-full flex-col items-center justify-center rounded bg-muted/20 ${CHART_HEIGHT_CLASS}`}>
+        <Activity className="mb-2 h-6 w-6 text-[hsl(var(--chart-empty))]" />
         <p className="text-muted-foreground">No data available</p>
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={320}>
-      <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="4 6" className="stroke-muted/40" />
-        <XAxis
-          dataKey="date"
-          className="text-xs"
-          tickFormatter={(value: string | number) => {
-            const date = new Date(value);
-            return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
-        />
-        <YAxis className="text-xs" allowDecimals={false} />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px",
-            boxShadow: "0 12px 24px rgba(15, 23, 42, 0.08)",
-          }}
-          labelFormatter={(label: ReactNode) => {
-            if (typeof label !== "string" && typeof label !== "number") {
-              return "";
-            }
-            const date = new Date(label);
-            if (Number.isNaN(date.getTime())) {
-              return String(label);
-            }
-            return date.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            });
-          }}
-        />
-        <Legend />
-        <Line
-          type="monotone"
-          dataKey="shipped_count"
-          stroke={WORKFLOW_LINE_COLORS.shipped}
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 5 }}
-          name="Shipped"
-        />
-        <Line
-          type="monotone"
-          dataKey="delivered_count"
-          stroke={WORKFLOW_LINE_COLORS.delivered}
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 5 }}
-          name="Delivered"
-        />
-        <Line
-          type="monotone"
-          dataKey="fulfilled_count"
-          stroke={WORKFLOW_LINE_COLORS.fulfilled}
-          strokeWidth={2.5}
-          dot={false}
-          activeDot={{ r: 5 }}
-          name="Fulfilled/Completed"
-        />
-        <Line
-          type="monotone"
-          dataKey="picked_count"
-          stroke={WORKFLOW_LINE_COLORS.picked}
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 5 }}
-          name="Picked"
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <div className={CHART_HEIGHT_CLASS}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="4 6" className="stroke-muted/40" />
+          <XAxis
+            dataKey="date"
+            className="text-xs"
+            tickFormatter={(value: string | number) => {
+              const date = new Date(value);
+              return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            }}
+          />
+          <YAxis className="text-xs" allowDecimals={false} />
+          <Tooltip
+            contentStyle={CHART_TOOLTIP_STYLE}
+            labelFormatter={(label: ReactNode) => {
+              if (typeof label !== "string" && typeof label !== "number") {
+                return "";
+              }
+              const date = new Date(label);
+              if (Number.isNaN(date.getTime())) {
+                return String(label);
+              }
+              return date.toLocaleDateString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              });
+            }}
+          />
+          <Legend />
+          <Line
+            type="monotone"
+            dataKey="shipped_count"
+            stroke={CHART_COLORS.shipped}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 5 }}
+            name="Shipped"
+          />
+          <Line
+            type="monotone"
+            dataKey="delivered_count"
+            stroke={CHART_COLORS.delivered}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 5 }}
+            name="Delivered"
+          />
+          <Line
+            type="monotone"
+            dataKey="fulfilled_count"
+            stroke={CHART_COLORS.fulfilled}
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={{ r: 5 }}
+            name="Fulfilled/Completed"
+          />
+          <Line
+            type="monotone"
+            dataKey="picked_count"
+            stroke={CHART_COLORS.picked}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 5 }}
+            name="Picked"
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
