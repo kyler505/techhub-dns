@@ -333,12 +333,11 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto py-8 space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Live metrics for QA, fulfillment, and delivery status.</p>
         </div>
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">Refreshed every 15 mins</p>
       </div>
 
       {error && (
@@ -351,13 +350,18 @@ export default function Dashboard() {
         <Card className="xl:col-span-2 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
-            <span
-              className={`text-xs text-muted-foreground${socketStatus === "connected" ? " status-live" : ""}`}
-            >
-              {socketStatus === "connecting" && "Connecting"}
-              {socketStatus === "connected" && "Connected"}
-              {socketStatus === "disconnected" && "Disconnected"}
-            </span>
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span
+                className={`text-xs text-muted-foreground${socketStatus === "connected" ? " status-live" : ""}`}
+              >
+                {socketStatus === "connecting" && "Connecting"}
+                {socketStatus === "connected" && "Connected"}
+                {socketStatus === "disconnected" && "Disconnected"}
+              </span>
+              {socketStatus !== "connected" && (
+                <span className="text-[11px] text-muted-foreground">Fallback refresh every 60 seconds</span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <SectionErrorBoundary
