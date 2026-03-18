@@ -14,17 +14,29 @@ class AnalyticsService:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _is_business_day(date_value: Any) -> bool:
+        if isinstance(date_value, datetime):
+            target_date = date_value.date()
+        elif hasattr(date_value, "weekday"):
+            target_date = date_value
+        else:
+            target_date = datetime.fromisoformat(str(date_value)).date()
+
+        return target_date.weekday() < 5
+
     def get_order_status_counts(self) -> Dict[str, int]:
         """
         Get count of orders grouped by status.
-        
+
         Returns:
             Dict mapping status names to counts, e.g. {"picked": 5, "qa": 3, "delivered": 10}
         """
-        results = self.db.query(
-            Order.status,
-            func.count(Order.id).label('count')
-        ).group_by(Order.status).all()
+        results = (
+            self.db.query(Order.status, func.count(Order.id).label("count"))
+            .group_by(Order.status)
+            .all()
+        )
 
         if not results:
             return {}
@@ -34,7 +46,7 @@ class AnalyticsService:
     def get_delivery_performance(self) -> Dict[str, int]:
         """
         Get delivery performance metrics.
-        
+
         Returns:
             Dict with keys:
             - active_runs: count of delivery runs with status=Active
@@ -42,64 +54,89 @@ class AnalyticsService:
             - ready_for_delivery: count of orders with status=pre-delivery
         """
         # Count active delivery runs
-        active_runs = self.db.query(func.count(DeliveryRun.id)).filter(
-            DeliveryRun.status == DeliveryRunStatus.ACTIVE.value
-        ).scalar() or 0
+        active_runs = (
+            self.db.query(func.count(DeliveryRun.id))
+            .filter(DeliveryRun.status == DeliveryRunStatus.ACTIVE.value)
+            .scalar()
+            or 0
+        )
 
         # Count orders completed today (delivered status + delivered today)
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        completed_today = self.db.query(func.count(Order.id)).filter(
-            Order.status == OrderStatus.DELIVERED.value,
-            Order.updated_at >= today_start
-        ).scalar() or 0
+        today_start = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        completed_today = (
+            self.db.query(func.count(Order.id))
+            .filter(
+                Order.status == OrderStatus.DELIVERED.value,
+                Order.updated_at >= today_start,
+            )
+            .scalar()
+            or 0
+        )
 
         # Count orders ready for delivery (pre-delivery status)
-        ready_for_delivery = self.db.query(func.count(Order.id)).filter(
-            Order.status == OrderStatus.PRE_DELIVERY.value
-        ).scalar() or 0
+        ready_for_delivery = (
+            self.db.query(func.count(Order.id))
+            .filter(Order.status == OrderStatus.PRE_DELIVERY.value)
+            .scalar()
+            or 0
+        )
 
         return {
             "active_runs": active_runs,
             "completed_today": completed_today,
-            "ready_for_delivery": ready_for_delivery
+            "ready_for_delivery": ready_for_delivery,
         }
 
     def get_recent_activity(self, limit: int = 20) -> List[Dict[str, Any]]:
         """
         Get recent activity combining recent orders and audit log entries.
-        
+
         Returns recent orders (by created_at) and status changes (from audit logs),
         merged and sorted by timestamp, returning the latest N items.
-        
+
         Args:
             limit: Maximum number of items to return
-            
+
         Returns:
             List of dicts with keys: type, timestamp, description, order_id, status (for changes)
         """
         activity = []
 
         # Get recent orders
-        recent_orders = self.db.query(Order).order_by(
-            Order.created_at.desc()
-        ).limit(limit * 2).all()  # Get extra to account for filtering
+        recent_orders = (
+            self.db.query(Order)
+            .order_by(Order.created_at.desc())
+            .limit(limit * 2)
+            .all()
+        )  # Get extra to account for filtering
 
         for order in recent_orders:
-            activity.append({
-                "type": "order_created",
-                "timestamp": order.created_at,
-                "description": "Order created",
-                "order_id": order.id,
-                "order_number": order.inflow_order_id,
-            })
+            activity.append(
+                {
+                    "type": "order_created",
+                    "timestamp": order.created_at,
+                    "description": "Order created",
+                    "order_id": order.id,
+                    "order_number": order.inflow_order_id,
+                }
+            )
 
         # Get recent audit log entries (status changes)
-        recent_changes = self.db.query(AuditLog).order_by(
-            AuditLog.timestamp.desc()
-        ).limit(limit * 2).all()
+        recent_changes = (
+            self.db.query(AuditLog)
+            .order_by(AuditLog.timestamp.desc())
+            .limit(limit * 2)
+            .all()
+        )
 
         # Batch lookup order_id -> inflow_order_id to avoid N+1.
-        order_ids = [str(log.order_id) for log in recent_changes if getattr(log, "order_id", None)]
+        order_ids = [
+            str(log.order_id)
+            for log in recent_changes
+            if getattr(log, "order_id", None)
+        ]
         unique_order_ids = sorted(set(order_ids))
         unique_order_ids_lower = sorted({oid.lower() for oid in unique_order_ids})
 
@@ -130,30 +167,34 @@ class AnalyticsService:
 
         for log in recent_changes:
             order_id = str(log.order_id)
-            activity.append({
-                "type": "status_change",
-                "timestamp": log.timestamp,
-                "description": f"Status changed to {log.to_status}",
-                "order_id": order_id,
-                "order_number": order_number_by_id.get(order_id.lower()),
-                "from_status": log.from_status,
-                "to_status": log.to_status,
-                "changed_by": log.changed_by,
-                "reason": log.reason
-            })
+            activity.append(
+                {
+                    "type": "status_change",
+                    "timestamp": log.timestamp,
+                    "description": f"Status changed to {log.to_status}",
+                    "order_id": order_id,
+                    "order_number": order_number_by_id.get(order_id.lower()),
+                    "from_status": log.from_status,
+                    "to_status": log.to_status,
+                    "changed_by": log.changed_by,
+                    "reason": log.reason,
+                }
+            )
 
         # Sort by timestamp descending and return top N
         activity.sort(key=lambda x: x["timestamp"], reverse=True)
         return activity[:limit]
 
-    def get_time_trends(self, period: str = "day", days: int = 7) -> List[Dict[str, Any]]:
+    def get_time_trends(
+        self, period: str = "day", days: int = 7
+    ) -> List[Dict[str, Any]]:
         """
         Get time-series data for orders grouped by date.
-        
+
         Args:
             period: Grouping period ("day", "week", "month") - currently only "day" supported
             days: Number of days to look back
-            
+
         Returns:
             List of dicts with keys: date, count, status_breakdown
             Example: [
@@ -168,20 +209,21 @@ class AnalyticsService:
         cutoff_date = datetime.utcnow() - timedelta(days=days)
 
         # Query orders grouped by date
-        results = self.db.query(
-            func.date(Order.signature_captured_at).label('date'),
-            Order.status,
-            func.count(Order.id).label('count')
-        ).filter(
-            Order.status == OrderStatus.DELIVERED.value,
-            Order.signature_captured_at.isnot(None),
-            Order.signature_captured_at >= cutoff_date
-        ).group_by(
-            func.date(Order.signature_captured_at),
-            Order.status
-        ).order_by(
-            func.date(Order.signature_captured_at).desc()
-        ).all()
+        results = (
+            self.db.query(
+                func.date(Order.signature_captured_at).label("date"),
+                Order.status,
+                func.count(Order.id).label("count"),
+            )
+            .filter(
+                Order.status == OrderStatus.DELIVERED.value,
+                Order.signature_captured_at.isnot(None),
+                Order.signature_captured_at >= cutoff_date,
+            )
+            .group_by(func.date(Order.signature_captured_at), Order.status)
+            .order_by(func.date(Order.signature_captured_at).desc())
+            .all()
+        )
 
         if not results:
             return []
@@ -189,12 +231,14 @@ class AnalyticsService:
         # Aggregate by date
         trends = {}
         for date, status, count in results:
+            if not self._is_business_day(date):
+                continue
             date_str = str(date)
             if date_str not in trends:
                 trends[date_str] = {
                     "date": date_str,
                     "count": 0,
-                    "status_breakdown": {}
+                    "status_breakdown": {},
                 }
             trends[date_str]["count"] += count
             trends[date_str]["status_breakdown"][status] = count
@@ -212,13 +256,21 @@ class AnalyticsService:
                 func.date(AuditLog.timestamp).label("date"),
                 func.sum(
                     case(
-                        (func.lower(AuditLog.to_status) == OrderStatus.SHIPPING.value, 1),
+                        (
+                            func.lower(AuditLog.to_status)
+                            == OrderStatus.SHIPPING.value,
+                            1,
+                        ),
                         else_=0,
                     )
                 ).label("shipped_count"),
                 func.sum(
                     case(
-                        (func.lower(AuditLog.to_status) == OrderStatus.DELIVERED.value, 1),
+                        (
+                            func.lower(AuditLog.to_status)
+                            == OrderStatus.DELIVERED.value,
+                            1,
+                        ),
                         else_=0,
                     )
                 ).label("delivered_count"),

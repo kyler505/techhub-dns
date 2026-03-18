@@ -747,60 +747,29 @@ def get_order_details_pdf(order_id):
 @bp.route("/<uuid:order_id>/send-order-details", methods=["POST"])
 def send_order_details_email(order_id):
     """Generate Order Details PDF and email to recipient"""
-    from app.services.pdf_service import pdf_service
-    from app.services.email_service import email_service
-
     with get_db() as db:
         service = OrderService(db)
-        order = service.get_order_by_id(order_id)
-        if not order:
-            abort(404, description="Order not found")
+        current_user = get_current_user_email()
+        generated_by = current_user if current_user != "system" else None
 
-        # Get fresh inFlow data
-        inflow_service = InflowService()
-        inflow_data = inflow_service.get_order_by_id_sync(order.inflow_sales_order_id)
-
-        if not inflow_data:
-            abort(404, description="Order not found in inFlow")
-
-        # Get recipient email
-        recipient_email = inflow_data.get("email") or order.recipient_contact
-        if not recipient_email:
-            abort(400, description="No recipient email address available")
-
-        # Generate PDF
-        try:
-            pdf_bytes = pdf_service.generate_order_details_pdf(inflow_data)
-        except Exception as e:
-            import logging
-
-            logging.error(f"Failed to generate Order Details PDF: {e}")
-            abort(500, description="Failed to generate PDF")
-
-        # Send email
-        customer_name = inflow_data.get("contactName") or order.recipient_name
-        order_number = order.inflow_order_id
-
-        success = email_service.send_order_details_email(
-            to_address=recipient_email,
-            order_number=order_number,
-            customer_name=customer_name,
-            pdf_content=pdf_bytes,
+        success = service.send_order_details_email(
+            order_id=order_id,
+            generated_by=generated_by,
         )
 
         if success:
+            threading.Thread(target=_broadcast_orders_sync).start()
             return jsonify(
                 {
                     "success": True,
-                    "message": f"Order Details PDF sent to {recipient_email}",
-                    "recipient": recipient_email,
+                    "message": "Order Details PDF sent successfully",
                 }
             )
-        else:
-            abort(
-                500,
-                description="Failed to send email. Check Power Automate configuration.",
-            )
+
+        abort(
+            500,
+            description="Failed to send Order Details email or update order remarks.",
+        )
 
 
 # SocketIO event handlers will be registered in main.py
