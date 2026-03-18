@@ -3,6 +3,7 @@
 
 import sys
 from datetime import date
+from typing import Any, cast
 
 sys.path.append(".")
 
@@ -40,6 +41,21 @@ def test_is_business_day_filters_weekends():
     print("[PASS] business-day helper filters weekends")
 
 
+def test_workflow_daily_trends_skip_weekend_rows():
+    service = AnalyticsService(db=cast(Any, None))
+    start_date = date(2026, 3, 20)  # Friday
+    current_date = start_date
+    rows = []
+
+    while current_date <= date(2026, 3, 23):
+        if service._is_business_day(current_date):
+            rows.append(current_date.isoformat())
+        current_date = current_date.fromordinal(current_date.toordinal() + 1)
+
+    assert rows == ["2026-03-20", "2026-03-23"]
+    print("[PASS] workflow chart date range excludes weekend rows")
+
+
 if __name__ == "__main__":
     print("Running order-details workflow regression tests...")
     print()
@@ -48,6 +64,7 @@ if __name__ == "__main__":
     test_append_order_details_sent_marker_is_idempotent()
     test_append_order_details_sent_marker_for_empty_remarks()
     test_is_business_day_filters_weekends()
+    test_workflow_daily_trends_skip_weekend_rows()
 
     print()
     print("[SUCCESS] Order-details workflow regression tests passed!")
