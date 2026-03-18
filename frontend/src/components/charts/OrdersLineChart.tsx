@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Activity } from "lucide-react";
 import { TimeTrendDataPoint } from "../../api/analytics";
 import { CHART_HEIGHT_CLASS, CHART_TOOLTIP_STYLE } from "./chartTheme";
+import { formatChartDateLabel } from "./chartDate";
 
 interface OrdersLineChartProps {
   data: TimeTrendDataPoint[];
@@ -41,10 +42,9 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
         <XAxis 
           dataKey="date" 
           className="text-xs"
-          tickFormatter={(value: string | number) => {
-            const date = new Date(value);
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          }}
+          tickFormatter={(value: string | number) =>
+            formatChartDateLabel(value, { month: "short", day: "numeric" })
+          }
         />
         <YAxis className="text-xs" />
         <Tooltip 
@@ -53,13 +53,9 @@ export default function OrdersLineChart({ data, loading }: OrdersLineChartProps)
             if (typeof label !== "string" && typeof label !== "number") {
               return "";
             }
-            const date = new Date(label);
-            if (Number.isNaN(date.getTime())) {
-              return String(label);
-            }
-            return date.toLocaleDateString('en-US', { 
+            return formatChartDateLabel(label, {
               weekday: 'short',
-              month: 'short', 
+              month: 'short',
               day: 'numeric',
               year: 'numeric'
             });
