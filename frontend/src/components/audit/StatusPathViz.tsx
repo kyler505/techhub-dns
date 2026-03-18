@@ -78,14 +78,14 @@ export default function StatusPathViz({ auditLogs, title = "Status path" }: Stat
   }, [transitions]);
 
   const nodeCount = CANONICAL_STEPS.length;
-  const w = 660;
-  const h = 90;
-  const padX = 24;
-  const y = 34;
+  const w = 540;
+  const h = 72;
+  const padX = 18;
+  const y = 24;
   const stepX = (w - padX * 2) / (nodeCount - 1);
 
   return (
-    <div className="rounded-lg border border-maroon-900/10 bg-muted/20 p-3">
+    <div className="mx-auto max-w-3xl rounded-lg border border-maroon-900/10 bg-muted/20 p-2.5">
       <div className="text-xs font-medium text-muted-foreground">{title}</div>
       <svg className="mt-2 w-full" viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Order status path">
         {CANONICAL_STEPS.map((step, idx) => {
@@ -105,17 +105,17 @@ export default function StatusPathViz({ auditLogs, title = "Status path" }: Stat
                   x2={x}
                   y2={y}
                   stroke={active ? "hsl(var(--primary))" : "hsl(var(--border))"}
-                  strokeWidth={3}
+                  strokeWidth={2.5}
                   strokeLinecap="round"
                   opacity={active ? 0.95 : 0.6}
                 />
               ) : null}
-              <circle cx={x} cy={y} r={10} fill={fill} stroke={stroke} strokeWidth={2} />
-              <text x={x} y={68} textAnchor="middle" fontSize={11} fill="currentColor" className="text-foreground">
+              <circle cx={x} cy={y} r={8} fill={fill} stroke={stroke} strokeWidth={2} />
+              <text x={x} y={50} textAnchor="middle" fontSize={9} fill="currentColor" className="text-foreground">
                 {step.replace("_", " ")}
               </text>
               {duration != null ? (
-                <text x={x} y={84} textAnchor="middle" fontSize={10} fill="currentColor" className="text-muted-foreground">
+                <text x={x} y={64} textAnchor="middle" fontSize={8} fill="currentColor" className="text-muted-foreground">
                   {formatDuration(duration)}
                 </text>
               ) : null}

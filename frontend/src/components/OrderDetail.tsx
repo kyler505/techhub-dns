@@ -44,6 +44,36 @@ interface OrderDetailProps {
   retryingNotification: boolean;
 }
 
+type OrderItemLine = {
+  productId?: string;
+  productName?: string;
+  description?: string;
+  product?: {
+    name?: string;
+  };
+  quantity?: {
+    standardQuantity?: number | string;
+    serialNumbers?: Array<string | number>;
+  } | number | string;
+};
+
+const getLineQuantity = (line: OrderItemLine): number => {
+  const rawQuantity =
+    typeof line.quantity === "object" && line.quantity !== null
+      ? line.quantity.standardQuantity
+      : line.quantity;
+
+  return Math.floor(Number(rawQuantity ?? 0));
+};
+
+const getLineSerials = (line: OrderItemLine): string[] => {
+  if (typeof line.quantity !== "object" || line.quantity === null) {
+    return [];
+  }
+
+  return (line.quantity.serialNumbers ?? []).map((serial) => String(serial));
+};
+
 export default function OrderDetail({
   order,
   auditLogs,
@@ -307,31 +337,36 @@ export default function OrderDetail({
                   <TableRow>
                     <TableHead className="w-[60px]">#</TableHead>
                     <TableHead>Product</TableHead>
+                    <TableHead>Serials</TableHead>
                     <TableHead className="text-right">Quantity</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {order.inflow_data.lines.map((line: any, index: number) => (
-                    <TableRow key={line.productId || index}>
-                      <TableCell className="text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {line.productName ||
-                          line.product?.name ||
-                          line.description ||
-                          line.productId ||
-                          "Unknown Product"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {Math.floor(
-                          Number(
-                            line.quantity?.standardQuantity ?? line.quantity ?? 0
-                          )
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {order.inflow_data.lines.map((rawLine: unknown, index: number) => {
+                    const line = (rawLine ?? {}) as OrderItemLine;
+                    const serials = getLineSerials(line);
+
+                    return (
+                      <TableRow key={line.productId || index}>
+                        <TableCell className="text-muted-foreground">
+                          {index + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {line.productName ||
+                            line.product?.name ||
+                            line.description ||
+                            line.productId ||
+                            "Unknown Product"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {serials.length > 0 ? serials.join(", ") : "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {getLineQuantity(line)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
