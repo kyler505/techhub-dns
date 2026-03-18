@@ -305,6 +305,9 @@ class AnalyticsService:
         current_date = start_date
         data: List[Dict[str, Any]] = []
         while current_date <= today:
+            if not self._is_business_day(current_date):
+                current_date = current_date + timedelta(days=1)
+                continue
             date_str = current_date.isoformat()
             metrics = row_map.get(
                 date_str,
