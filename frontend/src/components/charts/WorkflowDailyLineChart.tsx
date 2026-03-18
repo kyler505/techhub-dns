@@ -13,6 +13,7 @@ import {
 
 import type { WorkflowDailyTrendDataPoint } from "../../api/analytics";
 import { CHART_COLORS, CHART_HEIGHT_CLASS, CHART_TOOLTIP_STYLE } from "./chartTheme";
+import { formatChartDateLabel } from "./chartDate";
 
 interface WorkflowDailyLineChartProps {
   data: WorkflowDailyTrendDataPoint[];
@@ -45,10 +46,9 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
           <XAxis
             dataKey="date"
             className="text-xs"
-            tickFormatter={(value: string | number) => {
-              const date = new Date(value);
-              return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-            }}
+            tickFormatter={(value: string | number) =>
+              formatChartDateLabel(value, { month: "short", day: "numeric" })
+            }
           />
           <YAxis className="text-xs" allowDecimals={false} />
           <Tooltip
@@ -57,11 +57,7 @@ export default function WorkflowDailyLineChart({ data, loading }: WorkflowDailyL
               if (typeof label !== "string" && typeof label !== "number") {
                 return "";
               }
-              const date = new Date(label);
-              if (Number.isNaN(date.getTime())) {
-                return String(label);
-              }
-              return date.toLocaleDateString("en-US", {
+              return formatChartDateLabel(label, {
                 weekday: "short",
                 month: "short",
                 day: "numeric",
