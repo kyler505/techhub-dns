@@ -499,25 +499,26 @@ export default function DeliveryDispatchPage() {
 
           <Card>
             <CardContent className="space-y-3 p-4">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div className="text-xs text-muted-foreground">Quick selection for currently filtered orders</div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search ID, recipient, deliverer, or location"
-                    className="h-8 w-[280px] max-w-full"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleToggleVisible}
-                    disabled={preDeliveryFilteredOrders.length === 0}
-                  >
-                    {allVisibleSelected ? "Clear visible" : "Select visible"}
-                  </Button>
-                </div>
-              </div>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="text-xs text-muted-foreground">Quick selection for currently filtered orders</div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                        placeholder="Search ID, recipient, deliverer, or location"
+                        className="min-h-[44px] w-full sm:w-[280px]"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleToggleVisible}
+                        disabled={preDeliveryFilteredOrders.length === 0}
+                        className="min-h-[44px] w-full sm:w-auto"
+                      >
+                        {allVisibleSelected ? "Clear visible" : "Select visible"}
+                      </Button>
+                    </div>
+                  </div>
 
               {preDeliveryFilteredOrders.length === 0 ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">No pre-delivery orders match this filter</div>
@@ -558,13 +559,13 @@ export default function DeliveryDispatchPage() {
                   {activeDeliveryPreview.map((order) => (
                     <div key={order.id} className="py-2 first:pt-0 last:pb-0">
                       <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          className="-mx-1 inline-flex min-h-8 items-center rounded px-1 text-left text-sm font-medium text-foreground hover:underline"
-                          onClick={() => handleViewDetail(order.id)}
-                        >
-                          {order.inflow_order_id}
-                        </button>
+                         <button
+                           type="button"
+                            className="-mx-1 inline-flex min-h-[44px] items-center rounded-md px-2 text-left text-sm font-medium text-foreground hover:underline"
+                           onClick={() => handleViewDetail(order.id)}
+                         >
+                           {order.inflow_order_id}
+                         </button>
                         <Badge variant="secondary" className="shrink-0">
                           {formatRunLabel(order.delivery_run_id)}
                         </Badge>
@@ -601,7 +602,7 @@ export default function DeliveryDispatchPage() {
                     type="button"
                     role="tab"
                     aria-selected={isActive}
-                    className={`min-h-9 rounded-md px-3 text-sm font-medium transition-colors ${
+                    className={`min-h-[44px] rounded-md px-3 text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-accent text-accent-foreground shadow-sm"
                         : "text-muted-foreground hover:bg-background/60 hover:text-foreground"

@@ -137,6 +137,81 @@ class OrderService:
     def _storage_path(self, *parts: str) -> Path:
         return Path(settings.storage_root).joinpath(*parts)
 
+    @staticmethod
+    def _append_order_details_sent_marker(existing_remarks: Any) -> Optional[str]:
+        marker = "Order Details Sent"
+        normalized = str(existing_remarks or "")
+        if marker in normalized:
+            return None
+        if not normalized.strip():
+            return marker
+        return f"{normalized.rstrip()}\n\n{marker}"
+
+    def _mark_order_details_sent(
+        self, order: Order, generated_by: Optional[str] = None
+    ) -> bool:
+        inflow_data = dict(order.inflow_data or {})
+        updated_remarks = self._append_order_details_sent_marker(
+            inflow_data.get("orderRemarks")
+        )
+        if updated_remarks is None:
+            return True
+
+        if not order.inflow_sales_order_id:
+            logger.warning(
+                "Order Details email sent for %s but order has no inflow_sales_order_id; skipping remarks update",
+                order.inflow_order_id,
+            )
+            return False
+
+        from app.services.inflow_service import InflowService
+
+        try:
+            inflow_service = InflowService()
+            inflow_service.update_order_remarks_sync(
+                order.inflow_sales_order_id, updated_remarks
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to update inFlow orderRemarks for %s after Order Details email: %s",
+                order.inflow_order_id,
+                exc,
+            )
+            return False
+
+        inflow_data["orderRemarks"] = updated_remarks
+        order.inflow_data = inflow_data
+        order.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(order)
+
+        audit_service = AuditService(self.db)
+        audit_service.log_order_action(
+            order_id=str(order.id),
+            action="order_details_sent_marked",
+            user_id=generated_by or "system",
+            description="Added 'Order Details Sent' to inFlow order remarks",
+            audit_metadata={"order_remarks": updated_remarks},
+        )
+        return True
+
+    def send_order_details_email(
+        self,
+        order_id: Union[UUID, str],
+        generated_by: Optional[str] = None,
+    ) -> bool:
+        order_id_str = str(order_id)
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
+        if not order:
+            raise NotFoundError("Order", str(order_id))
+
+        return self._send_order_details_email(order, generated_by)
+
     def mark_asset_tagged(
         self,
         order_id: Union[UUID, str],
@@ -1513,7 +1588,7 @@ class OrderService:
 
     def _send_order_details_email(
         self, order: Order, generated_by: Optional[str] = None
-    ) -> None:
+    ) -> bool:
         """
         Send Order Details PDF email to recipient after picklist generation.
 
@@ -1526,7 +1601,6 @@ class OrderService:
         """
         from app.services.pdf_service import pdf_service
         from app.services.email_service import email_service
-        from app.config import settings
 
         # Get recipient email
         recipient_email = order.recipient_contact
@@ -1538,7 +1612,7 @@ class OrderService:
                 logger.warning(
                     f"No inFlow data for order {order_number}, skipping Order Details generation"
                 )
-                return
+                return False
 
             pdf_bytes = None
             order_details_path = None
@@ -1609,13 +1683,13 @@ class OrderService:
                 logger.debug(
                     f"Power Automate email not configured, skipping Order Details email for order {order_number}"
                 )
-                return
+                return False
 
             if not recipient_email:
                 logger.warning(
                     f"No recipient email for order {order_number}, skipping Order Details email"
                 )
-                return
+                return False
 
             # Step 3: Send email with PDF
             customer_name = order.recipient_name or "Customer"
@@ -1645,16 +1719,25 @@ class OrderService:
                         "pdf_path": order_details_path,
                     },
                 )
+                if not self._mark_order_details_sent(order, generated_by):
+                    logger.error(
+                        "Order Details email succeeded for %s but remarks marker update failed",
+                        order_number,
+                    )
+                    return False
+                return True
             else:
                 logger.error(
                     f"Failed to send Order Details email to {recipient_email} for order {order_number}"
                 )
+                return False
 
         except Exception as e:
             # Log error but don't fail the picklist generation
             logger.error(
                 f"Error generating/sending Order Details for order {order.inflow_order_id}: {e}"
             )
+            return False
 
     def transition_shipping_workflow(
         self,

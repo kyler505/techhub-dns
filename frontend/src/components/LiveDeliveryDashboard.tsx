@@ -2,6 +2,7 @@ import { useDeliveryRuns } from "../hooks/useDeliveryRuns";
 import { Link } from "react-router-dom";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { Skeleton } from "./Skeleton";
 
 function getRunStatusVariant(status: string) {
     const normalized = status.toLowerCase().replace(/\s+/g, "_");
@@ -16,19 +17,51 @@ function getRunStatusVariant(status: string) {
 
 export default function LiveDeliveryDashboard() {
     const { runs, loading, error } = useDeliveryRuns();
+    const liveRegionMessage = loading
+        ? "Loading active delivery runs"
+        : runs.length === 0
+            ? "No active delivery runs"
+            : `Showing ${runs.length} active delivery runs`;
 
     return (
-        <div className="p-4">
+        <section className="p-4" aria-busy={loading} aria-describedby="live-delivery-summary">
+            <p id="live-delivery-summary" className="sr-only" aria-live="polite">
+                {liveRegionMessage}
+            </p>
             {error && (
-                <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive" role="status" aria-live="polite">
                     {error}
                 </div>
             )}
 
             {loading ? (
-                <div className="text-sm text-muted-foreground">Loading delivery runs...</div>
+                <div className="space-y-3" role="status" aria-live="polite">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                        <Card key={index} className="p-4">
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="space-y-2">
+                                        <Skeleton className="h-3 w-12" />
+                                        <Skeleton className="h-4 w-28" />
+                                    </div>
+                                    <div className="space-y-2 text-right">
+                                        <Skeleton className="ml-auto h-3 w-12" />
+                                        <Skeleton className="ml-auto h-4 w-20" />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <Skeleton className="h-12 w-full" />
+                                    <Skeleton className="h-12 w-full" />
+                                    <Skeleton className="h-12 w-full" />
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
             ) : runs.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No active delivery runs</div>
+                <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-6 text-sm text-muted-foreground" role="status" aria-live="polite">
+                    No active delivery runs
+                </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4">
                     {runs.map((r) => (
@@ -70,6 +103,6 @@ export default function LiveDeliveryDashboard() {
                     ))}
                 </div>
             )}
-        </div>
+        </section>
     );
 }

@@ -1030,6 +1030,32 @@ class InflowService:
                 return data[0] if data else None
             return data
 
+    def update_order_remarks_sync(
+        self, sales_order_id: str, order_remarks: str
+    ) -> Dict[str, Any]:
+        """Update the orderRemarks field for a sales order in inFlow."""
+        order = self.get_order_by_id_sync(sales_order_id)
+        if not order:
+            raise ValueError(f"Sales order {sales_order_id} not found in Inflow")
+
+        updated_order = dict(order)
+        updated_order["orderRemarks"] = order_remarks
+
+        url = f"{self.base_url}/{self.company_id}/sales-orders"
+        with httpx.Client() as client:
+            response = client.put(url, json=updated_order, headers=self.headers)
+            response.raise_for_status()
+            result = response.json()
+
+        if isinstance(result, dict) and "items" in result:
+            items = result.get("items") or []
+            return items[0] if items else updated_order
+        if isinstance(result, list):
+            return result[0] if result else updated_order
+        if isinstance(result, dict):
+            return result
+        return updated_order
+
     def fulfill_sales_order_sync(
         self, sales_order_id: str, db: Session = None, user_id: str = None
     ) -> Dict[str, Any]:
