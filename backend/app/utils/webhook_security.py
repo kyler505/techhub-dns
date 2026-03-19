@@ -7,9 +7,13 @@ logger = logging.getLogger(__name__)
 
 
 def _iter_secret_bytes(secret: str):
-    normalized_secret = secret[6:] if secret.startswith("whsec_") else secret
-    raw_secret_bytes = normalized_secret.encode("utf-8")
+    raw_secret_bytes = secret.encode("utf-8")
     yield raw_secret_bytes
+
+    normalized_secret = secret[6:] if secret.startswith("whsec_") else secret
+    normalized_secret_bytes = normalized_secret.encode("utf-8")
+    if normalized_secret_bytes != raw_secret_bytes:
+        yield normalized_secret_bytes
 
     padded_secret = normalized_secret + "=" * (-len(normalized_secret) % 4)
 
@@ -19,7 +23,10 @@ def _iter_secret_bytes(secret: str):
         except Exception:
             continue
 
-        if decoded_secret and decoded_secret != raw_secret_bytes:
+        if decoded_secret and decoded_secret not in {
+            raw_secret_bytes,
+            normalized_secret_bytes,
+        }:
             yield decoded_secret
 
 
