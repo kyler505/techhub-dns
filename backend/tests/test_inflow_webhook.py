@@ -189,9 +189,20 @@ def test_verify_webhook_signature_accepts_base64url_whsec_secret():
     assert verify_webhook_signature(payload, signature, secret) is True
 
 
+def test_verify_webhook_signature_accepts_literal_whsec_secret():
+    payload = b'{"orderNumber":"TH-4515"}'
+    secret = "whsec_literal-secret-value-123456"
+    signature = base64.b64encode(
+        hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+    ).decode("ascii")
+
+    assert verify_webhook_signature(payload, signature, secret) is True
+
+
 if __name__ == "__main__":
     test_webhook_returns_500_on_processing_error()
     test_webhook_returns_validation_status_code()
     test_webhook_accepts_env_secret_when_db_secret_is_stale()
     test_verify_webhook_signature_accepts_base64url_whsec_secret()
+    test_verify_webhook_signature_accepts_literal_whsec_secret()
     print("[PASS] inflow webhook route tests passed")
