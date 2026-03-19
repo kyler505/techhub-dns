@@ -5,6 +5,7 @@ Extracted from OrderService for better separation of concerns.
 """
 
 import logging
+from pathlib import Path
 from typing import Dict, Any, List
 
 from reportlab.pdfgen import canvas
@@ -17,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 class PicklistService:
     """Service for generating picklist PDFs from inFlow order data."""
+
+    def __init__(self):
+        self.logo_path = (
+            Path(__file__).parent.parent / "templates" / "tamu_tech_services.png"
+        )
 
     @staticmethod
     def _as_dict(value: Any) -> Dict[str, Any]:
@@ -61,7 +67,20 @@ class PicklistService:
 
         # Header
         x_offset = 50
-        y_offset = height - 80
+        logo_width = 150
+        logo_height = 50
+        logo_bottom_margin = 20
+        logo_top_y = height - logo_height - logo_bottom_margin
+        pdf.drawImage(
+            str(self.logo_path),
+            x_offset,
+            logo_top_y,
+            width=logo_width,
+            height=logo_height,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+        y_offset = logo_top_y - 20
 
         pdf.drawString(x_offset, y_offset, f"WCDC - TechHub")
         pdf.drawRightString(width - x_offset, y_offset, f"Customer: {customer_name}")

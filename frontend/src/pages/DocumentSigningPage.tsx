@@ -1,20 +1,16 @@
- import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFPageProxy } from "pdfjs-dist";
 // pdf-lib is used server-side for PDF bundling
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
 import { ordersApi } from "../api/orders";
 import { OrderDetail } from "../types/order";
-import { SignatureModal } from "../components/SignatureModal";
 import { signatureCache, type LastSignature } from "../lib/signatureCache";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { PenTool, X } from "lucide-react";
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+const SignatureModal = lazy(() => import("../components/SignatureModal").then((module) => ({ default: module.SignatureModal })));
+const PdfPane = lazy(() => import("../components/document-signing/PdfPane"));
 
 const SIGNATURE_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
@@ -44,32 +40,129 @@ interface Placement {
 }
 
 
-type PdfPaneProps = {
-    fileUrl: string;
-    containerWidth: number | null;
-    onPageLoad: (page: PDFPageProxy) => void;
+type PlacementOverlayProps = {
+    placement: Placement;
+    pageViewport: { width: number; height: number } | null;
+    scale: number;
+    isSelected: boolean;
+    isActiveDrag: boolean;
+    instructionsId: string;
+    onPointerDown: (event: React.PointerEvent, id: string) => void;
+    onTouchStart: (event: React.TouchEvent, id: string) => void;
+    onResizePointerDown: (event: React.PointerEvent, id: string) => void;
+    onResizeTouchStart: (event: React.TouchEvent, id: string) => void;
+    onSelect: (id: string) => void;
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>, placement: Placement) => void;
+    onRemove: (id: string) => void;
 };
 
-const PdfPane = memo(function PdfPane({ fileUrl, containerWidth, onPageLoad }: PdfPaneProps) {
+const PlacementOverlay = memo(function PlacementOverlay({
+    placement,
+    pageViewport,
+    scale,
+    isSelected,
+    isActiveDrag,
+    instructionsId,
+    onPointerDown,
+    onTouchStart,
+    onResizePointerDown,
+    onResizeTouchStart,
+    onSelect,
+    onKeyDown,
+    onRemove,
+}: PlacementOverlayProps) {
+    const style = useMemo(() => {
+        if (!pageViewport) return { display: 'none' } as const;
+
+        const xPx = placement.x * scale;
+        const yPx = (pageViewport.height - placement.y - placement.height) * scale;
+        const wPx = placement.width * scale;
+        const hPx = placement.height * scale;
+
+        return {
+            left: 0,
+            top: 0,
+            width: `${wPx}px`,
+            height: `${hPx}px`,
+            position: 'absolute' as const,
+            transform: `translate3d(${xPx}px, ${yPx}px, 0)`,
+            ...(isActiveDrag ? { willChange: 'transform' as const } : {}),
+        };
+    }, [isActiveDrag, pageViewport, placement, scale]);
+
+    if (!pageViewport) {
+        return null;
+    }
+
     return (
-        <Document
-            file={fileUrl}
-            loading={<div className="p-10 text-muted-foreground">Loading PDF...</div>}
-            error={<div className="p-10 text-destructive">Failed to load PDF</div>}
+        <div
+            role="button"
+            tabIndex={0}
+            aria-label="Signature placement"
+            aria-describedby={instructionsId}
+            className={`group cursor-move touch-none select-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
+            style={{
+                ...style,
+                touchAction: 'none',
+            }}
+            onPointerDown={(e) => {
+                onSelect(placement.id);
+                onPointerDown(e, placement.id);
+            }}
+            onTouchStart={(e) => {
+                onSelect(placement.id);
+                onTouchStart(e, placement.id);
+            }}
+            onKeyDown={(event) => onKeyDown(event, placement)}
         >
-            <Page
-                pageNumber={1}
-                width={containerWidth || undefined}
-                onLoadSuccess={onPageLoad}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                className="bg-background"
+            <img
+                src={placement.dataUrl}
+                alt="Signature"
+                className="h-full w-full object-contain pointer-events-none"
             />
-        </Document>
+
+            {isSelected && (
+                <Button
+                    type="button"
+                    data-delete-button
+                    variant="destructive"
+                    size="icon"
+                    aria-label="Remove signature"
+                    className="pointer-events-auto absolute -right-3 -top-3 z-20 h-9 w-9 rounded-full p-0 shadow-premium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive"
+                    onPointerDown={(e) => {
+                        e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(placement.id);
+                    }}
+                >
+                    <X className="h-4 w-4" />
+                </Button>
+            )}
+
+            {isSelected && (
+                <button
+                    type="button"
+                    aria-label="Resize signature"
+                    data-resize-handle
+                    className="pointer-events-auto absolute -bottom-4 -left-4 z-20 flex h-10 w-10 cursor-nw-resize items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    onPointerDown={(e) => onResizePointerDown(e, placement.id)}
+                    onTouchStart={(e) => onResizeTouchStart(e, placement.id)}
+                    style={{ touchAction: 'none' }}
+                >
+                    <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 6L6 18" />
+                        <path d="M12 6h6v6" />
+                    </svg>
+                </button>
+            )}
+        </div>
     );
 });
 
-
+const PLACEMENT_INSTRUCTIONS_ID = "signature-placement-instructions";
+const MIN_PLACEMENT_SIZE_PT = 32;
 
 function DocumentSigningPage() {
     const [searchParams] = useSearchParams();
@@ -295,10 +388,74 @@ function DocumentSigningPage() {
         setError(null);
     };
 
-    const removePlacement = (id: string) => {
-        setPlacements(prev => prev.filter(p => p.id !== id));
-        if (selectedPlacementId === id) setSelectedPlacementId(null);
-    };
+    const removePlacement = useCallback((id: string) => {
+        setPlacements((prev) => prev.filter((p) => p.id !== id));
+        setSelectedPlacementId((prev) => (prev === id ? null : prev));
+    }, []);
+
+    const pxToPoints = useCallback((px: number) => {
+        const effectiveScale = scale && scale > 0 ? scale : 1;
+        return px / effectiveScale;
+    }, [scale]);
+
+    const movePlacement = useCallback((id: string, deltaX: number, deltaY: number) => {
+        setPlacements((prev) => prev.map((placement) => {
+            if (placement.id !== id) return placement;
+            return {
+                ...placement,
+                x: placement.x + deltaX,
+                y: placement.y + deltaY,
+            };
+        }));
+    }, []);
+
+    const resizePlacement = useCallback((id: string, delta: number) => {
+        setPlacements((prev) => prev.map((placement) => {
+            if (placement.id !== id) return placement;
+
+            const aspectRatio = placement.width / Math.max(placement.height, 0.1);
+            let nextWidth = placement.width + delta;
+            nextWidth = Math.max(nextWidth, MIN_PLACEMENT_SIZE_PT);
+            const nextHeight = Math.max(nextWidth / aspectRatio, MIN_PLACEMENT_SIZE_PT);
+
+            return {
+                ...placement,
+                width: nextWidth,
+                height: nextHeight,
+            };
+        }));
+    }, []);
+
+    const handlePlacementKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>, placement: Placement) => {
+        const key = event.key;
+        const moveStepPx = 8;
+        const movementStep = pxToPoints(moveStepPx);
+        const resizeStep = pxToPoints(moveStepPx);
+
+        if (key === "Delete" || key === "Backspace") {
+            event.preventDefault();
+            removePlacement(placement.id);
+            return;
+        }
+
+        const arrowMoves: Record<string, { dx: number; dy: number }> = {
+            ArrowLeft: { dx: -movementStep, dy: 0 },
+            ArrowRight: { dx: movementStep, dy: 0 },
+            ArrowUp: { dx: 0, dy: movementStep },
+            ArrowDown: { dx: 0, dy: -movementStep },
+        };
+
+        if (key in arrowMoves) {
+            event.preventDefault();
+            const { dx, dy } = arrowMoves[key];
+            if (event.shiftKey) {
+                const direction = key === "ArrowLeft" || key === "ArrowDown" ? -resizeStep : resizeStep;
+                resizePlacement(placement.id, direction);
+            } else {
+                movePlacement(placement.id, dx, dy);
+            }
+        }
+    }, [movePlacement, pxToPoints, removePlacement, resizePlacement]);
 
     // --- Dragging Logic ---
     const dragStartRef = useRef<{ id: string, startX: number, startY: number, initX: number, initY: number } | null>(null);
@@ -470,7 +627,7 @@ function DocumentSigningPage() {
         });
     };
 
-    const handlePointerDown = (e: React.PointerEvent, id: string) => {
+    const handlePointerDown = useCallback((e: React.PointerEvent, id: string) => {
         const target = e.target as HTMLElement | null;
         if (target?.closest('[data-resize-handle], [data-delete-button]')) return;
         e.stopPropagation(); // Prevent PDF scrolling if possible? Or maybe just capture
@@ -494,9 +651,9 @@ function DocumentSigningPage() {
             initX: placement.x,
             initY: placement.y // stored as Bottom-Left
         };
-    };
+    }, [placements]);
 
-    const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
+    const handlePointerMove = useCallback((e: React.PointerEvent | PointerEvent) => {
         if (interactionTypeRef.current !== 'pointer') return;
         if (!dragStartRef.current && !resizeStartRef.current) return;
         if ('preventDefault' in e) {
@@ -504,9 +661,9 @@ function DocumentSigningPage() {
         }
 
         scheduleLatestMove(e.clientX, e.clientY);
-    };
+    }, []);
 
-    const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    const handleTouchStart = useCallback((e: React.TouchEvent, id: string) => {
         const target = e.target as HTMLElement | null;
         if (target?.closest('[data-resize-handle], [data-delete-button]')) return;
         if (interactionTypeRef.current === 'pointer') return;
@@ -529,9 +686,9 @@ function DocumentSigningPage() {
             initX: placement.x,
             initY: placement.y
         };
-    };
+    }, [placements]);
 
-    const handleTouchMove = (e: TouchEvent | React.TouchEvent) => {
+    const handleTouchMove = useCallback((e: TouchEvent | React.TouchEvent) => {
         if (interactionTypeRef.current !== 'touch') return;
         const touch = 'touches' in e ? (e.touches[0] || e.changedTouches[0]) : null;
         if (!touch) return;
@@ -540,7 +697,7 @@ function DocumentSigningPage() {
         }
 
         scheduleLatestMove(touch.clientX, touch.clientY);
-    };
+    }, []);
 
     const endInteraction = () => {
         dragStartRef.current = null;
@@ -567,7 +724,7 @@ function DocumentSigningPage() {
         detachTouchListeners();
     };
 
-    const handleResizePointerDown = (e: React.PointerEvent, id: string) => {
+    const handleResizePointerDown = useCallback((e: React.PointerEvent, id: string) => {
         e.stopPropagation();
         const placement = placements.find(p => p.id === id);
         if (!placement) return;
@@ -597,9 +754,9 @@ function DocumentSigningPage() {
             startHeight: placement.height,
             minSize
         };
-    };
+    }, [placements]);
 
-    const handleResizeTouchStart = (e: React.TouchEvent, id: string) => {
+    const handleResizeTouchStart = useCallback((e: React.TouchEvent, id: string) => {
         if (interactionTypeRef.current === 'pointer') return;
         const placement = placements.find(p => p.id === id);
         const touch = e.touches[0];
@@ -631,7 +788,7 @@ function DocumentSigningPage() {
             startHeight: placement.height,
             minSize
         };
-    };
+    }, [placements]);
 
     useEffect(() => {
         return () => {
@@ -640,6 +797,31 @@ function DocumentSigningPage() {
             detachTouchListeners();
         };
     }, []);
+
+    const placementOverlays = useMemo(() => {
+        if (!pageViewport) return null;
+        return placements.map((p) => {
+            const isActiveDrag = activeInteraction?.id === p.id && activeInteraction.mode === 'drag';
+            return (
+                <PlacementOverlay
+                    key={p.id}
+                    placement={p}
+                    pageViewport={pageViewport}
+                    scale={scale}
+                    isSelected={selectedPlacementId === p.id}
+                    isActiveDrag={isActiveDrag}
+                    instructionsId={PLACEMENT_INSTRUCTIONS_ID}
+                    onPointerDown={handlePointerDown}
+                    onTouchStart={handleTouchStart}
+                    onResizePointerDown={handleResizePointerDown}
+                    onResizeTouchStart={handleResizeTouchStart}
+                    onSelect={setSelectedPlacementId}
+                    onKeyDown={handlePlacementKeyDown}
+                    onRemove={removePlacement}
+                />
+            );
+        });
+    }, [activeInteraction?.id, activeInteraction?.mode, handlePointerDown, handleResizePointerDown, handleResizeTouchStart, handleTouchStart, pageViewport, placements, removePlacement, scale, selectedPlacementId]);
 
     const saveSignedPdf = async () => {
         if (!order || placements.length === 0) {
@@ -698,30 +880,6 @@ function DocumentSigningPage() {
         }
     };
 
-    // Calculate DOM styles for a placement
-    const getPlacementStyle = (p: Placement, willChangeTransform: boolean) => {
-        if (!pageViewport) return { display: 'none' };
-
-        // Convert PDF Points (Bottom-Left) to DOM Pixels (Top-Left)
-        // xPx = xPt * scale
-        // yPx = (PageH - yPt - hPt) * scale
-
-        const xPx = p.x * scale;
-        const yPx = (pageViewport.height - p.y - p.height) * scale;
-        const wPx = p.width * scale;
-        const hPx = p.height * scale;
-
-        return {
-            left: 0,
-            top: 0,
-            width: `${wPx}px`,
-            height: `${hPx}px`,
-            position: 'absolute' as const,
-            transform: `translate3d(${xPx}px, ${yPx}px, 0)`,
-            ...(willChangeTransform ? { willChange: 'transform' as const } : {}),
-        };
-    };
-
     // --- Render ---
 
     if (loadingOrder) {
@@ -733,12 +891,14 @@ function DocumentSigningPage() {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-gradient-to-b from-[#f8f5f2] via-[#fbfbfb] to-background px-4 pb-8">
-            <SignatureModal
-                open={modalOpen}
-                onOpenChange={setModalOpen}
-                onSave={handleModalSave}
-            />
+        <div className="min-h-[100dvh] bg-gradient-to-b from-white/70 via-muted/20 to-background px-4 pb-8">
+            <Suspense fallback={null}>
+                <SignatureModal
+                    open={modalOpen}
+                    onOpenChange={setModalOpen}
+                    onSave={handleModalSave}
+                />
+            </Suspense>
 
             <div className="max-w-6xl mx-auto pt-6">
                 <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -791,90 +951,55 @@ function DocumentSigningPage() {
                             Drag to place • Resize from bottom-left • Tap Save when finished
                         </div>
                     </div>
+                    <p id={PLACEMENT_INSTRUCTIONS_ID} className="sr-only">
+                        Focus a signature placement, use arrow keys to move, hold shift plus arrow to resize, delete/backspace removes.
+                    </p>
                     <div
                         className="relative flex min-h-[500px] justify-center overflow-hidden bg-muted/30 p-4 select-none"
                         ref={viewerRef}
                     >
                          {selectedPdfUrl ? (
                              <div className="relative shadow-premium ring-1 ring-border/50">
-                                 <PdfPane
-                                     fileUrl={selectedPdfUrl}
-                                     containerWidth={containerWidth}
-                                     onPageLoad={handlePageLoad}
-                                 />
+                                 <Suspense fallback={<div className="p-10 text-muted-foreground">Loading PDF...</div>}>
+                                     <PdfPane
+                                         fileUrl={selectedPdfUrl}
+                                         containerWidth={containerWidth}
+                                         onPageLoad={handlePageLoad}
+                                     />
+                                 </Suspense>
 
-                                 {/* Overlay Layer */}
-                                 {placements.map(p => (
-                                     <div
-                                         key={p.id}
-                                         className={`group cursor-move touch-none select-none ${selectedPlacementId === p.id ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
-                                         style={{
-                                             ...getPlacementStyle(
-                                                 p,
-                                                 activeInteraction?.id === p.id && activeInteraction.mode === 'drag'
-                                             ),
-                                             touchAction: 'none'
-                                         }}
-                                         onPointerDown={(e) => handlePointerDown(e, p.id)}
-                                         onTouchStart={(e) => handleTouchStart(e, p.id)}
-                                     >
-                                        <img
-                                            src={p.dataUrl}
-                                            alt="Signature"
-                                            className="w-full h-full object-contain pointer-events-none"
-                                        />
+                                  {/* Overlay Layer */}
+                                  {placementOverlays}
 
-                                        {/* Delete Button (visible on hover/select) */}
-                                        {(selectedPlacementId === p.id) && (
-                                            <Button
-                                                type="button"
-                                                data-delete-button
-                                                variant="destructive"
-                                                size="icon"
-                                                className="pointer-events-auto absolute -right-3 -top-3 z-20 h-7 w-7 rounded-full p-0 shadow-premium"
-                                                onPointerDown={(e) => { e.stopPropagation(); }}
-                                                onClick={(e) => { e.stopPropagation(); removePlacement(p.id); }}
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </Button>
-                                        )}
-
-                                         {(selectedPlacementId === p.id) && (
-                                             <div
-                                                 data-resize-handle
-                                                 className="pointer-events-auto absolute -bottom-3 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary bg-background shadow-premium transition-transform hover:scale-110 cursor-nw-resize"
-                                                 onPointerDown={(e) => handleResizePointerDown(e, p.id)}
-                                                 onTouchStart={(e) => handleResizeTouchStart(e, p.id)}
-                                                 style={{ touchAction: 'none' }}
-                                             >
-                                                <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M18 6L6 18" />
-                                                    <path d="M12 6h6v6" />
-                                                </svg>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-
-                                {/* Empty State Hint */}
-                                {placements.length === 0 && (
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                                        <div className="rounded-full bg-foreground/85 px-4 py-2 text-sm text-background backdrop-blur-sm">
-                                            Tap "Add Signature" to draw or "Use Last Signature", then drag to place
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="self-center text-muted-foreground">No PDF Loaded</div>
-                        )}
+                                 {/* Empty State Hint */}
+                                 {placements.length === 0 && (
+                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                                         <div className="rounded-full bg-foreground/90 px-4 py-2 text-sm text-background shadow-sm">
+                                             Tap "Add Signature" to draw or "Use Last Signature", then drag to place
+                                         </div>
+                                     </div>
+                                 )}
+                             </div>
+                         ) : (
+                             <div className="self-center text-muted-foreground">No PDF Loaded</div>
+                         )}
                     </div>
 
                     {/* Mobile Floating Action Button */}
-                    <div className="sm:hidden fixed bottom-6 right-6">
+                    <div className="sm:hidden fixed bottom-4 right-4 flex flex-col items-end gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={useLastSignature}
+                            disabled={!reusableSignature.canUse}
+                            title={reusableSignature.canUse ? "Apply last saved signature" : reusableSignature.reason}
+                            className="min-h-[44px] min-w-[160px] text-xs font-semibold"
+                        >
+                            Use Last Signature
+                        </Button>
                         <Button
                             className="h-14 w-14 rounded-full p-0 shadow-premium"
                             onClick={openSignatureModal}
+                            aria-label="Add new signature"
                         >
                             <PenTool className="w-6 h-6 text-white" />
                         </Button>

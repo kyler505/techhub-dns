@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
+import { AlertCircle, ArrowLeft, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import OrderDetailComponent from "../components/OrderDetail";
+import { Skeleton } from "../components/Skeleton";
 import StatusTransition from "../components/StatusTransition";
+import { Button } from "../components/ui/button";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 import {
     getOrderAuditQueryOptions,
@@ -14,7 +17,7 @@ import {
     invalidateOrderQueries,
 } from "../queries/orders";
 import { OrderStatus } from "../types/order";
-import { extractApiErrorMessage } from "../utils/apiErrors";
+import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
 import { isValidOrderId } from "../utils/orderIds";
 
 export default function OrderDetailPage() {
@@ -36,17 +39,37 @@ export default function OrderDetailPage() {
     const orderQuery = useQuery({
         ...getOrderDetailQueryOptions(orderId ?? ""),
         enabled: Boolean(orderId),
+        throwOnError: shouldThrowToBoundary,
     });
 
     const auditQuery = useQuery({
         ...getOrderAuditQueryOptions(orderId ?? ""),
         enabled: Boolean(orderId),
+        throwOnError: shouldThrowToBoundary,
     });
 
     const order = orderQuery.data ?? null;
     const auditLogs = auditQuery.data ?? [];
     const notifications = order?.teams_notifications ?? [];
     const loading = orderQuery.isPending || auditQuery.isPending;
+
+    const renderState = (title: string, description: string, icon: "error" | "missing") => (
+        <div className="mx-auto flex min-h-[50vh] max-w-xl items-center justify-center px-4">
+            <div className="w-full rounded-lg border border-border bg-card p-6 text-center shadow-sm">
+                {icon === "error" ? (
+                    <AlertCircle className="mx-auto mb-3 h-8 w-8 text-destructive" />
+                ) : (
+                    <FileSearch className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                )}
+                <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+                <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+                <Button type="button" variant="ghost" className="mt-4 gap-2" onClick={() => navigate(-1)}>
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </Button>
+            </div>
+        </div>
+    );
 
     const refreshOrder = async (): Promise<void> => {
         if (!orderId) {
@@ -256,29 +279,33 @@ export default function OrderDetailPage() {
 
 
     if (loading) {
-        return <div className="p-4">Loading...</div>;
+        return (
+            <div className="space-y-4 p-4">
+                <Skeleton className="h-10 w-28" />
+                <Skeleton className="h-10 w-48" />
+                <Skeleton className="h-72 w-full rounded-lg" />
+            </div>
+        );
     }
 
     if (invalidOrderId) {
-        return <div className="p-4">Invalid order link</div>;
+        return renderState("Invalid order link", "This order link is malformed or missing a valid order id.", "missing");
     }
 
     if (orderQuery.isError) {
-        return <div className="p-4">Failed to load order details</div>;
+        return renderState("Failed to load order details", "Try refreshing the page or return to the orders list and try again.", "error");
     }
 
     if (!order) {
-        return <div className="p-4">Order not found</div>;
+        return renderState("Order not found", "The order may have been removed or you may not have access to it.", "missing");
     }
 
     return (
         <div className="p-4">
-            <button
-                onClick={() => navigate(-1)}
-                className="mb-4 px-4 py-2 border rounded hover:bg-gray-100"
-            >
-                ← Back
-            </button>
+            <Button type="button" variant="ghost" className="mb-4 gap-2" onClick={() => navigate(-1)}>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+            </Button>
             <OrderDetailComponent
                 order={order}
                 auditLogs={auditLogs}

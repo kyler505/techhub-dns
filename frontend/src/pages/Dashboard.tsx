@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
 import { Order } from "../types/order";
-import LiveDeliveryDashboard from "../components/LiveDeliveryDashboard";
-import WorkflowDailyLineChart from "../components/charts/WorkflowDailyLineChart";
-import FulfilledTotalsBarChart from "../components/charts/FulfilledTotalsBarChart";
 import { Activity, Package, CheckCircle2, Truck } from "lucide-react";
+import { SectionErrorBoundary } from "../components/error-boundaries/AppErrorBoundaries";
 import {
   analyticsQueryKeys,
   getDeliveredOrdersQueryOptions,
@@ -20,6 +17,11 @@ import {
   getWorkflowDailyTrendsQueryOptions,
   getYearlyFulfilledTotalsQueryOptions,
 } from "../queries/analytics";
+import { shouldThrowToBoundary } from "../utils/apiErrors";
+
+const LiveDeliveryDashboard = lazy(() => import("../components/LiveDeliveryDashboard"));
+const WorkflowDailyLineChart = lazy(() => import("../components/charts/WorkflowDailyLineChart"));
+const FulfilledTotalsBarChart = lazy(() => import("../components/charts/FulfilledTotalsBarChart"));
 
 function useAnimatedCounter(target: number, duration: number = 900) {
   const [count, setCount] = useState(0);
@@ -68,14 +70,9 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-      className="group"
-    >
-      <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-premium-hover hover:-translate-y-0.5 h-full">
-        <div className={`absolute bottom-0 right-0 p-3 rounded-tl-2xl ${accentClasses[accent]} opacity-90 transition-transform duration-300 group-hover:scale-110`}>
+    <div className="group">
+      <Card className="relative overflow-hidden" data-transition="card-hover">
+        <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
           <Icon className="w-5 h-5" />
         </div>
         <CardHeader className="pb-2 pt-4">
@@ -87,19 +84,13 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
           {loading ? (
             <Skeleton className="h-9 w-16" />
           ) : (
-            <motion.div
-              className="text-3xl font-bold text-foreground"
-              key={value}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "spring", stiffness: 320, damping: 22 }}
-            >
+            <div className="text-3xl font-bold text-foreground tabular-nums" key={value}>
               {animatedValue}
-            </motion.div>
+            </div>
           )}
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }
 
@@ -118,12 +109,30 @@ export default function Dashboard() {
   const workflowTrendDaysRef = useRef<7 | 30>(30);
   const queryClient = useQueryClient();
 
-  const statusCountsQuery = useQuery(getOrderStatusCountsQueryOptions());
-  const deliveryPerformanceQuery = useQuery(getDeliveryPerformanceQueryOptions());
-  const workflowDailyTrendsQuery = useQuery(getWorkflowDailyTrendsQueryOptions(workflowTrendDays));
-  const monthlyFulfilledTotalsQuery = useQuery(getMonthlyFulfilledTotalsQueryOptions());
-  const yearlyFulfilledTotalsQuery = useQuery(getYearlyFulfilledTotalsQueryOptions());
-  const deliveredOrdersQuery = useQuery(getDeliveredOrdersQueryOptions());
+  const statusCountsQuery = useQuery({
+    ...getOrderStatusCountsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const deliveryPerformanceQuery = useQuery({
+    ...getDeliveryPerformanceQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const workflowDailyTrendsQuery = useQuery({
+    ...getWorkflowDailyTrendsQueryOptions(workflowTrendDays),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const monthlyFulfilledTotalsQuery = useQuery({
+    ...getMonthlyFulfilledTotalsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const yearlyFulfilledTotalsQuery = useQuery({
+    ...getYearlyFulfilledTotalsQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
+  const deliveredOrdersQuery = useQuery({
+    ...getDeliveredOrdersQueryOptions(),
+    throwOnError: shouldThrowToBoundary,
+  });
 
   const statusCounts = statusCountsQuery.data ?? {};
   const deliveryPerf = deliveryPerformanceQuery.data ?? {
@@ -324,16 +333,12 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto py-8 space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
+      <div className="flex flex-col gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Live metrics for QA, fulfillment, and delivery status.</p>
         </div>
-      </motion.div>
+      </div>
 
       {error && (
         <div className="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4">
@@ -345,16 +350,28 @@ export default function Dashboard() {
         <Card className="xl:col-span-2 h-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
-            <span
-              className={`text-xs text-muted-foreground${socketStatus === "connected" ? " status-live" : ""}`}
-            >
-              {socketStatus === "connecting" && "Connecting"}
-              {socketStatus === "connected" && "Connected"}
-              {socketStatus === "disconnected" && "Disconnected"}
-            </span>
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span
+                className={`text-xs text-muted-foreground${socketStatus === "connected" ? " status-live" : ""}`}
+              >
+                {socketStatus === "connecting" && "Connecting"}
+                {socketStatus === "connected" && "Connected"}
+                {socketStatus === "disconnected" && "Disconnected"}
+              </span>
+              {socketStatus !== "connected" && (
+                <span className="text-[11px] text-muted-foreground">Fallback refresh every 60 seconds</span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <LiveDeliveryDashboard />
+            <SectionErrorBoundary
+              title="Live delivery widget failed"
+              message="Try the live status panel again. The rest of the dashboard is still available."
+            >
+              <Suspense fallback={<Skeleton className="h-40 w-full rounded-lg" />}>
+                <LiveDeliveryDashboard />
+              </Suspense>
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
 
@@ -456,7 +473,15 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+            <SectionErrorBoundary
+              title="Workflow chart failed"
+              message="Try reloading this chart. The rest of the dashboard data is still available."
+              resetKeys={[workflowTrendDays]}
+            >
+              <Suspense fallback={<Skeleton className="h-72 w-full rounded-lg sm:h-80" />}>
+                <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
+              </Suspense>
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
       </div>
@@ -468,7 +493,14 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">Last 12 months</p>
           </CardHeader>
           <CardContent>
-            <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+            <SectionErrorBoundary
+              title="Monthly totals chart failed"
+              message="Try reloading the monthly fulfilled totals chart."
+            >
+              <Suspense fallback={<Skeleton className="h-72 w-full rounded-lg sm:h-80" />}>
+                <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
+              </Suspense>
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
 
@@ -478,7 +510,14 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">Last 5 years</p>
           </CardHeader>
           <CardContent>
-            <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
+            <SectionErrorBoundary
+              title="Yearly totals chart failed"
+              message="Try reloading the yearly fulfilled totals chart."
+            >
+              <Suspense fallback={<Skeleton className="h-72 w-full rounded-lg sm:h-80" />}>
+                <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
+              </Suspense>
+            </SectionErrorBoundary>
           </CardContent>
         </Card>
       </div>

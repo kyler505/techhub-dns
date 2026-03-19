@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useMemo, useState } from "react";
 import { Order, OrderStatus } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
@@ -104,28 +104,7 @@ export default function OrderTable({
         setSortDir("desc");
     };
 
-    const isInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLElement): boolean => {
-        const el = target as HTMLElement | null;
-        if (!el) return false;
-        const hit = el.closest(
-            "a,button,input,select,textarea,label,[role='button'],[role='link'],[data-row-click-ignore]",
-        );
-        return Boolean(hit && hit !== currentTarget);
-    };
-
     const navigateToOrder = (orderId: string) => onViewDetail(orderId);
-
-    const onRowClick = (e: MouseEvent<HTMLTableRowElement>, orderId: string) => {
-        if (isInteractiveTarget(e.target, e.currentTarget)) return;
-        navigateToOrder(orderId);
-    };
-
-    const onRowKeyDown = (e: KeyboardEvent<HTMLTableRowElement>, orderId: string) => {
-        if (isInteractiveTarget(e.target, e.currentTarget)) return;
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        navigateToOrder(orderId);
-    };
 
     if (orders.length === 0) {
         if (!showEmptyState) {
@@ -142,10 +121,10 @@ export default function OrderTable({
 
     return (
         <div className="rounded-lg border border-border bg-card shadow-premium overflow-hidden">
-            <Table className="min-w-[720px]">
+            <Table className="min-w-[640px] lg:min-w-[720px]">
                 <TableHeader className="sticky top-0 z-20 bg-muted/40">
                     <TableRow>
-                        <TableHead className="w-[260px]">
+                        <TableHead className="w-[220px] lg:w-[260px]">
                             <button
                                 type="button"
                                 onClick={() => toggleSort("id")}
@@ -201,11 +180,7 @@ export default function OrderTable({
                     {sortedOrders.map((order, index) => (
                         <TableRow
                             key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`}
-                            tabIndex={0}
-                            role="link"
-                            onClick={(e) => onRowClick(e, order.id)}
-                            onKeyDown={(e) => onRowKeyDown(e, order.id)}
-                            className="cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            className="hover:bg-muted/30 transition-colors"
                         >
                         <TableCell>
                             <Button

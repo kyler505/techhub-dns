@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Layers } from "lucide-react";
 import { TimeTrendDataPoint } from "../../api/analytics";
+import { formatChartDateLabel } from "./chartDate";
 
 interface StatusTrendsChartProps {
   data: TimeTrendDataPoint[];
@@ -10,13 +11,13 @@ interface StatusTrendsChartProps {
 
 // Color mapping for order statuses (matching StatusBadge colors)
 const STATUS_COLORS: { [key: string]: string } = {
-  "picked": "#3b82f6",      // blue
-  "qa": "#8b5cf6",          // purple
-  "pre-delivery": "#f59e0b", // amber
-  "in-delivery": "#10b981",  // green
-  "shipping": "#06b6d4",     // cyan
-  "delivered": "#22c55e",    // emerald
-  "issue": "#ef4444",        // red
+  "picked": "hsl(var(--ring))",
+  "qa": "hsl(var(--accent))",
+  "pre-delivery": "hsl(var(--secondary))",
+  "in-delivery": "hsl(var(--primary))",
+  "shipping": "hsl(var(--ring))",
+  "delivered": "hsl(var(--muted))",
+  "issue": "hsl(var(--destructive))",
 };
 
 export default function StatusTrendsChart({ data, loading }: StatusTrendsChartProps) {
@@ -57,18 +58,17 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
       <BarChart data={transformedData} margin={{ top: 10, right: 24, left: 0, bottom: 5 }}>
         <defs>
           <linearGradient id="statusGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#500000" stopOpacity={0.9} />
-            <stop offset="100%" stopColor="#a61b1b" stopOpacity={0.85} />
+            <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.9} />
+            <stop offset="100%" stopColor="hsl(var(--accent) / 0.8)" stopOpacity={0.85} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="4 6" className="stroke-muted/40" />
         <XAxis 
           dataKey="date" 
           className="text-xs"
-          tickFormatter={(value: string | number) => {
-            const date = new Date(value);
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          }}
+          tickFormatter={(value: string | number) =>
+            formatChartDateLabel(value, { month: 'short', day: 'numeric' })
+          }
         />
         <YAxis className="text-xs" />
         <Tooltip 
@@ -82,13 +82,9 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
             if (typeof label !== "string" && typeof label !== "number") {
               return "";
             }
-            const date = new Date(label);
-            if (Number.isNaN(date.getTime())) {
-              return String(label);
-            }
-            return date.toLocaleDateString('en-US', { 
+            return formatChartDateLabel(label, {
               weekday: 'short',
-              month: 'short', 
+              month: 'short',
               day: 'numeric'
             });
           }}
@@ -99,7 +95,7 @@ export default function StatusTrendsChart({ data, loading }: StatusTrendsChartPr
             key={status}
             dataKey={status}
             stackId="status"
-            fill={STATUS_COLORS[status.toLowerCase()] || "#6b7280"}
+            fill={STATUS_COLORS[status.toLowerCase()] || "hsl(var(--muted))"}
             radius={[6, 6, 0, 0]}
             name={status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           />

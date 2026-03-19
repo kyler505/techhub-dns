@@ -83,45 +83,46 @@ export default function OrderQAChecklist() {
 
     return (
         <div className="p-4">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">QA Checklist Dashboard</h1>
+            <header className="mb-4">
+                <h1 className="text-2xl font-bold text-gray-900">QA Checklist Dashboard</h1>
+                <p className="text-sm text-muted-foreground">Monitor orders awaiting QA review.</p>
+            </header>
 
-            <section className="bg-white shadow rounded-lg p-4 border border-gray-100 mb-6">
+            <section className="mb-6 rounded-lg border border-border bg-card p-4 shadow-sm">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">
-                            Orders Needing QA
-                        </h2>
+                        <h2 className="text-lg font-semibold text-foreground">Orders Needing QA</h2>
+                        <p className="text-xs text-muted-foreground">Filtered to QA status orders only.</p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                        <div className="flex items-center gap-2">
-                            <input
-                                id="qa-checklist-search"
-                                name="qaChecklistSearch"
-                                className="rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#800000]"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search orders"
-                                aria-label="Search"
-                            />
-                        </div>
+                        <label htmlFor="qa-checklist-search" className="sr-only">Search QA orders</label>
+                        <input
+                            id="qa-checklist-search"
+                            name="qaChecklistSearch"
+                            className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search orders"
+                            aria-label="Search orders needing QA"
+                        />
                     </div>
                 </div>
 
                 {loadingOrders ? (
                     <div className="p-4">Loading...</div>
                 ) : (
-                    <div className="mt-4 overflow-x-auto ios-scroll rounded-lg border border-slate-200 bg-white shadow-premium">
-                        <table className="min-w-[720px] w-full">
-                            <thead className="bg-slate-50/80">
+                    <div className="mt-4 overflow-x-auto ios-scroll rounded-lg border border-border bg-card shadow-sm">
+                        <table className="min-w-[640px] w-full md:min-w-[720px]">
+                            <thead className="bg-muted/50">
                                 <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Order</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Recipient</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Location</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">QA</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Order</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recipient</th>
+                                    <th className="hidden px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground lg:table-cell">Location</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">QA</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-border/70">
                                 {orders
                                     .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => {
@@ -132,22 +133,23 @@ export default function OrderQAChecklist() {
                                         const qaButtonLabel = submittedAt ? "Edit QA" : "Perform QA"; // clearer label
 
                                         return (
-                                        <tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-3 py-2 text-sm text-slate-700">
+                                        <tr key={o.id} className="transition-colors hover:bg-muted/30">
+                                            <td className="px-3 py-2 text-sm text-foreground">
                                                 <button
+                                                    type="button"
                                                     onClick={() => openOrder(o.id)}
-                                                    className="text-slate-700 hover:text-slate-900 hover:underline"
+                                                    className="rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                 >
                                                     {o.inflow_order_id}
                                                 </button>
                                             </td>
-                                            <td className="px-3 py-2 text-sm text-slate-700">{o.recipient_name || "N/A"}</td>
-                                            <td className="px-3 py-2 text-sm text-slate-700 hidden lg:table-cell">{o.delivery_location || "N/A"}</td>
+                                            <td className="px-3 py-2 text-sm text-foreground">{o.recipient_name || "N/A"}</td>
+                                            <td className="hidden px-3 py-2 text-sm text-foreground lg:table-cell">{o.delivery_location || "N/A"}</td>
                                             <td className="px-3 py-2 text-sm">
                                                 <button
                                                     type="button"
                                                     onClick={() => openQa(o.id)}
-                                                    className="px-3 py-1.5 text-sm bg-[#800000] text-white rounded hover:bg-[#660000] flex items-center gap-2 btn-lift"
+                                                    className="flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                 >
                                                     {qaButtonLabel}
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -164,7 +166,7 @@ export default function OrderQAChecklist() {
                                     .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
                                     .length === 0 && (
                                         <tr>
-                                            <td className="px-3 py-6 text-center text-sm text-slate-500" colSpan={4}>
+                                            <td className="px-3 py-6 text-center text-sm text-muted-foreground" colSpan={4}>
                                                 {orders.length === 0
                                                     ? "No orders need QA at this time."
                                                     : "All eligible orders have completed QA."}

@@ -297,7 +297,7 @@ export default function VettingEditor() {
                               vettingUrl: sectionUsesVettingUrl(section) ? current.vettingUrl : "",
                             }));
                           }}
-                          className="flex h-10 w-full min-w-[13rem] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          className="flex h-10 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:min-w-[12rem] lg:min-w-[13rem]"
                         >
                           {VETTING_EDITOR_SECTIONS.map((section) => (
                             <option key={section} value={section}>
@@ -315,7 +315,7 @@ export default function VettingEditor() {
                             const category = event.target.value as VettingEditorCategory;
                             updateRow(row.id, (current) => ({ ...current, category }));
                           }}
-                          className="flex h-10 w-full min-w-[15rem] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          className="flex h-10 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:min-w-[12rem] lg:min-w-[15rem]"
                         >
                           {VETTING_EDITOR_CATEGORIES.map((category) => (
                             <option key={category} value={category}>
