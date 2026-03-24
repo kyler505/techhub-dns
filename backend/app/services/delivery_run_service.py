@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 from flask import g
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -12,6 +12,7 @@ from app.utils.timezone import get_date_in_cst, is_morning_in_cst, to_utc_iso_z
 from sqlalchemy import func
 from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
+from app.models.order_status_history import OrderStatusHistory
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
 from app.models.vehicle_checkout import VehicleCheckout
@@ -30,6 +31,215 @@ class DeliveryRunService:
             else value
         )
         return normalized.replace(microsecond=(normalized.microsecond // 1000) * 1000)
+
+    def _get_shipment_status(
+        self, inflow_data: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if not inflow_data:
+            return {
+                "is_fully_shipped": True,
+                "total_ordered": 0,
+                "total_shipped": 0,
+                "remaining_items": [],
+            }
+
+        lines = inflow_data.get("lines", [])
+        pack_lines = inflow_data.get("packLines", [])
+
+        if not isinstance(lines, list):
+            lines = []
+        if not isinstance(pack_lines, list):
+            pack_lines = []
+
+        required: Dict[str, float] = {}
+        product_names: Dict[str, str] = {}
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if product_id is not None:
+                product_id = str(product_id)
+            raw_quantity = line.get("quantity")
+            quantity = raw_quantity if isinstance(raw_quantity, dict) else {}
+            try:
+                ordered_quantity = float(quantity.get("standardQuantity", 0) or 0)
+            except (TypeError, ValueError):
+                ordered_quantity = 0
+
+            if product_id and ordered_quantity > 0:
+                required[product_id] = required.get(product_id, 0) + ordered_quantity
+                if product_id not in product_names:
+                    raw_product = line.get("product")
+                    product = raw_product if isinstance(raw_product, dict) else {}
+                    product_names[product_id] = str(
+                        line.get("description") or product.get("name") or product_id
+                    )
+
+        shipped: Dict[str, float] = {}
+        for line in pack_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if product_id is not None:
+                product_id = str(product_id)
+            raw_quantity = line.get("quantity")
+            quantity = raw_quantity if isinstance(raw_quantity, dict) else {}
+            try:
+                shipped_quantity = float(quantity.get("standardQuantity", 0) or 0)
+            except (TypeError, ValueError):
+                shipped_quantity = 0
+
+            if product_id and shipped_quantity > 0:
+                shipped[product_id] = shipped.get(product_id, 0) + shipped_quantity
+
+        remaining_items = []
+        for product_id, ordered_quantity in required.items():
+            shipped_quantity = shipped.get(product_id, 0)
+            remaining_quantity = ordered_quantity - shipped_quantity
+            if remaining_quantity > 0.0001:
+                remaining_items.append(
+                    {
+                        "product_id": product_id,
+                        "product_name": product_names.get(product_id, product_id),
+                        "ordered": int(ordered_quantity),
+                        "shipped": int(shipped_quantity),
+                        "remaining": int(remaining_quantity),
+                    }
+                )
+
+        return {
+            "is_fully_shipped": len(remaining_items) == 0,
+            "total_ordered": int(sum(required.values())),
+            "total_shipped": int(
+                sum(
+                    min(shipped.get(product_id, 0), ordered_quantity)
+                    for product_id, ordered_quantity in required.items()
+                )
+            ),
+            "remaining_items": remaining_items,
+        }
+
+    def _record_status_history(
+        self,
+        *,
+        order: Order,
+        from_status: Optional[str],
+        to_status: str,
+        actor_user_id: Optional[str],
+        metadata: Optional[Dict[str, Any]] = None,
+        changed_at: Optional[datetime] = None,
+    ) -> None:
+        self.db.add(
+            OrderStatusHistory(
+                order_id=order.id,
+                from_status=from_status,
+                to_status=to_status,
+                changed_at=changed_at or datetime.utcnow(),
+                actor_user_id=actor_user_id,
+                status_metadata=metadata,
+            )
+        )
+
+    def _requeue_partially_delivered_orders(
+        self,
+        orders: List[Order],
+        user_id: Optional[str],
+        audit_service: AuditService,
+    ) -> Dict[str, Any]:
+        requeued_orders: List[Dict[str, Any]] = []
+
+        for order in orders:
+            shipment_status = self._get_shipment_status(
+                order.inflow_data if isinstance(order.inflow_data, dict) else None
+            )
+            if shipment_status.get("is_fully_shipped", True):
+                continue
+
+            previous_status = str(order.status) if order.status is not None else None
+            reason = "Order partially delivered; remaining items returned to Picked for a new prep cycle"
+            changed_at = datetime.utcnow()
+
+            order.status = OrderStatus.PICKED.value
+            order.assigned_deliverer = None
+            order.delivery_run_id = None
+            order.delivery_sequence = None
+            order.tagged_at = None
+            order.tagged_by = None
+            order.tag_data = None
+            order.picklist_generated_at = None
+            order.picklist_generated_by = None
+            order.picklist_path = None
+            order.qa_completed_at = None
+            order.qa_completed_by = None
+            order.qa_data = None
+            order.qa_path = None
+            order.qa_method = None
+            order.signature_captured_at = None
+            order.signed_picklist_path = None
+            order.order_details_path = None
+            order.order_details_generated_at = None
+            order.updated_at = changed_at
+
+            self.db.add(
+                AuditLog(
+                    order_id=order.id,
+                    changed_by=user_id or "system",
+                    from_status=previous_status,
+                    to_status=OrderStatus.PICKED.value,
+                    reason=reason,
+                    timestamp=changed_at,
+                    extra_metadata={
+                        "remaining_items": shipment_status.get("remaining_items", []),
+                        "total_ordered": shipment_status.get("total_ordered", 0),
+                        "total_shipped": shipment_status.get("total_shipped", 0),
+                        "prep_reset": True,
+                    },
+                )
+            )
+            self._record_status_history(
+                order=order,
+                from_status=previous_status,
+                to_status=OrderStatus.PICKED.value,
+                actor_user_id=user_id,
+                metadata={
+                    "reason": reason,
+                    "remaining_items": shipment_status.get("remaining_items", []),
+                    "total_ordered": shipment_status.get("total_ordered", 0),
+                    "total_shipped": shipment_status.get("total_shipped", 0),
+                    "prep_reset": True,
+                },
+                changed_at=changed_at,
+            )
+            audit_service.log_order_action(
+                order_id=str(order.id),
+                action="requeued_after_partial_delivery",
+                user_id=user_id,
+                description=reason,
+                old_value={"status": previous_status},
+                new_value={"status": OrderStatus.PICKED.value},
+                audit_metadata={
+                    "inflow_order_id": order.inflow_order_id,
+                    "remaining_items": shipment_status.get("remaining_items", []),
+                    "total_ordered": shipment_status.get("total_ordered", 0),
+                    "total_shipped": shipment_status.get("total_shipped", 0),
+                    "prep_reset": True,
+                },
+            )
+            requeued_orders.append(
+                {
+                    "order_id": str(order.id),
+                    "inflow_order_id": order.inflow_order_id,
+                    "status": OrderStatus.PICKED.value,
+                    "remaining_items": shipment_status.get("remaining_items", []),
+                    "total_ordered": shipment_status.get("total_ordered", 0),
+                    "total_shipped": shipment_status.get("total_shipped", 0),
+                }
+            )
+
+        return {
+            "requeued_count": len(requeued_orders),
+            "orders_requeued": requeued_orders,
+        }
 
     def generate_run_name(self, run_time: datetime) -> str:
         """Generate a run name based on time and existing runs that day."""
@@ -345,12 +555,13 @@ class DeliveryRunService:
                     continue
 
                 try:
-                    await inflow_service.fulfill_sales_order(
+                    updated_inflow_order = await inflow_service.fulfill_sales_order(
                         inflow_sales_order_id,
                         db=self.db,
                         user_id=user_id,
                         only_picked_items=True,  # Only fulfill items that were actually picked
                     )
+                    order.inflow_data = updated_inflow_order
                     successes.append(
                         {
                             "order_id": str(order.id),
@@ -385,10 +596,8 @@ class DeliveryRunService:
         Args:
             run_id: ID of the delivery run
             user_id: User completing the run
-            create_remainders: If True, create remainder orders for partial picks (user confirmed)
+            create_remainders: Legacy flag retained for API compatibility; partials now requeue the original order
         """
-        from app.services.order_splitting import OrderSplittingService
-
         run_id_str = str(run_id)
         run = (
             self.db.query(DeliveryRun)
@@ -458,17 +667,13 @@ class DeliveryRunService:
                 },
             )
 
-        # Create remainder orders for partial picks (if user confirmed)
-        remainder_results = {"remainder_count": 0, "remainders_created": []}
-        if create_remainders:
-            splitting_service = OrderSplittingService(self.db)
-            remainder_results = splitting_service.process_partial_fulfillments(
-                orders=run.orders, user_id=user_id, create_remainders=True
-            )
-
         run.status = DeliveryRunStatus.COMPLETED.value
         run.end_time = datetime.utcnow()
         run.updated_at = datetime.utcnow()
+
+        partial_delivery_results = self._requeue_partially_delivered_orders(
+            run.orders, user_id, audit_service
+        )
 
         audit_service.log_delivery_run_action(
             run_id=str(run_id),
@@ -479,7 +684,11 @@ class DeliveryRunService:
                 "order_count": len(run.orders),
                 "completed_at": to_utc_iso_z(run.end_time),
                 "fulfilled_orders": inflow_successes,
-                "remainders_created": remainder_results.get("remainder_count", 0),
+                "create_remainders_requested": create_remainders,
+                "partial_orders_requeued": partial_delivery_results.get(
+                    "requeued_count", 0
+                ),
+                "requeued_orders": partial_delivery_results.get("orders_requeued", []),
             },
         )
 
