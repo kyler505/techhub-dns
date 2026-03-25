@@ -22,7 +22,7 @@ function formatSegment(segment: string) {
   return LABELS[segment] ?? segment.replace(/-/g, " ");
 }
 
-export function Breadcrumbs() {
+export function Breadcrumbs({ loading = false }: { loading?: boolean }) {
   const location = useLocation();
   const segments = location.pathname.split("/").filter(Boolean);
 
@@ -35,7 +35,11 @@ export function Breadcrumbs() {
 
   return (
     <div className="flex items-center text-xs text-muted-foreground">
-      <Link to="/" className="hover:text-foreground transition-colors">
+      <Link
+        to="/"
+        aria-disabled={loading}
+        className={`transition-colors ${loading ? "pointer-events-none opacity-75 cursor-not-allowed" : "hover:text-foreground"}`}
+      >
         Dashboard
       </Link>
       {crumbs.map((crumb) => (
@@ -44,7 +48,11 @@ export function Breadcrumbs() {
           {crumb.isId ? (
             <span className="text-foreground">{crumb.label}</span>
           ) : (
-            <Link to={crumb.path} className="hover:text-foreground transition-colors">
+            <Link
+              to={crumb.path}
+              aria-disabled={loading}
+              className={`transition-colors ${loading ? "pointer-events-none opacity-75 cursor-not-allowed" : "hover:text-foreground"}`}
+            >
               {crumb.label}
             </Link>
           )}

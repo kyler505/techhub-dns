@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -45,23 +45,32 @@ export function Sidebar({ className }: { className?: string }) {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 1023px)").matches;
   });
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 1023px)").matches;
+  });
   const location = useLocation();
   const { isAdmin } = useAuth();
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
   const visibleAdminItems = isAdmin
     ? adminItems
     : adminItems.filter((item) => item.path !== "/admin" && item.path !== "/vetting-editor");
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.documentElement.style.setProperty("--sidebar-width", collapsed ? "72px" : "256px");
-  }, [collapsed]);
+    document.documentElement.style.setProperty("--sidebar-width", isMobile ? "0px" : collapsed ? "72px" : "256px");
+  }, [collapsed, isMobile]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
     const syncCollapsed = (event: MediaQueryList | MediaQueryListEvent) => {
+      setIsMobile(event.matches);
       setCollapsed(event.matches);
+      setIsMobileOpen(false);
     };
 
     syncCollapsed(mediaQuery);
@@ -69,19 +78,85 @@ export function Sidebar({ className }: { className?: string }) {
     return () => mediaQuery.removeEventListener("change", syncCollapsed);
   }, []);
 
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+
+    const onTouchStart = (event: TouchEvent) => {
+      touchStartXRef.current = event.touches[0]?.clientX ?? null;
+      touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const startX = touchStartXRef.current;
+      const startY = touchStartYRef.current;
+      const endX = event.changedTouches[0]?.clientX;
+      const endY = event.changedTouches[0]?.clientY;
+
+      touchStartXRef.current = null;
+      touchStartYRef.current = null;
+
+      if (startX === null || startY === null || typeof endX !== "number" || typeof endY !== "number") {
+        return;
+      }
+
+      const deltaX = endX - startX;
+      const deltaY = Math.abs(endY - startY);
+      if (deltaY > 80) {
+        return;
+      }
+
+      if (!isMobileOpen && startX < 24 && deltaX > 48) {
+        setIsMobileOpen(true);
+      }
+
+      if (isMobileOpen && deltaX < -48) {
+        setIsMobileOpen(false);
+      }
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [isMobile, isMobileOpen]);
+
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: collapsed ? 72 : 256 }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      className={cn(
-        "fixed left-0 top-0 z-40 h-screen bg-card border-r border-border text-foreground flex flex-col",
-        className
+    <>
+      {isMobile && isMobileOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar overlay"
+          onClick={() => setIsMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-foreground/50 backdrop-blur-[1px] touch-manipulation"
+        />
       )}
-    >
+      {isMobile && !isMobileOpen && (
+        <button
+          type="button"
+          aria-label="Open sidebar"
+          onClick={() => setIsMobileOpen(true)}
+          className="fixed left-3 top-3 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg touch-manipulation"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+      <motion.aside
+        initial={false}
+        animate={isMobile ? { x: isMobileOpen ? 0 : -288 } : { width: collapsed ? 72 : 256 }}
+        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+        className={cn(
+          "fixed left-0 top-0 z-50 h-screen bg-card border-r border-border text-foreground flex flex-col will-change-transform",
+          isMobile ? "w-[288px] max-w-[calc(100vw-3rem)] shadow-2xl" : "",
+          className
+        )}
+      >
       <div className="flex items-center justify-between h-11 sm:h-12 px-4 border-b border-border">
         <div className="flex items-center gap-3">
           <AnimatePresence mode="wait">
@@ -115,12 +190,20 @@ export function Sidebar({ className }: { className?: string }) {
         </div>
         <button
           type="button"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          onClick={() => {
+            if (isMobile) {
+              setIsMobileOpen((current) => !current);
+              return;
+            }
+            setCollapsed(!collapsed);
+          }}
+          aria-label={isMobile ? (isMobileOpen ? "Close sidebar" : "Open sidebar") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={isMobile ? isMobileOpen : !collapsed}
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation"
         >
-          {collapsed ? (
+          {isMobile ? (
+            isMobileOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />
+          ) : collapsed ? (
             <ChevronRight className="w-5 h-5" />
           ) : (
             <ChevronLeft className="w-5 h-5" />
@@ -128,7 +211,7 @@ export function Sidebar({ className }: { className?: string }) {
         </button>
       </div>
 
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar touch-pan-y">
         {navItems.map((item) => {
           const active = isActive(item.path);
           const Icon = item.icon;
@@ -227,6 +310,7 @@ export function Sidebar({ className }: { className?: string }) {
           );
         })}
       </nav>
-    </motion.aside>
+      </motion.aside>
+    </>
   );
 }

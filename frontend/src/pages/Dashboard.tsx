@@ -457,7 +457,8 @@ export default function Dashboard() {
                   size="sm"
                   variant={workflowTrendDays === 7 ? "default" : "ghost"}
                   onClick={() => updateWorkflowTrendDays(7)}
-                  className="h-7 px-2"
+                  disabled={workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 7}
+                  className={`h-7 px-2 ${workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 7 ? "opacity-75 cursor-not-allowed" : ""}`}
                 >
                   7d
                 </Button>
@@ -466,7 +467,8 @@ export default function Dashboard() {
                   size="sm"
                   variant={workflowTrendDays === 30 ? "default" : "ghost"}
                   onClick={() => updateWorkflowTrendDays(30)}
-                  className="h-7 px-2"
+                  disabled={workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 30}
+                  className={`h-7 px-2 ${workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 30 ? "opacity-75 cursor-not-allowed" : ""}`}
                 >
                   30d
                 </Button>

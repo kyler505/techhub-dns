@@ -175,6 +175,7 @@ export default function Orders() {
                         onStatusChange={setStatusFilter}
                         search={search}
                         onSearchChange={setSearch}
+                        loading={loading}
                     />
                 </div>
                 <CardContent>
@@ -183,6 +184,7 @@ export default function Orders() {
                         onStatusChange={handleStatusChange}
                         onViewDetail={handleViewDetail}
                         showEmptyState={false}
+                        loading={loading}
                     />
                 </CardContent>
             </Card>

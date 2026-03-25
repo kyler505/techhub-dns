@@ -103,6 +103,7 @@ export default function OrderQAChecklist() {
                             className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
+                            disabled={loadingOrders}
                             placeholder="Search orders"
                             aria-label="Search orders needing QA"
                         />
@@ -138,7 +139,8 @@ export default function OrderQAChecklist() {
                                                 <button
                                                     type="button"
                                                     onClick={() => openOrder(o.id)}
-                                                    className="rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                                    disabled={loadingOrders}
+                                                    className={`rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${loadingOrders ? "opacity-75 cursor-not-allowed" : ""}`}
                                                 >
                                                     {o.inflow_order_id}
                                                 </button>
@@ -149,7 +151,8 @@ export default function OrderQAChecklist() {
                                                 <button
                                                     type="button"
                                                     onClick={() => openQa(o.id)}
-                                                    className="flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                                    disabled={loadingOrders}
+                                                    className={`flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${loadingOrders ? "opacity-75 cursor-not-allowed" : ""}`}
                                                 >
                                                     {qaButtonLabel}
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">

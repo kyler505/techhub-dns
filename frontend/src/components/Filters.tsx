@@ -8,6 +8,7 @@ interface FiltersProps {
     onStatusChange: (status: StatusFilter) => void;
     search: string;
     onSearchChange: (search: string) => void;
+    loading?: boolean;
 }
 
 export default function Filters({
@@ -15,6 +16,7 @@ export default function Filters({
     onStatusChange,
     search,
     onSearchChange,
+    loading = false,
 }: FiltersProps) {
     // Helper to check if current filter matches a tab
     const isActiveTab = (tabValue: StatusFilter) => {
@@ -41,8 +43,10 @@ export default function Filters({
                 {statusTabs.map((tab) => (
                     <button
                         key={tab.label}
+                        type="button"
                         onClick={() => onStatusChange(tab.value)}
-                        className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors flex-shrink-0 ${isActiveTab(tab.value)
+                        disabled={loading}
+                        className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors flex-shrink-0 ${loading ? "opacity-75 cursor-not-allowed" : ""} ${isActiveTab(tab.value)
                             ? "border-primary text-primary font-medium"
                             : "border-transparent text-muted-foreground hover:text-foreground"
                             }`}
@@ -60,8 +64,9 @@ export default function Filters({
                     placeholder="Search orders"
                     value={search}
                     onChange={(e) => onSearchChange(e.target.value)}
+                    disabled={loading}
                     aria-label="Search"
-                    className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                    className={`w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
                 />
             </div>
         </div>

@@ -63,7 +63,7 @@ export default function OrderDetailPage() {
                 )}
                 <h1 className="text-lg font-semibold text-foreground">{title}</h1>
                 <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-                <Button type="button" variant="ghost" className="mt-4 gap-2" onClick={() => navigate(-1)}>
+                <Button type="button" variant="ghost" className="mt-4 gap-2" onClick={() => navigate(-1)} disabled={loading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -302,7 +302,7 @@ export default function OrderDetailPage() {
 
     return (
         <div className="p-4">
-            <Button type="button" variant="ghost" className="mb-4 gap-2" onClick={() => navigate(-1)}>
+            <Button type="button" variant="ghost" className="mb-4 gap-2" onClick={() => navigate(-1)} disabled={loading}>
                 <ArrowLeft className="h-4 w-4" />
                 Back
             </Button>
