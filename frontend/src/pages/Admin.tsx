@@ -717,8 +717,9 @@ export default function Admin() {
                             toast.message("Refreshing admin data");
                         }}
                         className="btn-lift"
+                        disabled={loading}
                     >
-                        <RefreshCw className="mr-2 h-4 w-4" />
+                        <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         Refresh
                     </Button>
                 </div>
