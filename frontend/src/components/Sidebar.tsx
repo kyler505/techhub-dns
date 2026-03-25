@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   Package,
@@ -157,36 +157,26 @@ export function Sidebar({ className }: { className?: string }) {
           className
         )}
       >
-      <div className="flex items-center justify-between h-11 sm:h-12 px-4 border-b border-border">
+      <div className="flex items-center justify-between h-12 px-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <AnimatePresence mode="wait">
-            {!collapsed && (
-              <motion.img
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -16 }}
-                transition={{ duration: 0.2 }}
-                src={boxTAM}
-                alt="Texas A&M University"
-                className="h-8 w-auto"
-              />
-            )}
-          </AnimatePresence>
-          <AnimatePresence mode="wait">
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -16 }}
-                transition={{ duration: 0.2 }}
-                className="font-semibold text-foreground tracking-tight leading-tight"
-              >
-                TechHub
-                <br />
-                Super App
-              </motion.span>
-            )}
-          </AnimatePresence>
+          <motion.img
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+            src={boxTAM}
+            alt="Texas A&M University"
+            className="h-8 w-auto"
+          />
+          <motion.span
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+            className="font-semibold text-foreground tracking-tight leading-tight"
+          >
+            TechHub
+            <br />
+            Super App
+          </motion.span>
         </div>
         <button
           type="button"
@@ -199,7 +189,7 @@ export function Sidebar({ className }: { className?: string }) {
           }}
           aria-label={isMobile ? (isMobileOpen ? "Close sidebar" : "Open sidebar") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={isMobile ? isMobileOpen : !collapsed}
-          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation"
+          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation"
         >
           {isMobile ? (
             isMobileOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />
@@ -219,30 +209,20 @@ export function Sidebar({ className }: { className?: string }) {
             <NavLink
               key={item.path}
               to={item.to ?? item.path}
-              aria-label={collapsed ? item.label : undefined}
-              title={collapsed ? item.label : undefined}
+              aria-label={item.label}
+              title={item.label}
               className={cn(
                 "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                collapsed && "justify-center px-0",
+                isMobile ? "px-3" : "",
                 active
                   ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               )}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              <AnimatePresence mode="wait">
-                {!collapsed && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="whitespace-nowrap overflow-hidden"
-                  >
-                    {item.label}
-                  </motion.span>
-                )}
-              </AnimatePresence>
+              <span className="whitespace-nowrap overflow-hidden">
+                {item.label}
+              </span>
             </NavLink>
           );
         })}
@@ -254,12 +234,12 @@ export function Sidebar({ className }: { className?: string }) {
           <NavLink
             key="/vetting-editor"
             to="/vetting-editor"
-            aria-label={collapsed ? "Vetting Editor" : undefined}
-            title={collapsed ? "Vetting Editor" : undefined}
+            aria-label="Vetting Editor"
+            title="Vetting Editor"
             className={({ isActive }) =>
               cn(
                 "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                collapsed && "justify-center px-0",
+                isMobile ? "px-3" : "",
                 isActive
                   ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -267,19 +247,9 @@ export function Sidebar({ className }: { className?: string }) {
             }
           >
             <FilePenLine className="w-5 h-5 flex-shrink-0" />
-            <AnimatePresence mode="wait">
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="whitespace-nowrap overflow-hidden"
-                >
-                  Vetting Editor
-                </motion.span>
-              )}
-            </AnimatePresence>
+            <span className="whitespace-nowrap overflow-hidden">
+              Vetting Editor
+            </span>
           </NavLink>
         )}
 
@@ -288,24 +258,20 @@ export function Sidebar({ className }: { className?: string }) {
           const Icon = item.icon;
           return (
             <NavLink key={item.path} to={item.path}
-              aria-label={collapsed ? item.label : undefined}
-              title={collapsed ? item.label : undefined}
+              aria-label={item.label}
+              title={item.label}
               className={cn(
                 "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                collapsed && "justify-center px-0",
+                isMobile ? "px-3" : "",
                 active
                   ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               )}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              <AnimatePresence mode="wait">
-                {!collapsed && (
-                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }} className="whitespace-nowrap overflow-hidden">
-                    {item.label}
-                  </motion.span>
-                )}
-              </AnimatePresence>
+              <span className="whitespace-nowrap overflow-hidden">
+                {item.label}
+              </span>
             </NavLink>
           );
         })}
