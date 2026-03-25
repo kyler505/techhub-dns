@@ -726,7 +726,7 @@ export default function Admin() {
             </div>
 
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-                    <TabsList className="w-full justify-start">
+                    <TabsList className="w-full flex-wrap justify-start">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="notifications">Notifications</TabsTrigger>
                         <TabsTrigger value="operations">Operations</TabsTrigger>
@@ -1038,7 +1038,7 @@ export default function Admin() {
                                                 ) : null}
                                                 {autoPrintEnabled ? "Pause auto-print" : "Enable auto-print"}
                                             </Button>
-                                            <Button variant="ghost" size="sm" onClick={loadPrintJobs} disabled={printJobsLoading}>
+                                            <Button variant="ghost" size="sm" onClick={loadPrintJobs} disabled={printJobsLoading} className="min-h-11">
                                                 {printJobsLoading ? (
                                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                                 ) : (

@@ -142,7 +142,7 @@ export default function OrderTable({
                                             {order.inflow_order_id || order.id}
                                         </span>
                                     </div>
-                                    <p className="truncate text-sm text-muted-foreground">
+                                    <p className="break-words text-sm text-muted-foreground">
                                         {order.recipient_name || "N/A"}
                                     </p>
                                 </div>
@@ -151,7 +151,7 @@ export default function OrderTable({
                             <div className={`mt-3 grid gap-2 text-xs text-muted-foreground ${isExpanded ? "grid-cols-1" : "grid-cols-2"}`}>
                                 <div>
                                     <p className="uppercase tracking-wide">Location</p>
-                                    <p className="mt-1 max-h-10 overflow-hidden break-words text-foreground">
+                                    <p className="mt-1 break-words text-foreground">
                                         {formatDeliveryLocation(order)}
                                     </p>
                                 </div>
@@ -210,7 +210,7 @@ export default function OrderTable({
                     <TableBody>
                         {sortedOrders.map((order, index) => (
                             <TableRow key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`} className="hover:bg-muted/30 transition-colors">
-                                <TableCell>
+                                <TableCell className="min-w-0 break-words">
                                     <Button
                                         variant="link"
                                         disabled={loading}
@@ -218,13 +218,13 @@ export default function OrderTable({
                                             e.stopPropagation();
                                             navigateToOrder(order.id);
                                         }}
-                                        className={`p-0 h-auto font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
+                                        className={`min-h-11 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
                                     >
                                         {order.inflow_order_id}
                                     </Button>
                                 </TableCell>
-                                <TableCell>{order.recipient_name || "N/A"}</TableCell>
-                                <TableCell className="hidden lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
+                                <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
+                                <TableCell className="hidden break-words lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
                                 <TableCell className="hidden lg:table-cell">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
                                 <TableCell>
                                     <StatusBadge status={order.status} />
