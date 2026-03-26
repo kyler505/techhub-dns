@@ -218,7 +218,7 @@ export default function OrderTable({
                                             e.stopPropagation();
                                             navigateToOrder(order.id);
                                         }}
-                                        className={`min-h-11 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
+                                        className={`h-auto min-h-0 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
                                     >
                                         {order.inflow_order_id}
                                     </Button>
