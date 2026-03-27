@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useLayoutEffect, useCallback } from "react";
 import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 
 // Special filter type that can be a single status, array of statuses, or null (all)
@@ -12,6 +12,16 @@ interface FiltersProps {
     loading?: boolean;
 }
 
+const STATUS_TABS: { label: string; value: StatusFilter }[] = [
+    { label: "All", value: null },
+    { label: "Picked + QA", value: [OrderStatus.PICKED, OrderStatus.QA] },
+    { label: OrderStatusDisplayNames[OrderStatus.PRE_DELIVERY], value: OrderStatus.PRE_DELIVERY },
+    { label: OrderStatusDisplayNames[OrderStatus.IN_DELIVERY], value: OrderStatus.IN_DELIVERY },
+    { label: OrderStatusDisplayNames[OrderStatus.SHIPPING], value: OrderStatus.SHIPPING },
+    { label: OrderStatusDisplayNames[OrderStatus.DELIVERED], value: OrderStatus.DELIVERED },
+    { label: OrderStatusDisplayNames[OrderStatus.ISSUE], value: OrderStatus.ISSUE },
+];
+
 export default function Filters({
     status,
     onStatusChange,
@@ -19,9 +29,9 @@ export default function Filters({
     onSearchChange,
     loading = false,
 }: FiltersProps) {
-    const tabsContainerRef = useRef<HTMLDivElement>(null);
     const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
     const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
+    const [indicatorReady, setIndicatorReady] = useState(false);
 
     // Helper to check if current filter matches a tab
     const isActiveTab = (tabValue: StatusFilter) => {
@@ -32,50 +42,53 @@ export default function Filters({
         return tabValue === status;
     };
 
-    const statusTabs: { label: string; value: StatusFilter }[] = [
-        { label: "All", value: null },
-        { label: "Picked + QA", value: [OrderStatus.PICKED, OrderStatus.QA] },
-        { label: OrderStatusDisplayNames[OrderStatus.PRE_DELIVERY], value: OrderStatus.PRE_DELIVERY },
-        { label: OrderStatusDisplayNames[OrderStatus.IN_DELIVERY], value: OrderStatus.IN_DELIVERY },
-        { label: OrderStatusDisplayNames[OrderStatus.SHIPPING], value: OrderStatus.SHIPPING },
-        { label: OrderStatusDisplayNames[OrderStatus.DELIVERED], value: OrderStatus.DELIVERED },
-        { label: OrderStatusDisplayNames[OrderStatus.ISSUE], value: OrderStatus.ISSUE },
-    ];
-
-    // Update indicator position when active tab changes
-    useEffect(() => {
-        const activeTab = statusTabs.find((tab) => isActiveTab(tab.value));
-        if (!activeTab) return;
+    const updateIndicatorPosition = useCallback(() => {
+        const activeTab = STATUS_TABS.find((tab) => isActiveTab(tab.value));
+        if (!activeTab) {
+            setIndicatorReady(false);
+            return;
+        }
 
         const activeElement = tabRefs.current.get(activeTab.label);
-        const container = tabsContainerRef.current;
-
-        if (activeElement && container) {
-            const containerRect = container.getBoundingClientRect();
-            const tabRect = activeElement.getBoundingClientRect();
-            setIndicatorStyle({
-                left: tabRect.left - containerRect.left + container.scrollLeft,
-                width: tabRect.width,
-            });
+        if (!activeElement) {
+            setIndicatorReady(false);
+            return;
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+        setIndicatorStyle({
+            left: activeElement.offsetLeft,
+            width: activeElement.offsetWidth,
+        });
+        setIndicatorReady(true);
     }, [status]);
+
+    useLayoutEffect(() => {
+        updateIndicatorPosition();
+
+        const handleResize = () => {
+            updateIndicatorPosition();
+        };
+
+        window.addEventListener("resize", handleResize);
+        return () => {
+            window.removeEventListener("resize", handleResize);
+        };
+    }, [updateIndicatorPosition]);
 
     return (
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
             <div
-                ref={tabsContainerRef}
                 className="relative flex gap-1 border-b overflow-x-auto whitespace-nowrap ios-scroll no-scrollbar -mx-2 px-2"
             >
                 {/* Animated indicator */}
                 <div
-                    className="absolute bottom-0 h-0.5 bg-primary transition-all duration-200 ease-out"
+                    className={`absolute bottom-0 h-0.5 bg-primary ${indicatorReady ? "transition-[left,width,opacity] duration-200 ease-out opacity-100" : "opacity-0"}`}
                     style={{
                         left: indicatorStyle.left,
                         width: indicatorStyle.width,
                     }}
                 />
-                {statusTabs.map((tab) => (
+                {STATUS_TABS.map((tab) => (
                     <button
                         key={tab.label}
                         ref={(el) => {

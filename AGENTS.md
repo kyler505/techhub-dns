@@ -1,179 +1,179 @@
-# Agent Guide (Repo-Specific)
+# AGENTS.md — Agentic Coding Guide (techhub-dns-dev)
 
-This repo has no AI tool config files like `.cursor/rules/`, `.cursorrules`, or `.github/copilot-instructions.md`. Treat this document as the source of truth (no Cursor/Copilot overrides).
+Operational contract for coding agents in this repository.
+Keep changes fast, low-risk, and repo-specific.
 
-## Layout
-- `frontend/`: Vite + React + TypeScript.
-- `frontend/dist/`: Production build output (served by Flask).
-- `backend/`: Flask app and API.
-- `backend/app/main.py`: Flask entrypoint; serves `frontend/dist` in production.
-- `backend/app/api/middleware.py`: Registers error handlers (serializes `DNSApiError`).
-- `backend/app/utils/exceptions.py`: `DNSApiError` and subclasses.
-- `backend/tests/test_error_handling.py`: Scriptable tests for error handling.
-- `scripts/deploy.sh`: PythonAnywhere deploy script (builds frontend, reloads app).
-- `.github/workflows/deploy-pythonanywhere.yml`: Deploy workflow (SSH; uploads deploy.log on failure).
+## Rule Sources and Precedence
 
-## Runtime Notes
-- Production serves the React SPA from `frontend/dist` via `backend/app/main.py`.
-- If `frontend/dist` is missing locally, `backend/app/main.py` returns a JSON hint telling you to build the frontend.
-- `/health` exists for simple uptime checks.
-- `backend/app/api/middleware.py` owns JSON error shaping (do not fork error formats per endpoint).
+1. Direct user/developer instructions in the active task
+2. This `AGENTS.md`
+3. Repo automation/config rules (if present)
 
-## Commands
-Run commands from the repo root unless noted.
+## Cursor / Copilot Rule Files (checked)
 
-### Frontend
-Scripts are defined in `frontend/package.json`.
+- `.cursor/rules/**`: **absent**
+- `.cursorrules`: **absent**
+- `.github/copilot-instructions.md`: **absent**
+
+No external Cursor/Copilot override files are active. Use this document as source of truth.
+
+## Repository Map
+
+- `frontend/` — Vite + React + TypeScript UI
+- `frontend/dist/` — production static bundle served by Flask
+- `backend/` — Flask API and server-side logic
+- `backend/app/main.py` — Flask entrypoint + SPA static serving
+- `backend/app/api/middleware.py` — centralized API error serialization
+- `backend/app/utils/exceptions.py` — `DNSApiError` and domain exceptions
+- `backend/tests/` — mixed script-style tests + pytest-compatible tests
+- `backend/alembic.ini` — Alembic config
+- `scripts/deploy.sh` — PythonAnywhere deployment script (**do not run locally**)
+
+## Environment Setup
+
+### Frontend setup
 
 ```bash
 cd frontend
 npm ci
-npm run dev
-npm run lint                 # fails on warnings (max-warnings 0)
-npm run build                 # exactly: tsc && vite build
-npm run preview
-
-npx tsc --noEmit              # typecheck only
-npm run lint -- src/App.tsx   # single-file / targeted lint
 ```
 
-### Backend
-There is no single pinned backend runner; use a virtualenv.
+### Backend setup
 
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
+```
 
-cd backend
+## Authoritative Build / Lint / Test Commands
+
+### Frontend (`frontend/`)
+
+```bash
+npm run dev
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run preview
+npm run test
+```
+
+Single-test patterns (Vitest):
+
+```bash
+# single file
+npm run test -- src/utils/timezone.test.ts
+
+# single named test
+npm run test -- src/utils/timezone.test.ts -t "formats winter UTC timestamps in Central time"
+```
+
+### Backend (`backend/`)
+
+Runtime + migrations:
+
+```bash
 python -m app.main
 curl http://localhost:8000/health
-
-# DB migrations (Alembic; uses backend/alembic.ini)
 alembic upgrade head
 ```
 
-### Tests
-`pytest` is not pinned in `backend/requirements.txt`.
+Testing:
 
 ```bash
-cd backend
-
-# Scriptable tests (no pytest required)
+# script-style tests (fast checks, no pytest required)
 python tests/test_error_handling.py
 python tests/test_db.py
 python tests/test_picklist_service.py
 
-# Optional pytest
+# pytest flow
 python -m pip install pytest
+pytest -q
+```
+
+Single-test patterns:
+
+```bash
+# single file
 pytest -q tests/test_error_handling.py
-pytest -q tests/test_error_handling.py -k "validation"   # run a single test by substring
+
+# single test function
+pytest -q tests/test_error_handling.py::test_validation_error
+
+# subset by expression
+pytest -q tests/test_error_handling.py -k "validation"
+
+# script-style single file
+python tests/test_picklist_service.py
 ```
 
-## Deployment (PythonAnywhere)
-- Operational note (not in repo config): dev deployment uses `techhub-dns-dev`, site `dev-techhub.pythonanywhere.com`.
-- Production deployment uses the `techhub-dns` folder.
-- GitHub Actions deploys via SSH: `.github/workflows/deploy-pythonanywhere.yml`.
-- `scripts/deploy.sh` runs on PythonAnywhere; it installs deps, builds the frontend (`npm run build`), and reloads by touching the WSGI file.
-- No build artifacts are uploaded; the frontend build happens on PythonAnywhere.
-- On failure, the workflow uploads `deploy.log` as an artifact.
-- PythonAnywhere logs: `~/logs/<domain>.error.log`, `~/logs/<domain>.server.log`.
-- Do not run `scripts/deploy.sh` locally; it assumes PythonAnywhere paths and hard-resets to `origin/main`.
+## Verification Expectations by Change Type
 
+- Frontend-only change: run `npm run lint`, `npx tsc --noEmit`, and targeted frontend tests
+- Backend-only change: run impacted script/pytest tests and smoke-check startup
+- Full-stack/API contract change: run frontend + backend validations
+- Error-handling changes: always run `python tests/test_error_handling.py`
 
-## PythonAnywhere SSH Key Usage
+## Code Style Guidelines
 
-- For PythonAnywhere SSH/SCP commands, use the explicit local key:
-  - key path: `/home/kcao/.ssh/pythonanywhere_kcao`
-- Always force that key to avoid agent/key mismatch:
-  - `-i /home/kcao/.ssh/pythonanywhere_kcao -o IdentitiesOnly=yes`
-- Keep host verification enabled:
-  - `-o StrictHostKeyChecking=yes`
-- Example:
-  - `ssh -i /home/kcao/.ssh/pythonanywhere_kcao -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes techhub@ssh.pythonanywhere.com "echo ok"`
+### Imports
 
-## Error Handling Conventions
-- Expected API failures: raise `DNSApiError` (or subclasses) from `backend/app/utils/exceptions.py`.
-- Do not hand-roll JSON error payloads per-route; rely on `backend/app/api/middleware.py` handlers.
-- `register_error_handlers` serializes `DNSApiError` into `ErrorResponse` and returns `jsonify(response.model_dump()), error.status_code`.
-- If catching broad exceptions around external I/O, re-raise as `ExternalServiceError` (or another `DNSApiError`) with actionable context.
-- Avoid silent failures (empty `catch`/`except` blocks).
-- Do not return SPA HTML for API paths; `backend/app/main.py` guards `/api` and returns a JSON 404 for missing endpoints.
+TypeScript / React:
+- Order imports: third-party → internal aliases/absolute → relative
+- Remove unused imports; keep import blocks stable
+- Use type-only imports when applicable (`import type { Foo } ...`)
 
-## Local Build Flow
-If you want the backend to serve the built SPA locally:
+Python:
+- Order imports: stdlib → third-party → local app modules
+- Avoid wildcard imports
+- Avoid side-effect-only imports unless established in file pattern
+
+### Formatting
+
+- Respect existing formatter/linter output in touched files
+- Avoid unrelated reformatting churn
+- Prefer guard clauses / early returns over deep nesting
+
+### Typing and Data Contracts
+
+Frontend TypeScript:
+- Preserve strict typing; avoid introducing `any`
+- Add explicit types for exported/shared APIs
+- Prefix intentionally unused params/locals with `_`
+
+Backend Python:
+- Parse/coerce external input at boundaries
+- Keep internal flow operating on trusted shapes
+
+### Naming
+
+- Use intent-revealing names (`resolveLocation`, `selectedDnsRecord`)
+- Avoid vague names (`data`, `temp`, `handleThing`) unless context is trivial
+- Booleans should read as predicates (`isReady`, `hasErrors`, `canTransition`)
+
+### Error Handling
+
+- Never swallow errors (`except: pass`, empty catch blocks)
+- For expected API failures, use `DNSApiError` subclasses
+- Let middleware serialize API errors; avoid route-specific duplicate JSON formats
+- Return actionable messages and structured `details` where useful
+- Fail fast on invalid states; do not propagate partially invalid objects
+
+## Backend/Frontend Integration Notes
+
+- Flask serves `frontend/dist` in production
+- If `frontend/dist` is missing, backend returns a JSON hint to build frontend
+- Local full-stack smoke check:
 
 ```bash
-cd frontend
-npm run build
-
-cd ../backend
-python -m app.main
+cd frontend && npm run build
+cd ../backend && python -m app.main
 ```
 
-## Code Conventions
+## Deployment and Safety Notes
 
-### General
-- Keep changes minimal and local; match existing patterns before introducing new ones.
-- Prefer the smallest change that solves the task; avoid formatting-only churn.
-- Prefer early guard clauses over nested conditionals.
-- Parse inputs at the boundary; keep internal code operating on trusted types.
-- Fail fast with descriptive errors; do not silently swallow exceptions.
-- Avoid drive-by refactors unless they reduce risk for the current change.
-- Keep secrets out of code and logs (.env files, credentials, tokens).
-- Keep edits ASCII-only unless the file already contains non-ASCII and needs it.
-- Do not commit, push, or deploy unless explicitly requested.
-
-### Frontend (TypeScript / React)
-- `frontend/tsconfig.json` is strict: do not leave unused imports/locals/params.
-- ESLint fails on warnings (`--max-warnings 0`); fix warnings before calling work "done".
-- Prefix intentionally-unused vars/args with `_`.
-- Prefer type-only imports where appropriate (`import type { Foo } from "..."`).
-- Prefer explicit return types for exported functions; avoid `any` unless there is no reasonable alternative.
-- Hooks: even if some rules are relaxed, write hooks as if rules-of-hooks + exhaustive-deps were enabled.
-- Components: name props/handlers intentionally (`onSubmitOrder`, not `handle`/`doThing`).
-- Errors: surface API failures to the UI deliberately (empty catch blocks are not acceptable).
-
-#### Frontend Style
-- Imports: third-party, then local; keep type-only imports explicit.
-- Naming: prefer descriptive handlers (`onSaveProfile`) and state (`selectedDnsRecord`).
-- Formatting: follow existing file style; do not reformat unrelated code.
-
-### Backend (Python / Flask)
-- Imports: standard library, third-party, then local imports.
-- Prefer explicit, actionable `message` strings; use `details` for structured context.
-- If you must catch a broad exception around external I/O, wrap it as a `DNSApiError` subclass with context.
-
-#### Backend Style
-- Naming: functions read like sentences; avoid abbreviations unless common.
-- Formatting: keep line length and spacing consistent with the file.
-
-## Database (MySQL / PythonAnywhere)
-Warning: do not print or paste secrets (avoid `cat backend/.env`, logging `DATABASE_URL`, or sharing passwords).
-
-```bash
-cd backend
-python -c "from app.config import settings; from sqlalchemy.engine.url import make_url; u = make_url(settings.database_url); print(f'host={u.host} port={u.port or 3306} user={u.username} db={u.database}')"
-mysql -h <db-host> -u <db-user> -p <db-name>   # enter password when prompted
-```
-
-## Working Agreements
-- Keep changes minimal and follow existing patterns; avoid formatting-only churn.
-- New feature work and hotfix work must start in a dedicated git worktree, not the default workspace.
-- If already in the correct feature/hotfix worktree, continue there; otherwise create or switch to an isolated worktree before making code changes.
-- Prefer the `using-git-worktrees` skill for setup. Reuse an existing repo convention for worktree location when present; otherwise ask once before creating a new worktree directory.
-- Keep repository cartography current when architecture, boundaries, or integrations change.
-- Use the root `codemap.md` as the repo atlas and folder-level `codemap.md` files as the first-pass index before reading source files.
-- After feature or structural changes, run `python3 ~/.config/opencode/skills/cartography/scripts/cartographer.py changes --root ./` and update only the affected `codemap.md` files.
-- If a change adds a new tracked subsystem or shifts repo shape materially, update the root `codemap.md` atlas too.
-- After cartography edits, run `python3 ~/.config/opencode/skills/cartography/scripts/cartographer.py update --root ./` to refresh `.slim/cartography.json`.
-- Keep cartography updates in the same PR/change set as the code they describe; treat codemaps as orientation aids, not a replacement for reading source.
-- Frontend TS is strict; do not leave unused imports/locals/params (prefix intentionally-unused with `_`).
-- Frontend changes: `cd frontend && npm run lint && npm run build`.
-- Backend error-handling changes: `cd backend && python tests/test_error_handling.py`.
-- Deployment changes: sanity-check `scripts/deploy.sh` assumptions and `.github/workflows/deploy-pythonanywhere.yml` steps.
-- Do not run `scripts/deploy.sh` locally.
-- Default loop: read relevant files -> implement minimal change -> verify.
-- After implementing requested changes, run relevant verification (tests/lint/build as applicable). Do not commit or push unless explicitly asked.
-- If the backend hints that `frontend/dist` is missing, run a frontend build and retry.
+- **Do not run `scripts/deploy.sh` locally** (PythonAnywhere-specific)
+- Do not execute deployment actions unless explicitly requested
+- Do not use destructive git operations (force push/reset) unless explicitly requested

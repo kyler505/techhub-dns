@@ -17,6 +17,16 @@ import {
 import { toast } from "sonner";
 import { isValidOrderId } from "../utils/orderIds";
 
+const PREFETCH_STATUS_FILTERS: StatusFilter[] = [
+    null,
+    [OrderStatus.PICKED, OrderStatus.QA],
+    OrderStatus.PRE_DELIVERY,
+    OrderStatus.IN_DELIVERY,
+    OrderStatus.SHIPPING,
+    OrderStatus.DELIVERED,
+    OrderStatus.ISSUE,
+];
+
 export default function Orders() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
@@ -33,6 +43,7 @@ export default function Orders() {
     // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
+    const hasPrefetchedStatusTabs = useRef(false);
 
     const ordersQuery = useQuery(
         getOrdersListQueryOptions({
@@ -95,6 +106,33 @@ export default function Orders() {
         };
     }, [search]);
 
+    useEffect(() => {
+        if (hasPrefetchedStatusTabs.current) {
+            return;
+        }
+
+        if (!ordersQuery.isSuccess) {
+            return;
+        }
+
+        if (debouncedSearch.trim() !== "") {
+            return;
+        }
+
+        hasPrefetchedStatusTabs.current = true;
+
+        void Promise.all(
+            PREFETCH_STATUS_FILTERS.map((status) =>
+                queryClient.prefetchQuery(
+                    getOrdersListQueryOptions({
+                        status,
+                        search: "",
+                    })
+                )
+            )
+        );
+    }, [debouncedSearch, ordersQuery.isSuccess, queryClient]);
+
     const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
         const currentStatus = orders.find((order) => order.id === orderId)?.status;
         if (!currentStatus) {
@@ -136,32 +174,6 @@ export default function Orders() {
         navigate(`/orders/${orderId}`);
     };
 
-    if (loading && isInitialLoad) {
-        return (
-            <div className="container mx-auto py-6 space-y-4">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
-                </div>
-                <Card>
-                    <div className="p-6 pb-4">
-                        <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
-                            <div className="flex gap-1 -mx-2 px-2">
-                                <div className="h-9 w-16 bg-muted rounded-md animate-pulse" />
-                                <div className="h-9 w-24 bg-muted rounded-md animate-pulse" />
-                                <div className="h-9 w-24 bg-muted rounded-md animate-pulse" />
-                                <div className="h-9 w-24 bg-muted rounded-md animate-pulse hidden sm:block" />
-                            </div>
-                            <div className="h-9 w-full sm:w-[260px] lg:w-[300px] bg-muted rounded-md animate-pulse" />
-                        </div>
-                    </div>
-                    <CardContent className="min-h-[280px]">
-                        <SkeletonTable rows={6} columns={5} />
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
     if (ordersQuery.isError && orders.length === 0) {
         return <div className="p-4">Failed to load orders</div>;
     }
@@ -183,20 +195,26 @@ export default function Orders() {
                     />
                 </div>
                 <CardContent className="min-h-[280px]">
-                    {!loading && orders.length === 0 ? (
+                    {loading && isInitialLoad ? (
+                        <div className="transition-opacity duration-150 opacity-100">
+                            <SkeletonTable rows={6} columns={5} />
+                        </div>
+                    ) : !loading && orders.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                             <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
                             <p className="text-sm font-medium text-foreground">No orders to display</p>
                             <p className="text-xs text-muted-foreground">Adjust your filters or clear search to see orders.</p>
                         </div>
                     ) : (
-                        <OrderTable
-                            orders={orders}
-                            onStatusChange={handleStatusChange}
-                            onViewDetail={handleViewDetail}
-                            showEmptyState={false}
-                            loading={loading}
-                        />
+                        <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
+                            <OrderTable
+                                orders={orders}
+                                onStatusChange={handleStatusChange}
+                                onViewDetail={handleViewDetail}
+                                showEmptyState={false}
+                                loading={loading}
+                            />
+                        </div>
                     )}
                 </CardContent>
             </Card>
