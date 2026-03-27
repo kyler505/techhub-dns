@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 
 // Special filter type that can be a single status, array of statuses, or null (all)
@@ -18,6 +19,10 @@ export default function Filters({
     onSearchChange,
     loading = false,
 }: FiltersProps) {
+    const tabsContainerRef = useRef<HTMLDivElement>(null);
+    const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
+
     // Helper to check if current filter matches a tab
     const isActiveTab = (tabValue: StatusFilter) => {
         if (tabValue === null && status === null) return true;
@@ -37,18 +42,51 @@ export default function Filters({
         { label: OrderStatusDisplayNames[OrderStatus.ISSUE], value: OrderStatus.ISSUE },
     ];
 
+    // Update indicator position when active tab changes
+    useEffect(() => {
+        const activeTab = statusTabs.find((tab) => isActiveTab(tab.value));
+        if (!activeTab) return;
+
+        const activeElement = tabRefs.current.get(activeTab.label);
+        const container = tabsContainerRef.current;
+
+        if (activeElement && container) {
+            const containerRect = container.getBoundingClientRect();
+            const tabRect = activeElement.getBoundingClientRect();
+            setIndicatorStyle({
+                left: tabRect.left - containerRect.left + container.scrollLeft,
+                width: tabRect.width,
+            });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status]);
+
     return (
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
-            <div className="flex gap-1 border-b overflow-x-auto whitespace-nowrap ios-scroll no-scrollbar -mx-2 px-2">
+            <div
+                ref={tabsContainerRef}
+                className="relative flex gap-1 border-b overflow-x-auto whitespace-nowrap ios-scroll no-scrollbar -mx-2 px-2"
+            >
+                {/* Animated indicator */}
+                <div
+                    className="absolute bottom-0 h-0.5 bg-primary transition-all duration-200 ease-out"
+                    style={{
+                        left: indicatorStyle.left,
+                        width: indicatorStyle.width,
+                    }}
+                />
                 {statusTabs.map((tab) => (
                     <button
                         key={tab.label}
+                        ref={(el) => {
+                            if (el) tabRefs.current.set(tab.label, el);
+                        }}
                         type="button"
                         onClick={() => onStatusChange(tab.value)}
                         disabled={loading}
-                        className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors flex-shrink-0 ${loading ? "opacity-75 cursor-not-allowed" : ""} ${isActiveTab(tab.value)
-                            ? "border-primary text-primary font-medium"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        className={`px-3 py-2 text-sm -mb-px transition-colors duration-150 flex-shrink-0 ${loading ? "opacity-75 cursor-not-allowed" : ""} ${isActiveTab(tab.value)
+                            ? "text-primary font-medium"
+                            : "text-muted-foreground hover:text-foreground"
                             }`}
                     >
                         {tab.label}

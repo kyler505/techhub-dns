@@ -178,23 +178,24 @@ export default function Orders() {
                         loading={loading}
                     />
                 </div>
-                <CardContent>
-                    <OrderTable
-                        orders={orders}
-                        onStatusChange={handleStatusChange}
-                        onViewDetail={handleViewDetail}
-                        showEmptyState={false}
-                        loading={loading}
-                    />
+                <CardContent className="min-h-[280px]">
+                    {!loading && orders.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
+                            <p className="text-sm font-medium text-foreground">No orders to display</p>
+                            <p className="text-xs text-muted-foreground">Adjust your filters or clear search to see orders.</p>
+                        </div>
+                    ) : (
+                        <OrderTable
+                            orders={orders}
+                            onStatusChange={handleStatusChange}
+                            onViewDetail={handleViewDetail}
+                            showEmptyState={false}
+                            loading={loading}
+                        />
+                    )}
                 </CardContent>
             </Card>
-            {!loading && orders.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
-                    <PackageSearch className="mx-auto mb-3 h-8 w-8 text-muted-foreground/60" />
-                    <p className="text-sm font-medium text-foreground">No orders to display</p>
-                    <p className="text-xs text-muted-foreground">Adjust your filters or clear search to see orders.</p>
-                </div>
-            )}
             {transitioningOrder && (
                 <StatusTransition
                     currentStatus={transitioningOrder.currentStatus}
