@@ -139,18 +139,22 @@ export default function Orders() {
     if (loading && isInitialLoad) {
         return (
             <div className="container mx-auto py-6 space-y-4">
-                <div className="space-y-2">
-                    <div className="text-2xl font-semibold text-foreground">Orders</div>
-                    <div className="text-sm text-muted-foreground">Loading current workflow queues.</div>
+                <div className="space-y-1">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
                 </div>
                 <Card>
                     <div className="p-6 pb-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="h-9 w-52 bg-slate-100 rounded-md animate-pulse" />
-                            <div className="h-9 w-36 bg-slate-100 rounded-md animate-pulse" />
+                        <div className="flex flex-col sm:flex-row gap-4 sm:items-end sm:justify-between">
+                            <div className="flex gap-1 -mx-2 px-2">
+                                <div className="h-9 w-16 bg-muted rounded-md animate-pulse" />
+                                <div className="h-9 w-24 bg-muted rounded-md animate-pulse" />
+                                <div className="h-9 w-24 bg-muted rounded-md animate-pulse" />
+                                <div className="h-9 w-24 bg-muted rounded-md animate-pulse hidden sm:block" />
+                            </div>
+                            <div className="h-9 w-full sm:w-[260px] lg:w-[300px] bg-muted rounded-md animate-pulse" />
                         </div>
                     </div>
-                    <CardContent>
+                    <CardContent className="min-h-[280px]">
                         <SkeletonTable rows={6} columns={5} />
                     </CardContent>
                 </Card>
