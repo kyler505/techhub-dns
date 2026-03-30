@@ -1,45 +1,47 @@
-# AGENTS.md — Agentic Coding Guide (techhub-dns-dev)
+# AGENTS.md — techhub-dns-dev Agent Guide
 
-Operational contract for coding agents in this repository.
-Keep changes fast, low-risk, and repo-specific.
+Repo-specific instructions for coding agents.
 
-## Rule Sources and Precedence
-
-1. Direct user/developer instructions in the active task
+## Rule Precedence
+1. Active system/developer/user task instructions
 2. This `AGENTS.md`
-3. Repo automation/config rules (if present)
+3. Tool/config defaults in repo (eslint, tsconfig, test runners)
 
-## Cursor / Copilot Rule Files (checked)
+## Cursor/Copilot Rule Status
+Audited in repo root:
+- `.cursor/rules/**` → **not present**
+- `.cursorrules` → **not present**
+- `.github/copilot-instructions.md` → **not present**
 
-- `.cursor/rules/**`: **absent**
-- `.cursorrules`: **absent**
-- `.github/copilot-instructions.md`: **absent**
-
-No external Cursor/Copilot override files are active. Use this document as source of truth.
+Result: no additional Cursor/Copilot instruction layers are active.
+`AGENTS.md` is the effective repo instruction file.
 
 ## Repository Map
+- `frontend/` — React 18 + TypeScript + Vite
+- `frontend/package.json` — authoritative frontend scripts
+- `frontend/.eslintrc.cjs` — ESLint config
+- `frontend/tsconfig.json` — strict TS config
+- `backend/` — Flask + SQLAlchemy + Socket.IO
+- `backend/app/main.py` — backend entrypoint (`python -m app.main`)
+- `backend/tests/` — pytest-style + script-style tests
+- `backend/requirements.txt` — Python deps
+- `backend/alembic.ini` — migrations
+- `scripts/deploy.sh` — deployment-only script
 
-- `frontend/` — Vite + React + TypeScript UI
-- `frontend/dist/` — production static bundle served by Flask
-- `backend/` — Flask API and server-side logic
-- `backend/app/main.py` — Flask entrypoint + SPA static serving
-- `backend/app/api/middleware.py` — centralized API error serialization
-- `backend/app/utils/exceptions.py` — `DNSApiError` and domain exceptions
-- `backend/tests/` — mixed script-style tests + pytest-compatible tests
-- `backend/alembic.ini` — Alembic config
-- `scripts/deploy.sh` — PythonAnywhere deployment script (**do not run locally**)
+## Working Directory Expectations
+- Run frontend commands from `frontend/`.
+- Run backend commands from `backend/`.
+- Many backend tests rely on `sys.path.append('.')`, so CWD matters.
 
-## Environment Setup
+## Setup
 
-### Frontend setup
-
+### Frontend
 ```bash
 cd frontend
 npm ci
 ```
 
-### Backend setup
-
+### Backend
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -47,10 +49,10 @@ python -m venv .venv
 python -m pip install -r backend/requirements.txt
 ```
 
-## Authoritative Build / Lint / Test Commands
+## Build / Lint / Type / Test Commands
 
-### Frontend (`frontend/`)
-
+### Frontend (from `frontend/`)
+Commands from `frontend/package.json`:
 ```bash
 npm run dev
 npm run lint
@@ -60,8 +62,11 @@ npm run preview
 npm run test
 ```
 
-Single-test patterns (Vitest):
+Notes:
+- `npm run test` = `vitest run` (non-watch).
+- `npm run build` = `tsc && vite build`.
 
+Frontend single-test patterns:
 ```bash
 # single file
 npm run test -- src/utils/timezone.test.ts
@@ -70,110 +75,105 @@ npm run test -- src/utils/timezone.test.ts
 npm run test -- src/utils/timezone.test.ts -t "formats winter UTC timestamps in Central time"
 ```
 
-### Backend (`backend/`)
+### Backend (from `backend/`)
+No central script runner is configured; use direct commands.
 
-Runtime + migrations:
-
+Runtime + health:
 ```bash
 python -m app.main
 curl http://localhost:8000/health
+```
+
+Migrations:
+```bash
 alembic upgrade head
 ```
 
-Testing:
-
+Tests:
 ```bash
-# script-style tests (fast checks, no pytest required)
-python tests/test_error_handling.py
-python tests/test_db.py
-python tests/test_picklist_service.py
-
-# pytest flow
+# install pytest if needed
 python -m pip install pytest
+
+# full pytest run
 pytest -q
+
+# script-style tests used in this repo
+python tests/test_error_handling.py
+python tests/test_picklist_service.py
+python tests/test_db.py
 ```
 
-Single-test patterns:
-
+Backend single-test patterns:
 ```bash
-# single file
+# single pytest file
 pytest -q tests/test_error_handling.py
 
-# single test function
+# single pytest function
 pytest -q tests/test_error_handling.py::test_validation_error
 
-# subset by expression
+# filtered subset
 pytest -q tests/test_error_handling.py -k "validation"
 
-# script-style single file
+# single script-style file
 python tests/test_picklist_service.py
 ```
 
-## Verification Expectations by Change Type
-
-- Frontend-only change: run `npm run lint`, `npx tsc --noEmit`, and targeted frontend tests
-- Backend-only change: run impacted script/pytest tests and smoke-check startup
-- Full-stack/API contract change: run frontend + backend validations
-- Error-handling changes: always run `python tests/test_error_handling.py`
+## Verification Expectations
+- Frontend-only change: `npm run lint`, `npx tsc --noEmit`, targeted vitest.
+- Backend-only change: run impacted backend tests (pytest or script-style).
+- API/shared-model change: run both frontend and backend validations.
+- Error handling changes: always run `python tests/test_error_handling.py`.
 
 ## Code Style Guidelines
 
 ### Imports
-
-TypeScript / React:
-- Order imports: third-party → internal aliases/absolute → relative
-- Remove unused imports; keep import blocks stable
-- Use type-only imports when applicable (`import type { Foo } ...`)
+TypeScript/React:
+- Order: external packages → internal modules → relative modules.
+- Use `import type` for type-only imports.
+- Keep imports minimal; remove unused imports.
 
 Python:
-- Order imports: stdlib → third-party → local app modules
-- Avoid wildcard imports
-- Avoid side-effect-only imports unless established in file pattern
+- Order: stdlib → third-party → local `app.*` imports.
+- Avoid wildcard imports.
+- Avoid side-effect imports unless framework wiring requires them.
 
-### Formatting
+### Formatting & Structure
+- Follow existing style in touched files; avoid unrelated format churn.
+- Prefer guard clauses/early returns over deep nesting.
+- Keep functions small and deterministic where practical.
 
-- Respect existing formatter/linter output in touched files
-- Avoid unrelated reformatting churn
-- Prefer guard clauses / early returns over deep nesting
-
-### Typing and Data Contracts
-
-Frontend TypeScript:
-- Preserve strict typing; avoid introducing `any`
-- Add explicit types for exported/shared APIs
-- Prefix intentionally unused params/locals with `_`
+### Types / Contracts
+Frontend TypeScript (`strict: true`, `noUnusedLocals`, `noUnusedParameters`):
+- Do not introduce new `any` unless unavoidable and justified inline.
+- Add explicit types for exported/shared APIs.
+- Prefix intentionally unused variables/params with `_` (ESLint-compatible).
 
 Backend Python:
-- Parse/coerce external input at boundaries
-- Keep internal flow operating on trusted shapes
+- Parse external/request data at boundaries.
+- Keep internal logic on trusted normalized data.
+- Preserve exception contracts consumed by API middleware.
 
 ### Naming
-
-- Use intent-revealing names (`resolveLocation`, `selectedDnsRecord`)
-- Avoid vague names (`data`, `temp`, `handleThing`) unless context is trivial
-- Booleans should read as predicates (`isReady`, `hasErrors`, `canTransition`)
+- Use intent-revealing names (`resolveLocationFromRemarks`, `isShippingFlow`).
+- Boolean names should read as predicates (`isReady`, `hasSignature`, `canAdvance`).
+- Avoid vague names (`data`, `temp`, `obj`) except in tiny local scopes.
 
 ### Error Handling
+- Never swallow errors (`except: pass`, empty `catch`).
+- Use typed domain/API exceptions (e.g., `DNSApiError` family) for expected failures.
+- Let centralized middleware serialize API errors.
+- Fail fast on invalid states; do not propagate partial/invalid objects.
 
-- Never swallow errors (`except: pass`, empty catch blocks)
-- For expected API failures, use `DNSApiError` subclasses
-- Let middleware serialize API errors; avoid route-specific duplicate JSON formats
-- Return actionable messages and structured `details` where useful
-- Fail fast on invalid states; do not propagate partially invalid objects
-
-## Backend/Frontend Integration Notes
-
-- Flask serves `frontend/dist` in production
-- If `frontend/dist` is missing, backend returns a JSON hint to build frontend
-- Local full-stack smoke check:
-
+## Integration Notes
+- Backend serves `frontend/dist` when available.
+- If `frontend/dist` is missing, backend root returns JSON guidance.
+- Full-stack smoke check:
 ```bash
 cd frontend && npm run build
 cd ../backend && python -m app.main
 ```
 
-## Deployment and Safety Notes
-
-- **Do not run `scripts/deploy.sh` locally** (PythonAnywhere-specific)
-- Do not execute deployment actions unless explicitly requested
-- Do not use destructive git operations (force push/reset) unless explicitly requested
+## Safety Notes
+- Do not run `scripts/deploy.sh` unless explicitly requested.
+- Avoid destructive git operations unless explicitly requested.
+- Keep edits scoped to task-relevant areas.

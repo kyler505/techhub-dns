@@ -18,6 +18,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { cn } from "../lib/utils";
 import { extractApiErrorMessage } from "../utils/apiErrors";
 
 type VettingEditorRow = {
@@ -28,6 +29,9 @@ type VettingEditorRow = {
   url: string;
   vettingUrl: string;
 };
+
+type RequiredField = "name" | "url";
+type RowFieldErrors = Partial<Record<RequiredField, string>>;
 
 const defaultSection: VettingEditorSection = VETTING_EDITOR_SECTIONS[0];
 const defaultCategory: VettingEditorCategory = "ACCESSORIES";
@@ -117,6 +121,7 @@ export default function VettingEditor() {
   const [rows, setRows] = useState<VettingEditorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [rowFieldErrors, setRowFieldErrors] = useState<Record<string, RowFieldErrors>>({});
 
   const rowCount = rows.length;
 
@@ -142,6 +147,7 @@ export default function VettingEditor() {
       try {
         const payload = await vettingEditorApi.getData();
         setRows(flattenPayload(payload));
+        setRowFieldErrors({});
       } catch (error: any) {
         const message = extractApiErrorMessage(error, "Failed to load vetting data.");
         toast.error("Failed to load Vetting Editor", { description: message });
@@ -158,13 +164,137 @@ export default function VettingEditor() {
     setRows((current) => current.map((row) => (row.id === id ? updater(row) : row)));
   };
 
+  const getRequiredFieldError = (field: RequiredField, value: string): string | undefined => {
+    if (value.trim()) {
+      return undefined;
+    }
+
+    if (field === "name") {
+      return "Name is required.";
+    }
+
+    return "Product URL is required.";
+  };
+
+  const clearRowErrors = (id: string) => {
+    setRowFieldErrors((current) => {
+      if (!current[id]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const validateFieldOnBlur = (row: VettingEditorRow, field: RequiredField) => {
+    const nextError = getRequiredFieldError(field, row[field]);
+    setRowFieldErrors((current) => {
+      const rowErrors = current[row.id] ?? {};
+      const existingError = rowErrors[field];
+
+      if (existingError === nextError) {
+        return current;
+      }
+
+      if (!nextError) {
+        if (!existingError) {
+          return current;
+        }
+
+        const nextRowErrors = { ...rowErrors };
+        delete nextRowErrors[field];
+        if (Object.keys(nextRowErrors).length === 0) {
+          const next = { ...current };
+          delete next[row.id];
+          return next;
+        }
+
+        return {
+          ...current,
+          [row.id]: nextRowErrors,
+        };
+      }
+
+      return {
+        ...current,
+        [row.id]: {
+          ...rowErrors,
+          [field]: nextError,
+        },
+      };
+    });
+  };
+
+  const validateRows = (currentRows: VettingEditorRow[]): boolean => {
+    const nextErrors: Record<string, RowFieldErrors> = {};
+
+    for (const row of currentRows) {
+      const nameError = getRequiredFieldError("name", row.name);
+      const urlError = getRequiredFieldError("url", row.url);
+
+      if (!nameError && !urlError) {
+        continue;
+      }
+
+      nextErrors[row.id] = {
+        ...(nameError ? { name: nameError } : {}),
+        ...(urlError ? { url: urlError } : {}),
+      };
+    }
+
+    setRowFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const updateRequiredField = (id: string, field: RequiredField, value: string) => {
+    updateRow(id, (current) => ({
+      ...current,
+      [field]: value,
+    }));
+
+    setRowFieldErrors((current) => {
+      const rowErrors = current[id];
+      if (!rowErrors?.[field]) {
+        return current;
+      }
+
+      const nextError = getRequiredFieldError(field, value);
+      if (nextError) {
+        return current;
+      }
+
+      const nextRowErrors = { ...rowErrors };
+      delete nextRowErrors[field];
+      if (Object.keys(nextRowErrors).length === 0) {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      }
+
+      return {
+        ...current,
+        [id]: nextRowErrors,
+      };
+    });
+  };
+
   const addRow = () => setRows((current) => [...current, createRow()]);
 
   const deleteRow = (id: string) => {
     setRows((current) => current.filter((row) => row.id !== id));
+    clearRowErrors(id);
   };
 
   const handleSave = async () => {
+    if (!validateRows(rows)) {
+      toast.error("Please complete required fields", {
+        description: "Each product must include Name and Product URL before saving.",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = buildPayload(rows);
@@ -214,7 +344,7 @@ export default function VettingEditor() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-4">
+    <div className="container mx-auto space-y-4 py-6 pb-28 md:pb-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Vetting Editor</h1>
@@ -222,7 +352,7 @@ export default function VettingEditor() {
             Manage products across the vetting lifecycle.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="hidden items-center gap-2 md:flex">
           <Button type="button" variant="outline" onClick={addRow} disabled={saving}>
             <Plus className="mr-2 h-4 w-4" />
             Add Product
@@ -247,8 +377,146 @@ export default function VettingEditor() {
               No products found. Add a product to begin.
             </div>
           ) : (
-            <div className="rounded-lg border bg-card">
-              <Table>
+            <>
+              <div className="space-y-4 md:hidden">
+                {rows.map((row, index) => {
+                  const nameError = rowFieldErrors[row.id]?.name;
+                  const productUrlError = rowFieldErrors[row.id]?.url;
+
+                  return (
+                    <div key={row.id} className="rounded-lg border bg-card p-4 shadow-sm">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-foreground">Product {index + 1}</div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="destructive"
+                          onClick={() => deleteRow(row.id)}
+                          aria-label={`Delete ${row.name.trim() || `product ${index + 1}`}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label htmlFor={`vetting-mobile-name-${row.id}`} className="text-sm font-medium text-foreground">
+                            Name
+                          </label>
+                          <Input
+                            id={`vetting-mobile-name-${row.id}`}
+                            name={`vettingMobileName-${row.id}`}
+                            value={row.name}
+                            onChange={(event) => updateRequiredField(row.id, "name", event.target.value)}
+                            onBlur={() => validateFieldOnBlur(row, "name")}
+                            aria-invalid={Boolean(nameError)}
+                            className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                            placeholder="e.g., Magic Keyboard"
+                          />
+                          {nameError ? <p className="text-xs text-destructive">{nameError}</p> : null}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor={`vetting-mobile-section-${row.id}`} className="text-sm font-medium text-foreground">
+                            Section
+                          </label>
+                          <select
+                            id={`vetting-mobile-section-${row.id}`}
+                            name={`vettingMobileSection-${row.id}`}
+                            value={row.section}
+                            onChange={(event) => {
+                              const section = normalizeVettingEditorSection(event.target.value);
+                              if (!section) {
+                                return;
+                              }
+                              updateRow(row.id, (current) => ({
+                                ...current,
+                                section,
+                                vettingUrl: sectionUsesVettingUrl(section) ? current.vettingUrl : "",
+                              }));
+                            }}
+                            className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            {VETTING_EDITOR_SECTIONS.map((section) => (
+                              <option key={section} value={section}>
+                                {formatSectionLabel(section)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor={`vetting-mobile-category-${row.id}`} className="text-sm font-medium text-foreground">
+                            Category
+                          </label>
+                          <select
+                            id={`vetting-mobile-category-${row.id}`}
+                            name={`vettingMobileCategory-${row.id}`}
+                            value={row.category}
+                            onChange={(event) => {
+                              const category = event.target.value as VettingEditorCategory;
+                              updateRow(row.id, (current) => ({ ...current, category }));
+                            }}
+                            className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            {VETTING_EDITOR_CATEGORIES.map((category) => (
+                              <option key={category} value={category}>
+                                {formatCategoryLabel(category)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor={`vetting-mobile-url-${row.id}`} className="text-sm font-medium text-foreground">
+                            Product URL
+                          </label>
+                          <Input
+                            id={`vetting-mobile-url-${row.id}`}
+                            name={`vettingMobileUrl-${row.id}`}
+                            type="url"
+                            inputMode="url"
+                            autoCapitalize="off"
+                            value={row.url}
+                            onChange={(event) => updateRequiredField(row.id, "url", event.target.value)}
+                            onBlur={() => validateFieldOnBlur(row, "url")}
+                            aria-invalid={Boolean(productUrlError)}
+                            className={cn(productUrlError && "border-destructive focus-visible:ring-destructive")}
+                            placeholder="e.g., https://store.example.com"
+                          />
+                          {productUrlError ? <p className="text-xs text-destructive">{productUrlError}</p> : null}
+                        </div>
+
+                        {sectionUsesVettingUrl(row.section) ? (
+                          <div className="space-y-1.5">
+                            <label htmlFor={`vetting-mobile-review-url-${row.id}`} className="text-sm font-medium text-foreground">
+                              Vetting URL
+                            </label>
+                            <Input
+                              id={`vetting-mobile-review-url-${row.id}`}
+                              name={`vettingMobileReviewUrl-${row.id}`}
+                              type="url"
+                              inputMode="url"
+                              autoCapitalize="off"
+                              value={row.vettingUrl}
+                              onChange={(event) =>
+                                updateRow(row.id, (current) => ({
+                                  ...current,
+                                  vettingUrl: event.target.value,
+                                }))
+                              }
+                              placeholder="e.g., https://store.example.com"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden rounded-lg border bg-card md:block">
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-20">Actions</TableHead>
@@ -260,26 +528,37 @@ export default function VettingEditor() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={row.id}>
+                  {rows.map((row) => {
+                    const nameError = rowFieldErrors[row.id]?.name;
+                    const productUrlError = rowFieldErrors[row.id]?.url;
+
+                    return (
+                      <TableRow key={row.id}>
                       <TableCell>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => deleteRow(row.id)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteRow(row.id)}
+                          aria-label={`Delete ${row.name.trim() || "product"}`}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
                       <TableCell>
-                        <Input
-                          id={`vetting-name-${row.id}`}
-                          name={`vettingName-${row.id}`}
-                          value={row.name}
-                          onChange={(event) =>
-                            updateRow(row.id, (current) => ({
-                              ...current,
-                              name: event.target.value,
-                            }))
-                          }
-                           placeholder="e.g., Magic Keyboard"
-                         />
+                        <div className="space-y-1.5">
+                          <Input
+                            id={`vetting-name-${row.id}`}
+                            name={`vettingName-${row.id}`}
+                            value={row.name}
+                            onChange={(event) => updateRequiredField(row.id, "name", event.target.value)}
+                            onBlur={() => validateFieldOnBlur(row, "name")}
+                            aria-invalid={Boolean(nameError)}
+                            className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                            placeholder="e.g., Magic Keyboard"
+                          />
+                          {nameError ? <p className="text-xs text-destructive">{nameError}</p> : null}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <select
@@ -325,24 +604,31 @@ export default function VettingEditor() {
                         </select>
                       </TableCell>
                       <TableCell>
-                        <Input
-                          id={`vetting-url-${row.id}`}
-                          name={`vettingUrl-${row.id}`}
-                          value={row.url}
-                          onChange={(event) =>
-                            updateRow(row.id, (current) => ({
-                              ...current,
-                              url: event.target.value,
-                            }))
-                          }
-                          placeholder="e.g., https://store.example.com"
-                        />
+                        <div className="space-y-1.5">
+                          <Input
+                            id={`vetting-url-${row.id}`}
+                            name={`vettingUrl-${row.id}`}
+                            type="url"
+                            inputMode="url"
+                            autoCapitalize="off"
+                            value={row.url}
+                            onChange={(event) => updateRequiredField(row.id, "url", event.target.value)}
+                            onBlur={() => validateFieldOnBlur(row, "url")}
+                            aria-invalid={Boolean(productUrlError)}
+                            className={cn(productUrlError && "border-destructive focus-visible:ring-destructive")}
+                            placeholder="e.g., https://store.example.com"
+                          />
+                          {productUrlError ? <p className="text-xs text-destructive">{productUrlError}</p> : null}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {sectionUsesVettingUrl(row.section) ? (
                           <Input
                             id={`vetting-review-url-${row.id}`}
                             name={`vettingReviewUrl-${row.id}`}
+                            type="url"
+                            inputMode="url"
+                            autoCapitalize="off"
                             value={row.vettingUrl}
                             onChange={(event) =>
                               updateRow(row.id, (current) => ({
@@ -354,14 +640,29 @@ export default function VettingEditor() {
                           />
                         ) : null}
                       </TableCell>
-                    </TableRow>
-                  ))}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
-              </Table>
-            </div>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+        <div className="container mx-auto flex items-center gap-2 px-0">
+          <Button type="button" variant="outline" onClick={addRow} disabled={saving} className="flex-1">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
+          <Button type="button" onClick={() => void handleSave()} disabled={saving} className="btn-lift flex-1">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
