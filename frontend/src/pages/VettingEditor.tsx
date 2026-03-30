@@ -280,7 +280,7 @@ export default function VettingEditor() {
     });
   };
 
-  const addRow = () => setRows((current) => [...current, createRow()]);
+  const addRow = () => setRows((current) => [createRow(), ...current]);
 
   const deleteRow = (id: string) => {
     setRows((current) => current.filter((row) => row.id !== id));
