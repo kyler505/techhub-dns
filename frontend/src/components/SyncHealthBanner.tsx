@@ -39,7 +39,7 @@ export function SyncHealthBanner(): JSX.Element | null {
   if (!showBanner) return null;
 
   return (
-    <div className="px-6 lg:px-8 pt-4">
+    <div className="px-4 pt-4 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-warning mt-0.5" />
