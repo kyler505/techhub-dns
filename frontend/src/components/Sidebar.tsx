@@ -161,35 +161,34 @@ export function Sidebar({ className }: { className?: string }) {
         animate={isMobile ? { x: isMobileOpen ? 0 : -288 } : { width: collapsed ? 72 : 256 }}
         transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen bg-card border-r border-border text-foreground flex flex-col will-change-transform",
+          "fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-border bg-card text-foreground will-change-transform",
           isMobile ? "w-[288px] max-w-[calc(100vw-3rem)] shadow-2xl" : "",
           className
         )}
       >
-      <div className={cn("flex h-12 items-center border-b border-border", showExpandedContent ? "justify-between px-4" : "justify-center px-3")}>
-        <div className={cn("flex items-center", showExpandedContent ? "gap-3" : "justify-center")}>
-          <motion.img
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2 }}
-            src={boxTAM}
-            alt="Texas A&M University"
-            className="h-8 w-auto"
-          />
-          {showExpandedContent && (
-            <motion.span
+        <div className={cn("relative flex h-12 items-center border-b border-border", showExpandedContent ? "justify-between px-4" : "justify-center px-3")}>
+          <div className={cn("flex items-center", showExpandedContent ? "gap-3" : "justify-center")}>
+            <motion.img
               initial={{ opacity: 0, x: -16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2 }}
-              className="font-semibold text-foreground tracking-tight leading-tight"
-            >
-              TechHub
-              <br />
-              Super App
-            </motion.span>
-          )}
-        </div>
-        {showExpandedContent && (
+              src={boxTAM}
+              alt="Texas A&M University"
+              className="h-8 w-auto"
+            />
+            {showExpandedContent && (
+              <motion.span
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2 }}
+                className="font-semibold leading-tight tracking-tight text-foreground"
+              >
+                TechHub
+                <br />
+                Super App
+              </motion.span>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -201,100 +200,93 @@ export function Sidebar({ className }: { className?: string }) {
             }}
             aria-label={isMobile ? (isMobileOpen ? "Close sidebar" : "Open sidebar") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-expanded={isMobile ? isMobileOpen : !collapsed}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation"
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation",
+              showExpandedContent ? "" : "absolute right-2 top-1"
+            )}
           >
             {isMobile ? (
-              isMobileOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />
+              isMobileOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />
             ) : collapsed ? (
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="h-5 w-5" />
             ) : (
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="h-5 w-5" />
             )}
           </button>
-        )}
-      </div>
+        </div>
 
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar touch-pan-y">
-        {navItems.map((item) => {
-          const active = isActive(item.path);
-          const Icon = item.icon;
-          return (
+        <nav className="custom-scrollbar flex-1 touch-pan-y space-y-1 overflow-y-auto px-3 py-4">
+          {navItems.map((item) => {
+            const active = isActive(item.path);
+            const Icon = item.icon;
+
+            return (
+              <NavLink
+                key={item.path}
+                to={item.to ?? item.path}
+                aria-label={item.label}
+                title={item.label}
+                className={cn(
+                  "flex min-h-[44px] items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+                  showExpandedContent ? "gap-3 px-3" : "justify-center px-0",
+                  active
+                    ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+              >
+                <Icon className="h-5 w-5 flex-shrink-0" />
+                {showExpandedContent && <span className="overflow-hidden whitespace-nowrap">{item.label}</span>}
+              </NavLink>
+            );
+          })}
+
+          <div className={cn("my-4 border-t border-border", showExpandedContent ? "" : "mx-2")} />
+
+          {isAdmin && (
             <NavLink
-              key={item.path}
-              to={item.to ?? item.path}
-              aria-label={item.label}
-              title={item.label}
-              className={cn(
-                "flex min-h-[44px] items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                showExpandedContent ? "gap-3" : "justify-center",
-                active
-                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              {showExpandedContent && (
-                <span className="whitespace-nowrap overflow-hidden">
-                  {item.label}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
-
-        <div className={cn("my-4 border-t border-border", showExpandedContent ? "" : "mx-2")} />
-
-        {/* Vetting Editor item - positioned after separator but before other admin items */}
-        {isAdmin && (
-          <NavLink
-            key="/vetting-editor"
-            to="/vetting-editor"
-            aria-label="Vetting Editor"
+              key="/vetting-editor"
+              to="/vetting-editor"
+              aria-label="Vetting Editor"
               title="Vetting Editor"
-              className={({ isActive }) =>
+              className={({ isActive: isCurrentVettingEditor }) =>
                 cn(
-                  "flex min-h-[44px] items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  showExpandedContent ? "gap-3" : "justify-center",
-                  isActive
+                  "flex min-h-[44px] items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+                  showExpandedContent ? "gap-3 px-3" : "justify-center px-0",
+                  isCurrentVettingEditor
                     ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )
               }
             >
-              <FilePenLine className="w-5 h-5 flex-shrink-0" />
-              {showExpandedContent && (
-                <span className="whitespace-nowrap overflow-hidden">
-                  Vetting Editor
-                </span>
-              )}
+              <FilePenLine className="h-5 w-5 flex-shrink-0" />
+              {showExpandedContent && <span className="overflow-hidden whitespace-nowrap">Vetting Editor</span>}
             </NavLink>
-        )}
+          )}
 
-        {visibleAdminItems.map((item) => {
-          const active = isActive(item.path);
-          const Icon = item.icon;
-          return (
-            <NavLink key={item.path} to={item.path}
-              aria-label={item.label}
-              title={item.label}
-              className={cn(
-                "flex min-h-[44px] items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                showExpandedContent ? "gap-3" : "justify-center",
-                active
-                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              {showExpandedContent && (
-                <span className="whitespace-nowrap overflow-hidden">
-                  {item.label}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
-      </nav>
+          {visibleAdminItems.map((item) => {
+            const active = isActive(item.path);
+            const Icon = item.icon;
+
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                aria-label={item.label}
+                title={item.label}
+                className={cn(
+                  "flex min-h-[44px] items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+                  showExpandedContent ? "gap-3 px-3" : "justify-center px-0",
+                  active
+                    ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+              >
+                <Icon className="h-5 w-5 flex-shrink-0" />
+                {showExpandedContent && <span className="overflow-hidden whitespace-nowrap">{item.label}</span>}
+              </NavLink>
+            );
+          })}
+        </nav>
       </motion.aside>
     </>
   );
