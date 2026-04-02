@@ -124,8 +124,17 @@ export function Sidebar({ className }: { className?: string }) {
     };
   }, [isMobile, isMobileOpen]);
 
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+
+    setIsMobileOpen(false);
+  }, [isMobile, location.pathname]);
+
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+  const showExpandedContent = isMobile || !collapsed;
 
   return (
     <>
@@ -142,7 +151,7 @@ export function Sidebar({ className }: { className?: string }) {
           type="button"
           aria-label="Open sidebar"
           onClick={() => setIsMobileOpen(true)}
-          className="fixed left-3 top-3 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg touch-manipulation"
+          className="fixed left-3 top-1 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg touch-manipulation"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
@@ -157,8 +166,8 @@ export function Sidebar({ className }: { className?: string }) {
           className
         )}
       >
-      <div className="flex items-center justify-between h-12 px-4 border-b border-border">
-        <div className="flex items-center gap-3">
+      <div className={cn("flex h-12 items-center border-b border-border", showExpandedContent ? "justify-between px-4" : "justify-center px-3")}>
+        <div className={cn("flex items-center", showExpandedContent ? "gap-3" : "justify-center")}>
           <motion.img
             initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
@@ -167,38 +176,42 @@ export function Sidebar({ className }: { className?: string }) {
             alt="Texas A&M University"
             className="h-8 w-auto"
           />
-          <motion.span
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2 }}
-            className="font-semibold text-foreground tracking-tight leading-tight"
-          >
-            TechHub
-            <br />
-            Super App
-          </motion.span>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (isMobile) {
-              setIsMobileOpen((current) => !current);
-              return;
-            }
-            setCollapsed(!collapsed);
-          }}
-          aria-label={isMobile ? (isMobileOpen ? "Close sidebar" : "Open sidebar") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={isMobile ? isMobileOpen : !collapsed}
-          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation"
-        >
-          {isMobile ? (
-            isMobileOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />
-          ) : collapsed ? (
-            <ChevronRight className="w-5 h-5" />
-          ) : (
-            <ChevronLeft className="w-5 h-5" />
+          {showExpandedContent && (
+            <motion.span
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.2 }}
+              className="font-semibold text-foreground tracking-tight leading-tight"
+            >
+              TechHub
+              <br />
+              Super App
+            </motion.span>
           )}
-        </button>
+        </div>
+        {showExpandedContent && (
+          <button
+            type="button"
+            onClick={() => {
+              if (isMobile) {
+                setIsMobileOpen((current) => !current);
+                return;
+              }
+              setCollapsed(!collapsed);
+            }}
+            aria-label={isMobile ? (isMobileOpen ? "Close sidebar" : "Open sidebar") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={isMobile ? isMobileOpen : !collapsed}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground touch-manipulation"
+          >
+            {isMobile ? (
+              isMobileOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />
+            ) : collapsed ? (
+              <ChevronRight className="w-5 h-5" />
+            ) : (
+              <ChevronLeft className="w-5 h-5" />
+            )}
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar touch-pan-y">
@@ -212,22 +225,24 @@ export function Sidebar({ className }: { className?: string }) {
               aria-label={item.label}
               title={item.label}
               className={cn(
-                "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isMobile ? "px-3" : "",
+                "flex min-h-[44px] items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                showExpandedContent ? "gap-3" : "justify-center",
                 active
                   ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               )}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              <span className="whitespace-nowrap overflow-hidden">
-                {item.label}
-              </span>
+              {showExpandedContent && (
+                <span className="whitespace-nowrap overflow-hidden">
+                  {item.label}
+                </span>
+              )}
             </NavLink>
           );
         })}
 
-        <div className="my-4 border-t border-border" />
+        <div className={cn("my-4 border-t border-border", showExpandedContent ? "" : "mx-2")} />
 
         {/* Vetting Editor item - positioned after separator but before other admin items */}
         {isAdmin && (
@@ -235,22 +250,24 @@ export function Sidebar({ className }: { className?: string }) {
             key="/vetting-editor"
             to="/vetting-editor"
             aria-label="Vetting Editor"
-            title="Vetting Editor"
-            className={({ isActive }) =>
-              cn(
-                "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isMobile ? "px-3" : "",
-                isActive
-                  ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )
-            }
-          >
-            <FilePenLine className="w-5 h-5 flex-shrink-0" />
-            <span className="whitespace-nowrap overflow-hidden">
-              Vetting Editor
-            </span>
-          </NavLink>
+              title="Vetting Editor"
+              className={({ isActive }) =>
+                cn(
+                  "flex min-h-[44px] items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  showExpandedContent ? "gap-3" : "justify-center",
+                  isActive
+                    ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )
+              }
+            >
+              <FilePenLine className="w-5 h-5 flex-shrink-0" />
+              {showExpandedContent && (
+                <span className="whitespace-nowrap overflow-hidden">
+                  Vetting Editor
+                </span>
+              )}
+            </NavLink>
         )}
 
         {visibleAdminItems.map((item) => {
@@ -261,17 +278,19 @@ export function Sidebar({ className }: { className?: string }) {
               aria-label={item.label}
               title={item.label}
               className={cn(
-                "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isMobile ? "px-3" : "",
+                "flex min-h-[44px] items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                showExpandedContent ? "gap-3" : "justify-center",
                 active
                   ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               )}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              <span className="whitespace-nowrap overflow-hidden">
-                {item.label}
-              </span>
+              {showExpandedContent && (
+                <span className="whitespace-nowrap overflow-hidden">
+                  {item.label}
+                </span>
+              )}
             </NavLink>
           );
         })}

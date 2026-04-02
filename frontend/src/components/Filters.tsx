@@ -54,7 +54,6 @@ export default function Filters({
             setIndicatorReady(false);
             return;
         }
-
         setIndicatorStyle({
             left: activeElement.offsetLeft,
             width: activeElement.offsetWidth,
