@@ -58,7 +58,6 @@ export default function Filters({
                 width: tabRect.width,
             });
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status]);
 
     return (
