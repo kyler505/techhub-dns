@@ -56,7 +56,6 @@ VETTING_EDITOR_ALLOWED_SECTIONS = (
     "Vetting",
     "AwaitingApproval",
     "ComingSoon",
-    "Approved",
 )
 VETTING_EDITOR_VETTING_URL_SECTIONS = ("Vetting", "AwaitingApproval")
 VETTING_EDITOR_ALLOWED_CATEGORIES = (

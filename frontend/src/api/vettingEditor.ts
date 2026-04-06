@@ -5,7 +5,6 @@ export const VETTING_EDITOR_SECTIONS = [
   "Vetting",
   "AwaitingApproval",
   "ComingSoon",
-  "Approved",
 ] as const;
 export const VETTING_EDITOR_LEGACY_SECTION_ORDER = [...VETTING_EDITOR_SECTIONS] as const;
 export const VETTING_EDITOR_VETTING_URL_SECTIONS = ["Vetting", "AwaitingApproval"] as const;
