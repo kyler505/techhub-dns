@@ -722,7 +722,7 @@ export default function DeliveryDispatchPage() {
             </DialogTitle>
             <DialogDescription>
               {partialPickOrders.length} order{partialPickOrders.length > 1 ? "s are" : " is"} only partially picked.
-              Only the picked items will be delivered. Remainder orders will be created for unpicked items.
+              Only the picked items will be delivered. Any remaining items will return to Picked on the original order so asset tags, a new picklist, and order details can be redone.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-48 overflow-y-auto py-2">

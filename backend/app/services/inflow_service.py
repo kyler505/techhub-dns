@@ -6,6 +6,7 @@ from datetime import datetime
 import time
 from sqlalchemy.orm import Session
 from app.config import settings
+from app.utils.pdf_helpers import filter_picklines
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,117 @@ class InflowService:
                 return False
 
         return True
+
+    @staticmethod
+    def _parse_standard_quantity(value: Any) -> float:
+        if isinstance(value, dict):
+            value = value.get("standardQuantity")
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _copy_line_with_quantity(
+        line: Dict[str, Any], quantity: float
+    ) -> Dict[str, Any]:
+        copied_line = dict(line)
+        quantity_data = dict(line.get("quantity") or {})
+        quantity_data["standardQuantity"] = str(
+            int(quantity) if quantity.is_integer() else quantity
+        )
+        copied_line["quantity"] = quantity_data
+        return copied_line
+
+    def build_remaining_order_view(self, order: Dict[str, Any]) -> Dict[str, Any]:
+        order_view = dict(order or {})
+        lines = order.get("lines", []) if isinstance(order, dict) else []
+        pack_lines = order.get("packLines", []) if isinstance(order, dict) else []
+        pick_lines = order.get("pickLines", []) if isinstance(order, dict) else []
+
+        if not isinstance(lines, list):
+            lines = []
+        if not isinstance(pack_lines, list):
+            pack_lines = []
+        if not isinstance(pick_lines, list):
+            pick_lines = []
+
+        shipped_quantities: Dict[str, float] = {}
+        shipped_serials: Dict[str, set[str]] = {}
+        for pack_line in pack_lines:
+            if not isinstance(pack_line, dict):
+                continue
+            product_id = pack_line.get("productId")
+            if not product_id:
+                continue
+            product_key = str(product_id)
+            shipped_quantities[product_key] = shipped_quantities.get(
+                product_key, 0.0
+            ) + self._parse_standard_quantity(pack_line.get("quantity"))
+            serial_numbers = (
+                pack_line.get("quantity", {}).get("serialNumbers", []) or []
+            )
+            shipped_serials.setdefault(product_key, set()).update(
+                str(serial) for serial in serial_numbers if serial is not None
+            )
+
+        remaining_lines: List[Dict[str, Any]] = []
+        remaining_subtotal = 0.0
+
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+
+            product_key = str(product_id)
+            original_qty = self._parse_standard_quantity(line.get("quantity"))
+            if original_qty <= 0:
+                continue
+
+            serial_numbers = [
+                str(serial)
+                for serial in (line.get("quantity", {}).get("serialNumbers", []) or [])
+                if serial is not None
+            ]
+
+            if serial_numbers:
+                remaining_serials = [
+                    serial
+                    for serial in serial_numbers
+                    if serial not in shipped_serials.get(product_key, set())
+                ]
+                if not remaining_serials:
+                    continue
+                remaining_line = self._copy_line_with_quantity(
+                    line, float(len(remaining_serials))
+                )
+                remaining_line["quantity"] = dict(remaining_line.get("quantity") or {})
+                remaining_line["quantity"]["serialNumbers"] = remaining_serials
+                remaining_qty = float(len(remaining_serials))
+            else:
+                shipped_qty = shipped_quantities.get(product_key, 0.0)
+                remaining_qty = max(original_qty - shipped_qty, 0.0)
+                if remaining_qty <= 0:
+                    continue
+                remaining_line = self._copy_line_with_quantity(line, remaining_qty)
+                shipped_quantities[product_key] = max(shipped_qty - original_qty, 0.0)
+
+            raw_price = line.get("unitPrice")
+            try:
+                unit_price = float(raw_price or 0)
+            except (TypeError, ValueError):
+                unit_price = 0.0
+            remaining_subtotal += unit_price * remaining_qty
+            remaining_lines.append(remaining_line)
+
+        order_view["lines"] = remaining_lines
+        order_view["pickLines"] = filter_picklines(order_view, pick_lines)
+        order_view["subtotal"] = remaining_subtotal
+        order_view["total"] = remaining_subtotal
+        return order_view
 
     def get_pick_status(self, order: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -361,7 +473,6 @@ class InflowService:
 
         now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         order_number = order.get("orderNumber") or sales_order_id
-        container_number = f"DELIVERY-{order_number}"
 
         def positive_quantity(line: Dict[str, Any]) -> bool:
             qty = line.get("quantity", {})
@@ -375,19 +486,37 @@ class InflowService:
 
         # pickLines validation is now done above - they must exist
 
-        if not order.get("packLines"):
+        pack_lines = order.get("packLines", [])
+        if not isinstance(pack_lines, list):
             pack_lines = []
-            # If only_picked_items is True, use pickLines instead of lines (for partial order fulfillment)
-            source_lines = (
-                order.get("pickLines", [])
-                if only_picked_items
-                else order.get("lines", [])
-            )
+
+        ship_lines = order.get("shipLines", [])
+        if not isinstance(ship_lines, list):
+            ship_lines = []
+
+        if only_picked_items:
+            source_lines = filter_picklines(order, order.get("pickLines", []))
+            new_pack_lines = []
+            existing_suffixes: List[int] = []
+            for existing_pack_line in pack_lines:
+                container_name = existing_pack_line.get("containerNumber")
+                if not isinstance(container_name, str):
+                    continue
+                prefix = f"DELIVERY-{order_number}-"
+                if not container_name.startswith(prefix):
+                    continue
+                suffix = container_name[len(prefix) :]
+                if suffix.isdigit():
+                    existing_suffixes.append(int(suffix))
+            next_suffix = (
+                max(existing_suffixes) if existing_suffixes else len(ship_lines)
+            ) + 1
+            container_number = f"DELIVERY-{order_number}-{next_suffix}"
 
             for line in source_lines:
                 if not positive_quantity(line):
                     continue
-                pack_lines.append(
+                new_pack_lines.append(
                     {
                         "salesOrderPackLineId": str(uuid.uuid4()),
                         "productId": line.get("productId"),
@@ -396,23 +525,55 @@ class InflowService:
                         "containerNumber": container_number,
                     }
                 )
-            order["packLines"] = pack_lines
 
-        if not order.get("shipLines") and order.get("packLines"):
-            order["shipLines"] = [
+            if not new_pack_lines:
+                raise ValueError(
+                    f"Order {order_number} has no newly picked items to fulfill in InFlow"
+                )
+
+            order["packLines"] = pack_lines + new_pack_lines
+            order["shipLines"] = ship_lines + [
                 {
                     "salesOrderShipLineId": str(uuid.uuid4()),
                     "carrier": "TechHub",
-                    "containers": list(
-                        {
-                            line.get("containerNumber")
-                            for line in order["packLines"]
-                            if line.get("containerNumber")
-                        }
-                    ),
+                    "containers": [container_number],
                     "shippedDate": now,
                 }
             ]
+        else:
+            if not pack_lines:
+                container_number = f"DELIVERY-{order_number}"
+                new_pack_lines = []
+                for line in order.get("lines", []):
+                    if not positive_quantity(line):
+                        continue
+                    new_pack_lines.append(
+                        {
+                            "salesOrderPackLineId": str(uuid.uuid4()),
+                            "productId": line.get("productId"),
+                            "quantity": line.get("quantity"),
+                            "description": line.get("description"),
+                            "containerNumber": container_number,
+                        }
+                    )
+                order["packLines"] = new_pack_lines
+                pack_lines = new_pack_lines
+
+            if not ship_lines and pack_lines:
+                order["shipLines"] = [
+                    {
+                        "salesOrderShipLineId": str(uuid.uuid4()),
+                        "carrier": "TechHub",
+                        "containers": list(
+                            {
+                                line.get("containerNumber")
+                                for line in pack_lines
+                                if line.get("containerNumber")
+                            }
+                        ),
+                        "shippedDate": now,
+                    }
+                ]
 
             # Check if order is fully picked (skip this check if only_picked_items=True)
             if not only_picked_items:
@@ -450,6 +611,15 @@ class InflowService:
             response = await client.put(url, json=order, headers=self.headers)
             response.raise_for_status()
             result = response.json()
+
+        if isinstance(result, dict) and "items" in result:
+            items = result.get("items")
+            result = items[0] if isinstance(items, list) and items else {}
+        elif isinstance(result, list):
+            result = result[0] if result else {}
+
+        if not isinstance(result, dict) or not result or "lines" not in result:
+            result = order
 
         # Audit logging for inFlow fulfillment
         if db:
@@ -639,6 +809,7 @@ class InflowService:
         )
 
     def requires_asset_tags(self, order: Dict[str, Any]) -> bool:
+        order = self.build_remaining_order_view(order)
         lines = order.get("lines", []) or []
         if not isinstance(lines, list) or not lines:
             return False
@@ -686,6 +857,7 @@ class InflowService:
         return False
 
     def build_asset_tag_requirement_key(self, order: Dict[str, Any]) -> tuple[Any, ...]:
+        order = self.build_remaining_order_view(order)
         lines = order.get("lines", []) or []
         if not isinstance(lines, list) or not lines:
             return tuple()
@@ -829,6 +1001,7 @@ class InflowService:
         Extract serial numbers for asset-tag-required items from inflow order data.
         Uses pickLines when available to preserve device pick order.
         """
+        order = self.build_remaining_order_view(order)
         lines = order.get("lines", [])
         pick_lines = order.get("pickLines", [])
 

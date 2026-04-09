@@ -14,18 +14,18 @@ def wrap_text(
     max_width: Union[int, float],
     font_name: str,
     font_size: int,
-    pdf: Optional[canvas.Canvas] = None
+    pdf: Optional[canvas.Canvas] = None,
 ) -> List[str]:
     """Wrap text to fit within max_width, respecting explicit newlines.
-    
+
     Args:
         text: The text to wrap
         max_width: Maximum width in points
         font_name: Name of the font to use for width calculations
         font_size: Size of the font
-        pdf: Optional canvas instance. If provided, uses pdf.stringWidth(); 
+        pdf: Optional canvas instance. If provided, uses pdf.stringWidth();
              otherwise uses reportlab.pdfbase.pdfmetrics.stringWidth()
-    
+
     Returns:
         List of wrapped lines
     """
@@ -36,7 +36,7 @@ def wrap_text(
     width_func = pdf.stringWidth if pdf else stringWidth
 
     # First split on explicit newlines to respect intentional line breaks
-    paragraphs = str(text).split('\n')
+    paragraphs = str(text).split("\n")
     lines = []
 
     for paragraph in paragraphs:
@@ -68,17 +68,17 @@ def check_page_break(
     y_offset: Union[int, float],
     height: Union[int, float],
     threshold: Union[int, float] = 60,
-    reset_offset: Union[int, float] = 50
+    reset_offset: Union[int, float] = 50,
 ) -> Union[int, float]:
     """Check if page break is needed and return updated y_offset.
-    
+
     Args:
         pdf: The canvas to draw on
         y_offset: Current Y position
         height: Page height
         threshold: Y position below which a page break is triggered
         reset_offset: Y position to reset to after a page break
-    
+
     Returns:
         Updated y_offset (either current position or reset position after page break)
     """
@@ -90,14 +90,14 @@ def check_page_break(
 
 def filter_picklines(inflow_data: Dict[str, Any], pick_lines: List[Dict]) -> List[Dict]:
     """Filter pick lines to show only unshipped items.
-    
+
     Compares pickLines against packLines to determine which items
     have already been shipped and removes them from the result.
-    
+
     Args:
         inflow_data: The inFlow order data containing packLines
         pick_lines: The list of pick lines to filter
-    
+
     Returns:
         List of unshipped pick line items
     """
@@ -117,10 +117,7 @@ def filter_picklines(inflow_data: Dict[str, Any], pick_lines: List[Dict]) -> Lis
         serials = pack.get("quantity", {}).get("serialNumbers", [])
 
         if pid not in shipped_items:
-            shipped_items[pid] = {
-                "quantity": 0.0,
-                "serialNumbers": set()
-            }
+            shipped_items[pid] = {"quantity": 0.0, "serialNumbers": set()}
 
         shipped_items[pid]["quantity"] += qty
         shipped_items[pid]["serialNumbers"].update(serials)
@@ -141,10 +138,7 @@ def filter_picklines(inflow_data: Dict[str, Any], pick_lines: List[Dict]) -> Lis
         if pid not in tracked_orders:
             tracked_orders[pid] = {
                 **pick,
-                "quantity": {
-                    "standardQuantity": qty,
-                    "serialNumbers": list(serials)
-                }
+                "quantity": {"standardQuantity": qty, "serialNumbers": list(serials)},
             }
         else:
             tracked_orders[pid]["quantity"]["standardQuantity"] += qty
@@ -155,7 +149,9 @@ def filter_picklines(inflow_data: Dict[str, Any], pick_lines: List[Dict]) -> Lis
     for pid, pick in tracked_orders.items():
         picked_qty = pick["quantity"]["standardQuantity"]
         picked_serials = pick["quantity"].get("serialNumbers", [])
-        track_serials = pick.get("product", {}).get("trackSerials", False)
+        track_serials = bool(
+            pick.get("product", {}).get("trackSerials", False) or picked_serials
+        )
 
         shipped = shipped_items.get(pid, {"quantity": 0.0, "serialNumbers": set()})
         shipped_qty = shipped["quantity"]
@@ -168,18 +164,19 @@ def filter_picklines(inflow_data: Dict[str, Any], pick_lines: List[Dict]) -> Lis
 
         unshipped_entry = {
             **pick,
-            "quantity": {
-                "standardQuantity": str(remaining_qty),
-                "serialNumbers": []
-            }
+            "quantity": {"standardQuantity": str(remaining_qty), "serialNumbers": []},
         }
 
         if track_serials:
             # Remove shipped serials from picked serials
-            remaining_serials = [sn for sn in picked_serials if sn not in shipped_serials]
+            remaining_serials = [
+                sn for sn in picked_serials if sn not in shipped_serials
+            ]
             unshipped_entry["quantity"]["serialNumbers"] = remaining_serials
             # Adjust quantity to number of serials remaining
-            unshipped_entry["quantity"]["standardQuantity"] = str(len(remaining_serials))
+            unshipped_entry["quantity"]["standardQuantity"] = str(
+                len(remaining_serials)
+            )
 
         unshipped.append(unshipped_entry)
 

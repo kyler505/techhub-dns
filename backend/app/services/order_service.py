@@ -1601,6 +1601,7 @@ class OrderService:
         """
         from app.services.pdf_service import pdf_service
         from app.services.email_service import email_service
+        from app.services.inflow_service import InflowService
 
         # Get recipient email
         recipient_email = order.recipient_contact
@@ -1614,38 +1615,51 @@ class OrderService:
                 )
                 return False
 
+            inflow_service = InflowService()
+            order_details_data = inflow_service.build_remaining_order_view(
+                order.inflow_data
+            )
+            has_partial_remaining = bool(order_details_data.get("lines")) and (
+                order_details_data.get("lines") != order.inflow_data.get("lines", [])
+            )
+            pdf_source_data = (
+                order_details_data if has_partial_remaining else order.inflow_data
+            )
+            force_regenerate_pdf = has_partial_remaining
+
             pdf_bytes = None
             order_details_path = None
 
             # Step 1: Check SharePoint first for existing PDF
-            try:
-                from app.services.sharepoint_service import get_sharepoint_service
+            if not force_regenerate_pdf:
+                try:
+                    from app.services.sharepoint_service import get_sharepoint_service
 
-                sp_service = get_sharepoint_service()
+                    sp_service = get_sharepoint_service()
 
-                if sp_service.is_enabled:
-                    logger.info(
-                        f"Checking SharePoint for existing Order Details PDF: {pdf_filename}"
-                    )
-                    existing_pdf = sp_service.download_file(
-                        "order-details", pdf_filename
-                    )
-
-                    if existing_pdf:
+                    if sp_service.is_enabled:
                         logger.info(
-                            f"Found existing Order Details PDF in SharePoint: {pdf_filename}"
+                            f"Checking SharePoint for existing Order Details PDF: {pdf_filename}"
                         )
-                        pdf_bytes = existing_pdf
-                        order_details_path = sp_service.get_file_url(
+                        existing_pdf = sp_service.download_file(
                             "order-details", pdf_filename
                         )
-            except Exception as e:
-                logger.warning(f"Error checking SharePoint for existing PDF: {e}")
+
+                        if existing_pdf:
+                            logger.info(
+                                f"Found existing Order Details PDF in SharePoint: {pdf_filename}"
+                            )
+                            pdf_bytes = existing_pdf
+                            order_details_path = sp_service.get_file_url(
+                                "order-details", pdf_filename
+                            )
+                except Exception as e:
+                    logger.warning(f"Error checking SharePoint for existing PDF: {e}")
 
             # Step 2: If not found in SharePoint, generate and upload
             if pdf_bytes is None:
                 logger.info(f"Generating Order Details PDF for order {order_number}")
-                pdf_bytes = pdf_service.generate_order_details_pdf(order.inflow_data)
+                pdf_bytes = pdf_service.generate_order_details_pdf(pdf_source_data)
 
                 # Save locally first
                 order_details_dir = self._storage_path("order_details")

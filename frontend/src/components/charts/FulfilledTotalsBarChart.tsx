@@ -12,7 +12,7 @@ interface FulfilledTotalsBarChartProps {
 export default function FulfilledTotalsBarChart({ data, loading }: FulfilledTotalsBarChartProps) {
   if (loading) {
     return (
-      <div className="flex h-[220px] w-full items-center justify-center rounded bg-muted/20 animate-pulse">
+      <div className="flex h-[220px] w-full items-center justify-center rounded bg-muted/20 animate-pulse overflow-hidden">
         <p className="text-muted-foreground">Loading chart...</p>
       </div>
     );
@@ -20,7 +20,7 @@ export default function FulfilledTotalsBarChart({ data, loading }: FulfilledTota
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-[220px] w-full flex-col items-center justify-center rounded bg-muted/20">
+      <div className="flex h-[220px] w-full flex-col items-center justify-center rounded bg-muted/20 overflow-hidden">
         <BarChart2 className="mb-2 h-6 w-6 text-slate-300" />
         <p className="text-muted-foreground">No data available</p>
       </div>
