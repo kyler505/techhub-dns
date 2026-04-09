@@ -19,15 +19,18 @@ interface OrderTableProps {
     onStatusChange?: (orderId: string, newStatus: OrderStatus, reason?: string) => void;
     onViewDetail: (orderId: string) => void;
     showEmptyState?: boolean;
+    loading?: boolean;
 }
 
 export default function OrderTable({
     orders,
     onViewDetail,
     showEmptyState = true,
+    loading = false,
 }: OrderTableProps) {
     const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
     const compareText = (left: unknown, right: unknown): number => {
         const leftText = typeof left === "string" ? left : "";
@@ -120,92 +123,117 @@ export default function OrderTable({
     }
 
     return (
-        <div className="rounded-lg border border-border bg-card shadow-premium overflow-hidden">
-            <Table className="min-w-[640px] lg:min-w-[720px]">
-                <TableHeader className="sticky top-0 z-20 bg-muted/40">
-                    <TableRow>
-                        <TableHead className="w-[220px] lg:w-[260px]">
-                            <button
-                                type="button"
-                                onClick={() => toggleSort("id")}
-                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                            >
-                                Order ID
-                                <ArrowUpDown className="h-3.5 w-3.5" />
-                            </button>
-                        </TableHead>
-                        <TableHead>
-                            <button
-                                type="button"
-                                onClick={() => toggleSort("recipient")}
-                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                            >
-                                Recipient
-                                <ArrowUpDown className="h-3.5 w-3.5" />
-                            </button>
-                        </TableHead>
-                        <TableHead className="hidden lg:table-cell">
-                            <button
-                                type="button"
-                                onClick={() => toggleSort("location")}
-                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                            >
-                                Location
-                                <ArrowUpDown className="h-3.5 w-3.5" />
-                            </button>
-                        </TableHead>
-                        <TableHead className="hidden lg:table-cell">
-                            <button
-                                type="button"
-                                onClick={() => toggleSort("date")}
-                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                            >
-                                Order Date
-                                <ArrowUpDown className="h-3.5 w-3.5" />
-                            </button>
-                        </TableHead>
-                        <TableHead>
-                            <button
-                                type="button"
-                                onClick={() => toggleSort("status")}
-                                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                            >
-                                Status
-                                <ArrowUpDown className="h-3.5 w-3.5" />
-                            </button>
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {sortedOrders.map((order, index) => (
-                        <TableRow
-                            key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`}
-                            className="hover:bg-muted/30 transition-colors"
+        <div className="rounded-lg border border-border bg-card shadow-premium overflow-hidden" style={{ scrollbarGutter: "stable" }}>
+            <div className="md:hidden divide-y divide-border">
+                {sortedOrders.map((order, index) => {
+                    const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
+                    const isExpanded = expandedOrderId === orderId;
+                    return (
+                        <button
+                            key={orderId}
+                            type="button"
+                            onClick={() => setExpandedOrderId((current) => (current === orderId ? null : orderId))}
+                            className="touch-manipulation block w-full p-4 text-left hover:bg-muted/30"
                         >
-                        <TableCell>
-                            <Button
-                                variant="link"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigateToOrder(order.id);
-                                }}
-                                className="p-0 h-auto font-normal text-foreground/90 hover:text-foreground"
-                            >
-                                {order.inflow_order_id}
-                            </Button>
-                        </TableCell>
-                        <TableCell>{order.recipient_name || "N/A"}</TableCell>
-                        <TableCell className="hidden lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                            {formatToCentralTime(order.created_at, "MMM d, yyyy")}
-                        </TableCell>
-                        <TableCell>
-                            <StatusBadge status={order.status} />
-                        </TableCell>
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 space-y-1">
+                                    <div className="flex min-h-[44px] items-center gap-2">
+                                        <span className="truncate text-sm font-semibold text-foreground">
+                                            {order.inflow_order_id || order.id}
+                                        </span>
+                                    </div>
+                                    <p className="break-words text-sm text-muted-foreground">
+                                        {order.recipient_name || "N/A"}
+                                    </p>
+                                </div>
+                                <StatusBadge status={order.status} />
+                            </div>
+                            <div className={`mt-3 grid gap-2 text-xs text-muted-foreground ${isExpanded ? "grid-cols-1" : "grid-cols-2"}`}>
+                                <div>
+                                    <p className="uppercase tracking-wide">Location</p>
+                                    <p className="mt-1 break-words text-foreground">
+                                        {formatDeliveryLocation(order)}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="uppercase tracking-wide">Date</p>
+                                    <p className="mt-1 text-foreground">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</p>
+                                </div>
+                                {isExpanded && (
+                                    <div className="col-span-2">
+                                        <p className="uppercase tracking-wide">Open</p>
+                                        <p className="mt-1 text-foreground">Swipe or tap to collapse.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto ios-scroll">
+                <Table className="min-w-[720px]">
+                    <TableHeader className="sticky top-0 z-20 bg-muted/40">
+                        <TableRow>
+                            <TableHead className="w-[220px] lg:w-[260px]">
+                                <button type="button" onClick={() => toggleSort("id")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Order ID
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
+                            <TableHead>
+                                <button type="button" onClick={() => toggleSort("recipient")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Recipient
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
+                            <TableHead className="hidden lg:table-cell">
+                                <button type="button" onClick={() => toggleSort("location")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Location
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
+                            <TableHead className="hidden lg:table-cell">
+                                <button type="button" onClick={() => toggleSort("date")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Order Date
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
+                            <TableHead>
+                                <button type="button" onClick={() => toggleSort("status")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Status
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {sortedOrders.map((order, index) => (
+                            <TableRow key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`} className="hover:bg-muted/30 transition-colors">
+                                <TableCell className="min-w-0 break-words">
+                                    <Button
+                                        variant="link"
+                                        disabled={loading}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigateToOrder(order.id);
+                                        }}
+                                        className={`h-auto min-h-0 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
+                                    >
+                                        {order.inflow_order_id}
+                                    </Button>
+                                </TableCell>
+                                <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
+                                <TableCell className="hidden break-words lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
+                                <TableCell className="hidden lg:table-cell">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
+                                <TableCell>
+                                    <StatusBadge status={order.status} />
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
         </div>
     );
 }

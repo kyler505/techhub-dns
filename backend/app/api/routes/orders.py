@@ -724,9 +724,17 @@ def get_order_details_pdf(order_id):
         if not inflow_data:
             abort(404, description="Order not found in inFlow")
 
+        remaining_order_data = inflow_service.build_remaining_order_view(inflow_data)
+        order_details_data = (
+            remaining_order_data
+            if remaining_order_data.get("lines")
+            and remaining_order_data.get("lines") != inflow_data.get("lines", [])
+            else inflow_data
+        )
+
         # Generate PDF
         try:
-            pdf_bytes = pdf_service.generate_order_details_pdf(inflow_data)
+            pdf_bytes = pdf_service.generate_order_details_pdf(order_details_data)
             pdf_stream = BytesIO(pdf_bytes)
             pdf_stream.seek(0)
 

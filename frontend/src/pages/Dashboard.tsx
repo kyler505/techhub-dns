@@ -71,7 +71,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
 
   return (
     <div className="group">
-      <Card className="relative overflow-hidden" data-transition="card-hover">
+        <Card className="relative overflow-hidden" data-transition="card-hover">
         <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
           <Icon className="w-5 h-5" />
         </div>
@@ -348,7 +348,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
         <Card className="xl:col-span-2 h-full">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base">Live Status</CardTitle>
             <div className="flex flex-col items-end gap-1 text-right">
               <span
@@ -375,7 +375,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 h-full">
           <StatCard
             title="Picked"
             value={statusCounts.picked ?? 0}
@@ -409,7 +409,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base">Completed Today</CardTitle>
             <span className="text-xs text-muted-foreground">Last 24h</span>
           </CardHeader>
@@ -457,7 +457,8 @@ export default function Dashboard() {
                   size="sm"
                   variant={workflowTrendDays === 7 ? "default" : "ghost"}
                   onClick={() => updateWorkflowTrendDays(7)}
-                  className="h-7 px-2"
+                  disabled={workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 7}
+                  className={`min-h-11 px-3 ${workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 7 ? "opacity-75 cursor-not-allowed" : ""}`}
                 >
                   7d
                 </Button>
@@ -466,7 +467,8 @@ export default function Dashboard() {
                   size="sm"
                   variant={workflowTrendDays === 30 ? "default" : "ghost"}
                   onClick={() => updateWorkflowTrendDays(30)}
-                  className="h-7 px-2"
+                  disabled={workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 30}
+                  className={`min-h-11 px-3 ${workflowDailyTrendsQuery.isFetching && workflowTrendDays !== 30 ? "opacity-75 cursor-not-allowed" : ""}`}
                 >
                   30d
                 </Button>
