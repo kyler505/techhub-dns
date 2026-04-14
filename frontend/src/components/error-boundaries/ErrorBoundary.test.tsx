@@ -20,14 +20,15 @@ describe("ErrorBoundary", () => {
     expect(screen.getByText("safe content")).toBeInTheDocument();
   });
 
-  it("catches errors without crashing", () => {
+  it("catches errors and renders fallback", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     render(
-      <ErrorBoundary>
+      <ErrorBoundary fallback={({ error }) => <div data-testid="fallback">{error.message}</div>}>
         <ThrowingComponent />
       </ErrorBoundary>
     );
     spy.mockRestore();
-    expect(document.body.children.length).toBeGreaterThan(0);
+    expect(screen.getByTestId("fallback")).toBeInTheDocument();
+    expect(screen.getByText("test error")).toBeInTheDocument();
   });
 });
