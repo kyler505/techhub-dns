@@ -79,7 +79,7 @@ export interface Order {
   picklist_path?: string;
   qa_completed_at?: string;
   qa_completed_by?: string;
-  qa_data?: Record<string, any>;
+  qa_data?: Record<string, unknown>;
   qa_path?: string;
   qa_method?: string;
   signature_captured_at?: string;
@@ -92,7 +92,7 @@ export interface Order {
   shipped_to_carrier_by?: string;
   carrier_name?: string;
   tracking_number?: string;
-  inflow_data?: Record<string, any>;
+  inflow_data?: Record<string, unknown>;
   pick_status?: PickStatus;
   latest_picklist_print_job?: PrintJobSummary;
   asset_tag_serials?: AssetTagSerial[];
@@ -113,7 +113,7 @@ export interface TagData {
 }
 
 export interface OrderDetail extends Order {
-  inflow_data?: Record<string, any>;
+  inflow_data?: Record<string, unknown>;
   asset_tag_required?: boolean;
   teams_notifications?: TeamsNotification[];
 }
@@ -150,7 +150,7 @@ export interface AuditLog {
   to_status: string;
   reason?: string;
   timestamp: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TeamsNotification {
