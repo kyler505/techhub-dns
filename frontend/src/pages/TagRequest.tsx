@@ -119,7 +119,7 @@ export default function TagRequest() {
                 message: response.error || "Upload failed.",
             });
         },
-        onError: (err: any) => {
+        onError: (err: unknown) => {
             const responseData = err?.response?.data as unknown;
             const record = responseData && typeof responseData === "object" ? (responseData as Record<string, unknown>) : null;
 

@@ -99,7 +99,7 @@ export default function OrderDetailPage() {
             setTransitioningStatus(null);
             await refreshOrder();
         },
-        onError: async (error: any) => {
+        onError: async (error: unknown) => {
             console.error("Failed to update status:", error);
             if (error?.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
@@ -143,7 +143,7 @@ export default function OrderDetailPage() {
         onSuccess: async () => {
             await refreshOrder();
         },
-        onError: async (error: any) => {
+        onError: async (error: unknown) => {
             console.error("Failed to tag order:", error);
             if (error?.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
@@ -169,7 +169,7 @@ export default function OrderDetailPage() {
         onSuccess: async () => {
             await refreshOrder();
         },
-        onError: async (error: any) => {
+        onError: async (error: unknown) => {
             console.error("Failed to generate picklist:", error);
             if (error?.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
@@ -271,7 +271,7 @@ export default function OrderDetailPage() {
                 return;
             }
             await refreshOrder();
-        } catch (error: any) {
+        } catch (error: unknown) {
             const message = extractApiErrorMessage(error, "Failed to request tags");
             toast.error(message);
         }

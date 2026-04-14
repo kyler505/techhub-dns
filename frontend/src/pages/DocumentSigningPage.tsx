@@ -866,7 +866,7 @@ function DocumentSigningPage() {
                 state: { message: 'Document signed successfully!' }
             });
 
-        } catch (saveError: any) {
+        } catch (saveError: unknown) {
             console.error(saveError);
             if (saveError?.response?.status === 409) {
                 setError("This order changed while you were signing. Reloaded the latest order data; review and sign again.");

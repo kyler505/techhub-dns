@@ -12,6 +12,7 @@ import { Input } from "../components/ui/input";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
 import { OrderStatus } from "../types/order";
 import { isValidOrderId } from "../utils/orderIds";
+import { extractApiErrorMessage } from "../utils/apiErrors";
 import { formatToCentralTime } from "../utils/timezone";
 
 type DeliveryDetailLocationState = {
@@ -58,25 +59,7 @@ function getOrderStatusVariant(status: string) {
   }
 }
 
-function getApiErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && "response" in error) {
-    const candidate = error as {
-      response?: {
-        data?: {
-          error?: {
-            message?: unknown;
-          };
-        };
-      };
-    };
-    const message = candidate.response?.data?.error?.message;
-    if (typeof message === "string" && message.trim()) {
-      return message;
-    }
-  }
 
-  return "Action failed. Refresh and try again.";
-}
 
 export default function DeliveryRunDetailPage() {
   const { runId } = useParams<{ runId: string }>();
@@ -159,7 +142,7 @@ export default function DeliveryRunDetailPage() {
       toast.success("Delivery run completed");
       await refetch();
     } catch (error: unknown) {
-      setErrorMessage(getApiErrorMessage(error) || "Failed to complete delivery. Ensure all orders are delivered first.");
+      setErrorMessage(extractApiErrorMessage(error, "Failed to complete delivery. Ensure all orders are delivered first."));
       setErrorDialogOpen(true);
       await refetch();
     } finally {
@@ -193,7 +176,7 @@ export default function DeliveryRunDetailPage() {
       setRecallReason("");
       await refetch();
     } catch (error: unknown) {
-      setErrorMessage(getApiErrorMessage(error));
+      setErrorMessage(extractApiErrorMessage(error, "Action failed. Refresh and try again."));
       setErrorDialogOpen(true);
       await refetch();
     } finally {
@@ -248,7 +231,7 @@ export default function DeliveryRunDetailPage() {
       setReorderMode(false);
       await refetch();
     } catch (error: unknown) {
-      setErrorMessage(getApiErrorMessage(error));
+      setErrorMessage(extractApiErrorMessage(error, "Action failed. Refresh and try again."));
       setErrorDialogOpen(true);
       await refetch();
     } finally {
