@@ -179,7 +179,6 @@ def inflow_webhook():
                 ), 401
 
             payload = json.loads(body.decode("utf-8"))
-            logger.info(f"Webhook payload received: {json.dumps(payload, indent=2)}")
 
             event_type = (
                 payload.get("event")
@@ -187,7 +186,13 @@ def inflow_webhook():
                 or payload.get("EventType")
                 or payload.get("eventType")
             )
-            logger.info(f"Received webhook event: {event_type}")
+            # Early extraction for structured logging (full extraction below)
+            _early_order_number = (
+                payload.get("orderNumber")
+                or payload.get("order_number")
+                or payload.get("OrderNumber")
+            )
+            logger.info("Webhook payload received: event=%s order_number=%s", event_type, _early_order_number)
 
             order_data = (
                 payload.get("data")
@@ -349,15 +354,16 @@ def inflow_webhook():
                         webhook.status = WebhookStatus.failed
                     db.commit()
 
-                return _webhook_json("error", str(e), 500)
+                logger.error("Webhook processing failed: %s", e, exc_info=True)
+                return _webhook_json("error", "Internal server error", 500)
 
     except json.JSONDecodeError as e:
         logger.warning(f"Webhook payload was not valid JSON: {e}")
         return _webhook_json("error", "Invalid webhook payload", 400)
 
     except Exception as e:
-        logger.error(f"Webhook processing failed: {e}", exc_info=True)
-        return _webhook_json("error", str(e), 500)
+        logger.error("Webhook processing failed: %s", e, exc_info=True)
+        return _webhook_json("error", "Internal server error", 500)
 
 
 @bp.route("/webhooks/register", methods=["POST"])

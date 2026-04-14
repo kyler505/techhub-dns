@@ -30,13 +30,13 @@ def get_sharepoint_status():
             "authenticated": is_authenticated,
         })
     except Exception as e:
-        logger.error(f"Error getting SharePoint status: {e}")
+        logger.error("Error getting SharePoint status: %s", e, exc_info=True)
         return jsonify({
             "enabled": settings.sharepoint_enabled,
             "site_url": settings.sharepoint_site_url,
             "folder_path": settings.sharepoint_folder_path,
             "authenticated": False,
-            "error": str(e)
+            "error": "Failed to retrieve SharePoint status"
         })
 
 
@@ -82,10 +82,10 @@ def authenticate_sharepoint():
             "drive_id": drive_id
         })
     except Exception as e:
-        logger.error(f"SharePoint authentication failed: {e}")
+        logger.error("SharePoint authentication failed: %s", e, exc_info=True)
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "SharePoint authentication failed"
         }), 500
 
 
@@ -121,8 +121,8 @@ def test_sharepoint_upload():
             "filename": test_filename
         })
     except Exception as e:
-        logger.error(f"SharePoint test upload failed: {e}")
+        logger.error("SharePoint test upload failed: %s", e, exc_info=True)
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "SharePoint test upload failed"
         }), 500
