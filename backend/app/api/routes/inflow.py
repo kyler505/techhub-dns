@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from flask import Blueprint, request, jsonify, abort
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -292,6 +293,19 @@ def inflow_webhook():
                 logger.info(f"Order {order_number} processed successfully via webhook")
                 return jsonify({"status": "processed", "order_id": str(order.id)})
 
+            except IntegrityError:
+                db.rollback()
+                from app.models.order import Order
+                logger.info(
+                    "Webhook IntegrityError for order %s — likely duplicate, attempting fetch",
+                    order_number,
+                )
+                existing = (
+                    db.query(Order).filter(Order.inflow_order_id == order_number).first()
+                )
+                if existing:
+                    return jsonify({"status": "processed", "order_id": str(existing.id)})
+                return _webhook_json("error", "Duplicate order conflict", 409)
             except DNSApiError as e:
                 logger.warning(
                     "Webhook rejected order %s with %s: %s",
