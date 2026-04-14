@@ -18,8 +18,12 @@ describe("extractApiErrorMessage", () => {
     expect(extractApiErrorMessage(error, "default")).toBe("Something broke");
   });
 
-  it("returns fallback for unknown errors", () => {
-    expect(extractApiErrorMessage(new Error("fail"), "fallback")).toBe("fallback");
+  it("returns fallback for non-Error objects", () => {
+    expect(extractApiErrorMessage({ something: "weird" }, "fallback")).toBe("fallback");
+  });
+
+  it("extracts message from Error objects", () => {
+    expect(extractApiErrorMessage(new Error("fail"), "fallback")).toBe("fail");
   });
 
   it("handles null/undefined gracefully", () => {
