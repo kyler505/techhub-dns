@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, UploadCloud } from "lucide-react";
 import { settingsApi } from "../api/settings";
@@ -7,7 +7,6 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { getTagRequestCandidatesQueryOptions, ordersQueryKeys } from "../queries/orders";
 
@@ -77,7 +76,6 @@ export default function TagRequest() {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
 
-    const [candidatesSearch, setCandidatesSearch] = useState("");
     const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
     const queryClient = useQueryClient();
 
@@ -150,16 +148,7 @@ export default function TagRequest() {
 
     const selectedCandidateSet = useMemo(() => new Set(selectedCandidates), [selectedCandidates]);
 
-    const filteredCandidates = useMemo(() => {
-        const query = candidatesSearch.trim().toLowerCase();
-        if (!query) return safeCandidates;
-
-        return safeCandidates.filter((candidate) => {
-            const inflowOrderId = (candidate.inflow_order_id || "").toLowerCase();
-            const recipientName = (candidate.recipient_name || "").toLowerCase();
-            return inflowOrderId.includes(query) || recipientName.includes(query);
-        });
-    }, [safeCandidates, candidatesSearch]);
+    const filteredCandidates = safeCandidates;
 
     const selectableVisibleCount = useMemo(() => {
         let count = 0;
@@ -185,22 +174,24 @@ export default function TagRequest() {
         await candidatesQuery.refetch();
     };
 
+    // Prune selections that no longer exist in the candidate list
     useEffect(() => {
         setSelectedCandidates((prev) => {
             if (prev.length === 0) return prev;
-            const present = new Set(candidates.map((candidate) => candidate.inflow_order_id).filter(Boolean));
-            return prev.filter((candidateId) => present.has(candidateId));
+            const present = new Set(candidates.map((c) => c.inflow_order_id).filter(Boolean));
+            const next = prev.filter((id) => present.has(id));
+            return next.length === prev.length ? prev : next;
         });
     }, [candidates]);
 
-    const toggleCandidateSelected = (inflowOrderId: string, checked: boolean) => {
+    const toggleCandidateSelected = useCallback((inflowOrderId: string, checked: boolean) => {
         setSelectedCandidates((prev) => {
             if (checked) {
                 return prev.includes(inflowOrderId) ? prev : [...prev, inflowOrderId];
             }
             return prev.filter((id) => id !== inflowOrderId);
         });
-    };
+    }, []);
 
     const handleUpload = async () => {
         if (selectedOrders.length === 0) return;
@@ -214,69 +205,40 @@ export default function TagRequest() {
     };
 
     return (
-        <div className="container mx-auto py-6 space-y-6">
+        <div className="container mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-4 sm:space-y-6 overflow-hidden">
             <div className="space-y-1">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tag Request</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Tag Request</h1>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                <Card>
-                    <CardHeader>
+            <div className="grid gap-4 sm:gap-6 xl:grid-cols-[3fr_2fr]">
+                <Card className="min-w-0 overflow-hidden">
+                    <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <CardTitle className="text-base">Batch Builder</CardTitle>
+                            <CardTitle className="text-base">Batch Builder</CardTitle>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Refresh
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => {
+                                    setSelectedCandidates((prev) => {
+                                        const next = new Set(prev);
+                                        for (const candidate of filteredCandidates) {
+                                            const id = candidate.inflow_order_id;
+                                            if (id) next.add(id);
+                                        }
+                                        return Array.from(next);
+                                    });
+                                }} disabled={selectableVisibleCount === 0}>
+                                    Select all visible
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedCandidates([])} disabled={selectedCount === 0}>
+                                    Clear selection
+                                </Button>
                             </div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Refresh
-                            </Button>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex flex-col gap-3">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <div className="w-full sm:w-56">
-                                    <Input
-                                        placeholder="Search TH####"
-                                        value={candidatesSearch}
-                                        onChange={(event) => setCandidatesSearch(event.target.value)}
-                                        aria-label="Search candidates"
-                                    />
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Selected {selectedCount}</span>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            setSelectedCandidates((prev) => {
-                                                const next = new Set(prev);
-                                                for (const candidate of filteredCandidates) {
-                                                    const inflowOrderId = candidate.inflow_order_id;
-                                                    if (!inflowOrderId) continue;
-                                                    next.add(inflowOrderId);
-                                                }
-                                                return Array.from(next);
-                                            });
-                                        }}
-                                        disabled={selectableVisibleCount === 0}
-                                    >
-                                        Select all visible
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setSelectedCandidates([])}
-                                        disabled={selectedCount === 0}
-                                    >
-                                        Clear selection
-                                    </Button>
-                                </div>
-                            </div>
-                            {candidatesLoading ? <div className="text-xs text-muted-foreground">Loading...</div> : null}
-                        </div>
 
                         {candidatesLoading && safeCandidates.length === 0 ? (
                             <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
@@ -291,85 +253,85 @@ export default function TagRequest() {
                                 No candidates found.
                             </div>
                         ) : (
-                            <div className="rounded-lg border bg-card">
-                                <div className="max-h-[26rem] overflow-y-auto">
-                                    <Table>
-                                        <TableHeader className="sticky top-0 bg-card z-10">
-                                            <TableRow>
-                                                <TableHead className="w-10" />
-                                                <TableHead>Order</TableHead>
-                                                <TableHead>Recipient</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {filteredCandidates.map((candidate) => {
-                                                const inflowOrderId = candidate.inflow_order_id;
-                                                const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
-                                                const disabled = !inflowOrderId;
-                                                const selectable = Boolean(inflowOrderId);
+                            <div className="rounded-lg border bg-card overflow-hidden">
+                                <div className="max-h-[26rem] overflow-auto">
+                                        <Table className="w-full">
+                                            <TableHeader className="sticky top-0 bg-card z-10">
+                                                <TableRow>
+                                                    <TableHead className="w-10" />
+                                                    <TableHead className="whitespace-nowrap">Order</TableHead>
+                                                    <TableHead>Recipient</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredCandidates.map((candidate) => {
+                                                    const inflowOrderId = candidate.inflow_order_id;
+                                                    const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
+                                                    const disabled = !inflowOrderId;
+                                                    const selectable = Boolean(inflowOrderId);
 
-                                                return (
-                                                    <TableRow
-                                                        key={candidate.id}
-                                                        data-state={checked ? "selected" : undefined}
-                                                        className={selectable ? "cursor-pointer hover:bg-muted/30" : undefined}
-                                                        tabIndex={selectable ? 0 : undefined}
-                                                        onClick={() => {
-                                                            if (!inflowOrderId) return;
-                                                            toggleCandidateSelected(inflowOrderId, !checked);
-                                                        }}
-                                                        onKeyDown={(event) => {
-                                                            if (!inflowOrderId) return;
-                                                            if (event.key !== "Enter" && event.key !== " ") return;
-                                                            event.preventDefault();
-                                                            toggleCandidateSelected(inflowOrderId, !checked);
-                                                        }}
-                                                    >
-                                                        <TableCell className="w-10">
-                                                            <Checkbox
-                                                                checked={checked}
-                                                                disabled={disabled}
-                                                                aria-label={
-                                                                    inflowOrderId
-                                                                        ? `Select ${inflowOrderId}`
-                                                                        : "Select candidate"
-                                                                }
-                                                                onClick={(event) => event.stopPropagation()}
-                                                                onChange={(event) => {
-                                                                    if (!inflowOrderId) return;
-                                                                    toggleCandidateSelected(inflowOrderId, event.target.checked);
-                                                                }}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-medium text-foreground">
-                                                                    {candidate.inflow_order_id || "-"}
-                                                                </span>
-                                                                {checked ? (
-                                                                    <Badge variant="secondary" className="whitespace-nowrap">
-                                                                        Selected
-                                                                    </Badge>
-                                                                ) : null}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="min-w-0">
-                                                                <p className="truncate text-foreground">
-                                                                    {candidate.recipient_name || "Unknown recipient"}
-                                                                </p>
-                                                                {candidate.delivery_location ? (
-                                                                    <p className="truncate text-xs text-muted-foreground">
-                                                                        {candidate.delivery_location}
+                                                    return (
+                                                        <TableRow
+                                                            key={candidate.id}
+                                                            data-state={checked ? "selected" : undefined}
+                                                            className={selectable ? "cursor-pointer hover:bg-muted/30" : undefined}
+                                                            tabIndex={selectable ? 0 : undefined}
+                                                            onClick={() => {
+                                                                if (!inflowOrderId) return;
+                                                                toggleCandidateSelected(inflowOrderId, !checked);
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                                if (!inflowOrderId) return;
+                                                                if (event.key !== "Enter" && event.key !== " ") return;
+                                                                event.preventDefault();
+                                                                toggleCandidateSelected(inflowOrderId, !checked);
+                                                            }}
+                                                        >
+                                                            <TableCell className="w-10">
+                                                                <Checkbox
+                                                                    checked={checked}
+                                                                    disabled={disabled}
+                                                                    aria-label={
+                                                                        inflowOrderId
+                                                                            ? `Select ${inflowOrderId}`
+                                                                            : "Select candidate"
+                                                                    }
+                                                                    onClick={(event) => event.stopPropagation()}
+                                                                    onChange={(event) => {
+                                                                        if (!inflowOrderId) return;
+                                                                        toggleCandidateSelected(inflowOrderId, event.target.checked);
+                                                                    }}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium text-foreground whitespace-nowrap">
+                                                                        {candidate.inflow_order_id || "-"}
+                                                                    </span>
+                                                                    {checked ? (
+                                                                        <Badge variant="secondary" className="whitespace-nowrap">
+                                                                            Selected
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="min-w-0 max-w-[12rem] sm:max-w-none">
+                                                                    <p className="truncate text-foreground">
+                                                                        {candidate.recipient_name || "Unknown recipient"}
                                                                     </p>
-                                                                ) : null}
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                                                    {candidate.delivery_location ? (
+                                                                        <p className="truncate text-xs text-muted-foreground">
+                                                                            {candidate.delivery_location}
+                                                                        </p>
+                                                                    ) : null}
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
                                 </div>
                             </div>
                         )}
@@ -377,7 +339,7 @@ export default function TagRequest() {
                 </Card>
 
                 <Card className="self-start lg:sticky lg:top-6">
-                    <CardHeader>
+                    <CardHeader className="pb-3">
                         <CardTitle className="text-base">Upload summary</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -394,7 +356,7 @@ export default function TagRequest() {
                             <div className={`rounded-lg border p-4 text-sm ${statusStyles}`}>
                                 <p className="font-medium">{status.message}</p>
                                 {status.uploadedUrl ? (
-                                    <p className="mt-2 text-sm">
+                                    <p className="mt-2 text-sm break-all">
                                         File URL:{" "}
                                         <a
                                             href={status.uploadedUrl}

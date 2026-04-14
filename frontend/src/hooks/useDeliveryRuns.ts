@@ -33,7 +33,6 @@ export function useDeliveryRuns(socketUrl?: string) {
       });
       socketRef.current = socket;
     } catch (e) {
-      console.debug("Socket.IO connection failed (expected if backend not running)", e);
     }
 
     if (!socket) {
@@ -47,7 +46,6 @@ export function useDeliveryRuns(socketUrl?: string) {
     }
 
     socket.on("connect", () => {
-      console.debug("DeliveryRuns Socket.IO connected");
       setSocketError(null);
       // Join delivery-runs namespace/room
       socket.emit("join", { room: "delivery-runs" });
@@ -64,11 +62,9 @@ export function useDeliveryRuns(socketUrl?: string) {
     });
 
     socket.on("disconnect", () => {
-      console.debug("DeliveryRuns Socket.IO disconnected");
     });
 
-    socket.on("connect_error", (err) => {
-      console.debug("DeliveryRuns Socket.IO error (expected if backend not running)", err);
+    socket.on("connect_error", () => {
       setSocketError("Socket.IO connection failed - using cached data");
     });
 

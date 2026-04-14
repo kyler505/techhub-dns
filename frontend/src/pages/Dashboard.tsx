@@ -250,7 +250,6 @@ export default function Dashboard() {
       });
       socketRef.current = socket;
     } catch (e) {
-      console.debug("Socket.IO connection failed (expected if backend not running)", e);
     }
 
     if (!socket) {
@@ -268,7 +267,6 @@ export default function Dashboard() {
     }
 
     socket.on("connect", () => {
-      console.debug("Dashboard Socket.IO connected");
       setSocketStatus("connected");
       if (socketReconnectTimeoutRef.current) {
         window.clearTimeout(socketReconnectTimeoutRef.current);
@@ -279,22 +277,18 @@ export default function Dashboard() {
 
     // Listen for orders_update and active_runs events - refetch all metrics
     socket.on("orders_update", () => {
-      console.debug("Orders updated, refetching analytics");
       refreshFromSocket();
     });
 
     socket.on("active_runs", () => {
-      console.debug("Active runs updated, refetching analytics");
       refreshFromSocket();
     });
 
     socket.on("disconnect", () => {
-      console.debug("Dashboard Socket.IO disconnected");
       setSocketStatus("disconnected");
     });
 
-    socket.on("connect_error", (err) => {
-      console.debug("Dashboard Socket.IO error (expected if backend not running)", err);
+    socket.on("connect_error", () => {
       setSocketStatus("connecting");
       if (socketReconnectTimeoutRef.current) {
         window.clearTimeout(socketReconnectTimeoutRef.current);
