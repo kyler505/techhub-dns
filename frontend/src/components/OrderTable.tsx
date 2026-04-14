@@ -193,8 +193,8 @@ export default function OrderTable({
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead className="hidden lg:table-cell">
-                                <button type="button" onClick={() => toggleSort("date")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                            <TableHead className="hidden whitespace-nowrap lg:table-cell">
+                                <button type="button" onClick={() => toggleSort("date")} className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Order Date
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
