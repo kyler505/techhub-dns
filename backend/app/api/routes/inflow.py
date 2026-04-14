@@ -1,3 +1,4 @@
+from app.utils.broadcast_dedup import broadcast_dedup
 from sqlalchemy.exc import IntegrityError
 from flask import Blueprint, request, jsonify, abort
 from sqlalchemy.orm import Session
@@ -5,7 +6,6 @@ from datetime import datetime
 import logging
 import uuid
 import json
-import threading
 
 from app.database import get_db
 from app.services.inflow_service import InflowService
@@ -85,7 +85,7 @@ def _run_inflow_sync():
         db.commit()
 
     # Broadcast order updates via SocketIO
-    threading.Thread(target=_broadcast_orders_sync).start()
+    broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
     logger.info(
         f"Background Inflow sync completed: {orders_created} created, {orders_updated} updated"
@@ -288,7 +288,7 @@ def inflow_webhook():
                     db.commit()
 
                 # Broadcast order update via SocketIO
-                threading.Thread(target=_broadcast_orders_sync).start()
+                broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
                 logger.info(f"Order {order_number} processed successfully via webhook")
                 return jsonify({"status": "processed", "order_id": str(order.id)})
