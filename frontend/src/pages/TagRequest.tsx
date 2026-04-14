@@ -221,7 +221,7 @@ export default function TagRequest() {
                 <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Tag Request</h1>
             </div>
 
-            <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1fr_1fr]">
+            <div className="grid gap-4 sm:gap-6 xl:grid-cols-[3fr_2fr]">
                 <Card className="min-w-0 overflow-hidden">
                     <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-3">
