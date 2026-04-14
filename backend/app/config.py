@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     cors_allowed_origins: Optional[str] = None
 
     # Auth (structure only)
-    secret_key: str = "change-me-in-production"
+    secret_key: Optional[str] = None
 
     # Admin authorization
     # Allowlist of admin emails. See ADMIN_EMAILS env var.
