@@ -239,7 +239,12 @@ def get_orders():
 
             result.append(_serialize_order_list_item(o, pick_status_data))
 
-        return jsonify(result)
+        return jsonify({
+            "items": result,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        })
 
 
 @bp.route("/resolve", methods=["GET"])
@@ -579,7 +584,7 @@ def get_picklist(order_id):
                 import logging
 
                 logging.error(f"Failed to download picklist from SharePoint: {e}")
-                abort(500, description=f"Failed to download from SharePoint: {str(e)}")
+                abort(500, description="Failed to download picklist")
         else:
             # Local file path
             path = Path(picklist_path)
