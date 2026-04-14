@@ -47,7 +47,7 @@ ALLOWED_ORIGINS = settings.get_cors_allowed_origins()
 CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
 
 # Configure Flask-SocketIO with specific origins
-socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS, async_mode='threading')
 
 # Register Socket.IO events
 from app.api.socket_events import register_socket_events
