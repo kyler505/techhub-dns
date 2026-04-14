@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import Optional
 
@@ -92,7 +92,7 @@ class VehicleCheckoutService:
         lock_name = f"vehicle-checkout:{vehicle}"
         acquired = self.db.execute(
             text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
-            {"lock_name": lock_name, "timeout_seconds": 5},
+            {"lock_name": lock_name, "timeout_seconds": 2},  # Reduced from 5
         ).scalar()
         if acquired != 1:
             logger.warning(
@@ -100,15 +100,33 @@ class VehicleCheckoutService:
             )
             raise ValidationError(
                 f"Vehicle {vehicle} is busy processing another request. Please try again.",
-                details={"vehicle": vehicle, "lock_timeout_seconds": 5},
+                details={"vehicle": vehicle, "lock_timeout_seconds": 2},
             )
 
         try:
             yield
         finally:
-            self.db.execute(
-                text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
-            )
+            try:
+                self.db.execute(
+                    text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+                )
+            except Exception:
+                logger.warning("Failed to release vehicle lock: %s", lock_name, exc_info=True)
+
+    def recover_stale_vehicle_locks(self, max_lock_age_minutes: int = 10) -> int:
+        """Release any vehicle locks that have been held longer than max_lock_age_minutes."""
+        stale = self.db.query(VehicleCheckout).filter(
+            VehicleCheckout.checked_in_at.is_(None),
+            VehicleCheckout.created_at < datetime.utcnow() - timedelta(minutes=max_lock_age_minutes)
+        ).all()
+        count = 0
+        for checkout in stale:
+            checkout.checked_in_at = datetime.utcnow()
+            count += 1
+        if count:
+            self.db.commit()
+            logger.info("Recovered %d stale vehicle checkouts", count)
+        return count
 
     def checkout(
         self,
