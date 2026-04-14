@@ -200,7 +200,7 @@ def get_orders():
     limit = request.args.get("limit", 100, type=int)
 
     # Validate limit
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 200))
     skip = max(0, skip)
 
     # Convert status string to enum if provided
@@ -632,7 +632,17 @@ def fulfill_order(order_id):
 def sign_order(order_id):
     """Complete order signing, generate bundled documents, and transition to Delivered status"""
     data = request.get_json()
+    signature_data = SignatureData(**data)
 
+    # Phase 1: generate documents BEFORE locking the order row (no DB lock held during PDF I/O)
+    with get_db() as db:
+        service = OrderService(db)
+        bundled_path = service.generate_bundled_documents(
+            order_id=order_id,
+            signature_data=signature_data.model_dump(exclude={"expected_updated_at"}),
+        )
+
+    # Phase 2: short locking transaction for status update + commit
     with get_db() as db:
         service = OrderService(db)
 
@@ -651,12 +661,7 @@ def sign_order(order_id):
                 },
             )
 
-        signature_data = SignatureData(**data)
         service.assert_not_stale(order, signature_data.expected_updated_at)
-        bundled_path = service.generate_bundled_documents(
-            order_id=order_id,
-            signature_data=signature_data.model_dump(exclude={"expected_updated_at"}),
-        )
 
         from datetime import datetime
 
