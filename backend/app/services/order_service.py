@@ -584,13 +584,9 @@ class OrderService:
             query = query.filter(Order.status == status.value)
 
         if search:
-            search_filter = or_(
+            query = query.filter(
                 Order.inflow_order_id.ilike(f"%{search}%"),
-                Order.recipient_name.ilike(f"%{search}%"),
-                Order.delivery_location.ilike(f"%{search}%"),
-                Order.po_number.ilike(f"%{search}%"),
             )
-            query = query.filter(search_filter)
 
         total = query.count()
         orders = (
