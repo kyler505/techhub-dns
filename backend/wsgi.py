@@ -19,4 +19,5 @@ if os.path.exists(env_path):
     load_dotenv(env_path)
 
 # Import the Flask app
-from app.main import app as application
+from app.main import app, socketio
+application = app
