@@ -59,7 +59,6 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       });
       socketRef.current = socket;
     } catch (e) {
-      console.debug("Socket.IO connection failed (expected if backend not running)", e);
     }
 
     if (!socket) {
@@ -73,7 +72,6 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
     }
 
     socket.on("connect", () => {
-      console.debug("Orders Socket.IO connected");
       setError(null);
       // Join orders namespace/room
       socket.emit("join", { room: "orders" });
@@ -91,11 +89,9 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
     });
 
     socket.on("disconnect", () => {
-      console.debug("Orders Socket.IO disconnected");
     });
 
     socket.on("connect_error", (err) => {
-      console.debug("Orders Socket.IO error (expected if backend not running)", err);
     });
 
     return () => {
