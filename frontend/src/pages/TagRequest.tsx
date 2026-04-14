@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, UploadCloud } from "lucide-react";
 import { settingsApi } from "../api/settings";
@@ -185,22 +185,24 @@ export default function TagRequest() {
         await candidatesQuery.refetch();
     };
 
+    // Prune selections that no longer exist in the candidate list
     useEffect(() => {
         setSelectedCandidates((prev) => {
             if (prev.length === 0) return prev;
-            const present = new Set(candidates.map((candidate) => candidate.inflow_order_id).filter(Boolean));
-            return prev.filter((candidateId) => present.has(candidateId));
+            const present = new Set(candidates.map((c) => c.inflow_order_id).filter(Boolean));
+            const next = prev.filter((id) => present.has(id));
+            return next.length === prev.length ? prev : next;
         });
     }, [candidates]);
 
-    const toggleCandidateSelected = (inflowOrderId: string, checked: boolean) => {
+    const toggleCandidateSelected = useCallback((inflowOrderId: string, checked: boolean) => {
         setSelectedCandidates((prev) => {
             if (checked) {
                 return prev.includes(inflowOrderId) ? prev : [...prev, inflowOrderId];
             }
             return prev.filter((id) => id !== inflowOrderId);
         });
-    };
+    }, []);
 
     const handleUpload = async () => {
         if (selectedOrders.length === 0) return;
@@ -214,14 +216,14 @@ export default function TagRequest() {
     };
 
     return (
-        <div className="container mx-auto py-6 space-y-6">
+        <div className="container mx-auto px-4 py-4 sm:px-6 sm:py-6 space-y-4 sm:space-y-6">
             <div className="space-y-1">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tag Request</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Tag Request</h1>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.2fr_0.8fr]">
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <CardTitle className="text-base">Batch Builder</CardTitle>
@@ -293,83 +295,85 @@ export default function TagRequest() {
                         ) : (
                             <div className="rounded-lg border bg-card">
                                 <div className="max-h-[26rem] overflow-y-auto">
-                                    <Table>
-                                        <TableHeader className="sticky top-0 bg-card z-10">
-                                            <TableRow>
-                                                <TableHead className="w-10" />
-                                                <TableHead>Order</TableHead>
-                                                <TableHead>Recipient</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {filteredCandidates.map((candidate) => {
-                                                const inflowOrderId = candidate.inflow_order_id;
-                                                const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
-                                                const disabled = !inflowOrderId;
-                                                const selectable = Boolean(inflowOrderId);
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader className="sticky top-0 bg-card z-10">
+                                                <TableRow>
+                                                    <TableHead className="w-10" />
+                                                    <TableHead className="whitespace-nowrap">Order</TableHead>
+                                                    <TableHead>Recipient</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredCandidates.map((candidate) => {
+                                                    const inflowOrderId = candidate.inflow_order_id;
+                                                    const checked = inflowOrderId ? selectedCandidateSet.has(inflowOrderId) : false;
+                                                    const disabled = !inflowOrderId;
+                                                    const selectable = Boolean(inflowOrderId);
 
-                                                return (
-                                                    <TableRow
-                                                        key={candidate.id}
-                                                        data-state={checked ? "selected" : undefined}
-                                                        className={selectable ? "cursor-pointer hover:bg-muted/30" : undefined}
-                                                        tabIndex={selectable ? 0 : undefined}
-                                                        onClick={() => {
-                                                            if (!inflowOrderId) return;
-                                                            toggleCandidateSelected(inflowOrderId, !checked);
-                                                        }}
-                                                        onKeyDown={(event) => {
-                                                            if (!inflowOrderId) return;
-                                                            if (event.key !== "Enter" && event.key !== " ") return;
-                                                            event.preventDefault();
-                                                            toggleCandidateSelected(inflowOrderId, !checked);
-                                                        }}
-                                                    >
-                                                        <TableCell className="w-10">
-                                                            <Checkbox
-                                                                checked={checked}
-                                                                disabled={disabled}
-                                                                aria-label={
-                                                                    inflowOrderId
-                                                                        ? `Select ${inflowOrderId}`
-                                                                        : "Select candidate"
-                                                                }
-                                                                onClick={(event) => event.stopPropagation()}
-                                                                onChange={(event) => {
-                                                                    if (!inflowOrderId) return;
-                                                                    toggleCandidateSelected(inflowOrderId, event.target.checked);
-                                                                }}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-medium text-foreground">
-                                                                    {candidate.inflow_order_id || "-"}
-                                                                </span>
-                                                                {checked ? (
-                                                                    <Badge variant="secondary" className="whitespace-nowrap">
-                                                                        Selected
-                                                                    </Badge>
-                                                                ) : null}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="min-w-0">
-                                                                <p className="truncate text-foreground">
-                                                                    {candidate.recipient_name || "Unknown recipient"}
-                                                                </p>
-                                                                {candidate.delivery_location ? (
-                                                                    <p className="truncate text-xs text-muted-foreground">
-                                                                        {candidate.delivery_location}
+                                                    return (
+                                                        <TableRow
+                                                            key={candidate.id}
+                                                            data-state={checked ? "selected" : undefined}
+                                                            className={selectable ? "cursor-pointer hover:bg-muted/30" : undefined}
+                                                            tabIndex={selectable ? 0 : undefined}
+                                                            onClick={() => {
+                                                                if (!inflowOrderId) return;
+                                                                toggleCandidateSelected(inflowOrderId, !checked);
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                                if (!inflowOrderId) return;
+                                                                if (event.key !== "Enter" && event.key !== " ") return;
+                                                                event.preventDefault();
+                                                                toggleCandidateSelected(inflowOrderId, !checked);
+                                                            }}
+                                                        >
+                                                            <TableCell className="w-10">
+                                                                <Checkbox
+                                                                    checked={checked}
+                                                                    disabled={disabled}
+                                                                    aria-label={
+                                                                        inflowOrderId
+                                                                            ? `Select ${inflowOrderId}`
+                                                                            : "Select candidate"
+                                                                    }
+                                                                    onClick={(event) => event.stopPropagation()}
+                                                                    onChange={(event) => {
+                                                                        if (!inflowOrderId) return;
+                                                                        toggleCandidateSelected(inflowOrderId, event.target.checked);
+                                                                    }}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium text-foreground whitespace-nowrap">
+                                                                        {candidate.inflow_order_id || "-"}
+                                                                    </span>
+                                                                    {checked ? (
+                                                                        <Badge variant="secondary" className="whitespace-nowrap">
+                                                                            Selected
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="min-w-0 max-w-[12rem] sm:max-w-none">
+                                                                    <p className="truncate text-foreground">
+                                                                        {candidate.recipient_name || "Unknown recipient"}
                                                                     </p>
-                                                                ) : null}
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                                                    {candidate.delivery_location ? (
+                                                                        <p className="truncate text-xs text-muted-foreground">
+                                                                            {candidate.delivery_location}
+                                                                        </p>
+                                                                    ) : null}
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -377,7 +381,7 @@ export default function TagRequest() {
                 </Card>
 
                 <Card className="self-start lg:sticky lg:top-6">
-                    <CardHeader>
+                    <CardHeader className="pb-3">
                         <CardTitle className="text-base">Upload summary</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -394,7 +398,7 @@ export default function TagRequest() {
                             <div className={`rounded-lg border p-4 text-sm ${statusStyles}`}>
                                 <p className="font-medium">{status.message}</p>
                                 {status.uploadedUrl ? (
-                                    <p className="mt-2 text-sm">
+                                    <p className="mt-2 text-sm break-all">
                                         File URL:{" "}
                                         <a
                                             href={status.uploadedUrl}
