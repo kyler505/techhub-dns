@@ -8,7 +8,7 @@
 | `INFLOW_API_URL` | Inflow Cloud API base URL |
 | `INFLOW_API_KEY` | Inflow API key |
 | `INFLOW_COMPANY_ID` | Inflow company ID |
-| `SECRET_KEY` | Flask secret key |
+| `SECRET_KEY` | Flask secret key (if omitted, an ephemeral random key is generated at startup; sessions will not persist across restarts) |
 
 ## Authentication
 
