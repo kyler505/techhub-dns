@@ -39,7 +39,7 @@ export default function AdminsTab() {
             const res = await adminsApi.getAdmins();
             setData(res);
             setDraft(res.admins || []);
-        } catch (e: any) {
+        } catch (e: unknown) {
             const msg = extractApiErrorMessage(e, "Failed to load admin allowlist");
             setError(msg);
             toast.error("Failed to load admins", { description: msg });
@@ -93,7 +93,7 @@ export default function AdminsTab() {
             toast.success("Admin allowlist updated", {
                 description: `${(res.admins || []).length} admin${(res.admins || []).length === 1 ? "" : "s"}`,
             });
-        } catch (e: any) {
+        } catch (e: unknown) {
             const status = e?.response?.status;
             const msg = extractApiErrorMessage(e, "Failed to update admin allowlist");
             if (status === 409) {

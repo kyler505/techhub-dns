@@ -13,6 +13,7 @@ from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
 from app.api.auth_middleware import is_current_user_admin
 from app.utils.exceptions import DNSApiError
+from app.utils.csrf import csrf_protect
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,7 @@ def get_current_user():
 
 
 @bp.route("/logout", methods=["POST"])
+@csrf_protect
 def logout():
     """
     Log out current session.
@@ -233,6 +235,7 @@ def list_sessions():
 
 
 @bp.route("/sessions/revoke", methods=["POST"])
+@csrf_protect
 def revoke_session():
     """
     Revoke a specific session.
@@ -264,6 +267,7 @@ def revoke_session():
 
 
 @bp.route("/sessions/revoke_all", methods=["POST"])
+@csrf_protect
 def revoke_all_sessions():
     """
     Revoke all sessions except current one (sign out everywhere else).

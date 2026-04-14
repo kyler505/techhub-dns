@@ -279,7 +279,7 @@ export default function Admin() {
             });
             toast.success("Setting updated", { description: `${variables.key} = ${variables.value}` });
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
             console.error("Failed to update setting:", error);
             toast.error("Failed to update setting", {
                 description: extractApiErrorMessage(error, "Please try again."),
@@ -303,7 +303,7 @@ export default function Admin() {
             });
             toast.success("Inflow webhook registered");
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
             console.error("Failed to register webhook:", error);
             toast.error("Failed to register webhook", {
                 description: extractApiErrorMessage(error, "Please try again."),
@@ -324,7 +324,7 @@ export default function Admin() {
             toast.success("Webhook deleted");
             setWebhookToDelete(null);
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
             console.error("Failed to delete webhook:", error);
             toast.error("Failed to delete webhook", {
                 description: extractApiErrorMessage(error, "Please try again."),
@@ -341,7 +341,7 @@ export default function Admin() {
             });
             toast.success("Picklist reprint queued");
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
             console.error("Failed to queue picklist reprint:", error);
             toast.error("Failed to queue picklist reprint", {
                 description: extractApiErrorMessage(error, "Please try again."),
@@ -476,7 +476,7 @@ export default function Admin() {
             } else {
                 toast.error("Test email failed", { description: result.error || result.message || undefined });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast.error("Test email failed", { description: extractApiErrorMessage(error, "Please try again.") });
         } finally {
             setTestingService(null);
@@ -496,7 +496,7 @@ export default function Admin() {
             } else {
                 toast.error("Test Teams message failed", { description: result.error || result.message || undefined });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast.error("Test Teams message failed", {
                 description: extractApiErrorMessage(error, "Please try again."),
             });
@@ -514,7 +514,7 @@ export default function Admin() {
             } else {
                 toast.error("Inflow connection failed", { description: result.error || result.message || undefined });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast.error("Inflow connection failed", {
                 description: extractApiErrorMessage(error, "Please try again."),
             });
@@ -532,7 +532,7 @@ export default function Admin() {
             } else {
                 toast.error("SharePoint connection failed", { description: result.error || result.message || undefined });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast.error("SharePoint connection failed", {
                 description: extractApiErrorMessage(error, "Please try again."),
             });
@@ -560,7 +560,7 @@ export default function Admin() {
                 setCanopyBypassError(message);
                 toast.error("Upload failed", { description: message });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             const message = extractApiErrorMessage(error, "Upload failed");
             setCanopyBypassError(message);
             toast.error("Upload failed", { description: message });
@@ -680,7 +680,7 @@ export default function Admin() {
                 queryClient.invalidateQueries({ queryKey: adminQueryKeys.runtimeSummary() }),
                 queryClient.invalidateQueries({ queryKey: adminQueryKeys.systemStatus() }),
             ]);
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast.error("Manual sync failed", { description: extractApiErrorMessage(error, "Please try again.") });
         } finally {
             setManualSyncing(false);

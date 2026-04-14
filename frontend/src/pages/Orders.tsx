@@ -72,7 +72,7 @@ export default function Orders() {
             setTransitioningOrder(null);
             await invalidateOrderQueries(queryClient, variables.orderId);
         },
-        onError: async (error: any, variables) => {
+        onError: async (error: unknown, variables) => {
             console.error("Failed to update status:", error);
             if (error?.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest queue.");

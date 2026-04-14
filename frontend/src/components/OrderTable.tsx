@@ -175,31 +175,31 @@ export default function OrderTable({
                 <Table className="min-w-[720px]">
                     <TableHeader className="sticky top-0 z-20 bg-muted/40">
                         <TableRow>
-                            <TableHead className="w-[220px] lg:w-[260px]">
+                            <TableHead className="w-[220px] lg:w-[260px]" aria-sort={sortKey === "id" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("id")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Order ID
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead>
+                            <TableHead aria-sort={sortKey === "recipient" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("recipient")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Recipient
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead className="hidden lg:table-cell">
+                            <TableHead className="hidden lg:table-cell" aria-sort={sortKey === "location" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("location")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Location
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead className="hidden whitespace-nowrap lg:table-cell">
+                            <TableHead className="hidden whitespace-nowrap lg:table-cell" aria-sort={sortKey === "date" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("date")} className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Order Date
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead>
+                            <TableHead aria-sort={sortKey === "status" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("status")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Status
                                     <ArrowUpDown className="h-3.5 w-3.5" />
