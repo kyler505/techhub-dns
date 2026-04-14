@@ -9,6 +9,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/Skeleton";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { SyncHealthBanner } from "./components/SyncHealthBanner";
+import { OfflineBanner } from "./components/OfflineBanner";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -43,6 +44,16 @@ function AppContent() {
             prefetchRoutes();
         });
         return () => idleCancel(id as number);
+    }, []);
+
+    // Listen for rate-limit events from the API client
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            toast.warning(detail?.message ?? "Too many requests. Please wait a moment.");
+        };
+        window.addEventListener("app-rate-limit", handler);
+        return () => window.removeEventListener("app-rate-limit", handler);
     }, []);
 
     if (isLoading) {
@@ -121,6 +132,7 @@ function AppContent() {
                             </Suspense>
                         </RouteContentErrorBoundary>
                     </div>
+                                    <OfflineBanner />
                 </main>
 
 					<Toaster
