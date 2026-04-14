@@ -4,6 +4,7 @@ System status API routes.
 Provides endpoints for checking backend feature statuses.
 """
 
+import hmac
 import json
 import os
 import re
@@ -85,7 +86,7 @@ def _require_print_agent() -> None:
         raise PermissionError("Missing bearer token")
 
     provided_token = auth_header.removeprefix("Bearer ").strip()
-    if provided_token != configured_token:
+    if not hmac.compare_digest(provided_token, configured_token):
         raise PermissionError("Invalid bearer token")
 
 
@@ -105,6 +106,11 @@ def _send_picklist_pdf(file_path: str, download_name: str):
             as_attachment=False,
             download_name=download_name,
         )
+
+    storage_root = Path(settings.storage_root).resolve()
+    resolved_path = Path(file_path).resolve()
+    if not resolved_path.is_relative_to(storage_root):
+        abort(403, description="Access denied")
 
     path = Path(file_path)
     if path.exists():

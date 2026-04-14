@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 import logging
 
 from app.config import settings
+from app.api.auth_middleware import require_auth, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ sharepoint_bp = Blueprint("sharepoint", __name__, url_prefix="/api/sharepoint")
 
 
 @sharepoint_bp.route("/status", methods=["GET"])
+@require_auth
 def get_sharepoint_status():
     """Get SharePoint configuration status."""
     from app.services.sharepoint_service import get_sharepoint_service
@@ -41,6 +43,7 @@ def get_sharepoint_status():
 
 
 @sharepoint_bp.route("/authenticate", methods=["POST"])
+@require_admin
 def authenticate_sharepoint():
     """
     Test SharePoint authentication using Service Principal.
@@ -90,6 +93,7 @@ def authenticate_sharepoint():
 
 
 @sharepoint_bp.route("/test-upload", methods=["POST"])
+@require_admin
 def test_sharepoint_upload():
     """Test SharePoint upload by uploading a small test file."""
     from app.services.sharepoint_service import get_sharepoint_service

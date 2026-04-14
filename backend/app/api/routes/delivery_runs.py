@@ -129,6 +129,7 @@ def create_run():
 
 
 @bp.route("", methods=["GET"])
+@require_auth
 def get_runs():
     """Get delivery runs (optionally filtered by status)"""
     status_filter = request.args.getlist("status")
@@ -158,6 +159,7 @@ def get_runs():
 
 
 @bp.route("/active", methods=["GET"])
+@require_auth
 def get_active_runs():
     """Get all active delivery runs"""
     with get_db() as db:
@@ -181,6 +183,7 @@ def get_active_runs():
 
 
 @bp.route("/vehicles/available", methods=["GET"])
+@require_auth
 def get_available_vehicles():
     """Get available vehicles"""
     with get_db() as db:
@@ -192,6 +195,7 @@ def get_available_vehicles():
 
 
 @bp.route("/<uuid:run_id>", methods=["GET"])
+@require_auth
 def get_run(run_id):
     """Get delivery run details"""
     with get_db() as db:
@@ -235,6 +239,7 @@ def get_run(run_id):
 
 
 @bp.route("/<run_id>/finish", methods=["PUT"])
+@require_auth
 def finish_run(run_id):
     """Finish a delivery run, optionally creating remainder orders for partial picks"""
     data = request.get_json() or {}
