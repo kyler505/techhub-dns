@@ -3,7 +3,6 @@ from flask_socketio import emit
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
-import threading
 
 from app.database import get_db, get_db_session
 from app.api.auth_middleware import require_auth
@@ -19,6 +18,7 @@ from app.schemas.delivery_run import (
 from app.models.delivery_run import VehicleEnum
 from app.utils.exceptions import ValidationError
 from app.utils.timezone import to_utc_iso_z
+from app.utils.broadcast_dedup import broadcast_dedup
 from pydantic import ValidationError as PydanticValidationError
 
 bp = Blueprint("delivery_runs", __name__)
@@ -27,9 +27,17 @@ bp.strict_slashes = False
 
 def _broadcast_active_runs_sync(db_session: Session = None):
     """Send current active runs to all connected clients (sync version)."""
-    if db_session is None:
-        db_session = get_db_session()
+    if db_session is not None:
+        _do_broadcast_active_runs(db_session)
+        return
 
+    from app.database import get_db
+
+    with get_db() as db:
+        _do_broadcast_active_runs(db)
+
+
+def _do_broadcast_active_runs(db_session):
     try:
         service = DeliveryRunService(db_session)
         runs = service.get_active_runs_with_details()
@@ -50,7 +58,6 @@ def _broadcast_active_runs_sync(db_session: Session = None):
                 }
             )
 
-        # Emit via SocketIO to all connected clients
         # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
@@ -63,9 +70,10 @@ def _broadcast_active_runs_sync(db_session: Session = None):
             import logging
 
             logging.getLogger(__name__).error(f"Failed to broadcast active runs: {e}")
-    finally:
-        if db_session is not None:
-            db_session.close()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Failed to broadcast active runs")
 
 
 @bp.route("", methods=["POST"])
@@ -89,8 +97,8 @@ def create_run():
             )
 
             # Broadcast via SocketIO in background
-            threading.Thread(target=_broadcast_active_runs_sync).start()
-            threading.Thread(target=broadcast_vehicle_status_update_sync).start()
+            broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
+            broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
 
             # Trigger Teams notifications for orders in delivery
             try:
@@ -248,8 +256,8 @@ def finish_run(run_id):
             )
 
             # Broadcast via SocketIO in background
-            threading.Thread(target=_broadcast_active_runs_sync).start()
-            threading.Thread(target=broadcast_vehicle_status_update_sync).start()
+            broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
+            broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
 
             response = DeliveryRunResponse(
                 id=run.id,
@@ -288,8 +296,8 @@ def recall_run_order(run_id, order_id):
             expected_updated_at=req.expected_updated_at,
         )
 
-        threading.Thread(target=_broadcast_active_runs_sync).start()
-        threading.Thread(target=broadcast_vehicle_status_update_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
+        broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
 
         response = DeliveryRunResponse(
             id=run.id,
@@ -325,7 +333,7 @@ def reorder_run_orders(run_id):
             expected_updated_at=req.expected_updated_at,
         )
 
-        threading.Thread(target=_broadcast_active_runs_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
 
         response = DeliveryRunResponse(
             id=run.id,

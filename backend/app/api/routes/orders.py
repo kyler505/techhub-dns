@@ -6,11 +6,11 @@ from typing import Optional, List
 from uuid import UUID
 from pathlib import Path
 from datetime import datetime
-import threading
 
 from app.database import get_db
 from app.services.order_service import OrderService
 from app.services.inflow_service import InflowService
+from app.utils.broadcast_dedup import broadcast_dedup
 
 from app.schemas.order import (
     OrderResponse,
@@ -145,11 +145,17 @@ def _serialize_order_list_item(order, pick_status_data=None) -> dict:
 
 def _broadcast_orders_sync(db_session: Session = None):
     """Send current orders to all connected clients (sync version)."""
-    if db_session is None:
-        from app.database import get_db_session
+    if db_session is not None:
+        _do_broadcast_orders(db_session)
+        return
 
-        db_session = get_db_session()
+    from app.database import get_db
 
+    with get_db() as db:
+        _do_broadcast_orders(db)
+
+
+def _do_broadcast_orders(db_session):
     try:
         service = OrderService(db_session)
         orders, _ = service.get_orders(limit=1000)
@@ -167,7 +173,6 @@ def _broadcast_orders_sync(db_session: Session = None):
                 }
             )
 
-        # Emit via SocketIO to all connected clients
         # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
@@ -177,14 +182,12 @@ def _broadcast_orders_sync(db_session: Session = None):
                 {"type": "orders_update", "data": payload},
                 room="orders",
             )
-            # Keeping broadcast to all for backward compatibility if needed, but 'room' is preferred
         except Exception as e:
             import logging
 
             logging.getLogger(__name__).error(f"Failed to broadcast orders: {e}")
-    finally:
-        if db_session is not None:
-            db_session.close()
+    except Exception:
+        logger.exception("Failed to broadcast orders")
 
 
 @bp.route("/", methods=["GET"])
@@ -406,7 +409,7 @@ def update_order_status(order_id):
             teams_recipient_service.notify_orders_in_delivery([order])
 
         # Broadcast order update via SocketIO
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
         return jsonify(_order_response_json(order))
 
@@ -434,7 +437,7 @@ def bulk_transition_status():
             teams_recipient_service.notify_orders_in_delivery(orders)
 
         # Broadcast order updates via SocketIO
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
         return jsonify([_order_response_json(o) for o in orders])
 
@@ -476,7 +479,7 @@ def tag_order(order_id):
             expected_updated_at=tag_update.expected_updated_at,
         )
 
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
         return jsonify(_order_response_json(order))
 
 
@@ -501,7 +504,7 @@ def generate_picklist(order_id):
             expected_updated_at=gen_request.expected_updated_at,
         )
 
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
         return jsonify(_order_response_json(order))
 
 
@@ -526,7 +529,7 @@ def submit_qa(order_id):
         )
 
         # Broadcast order update via SocketIO
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
         return jsonify(_order_response_json(order))
 
@@ -650,7 +653,7 @@ def sign_order(order_id):
         db.refresh(order)
 
         # Broadcast order update via SocketIO
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
         return jsonify(
             {
@@ -679,7 +682,7 @@ def update_shipping_workflow(order_id):
         )
 
         # Broadcast order update via SocketIO
-        threading.Thread(target=_broadcast_orders_sync).start()
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
         return jsonify(_order_response_json(order))
 
@@ -766,7 +769,7 @@ def send_order_details_email(order_id):
         )
 
         if success:
-            threading.Thread(target=_broadcast_orders_sync).start()
+            broadcast_dedup.request_broadcast(_broadcast_orders_sync)
             return jsonify(
                 {
                     "success": True,
