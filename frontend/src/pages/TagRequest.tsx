@@ -7,7 +7,6 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { getTagRequestCandidatesQueryOptions, ordersQueryKeys } from "../queries/orders";
 
@@ -77,7 +76,6 @@ export default function TagRequest() {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
 
-    const [candidatesSearch, setCandidatesSearch] = useState("");
     const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
     const queryClient = useQueryClient();
 
@@ -150,16 +148,7 @@ export default function TagRequest() {
 
     const selectedCandidateSet = useMemo(() => new Set(selectedCandidates), [selectedCandidates]);
 
-    const filteredCandidates = useMemo(() => {
-        const query = candidatesSearch.trim().toLowerCase();
-        if (!query) return safeCandidates;
-
-        return safeCandidates.filter((candidate) => {
-            const inflowOrderId = (candidate.inflow_order_id || "").toLowerCase();
-            const recipientName = (candidate.recipient_name || "").toLowerCase();
-            return inflowOrderId.includes(query) || recipientName.includes(query);
-        });
-    }, [safeCandidates, candidatesSearch]);
+    const filteredCandidates = safeCandidates;
 
     const selectableVisibleCount = useMemo(() => {
         let count = 0;
