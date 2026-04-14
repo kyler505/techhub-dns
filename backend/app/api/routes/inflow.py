@@ -4,12 +4,13 @@ from datetime import datetime
 import logging
 import uuid
 import json
+import threading
 
 from app.database import get_db
 from app.services.inflow_service import InflowService
 from app.services.order_service import OrderService
+from app.services.background_tasks import BackgroundTaskService
 from app.api.routes.orders import _broadcast_orders_sync
-from app.utils.broadcast_dedup import broadcast_dedup
 from app.schemas.inflow import (
     InflowSyncResponse,
     InflowSyncStatusResponse,
@@ -35,62 +36,78 @@ def _webhook_json(status: str, message: str, http_status: int, **extra):
     return jsonify(payload), http_status
 
 
+def _run_inflow_sync():
+    """Background task: sync recent started orders from Inflow with batch commits."""
+    from app.models.order import Order
+
+    inflow_service = InflowService()
+
+    with get_db() as db:
+        order_service = OrderService(db)
+
+        inflow_orders = inflow_service.sync_recent_started_orders_sync(
+            max_pages=3, per_page=100, target_matches=100
+        )
+
+        orders_created = 0
+        orders_updated = 0
+
+        for i, inflow_order in enumerate(inflow_orders):
+            try:
+                order_number = inflow_order.get("orderNumber")
+                existing = (
+                    db.query(Order)
+                    .filter(Order.inflow_order_id == order_number)
+                    .first()
+                )
+
+                order = order_service.create_order_from_inflow(inflow_order)
+                if not existing:
+                    orders_created += 1
+                else:
+                    orders_updated += 1
+
+                # Batch commit every 20 orders to avoid losing progress on crash
+                if (i + 1) % 20 == 0:
+                    db.commit()
+            except ValueError as e:
+                continue
+            except Exception as e:
+                db.rollback()
+                logger.error(
+                    f"Error processing order {inflow_order.get('orderNumber')}: {e}",
+                    exc_info=True,
+                )
+                continue
+
+        # Final commit for remaining orders
+        db.commit()
+
+    # Broadcast order updates via SocketIO
+    threading.Thread(target=_broadcast_orders_sync).start()
+
+    logger.info(
+        f"Background Inflow sync completed: {orders_created} created, {orders_updated} updated"
+    )
+
+
 @bp.route("/sync", methods=["POST"])
 @require_admin
 def sync_orders():
-    """Manually trigger Inflow sync"""
-    try:
-        inflow_service = InflowService()
-
-        with get_db() as db:
-            order_service = OrderService(db)
-
-            # Fetch recent started orders (sync version)
-            inflow_orders = inflow_service.sync_recent_started_orders_sync(
-                max_pages=3, per_page=100, target_matches=100
-            )
-
-            orders_created = 0
-            orders_updated = 0
-
-            for inflow_order in inflow_orders:
-                try:
-                    from app.models.order import Order
-
-                    order_number = inflow_order.get("orderNumber")
-                    existing = (
-                        db.query(Order)
-                        .filter(Order.inflow_order_id == order_number)
-                        .first()
-                    )
-
-                    order = order_service.create_order_from_inflow(inflow_order)
-                    if not existing:
-                        orders_created += 1
-                    else:
-                        orders_updated += 1
-                except ValueError as e:
-                    continue
-                except Exception as e:
-                    logger.error(
-                        f"Error processing order {inflow_order.get('orderNumber')}: {e}",
-                        exc_info=True,
-                    )
-                    continue
-
-            # Broadcast order updates via SocketIO
-            broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-
-            response = InflowSyncResponse(
-                success=True,
-                orders_synced=len(inflow_orders),
-                orders_created=orders_created,
-                orders_updated=orders_updated,
-                message=f"Synced {len(inflow_orders)} orders",
-            )
-            return jsonify(response.model_dump())
-    except Exception as e:
-        abort(500, description=str(e))
+    """Manually trigger Inflow sync (runs in background, returns immediately)."""
+    BackgroundTaskService.run_async(
+        _run_inflow_sync,
+        task_name="inflow_manual_sync",
+    )
+    return (
+        jsonify(
+            {
+                "status": "accepted",
+                "message": "Inflow sync started in background",
+            }
+        ),
+        202,
+    )
 
 
 @bp.route("/sync-status", methods=["GET"])
@@ -270,7 +287,7 @@ def inflow_webhook():
                     db.commit()
 
                 # Broadcast order update via SocketIO
-                broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+                threading.Thread(target=_broadcast_orders_sync).start()
 
                 logger.info(f"Order {order_number} processed successfully via webhook")
                 return jsonify({"status": "processed", "order_id": str(order.id)})
