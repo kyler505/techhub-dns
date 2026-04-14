@@ -225,13 +225,28 @@ export default function TagRequest() {
                 <Card className="min-w-0 overflow-hidden">
                     <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <CardTitle className="text-base">Batch Builder</CardTitle>
+                            <CardTitle className="text-base">Batch Builder</CardTitle>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Refresh
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => {
+                                    setSelectedCandidates((prev) => {
+                                        const next = new Set(prev);
+                                        for (const candidate of filteredCandidates) {
+                                            const id = candidate.inflow_order_id;
+                                            if (id) next.add(id);
+                                        }
+                                        return Array.from(next);
+                                    });
+                                }} disabled={selectableVisibleCount === 0}>
+                                    Select all visible
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedCandidates([])} disabled={selectedCount === 0}>
+                                    Clear selection
+                                </Button>
                             </div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Refresh
-                            </Button>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -245,37 +260,7 @@ export default function TagRequest() {
                                         aria-label="Search candidates"
                                     />
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Selected {selectedCount}</span>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            setSelectedCandidates((prev) => {
-                                                const next = new Set(prev);
-                                                for (const candidate of filteredCandidates) {
-                                                    const inflowOrderId = candidate.inflow_order_id;
-                                                    if (!inflowOrderId) continue;
-                                                    next.add(inflowOrderId);
-                                                }
-                                                return Array.from(next);
-                                            });
-                                        }}
-                                        disabled={selectableVisibleCount === 0}
-                                    >
-                                        Select all visible
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setSelectedCandidates([])}
-                                        disabled={selectedCount === 0}
-                                    >
-                                        Clear selection
-                                    </Button>
-                                </div>
+
                             </div>
                             {candidatesLoading ? <div className="text-xs text-muted-foreground">Loading...</div> : null}
                         </div>
