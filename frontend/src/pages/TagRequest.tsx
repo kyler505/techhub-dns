@@ -296,7 +296,7 @@ export default function TagRequest() {
                             <div className="rounded-lg border bg-card">
                                 <div className="max-h-[26rem] overflow-y-auto">
                                     <div className="overflow-x-auto">
-                                        <Table>
+                                        <Table className="w-full">
                                             <TableHeader className="sticky top-0 bg-card z-10">
                                                 <TableRow>
                                                     <TableHead className="w-10" />
