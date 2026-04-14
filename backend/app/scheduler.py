@@ -8,8 +8,8 @@ from app.services.inflow_service import InflowService
 from app.services.order_service import OrderService
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.config import settings
+from app.utils.broadcast_dedup import broadcast_dedup
 import logging
-import threading
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def sync_inflow_orders():
 
         # Broadcast order updates via SocketIO
         if orders_created > 0 or orders_updated > 0:
-            threading.Thread(target=_broadcast_orders_sync).start()
+            broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
     except Exception as e:
         logger.error(f"Inflow sync failed: {e}", exc_info=True)
