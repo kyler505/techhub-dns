@@ -4,12 +4,12 @@ from datetime import datetime
 import logging
 import uuid
 import json
-import threading
 
 from app.database import get_db
 from app.services.inflow_service import InflowService
 from app.services.order_service import OrderService
 from app.api.routes.orders import _broadcast_orders_sync
+from app.utils.broadcast_dedup import broadcast_dedup
 from app.schemas.inflow import (
     InflowSyncResponse,
     InflowSyncStatusResponse,
@@ -79,7 +79,7 @@ def sync_orders():
                     continue
 
             # Broadcast order updates via SocketIO
-            threading.Thread(target=_broadcast_orders_sync).start()
+            broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
             response = InflowSyncResponse(
                 success=True,
@@ -270,7 +270,7 @@ def inflow_webhook():
                     db.commit()
 
                 # Broadcast order update via SocketIO
-                threading.Thread(target=_broadcast_orders_sync).start()
+                broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
                 logger.info(f"Order {order_number} processed successfully via webhook")
                 return jsonify({"status": "processed", "order_id": str(order.id)})
