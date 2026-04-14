@@ -157,7 +157,7 @@ export default function OrderTable({
                                 </div>
                                 <div>
                                     <p className="uppercase tracking-wide">Date</p>
-                                    <p className="mt-1 text-foreground">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</p>
+                                    <p className="mt-1 whitespace-nowrap text-foreground">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</p>
                                 </div>
                                 {isExpanded && (
                                     <div className="col-span-2">
@@ -225,7 +225,7 @@ export default function OrderTable({
                                 </TableCell>
                                 <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
                                 <TableCell className="hidden break-words lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
-                                <TableCell className="hidden lg:table-cell">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
+                                <TableCell className="hidden whitespace-nowrap lg:table-cell">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
                                 <TableCell>
                                     <StatusBadge status={order.status} />
                                 </TableCell>
