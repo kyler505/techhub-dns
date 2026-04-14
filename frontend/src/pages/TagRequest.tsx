@@ -250,20 +250,6 @@ export default function TagRequest() {
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex flex-col gap-3">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <div className="w-full sm:w-56">
-                                    <Input
-                                        placeholder="Search TH####"
-                                        value={candidatesSearch}
-                                        onChange={(event) => setCandidatesSearch(event.target.value)}
-                                        aria-label="Search candidates"
-                                    />
-                                </div>
-
-                            </div>
-                            {candidatesLoading ? <div className="text-xs text-muted-foreground">Loading...</div> : null}
-                        </div>
 
                         {candidatesLoading && safeCandidates.length === 0 ? (
                             <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
