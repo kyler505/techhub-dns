@@ -64,7 +64,7 @@ export function useDeliveryRuns(socketUrl?: string) {
     socket.on("disconnect", () => {
     });
 
-    socket.on("connect_error", (err) => {
+    socket.on("connect_error", () => {
       setSocketError("Socket.IO connection failed - using cached data");
     });
 

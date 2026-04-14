@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Toaster } from "sonner";
+import { toast, Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AppShellErrorBoundary, RouteContentErrorBoundary } from "./components/error-boundaries/AppErrorBoundaries";
 import { ProtectedRoute } from "./components/ProtectedRoute";

@@ -91,7 +91,7 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
     socket.on("disconnect", () => {
     });
 
-    socket.on("connect_error", (err) => {
+    socket.on("connect_error", () => {
     });
 
     return () => {

@@ -288,7 +288,7 @@ export default function Dashboard() {
       setSocketStatus("disconnected");
     });
 
-    socket.on("connect_error", (err) => {
+    socket.on("connect_error", () => {
       setSocketStatus("connecting");
       if (socketReconnectTimeoutRef.current) {
         window.clearTimeout(socketReconnectTimeoutRef.current);
