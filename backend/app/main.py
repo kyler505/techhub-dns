@@ -35,6 +35,11 @@ mimetypes.add_type("application/wasm", ".wasm")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+if settings.secret_key is None:
+    import secrets
+    settings.secret_key = secrets.token_hex(32)
+    logger.warning("No SECRET_KEY configured — using ephemeral random key (sessions will not persist across restarts)")
+
 app = Flask(__name__)
 app.url_map.strict_slashes = False  # Prevent 308 redirects that break CORS
 
