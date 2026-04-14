@@ -222,7 +222,7 @@ export default function TagRequest() {
             </div>
 
             <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1fr_1fr]">
-                <Card>
+                <Card className="min-w-0 overflow-hidden">
                     <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -293,9 +293,8 @@ export default function TagRequest() {
                                 No candidates found.
                             </div>
                         ) : (
-                            <div className="rounded-lg border bg-card">
-                                <div className="max-h-[26rem] overflow-y-auto">
-                                    <div className="overflow-x-auto">
+                            <div className="rounded-lg border bg-card overflow-hidden">
+                                <div className="max-h-[26rem] overflow-auto">
                                         <Table className="w-full">
                                             <TableHeader className="sticky top-0 bg-card z-10">
                                                 <TableRow>
@@ -373,7 +372,6 @@ export default function TagRequest() {
                                                 })}
                                             </TableBody>
                                         </Table>
-                                    </div>
                                 </div>
                             </div>
                         )}
