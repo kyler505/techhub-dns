@@ -834,19 +834,27 @@ class OrderService:
             .all()
         )
 
+        # Validate we found all requested orders
+        if len(orders) != len(order_id_strs):
+            found_ids = {str(o.id) for o in orders}
+            missing = [oid for oid in order_id_strs if oid not in found_ids]
+            raise NotFoundError("Order(s)", ", ".join(missing[:5]))
+
         # Validate staleness for all orders before making any changes
         if expected_updated_at is not None:
             for order in orders:
                 self.assert_not_stale(order, expected_updated_at)
 
+        # Transition each order directly (already locked above).
+        # transition_status() will re-acquire FOR UPDATE on the same row,
+        # which is a no-op within the same transaction.
         successful_orders = []
-        for order_id in order_ids:
+        for order in orders:
             try:
-                order = self.transition_status(order_id, new_status, changed_by, reason)
-                successful_orders.append(order)
+                transitioned = self.transition_status(order.id, new_status, changed_by, reason)
+                successful_orders.append(transitioned)
             except Exception as e:
-                # Log error but continue with other orders
-                logger.warning(f"Failed to transition order {order_id}: {e}")
+                logger.warning("Failed to transition order %s: %s", order.id, e)
                 continue
 
         return successful_orders
