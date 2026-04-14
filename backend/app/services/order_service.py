@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import Union
@@ -821,16 +822,39 @@ class OrderService:
         new_status: OrderStatus,
         changed_by: Optional[str] = None,
         reason: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
     ) -> List[Order]:
-        """Bulk transition multiple orders with logging."""
+        """Bulk transition multiple orders with locking and logging."""
+        # Lock all orders up front to prevent concurrent modifications
+        order_id_strs = [str(oid) for oid in order_ids]
+        orders = (
+            self.db.query(Order)
+            .filter(Order.id.in_(order_id_strs))
+            .with_for_update()
+            .all()
+        )
+
+        # Validate we found all requested orders
+        if len(orders) != len(order_id_strs):
+            found_ids = {str(o.id) for o in orders}
+            missing = [oid for oid in order_id_strs if oid not in found_ids]
+            raise NotFoundError("Order(s)", ", ".join(missing[:5]))
+
+        # Validate staleness for all orders before making any changes
+        if expected_updated_at is not None:
+            for order in orders:
+                self.assert_not_stale(order, expected_updated_at)
+
+        # Transition each order directly (already locked above).
+        # transition_status() will re-acquire FOR UPDATE on the same row,
+        # which is a no-op within the same transaction.
         successful_orders = []
-        for order_id in order_ids:
+        for order in orders:
             try:
-                order = self.transition_status(order_id, new_status, changed_by, reason)
-                successful_orders.append(order)
+                transitioned = self.transition_status(order.id, new_status, changed_by, reason)
+                successful_orders.append(transitioned)
             except Exception as e:
-                # Log error but continue with other orders
-                logger.warning(f"Failed to transition order {order_id}: {e}")
+                logger.warning("Failed to transition order %s: %s", order.id, e)
                 continue
 
         return successful_orders
@@ -1503,88 +1527,100 @@ class OrderService:
             self.db.refresh(existing)
             return existing
         else:
-            # Create new order - try to use Inflow orderDate if available, otherwise use current time
-            order_date = None
-            if "orderDate" in inflow_data and inflow_data.get("orderDate"):
-                try:
-                    # Parse Inflow date string (format may vary)
-                    order_date_str = inflow_data.get("orderDate")
-                    if isinstance(order_date_str, str):
-                        # Try common date formats
-                        for fmt in [
-                            "%Y-%m-%dT%H:%M:%S",
-                            "%Y-%m-%dT%H:%M:%S.%f",
-                            "%Y-%m-%d %H:%M:%S",
-                            "%Y-%m-%d",
-                        ]:
-                            try:
-                                order_date = datetime.strptime(
-                                    order_date_str.split("+")[0].split("Z")[0], fmt
-                                )
-                                break
-                            except ValueError:
-                                continue
-                except Exception as e:
-                    logger.debug(
-                        f"Could not parse orderDate '{inflow_data.get('orderDate')}' for order {order_number}: {e}"
-                    )
+            # Create new order with IntegrityError handling for duplicate webhooks (Issue #40)
+            try:
+                order_date = None
+                if "orderDate" in inflow_data and inflow_data.get("orderDate"):
+                    try:
+                        # Parse Inflow date string (format may vary)
+                        order_date_str = inflow_data.get("orderDate")
+                        if isinstance(order_date_str, str):
+                            # Try common date formats
+                            for fmt in [
+                                "%Y-%m-%dT%H:%M:%S",
+                                "%Y-%m-%dT%H:%M:%S.%f",
+                                "%Y-%m-%d %H:%M:%S",
+                                "%Y-%m-%d",
+                            ]:
+                                try:
+                                    order_date = datetime.strptime(
+                                        order_date_str.split("+")[0].split("Z")[0], fmt
+                                    )
+                                    break
+                                except ValueError:
+                                    continue
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not parse orderDate '{inflow_data.get('orderDate')}' for order {order_number}: {e}"
+                        )
 
-            # Use orderDate if available, otherwise use current time
-            created_time = order_date if order_date else datetime.utcnow()
+                # Use orderDate if available, otherwise use current time
+                created_time = order_date if order_date else datetime.utcnow()
 
-            order = Order(
-                inflow_order_id=order_number,
-                inflow_sales_order_id=inflow_data.get("salesOrderId"),
-                recipient_name=inflow_data.get("contactName"),
-                recipient_contact=inflow_data.get("email"),
-                delivery_location=delivery_location,
-                po_number=inflow_data.get("poNumber"),
-                status=OrderStatus.PICKED.value,
-                inflow_data=inflow_data,
-                created_at=created_time,
-                updated_at=created_time,  # Set to same as created_at initially
-            )
-            self.db.add(order)
-            self.db.commit()
-            self.db.refresh(order)
+                order = Order(
+                    inflow_order_id=order_number,
+                    inflow_sales_order_id=inflow_data.get("salesOrderId"),
+                    recipient_name=inflow_data.get("contactName"),
+                    recipient_contact=inflow_data.get("email"),
+                    delivery_location=delivery_location,
+                    po_number=inflow_data.get("poNumber"),
+                    status=OrderStatus.PICKED.value,
+                    inflow_data=inflow_data,
+                    created_at=created_time,
+                    updated_at=created_time,  # Set to same as created_at initially
+                )
+                self.db.add(order)
+                self.db.commit()
+                self.db.refresh(order)
 
-            # Create AuditLog entry for initial 'picked' status in timeline
-            audit_log = AuditLog(
-                order_id=order.id,
-                changed_by="system",
-                from_status=None,  # No previous status - order was just created
-                to_status=OrderStatus.PICKED.value,
-                reason="Order ingested from inFlow",
-                timestamp=datetime.utcnow(),  # Use ingestion time (not orderDate) for audit trail
-            )
-            self.db.add(audit_log)
-            self._record_status_history(
-                order=order,
-                from_status=None,
-                to_status=OrderStatus.PICKED.value,
-                actor_identifier="system",
-                metadata={"reason": "Order ingested from inFlow"},
-            )
-            self.db.commit()
+                # Create AuditLog entry for initial 'picked' status in timeline
+                audit_log = AuditLog(
+                    order_id=order.id,
+                    changed_by="system",
+                    from_status=None,  # No previous status - order was just created
+                    to_status=OrderStatus.PICKED.value,
+                    reason="Order ingested from inFlow",
+                    timestamp=datetime.utcnow(),  # Use ingestion time (not orderDate) for audit trail
+                )
+                self.db.add(audit_log)
+                self._record_status_history(
+                    order=order,
+                    from_status=None,
+                    to_status=OrderStatus.PICKED.value,
+                    actor_identifier="system",
+                    metadata={"reason": "Order ingested from inFlow"},
+                )
+                self.db.commit()
 
-            # Also log to system audit log for full traceability
-            audit_service = AuditService(self.db)
-            audit_service.log_order_action(
-                order_id=str(order.id),
-                action="imported_from_inflow",
-                user_id="system",  # Automated import
-                description=f"Order imported from inFlow",
-                audit_metadata={
-                    "inflow_order_id": order_number,
-                    "inflow_sales_order_id": inflow_data.get("salesOrderId"),
-                    "source": "inflow_webhook",
-                    "order_type": "shipping"
-                    if self._is_shipping_order(order)
-                    else "delivery",
-                },
-            )
+                # Also log to system audit log for full traceability
+                audit_service = AuditService(self.db)
+                audit_service.log_order_action(
+                    order_id=str(order.id),
+                    action="imported_from_inflow",
+                    user_id="system",  # Automated import
+                    description=f"Order imported from inFlow",
+                    audit_metadata={
+                        "inflow_order_id": order_number,
+                        "inflow_sales_order_id": inflow_data.get("salesOrderId"),
+                        "source": "inflow_webhook",
+                        "order_type": "shipping"
+                        if self._is_shipping_order(order)
+                        else "delivery",
+                    },
+                )
 
-            return order
+                return order
+            except IntegrityError:
+                self.db.rollback()
+                # Another request created it — fetch and update instead
+                existing = self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+                if existing:
+                    existing.inflow_data = inflow_data
+                    existing.updated_at = datetime.utcnow()
+                    self.db.commit()
+                    self.db.refresh(existing)
+                    return existing
+                raise
 
     def _send_order_details_email(
         self, order: Order, generated_by: Optional[str] = None
