@@ -33,6 +33,23 @@ Result: no additional Cursor/Copilot instruction layers are active.
 - Run backend commands from `backend/`.
 - Many backend tests rely on `sys.path.append('.')`, so CWD matters.
 
+## Testing
+
+### Frontend
+```bash
+cd frontend
+npm test          # Run tests (vitest + jsdom + @testing-library/react)
+```
+- Test files: `*.test.ts` / `*.test.tsx` co-located with source
+- Setup: `src/test/setup.ts` imports `@testing-library/jest-dom` matchers
+- Config: `vitest.config.ts` (jsdom environment, globals enabled)
+
+### Backend
+```bash
+cd backend
+python -m pytest tests/ -q
+```
+
 ## Setup
 
 ### Frontend
