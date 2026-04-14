@@ -159,7 +159,7 @@ export default function OrderQAPage() {
                 await invalidateOrderQueries(queryClient, orderId);
             }
         },
-        onError: async (error: any) => {
+        onError: async (error: unknown) => {
             console.error("Failed to submit QA:", error);
             if (error?.response?.status === 409 && orderId) {
                 toast.error("Order changed by another user. Reloaded the latest details.");

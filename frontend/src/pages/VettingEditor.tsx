@@ -148,7 +148,7 @@ export default function VettingEditor() {
         const payload = await vettingEditorApi.getData();
         setRows(flattenPayload(payload));
         setRowFieldErrors({});
-      } catch (error: any) {
+      } catch (error: unknown) {
         const message = extractApiErrorMessage(error, "Failed to load vetting data.");
         toast.error("Failed to load Vetting Editor", { description: message });
         setRows([]);
@@ -300,7 +300,7 @@ export default function VettingEditor() {
       const payload = buildPayload(rows);
       await vettingEditorApi.saveData(payload);
       toast.success("Vetting data saved");
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = extractApiErrorMessage(error, "Save failed.");
       toast.error("Failed to save Vetting Editor", { description: message });
     } finally {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import apiClient from "../api/client";
 import { io, Socket } from "socket.io-client";
 import { OrderSummary } from "../types/websocket";
 
@@ -21,14 +22,8 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       setError(null);
       setLoading(true);
       // Try to fetch orders via HTTP API as fallback
-      const response = await fetch('/api/orders');
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data);
-      } else {
-        console.warn("HTTP fallback failed:", response.status);
-        setOrders([]);
-      }
+      const response = await apiClient.get('/api/orders');
+      setOrders(response.data);
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch orders via HTTP:", err);

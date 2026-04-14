@@ -66,7 +66,7 @@ export const ordersApi = {
 
   submitQa: async (
     orderId: string,
-    payload: { responses: Record<string, any>; technician?: string; expected_updated_at?: string }
+    payload: { responses: Record<string, unknown>; technician?: string; expected_updated_at?: string }
   ) => {
     const response = await apiClient.post<Order>(`/orders/${orderId}/qa`, normalizeExpectedUpdatedAt(payload));
     return response.data;

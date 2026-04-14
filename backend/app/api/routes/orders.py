@@ -36,7 +36,7 @@ from app.utils.exceptions import (
     ValidationError,
 )
 from app.utils.timezone import to_utc_iso_z
-from app.api.auth_middleware import get_current_user_email
+from app.api.auth_middleware import get_current_user_email, require_auth, require_admin
 import logging
 
 bp = Blueprint("orders", __name__)
@@ -191,6 +191,7 @@ def _do_broadcast_orders(db_session):
 
 
 @bp.route("/", methods=["GET"])
+@require_auth
 def get_orders():
     """Get orders with filters and pagination"""
     status = request.args.get("status")
@@ -239,10 +240,16 @@ def get_orders():
 
             result.append(_serialize_order_list_item(o, pick_status_data))
 
-        return jsonify(result)
+        return jsonify({
+            "items": result,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        })
 
 
 @bp.route("/resolve", methods=["GET"])
+@require_auth
 def resolve_order_by_number():
     """Resolve an inFlow order number to internal UUID.
 
@@ -273,6 +280,7 @@ def resolve_order_by_number():
 
 
 @bp.route("/tag-request/candidates", methods=["GET"])
+@require_auth
 def get_tag_request_candidates():
     """Get picked orders that still need a tag request batch."""
     limit = request.args.get("limit", default=200, type=int)
@@ -328,6 +336,7 @@ def get_tag_request_candidates():
 
 
 @bp.route("/<uuid:order_id>", methods=["GET"])
+@require_auth
 def get_order(order_id):
     """Get order detail with audit logs and notifications"""
     with get_db() as db:
@@ -349,6 +358,7 @@ def get_order(order_id):
 
 
 @bp.route("/<uuid:order_id>", methods=["PATCH"])
+@require_auth
 def update_order(order_id):
     """Update order fields"""
     data = request.get_json()
@@ -386,6 +396,7 @@ def update_order(order_id):
 
 
 @bp.route("/<uuid:order_id>/status", methods=["PATCH"])
+@require_auth
 def update_order_status(order_id):
     """Transition order status"""
     data = request.get_json()
@@ -415,6 +426,7 @@ def update_order_status(order_id):
 
 
 @bp.route("/bulk-transition", methods=["POST"])
+@require_admin
 def bulk_transition_status():
     """Bulk transition multiple orders"""
     data = request.get_json()
@@ -443,6 +455,7 @@ def bulk_transition_status():
 
 
 @bp.route("/<uuid:order_id>/audit", methods=["GET"])
+@require_auth
 def get_order_audit(order_id):
     """Get audit log for an order"""
     with get_db() as db:
@@ -460,6 +473,7 @@ def get_order_audit(order_id):
 
 
 @bp.route("/<uuid:order_id>/tag", methods=["POST"])
+@require_auth
 def tag_order(order_id):
     """Mock asset tagging step"""
     data = request.get_json()
@@ -484,6 +498,7 @@ def tag_order(order_id):
 
 
 @bp.route("/<uuid:order_id>/picklist", methods=["POST"])
+@require_auth
 def generate_picklist(order_id):
     """Generate a picklist PDF for the order"""
     data = request.get_json()
@@ -509,6 +524,7 @@ def generate_picklist(order_id):
 
 
 @bp.route("/<uuid:order_id>/qa", methods=["POST"])
+@require_auth
 def submit_qa(order_id):
     """Submit QA checklist for an order"""
     data = request.get_json()
@@ -535,6 +551,7 @@ def submit_qa(order_id):
 
 
 @bp.route("/<uuid:order_id>/picklist", methods=["GET"])
+@require_auth
 def get_picklist(order_id):
     """Download generated picklist PDF (from local storage or SharePoint)"""
     from io import BytesIO
@@ -579,7 +596,7 @@ def get_picklist(order_id):
                 import logging
 
                 logging.error(f"Failed to download picklist from SharePoint: {e}")
-                abort(500, description=f"Failed to download from SharePoint: {str(e)}")
+                abort(500, description="Failed to download picklist")
         else:
             # Local file path
             path = Path(picklist_path)
@@ -592,6 +609,7 @@ def get_picklist(order_id):
 
 
 @bp.route("/<uuid:order_id>/fulfill", methods=["POST"])
+@require_admin
 def fulfill_order(order_id):
     """Mark an order as fulfilled in Inflow (best-effort)."""
     with get_db() as db:
@@ -610,6 +628,7 @@ def fulfill_order(order_id):
 
 
 @bp.route("/<uuid:order_id>/sign", methods=["POST"])
+@require_auth
 def sign_order(order_id):
     """Complete order signing, generate bundled documents, and transition to Delivered status"""
     data = request.get_json()
@@ -665,6 +684,7 @@ def sign_order(order_id):
 
 
 @bp.route("/<uuid:order_id>/shipping-workflow", methods=["PATCH"])
+@require_auth
 def update_shipping_workflow(order_id):
     """Update shipping workflow status for an order"""
     data = request.get_json()
@@ -688,6 +708,7 @@ def update_shipping_workflow(order_id):
 
 
 @bp.route("/<uuid:order_id>/shipping-workflow", methods=["GET"])
+@require_auth
 def get_shipping_workflow(order_id):
     """Get shipping workflow status for an order"""
     with get_db() as db:
@@ -709,6 +730,7 @@ def get_shipping_workflow(order_id):
 
 
 @bp.route("/<uuid:order_id>/order-details.pdf", methods=["GET"])
+@require_auth
 def get_order_details_pdf(order_id):
     """Generate and download Order Details PDF"""
     from app.services.pdf_service import pdf_service
@@ -756,6 +778,7 @@ def get_order_details_pdf(order_id):
 
 
 @bp.route("/<uuid:order_id>/send-order-details", methods=["POST"])
+@require_auth
 def send_order_details_email(order_id):
     """Generate Order Details PDF and email to recipient"""
     with get_db() as db:
