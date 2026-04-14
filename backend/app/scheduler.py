@@ -33,7 +33,7 @@ def sync_inflow_orders():
         orders_created = 0
         orders_updated = 0
 
-        for inflow_order in inflow_orders:
+        for i, inflow_order in enumerate(inflow_orders):
             try:
                 from app.models.order import Order
 
@@ -49,15 +49,23 @@ def sync_inflow_orders():
                     orders_created += 1
                 else:
                     orders_updated += 1
+
+                # Batch commit every 20 orders to avoid losing progress on crash
+                if (i + 1) % 20 == 0:
+                    db.commit()
             except ValueError as e:
                 # ValueError is raised for skipped orders (e.g., not in Bryan/College Station)
                 continue
             except Exception as e:
+                db.rollback()
                 logger.error(
                     f"Error processing order {inflow_order.get('orderNumber')}: {e}",
                     exc_info=True,
                 )
                 continue
+
+        # Final commit for remaining orders
+        db.commit()
 
         logger.info(
             f"Inflow sync completed: {len(inflow_orders)} synced, {orders_created} created, {orders_updated} updated"
