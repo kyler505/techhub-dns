@@ -5,80 +5,24 @@ from datetime import datetime, timedelta
 import asyncio
 from app.database import get_db_session
 from app.services.inflow_service import InflowService
-from app.services.order_service import OrderService
 from app.models.inflow_webhook import InflowWebhook, WebhookStatus
 from app.config import settings
-from app.utils.broadcast_dedup import broadcast_dedup
+from app.api.routes.inflow import _run_inflow_sync
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 def sync_inflow_orders():
-    """Background task to sync orders from Inflow (sync version)"""
-    from app.api.routes.orders import _broadcast_orders_sync
+    """Background task to sync orders from Inflow.
 
-    db = get_db_session()
+    Delegates to the shared implementation in inflow_routes so we
+    maintain a single code path for manual and scheduled syncs.
+    """
     try:
-        inflow_service = InflowService()
-        order_service = OrderService(db)
-
-        logger.info("Starting Inflow sync...")
-
-        # Fetch recent started orders (sync version)
-        inflow_orders = inflow_service.sync_recent_started_orders_sync(
-            max_pages=3, per_page=100, target_matches=100
-        )
-
-        orders_created = 0
-        orders_updated = 0
-
-        for i, inflow_order in enumerate(inflow_orders):
-            try:
-                from app.models.order import Order
-
-                order_number = inflow_order.get("orderNumber")
-                existing = (
-                    db.query(Order)
-                    .filter(Order.inflow_order_id == order_number)
-                    .first()
-                )
-
-                order = order_service.create_order_from_inflow(inflow_order)
-                if not existing:
-                    orders_created += 1
-                else:
-                    orders_updated += 1
-
-                # Batch commit every 20 orders to avoid losing progress on crash
-                if (i + 1) % 20 == 0:
-                    db.commit()
-            except ValueError as e:
-                # ValueError is raised for skipped orders (e.g., not in Bryan/College Station)
-                continue
-            except Exception as e:
-                db.rollback()
-                logger.error(
-                    f"Error processing order {inflow_order.get('orderNumber')}: {e}",
-                    exc_info=True,
-                )
-                continue
-
-        # Final commit for remaining orders
-        db.commit()
-
-        logger.info(
-            f"Inflow sync completed: {len(inflow_orders)} synced, {orders_created} created, {orders_updated} updated"
-        )
-
-        # Broadcast order updates via SocketIO
-        if orders_created > 0 or orders_updated > 0:
-            broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-
+        _run_inflow_sync()
     except Exception as e:
         logger.error(f"Inflow sync failed: {e}", exc_info=True)
-    finally:
-        db.close()
 
 
 def _has_active_webhook(db: Session) -> bool:
