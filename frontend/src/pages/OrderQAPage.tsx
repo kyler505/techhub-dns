@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
@@ -161,7 +162,7 @@ export default function OrderQAPage() {
         },
         onError: async (error: unknown) => {
             console.error("Failed to submit QA:", error);
-            if (error?.response?.status === 409 && orderId) {
+            if (isAxiosError(error) && error.response?.status === 409 && orderId) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
                 await invalidateOrderQueries(queryClient, orderId);
                 return;

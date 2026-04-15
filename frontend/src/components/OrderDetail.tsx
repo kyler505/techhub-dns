@@ -6,6 +6,26 @@ import {
   OrderStatus,
   TeamsNotification,
 } from "../types/order";
+
+interface ShippingAddress {
+  address1?: string;
+  address2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+}
+
+function getShippingAddress(order: OrderDetailType): ShippingAddress | null {
+  if (!order.inflow_data || typeof order.inflow_data !== "object") return null;
+  const addr = (order.inflow_data as Record<string, unknown>).shippingAddress;
+  return typeof addr === "object" && addr !== null ? addr as ShippingAddress : null;
+}
+
+function getInflowLines(order: OrderDetailType): unknown[] {
+  if (!order.inflow_data || typeof order.inflow_data !== "object") return [];
+  const lines = (order.inflow_data as Record<string, unknown>).lines;
+  return Array.isArray(lines) ? lines : [];
+}
 import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
 import { Badge } from "./ui/badge";
@@ -166,14 +186,14 @@ export default function OrderDetail({
               <p className="text-sm text-foreground">
                 {order.delivery_location || "N/A"}
               </p>
-              {order.inflow_data?.shippingAddress && (
+              {getShippingAddress(order) && (
                 <p className="mt-1 text-sm text-muted-foreground">
                   {[
-                    order.inflow_data.shippingAddress.address1,
-                    order.inflow_data.shippingAddress.address2,
-                    order.inflow_data.shippingAddress.city,
-                    order.inflow_data.shippingAddress.state,
-                    order.inflow_data.shippingAddress.postalCode,
+                    getShippingAddress(order)!.address1,
+                    getShippingAddress(order)!.address2,
+                    getShippingAddress(order)!.city,
+                    getShippingAddress(order)!.state,
+                    getShippingAddress(order)!.postalCode,
                   ]
                     .filter(Boolean)
                     .join(", ")}
@@ -325,7 +345,7 @@ export default function OrderDetail({
         </CardContent>
       </Card>
 
-      {order.inflow_data?.lines && order.inflow_data.lines.length > 0 && (
+      {getInflowLines(order).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Order Items</CardTitle>
@@ -342,7 +362,7 @@ export default function OrderDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {order.inflow_data.lines.map((rawLine: unknown, index: number) => {
+                  {getInflowLines(order).map((rawLine: unknown, index: number) => {
                     const line = (rawLine ?? {}) as OrderItemLine;
                     const serials = getLineSerials(line);
 

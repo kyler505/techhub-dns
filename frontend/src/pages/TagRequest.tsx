@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { RefreshCw, UploadCloud } from "lucide-react";
 import { settingsApi } from "../api/settings";
 import { Badge } from "../components/ui/badge";
@@ -120,7 +121,7 @@ export default function TagRequest() {
             });
         },
         onError: (err: unknown) => {
-            const responseData = err?.response?.data as unknown;
+            const responseData = isAxiosError(err) ? (err.response?.data as unknown) : undefined;
             const record = responseData && typeof responseData === "object" ? (responseData as Record<string, unknown>) : null;
 
             const missingOrders = parseStringArray(record?.missing_orders);

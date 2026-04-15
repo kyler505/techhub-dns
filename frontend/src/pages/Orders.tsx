@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
 import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
@@ -74,7 +75,7 @@ export default function Orders() {
         },
         onError: async (error: unknown, variables) => {
             console.error("Failed to update status:", error);
-            if (error?.response?.status === 409) {
+            if (isAxiosError(error) && error.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest queue.");
                 await invalidateOrderQueries(queryClient, variables.orderId);
                 return;
