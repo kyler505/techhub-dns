@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
+import { isAxiosError } from "axios";
 import { AlertCircle, ArrowLeft, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
@@ -101,7 +102,7 @@ export default function OrderDetailPage() {
         },
         onError: async (error: unknown) => {
             console.error("Failed to update status:", error);
-            if (error?.response?.status === 409) {
+            if (isAxiosError(error) && error.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
                 await refreshOrder();
                 return;
@@ -145,7 +146,7 @@ export default function OrderDetailPage() {
         },
         onError: async (error: unknown) => {
             console.error("Failed to tag order:", error);
-            if (error?.response?.status === 409) {
+            if (isAxiosError(error) && error.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
                 await refreshOrder();
                 return;
@@ -171,7 +172,7 @@ export default function OrderDetailPage() {
         },
         onError: async (error: unknown) => {
             console.error("Failed to generate picklist:", error);
-            if (error?.response?.status === 409) {
+            if (isAxiosError(error) && error.response?.status === 409) {
                 toast.error("Order changed by another user. Reloaded the latest details.");
                 await refreshOrder();
                 return;

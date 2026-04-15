@@ -1,5 +1,6 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { isAxiosError } from "axios";
 import type { PDFPageProxy } from "pdfjs-dist";
 // pdf-lib is used server-side for PDF bundling
 import { ordersApi } from "../api/orders";
@@ -868,7 +869,7 @@ function DocumentSigningPage() {
 
         } catch (saveError: unknown) {
             console.error(saveError);
-            if (saveError?.response?.status === 409) {
+            if (isAxiosError(saveError) && saveError.response?.status === 409) {
                 setError("This order changed while you were signing. Reloaded the latest order data; review and sign again.");
                 const refreshedOrder = await ordersApi.getOrder(order.id);
                 setOrder(refreshedOrder);

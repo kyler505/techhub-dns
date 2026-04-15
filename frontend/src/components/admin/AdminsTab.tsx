@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { isAxiosError } from "axios";
 import { AlertTriangle, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { adminsApi, GetAdminsResponse } from "../../api/admins";
@@ -94,7 +95,7 @@ export default function AdminsTab() {
                 description: `${(res.admins || []).length} admin${(res.admins || []).length === 1 ? "" : "s"}`,
             });
         } catch (e: unknown) {
-            const status = e?.response?.status;
+            const status = isAxiosError(e) ? e.response?.status : undefined;
             const msg = extractApiErrorMessage(e, "Failed to update admin allowlist");
             if (status === 409) {
                 toast.error("Admin allowlist is read-only", { description: msg });
