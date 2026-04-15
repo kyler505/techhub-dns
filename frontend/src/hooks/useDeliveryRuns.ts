@@ -4,6 +4,10 @@ import { io, Socket } from "socket.io-client";
 
 import { deliveryRunsQueryKeys, getActiveDeliveryRunsQueryOptions, type ActiveDeliveryRun } from "../queries/deliveryRuns";
 
+function safeArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export type DeliveryRun = ActiveDeliveryRun;
 
 export function useDeliveryRuns(socketUrl?: string) {
@@ -54,7 +58,7 @@ export function useDeliveryRuns(socketUrl?: string) {
     socket.on("active_runs", (payload: { type: string; data: DeliveryRun[] }) => {
       try {
         if (payload.type === "active_runs") {
-          queryClient.setQueryData(deliveryRunsQueryKeys.active(), payload.data || []);
+          queryClient.setQueryData(deliveryRunsQueryKeys.active(), safeArray<DeliveryRun>(payload.data));
         }
       } catch (e) {
         console.warn("Failed to parse Socket.IO message", e);

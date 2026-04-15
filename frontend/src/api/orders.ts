@@ -2,10 +2,14 @@ import apiClient from "./client";
 import { Order, OrderDetail, OrderStatus, OrderStatusUpdate, BulkStatusUpdate, AuditLog, ShippingWorkflowStatus } from "../types/order";
 import { normalizeExpectedUpdatedAt } from "./expectedUpdatedAt";
 
+function safeArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export const ordersApi = {
   getOrders: async (params?: { status?: OrderStatus; search?: string }): Promise<Order[]> => {
     const response = await apiClient.get<Order[]>("/orders", { params });
-    return response.data;
+    return safeArray<Order>(response.data);
   },
 
   getOrder: async (orderId: string): Promise<OrderDetail> => {
