@@ -17,7 +17,13 @@ import {
   getWorkflowDailyTrendsQueryOptions,
   getYearlyFulfilledTotalsQueryOptions,
 } from "../queries/analytics";
+import { type FulfilledTotalDataPoint, type WorkflowDailyTrendDataPoint } from "../api/analytics";
 import { shouldThrowToBoundary } from "../utils/apiErrors";
+
+/** Guard against API returning non-array data (error objects, null, etc.) */
+function safeArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
 
 const LiveDeliveryDashboard = lazy(() => import("../components/LiveDeliveryDashboard"));
 const WorkflowDailyLineChart = lazy(() => import("../components/charts/WorkflowDailyLineChart"));
@@ -140,12 +146,12 @@ export default function Dashboard() {
     completed_today: 0,
     ready_for_delivery: 0,
   };
-  const workflowDailyTrends = workflowDailyTrendsQuery.data?.data ?? [];
-  const monthlyFulfilledTotals = monthlyFulfilledTotalsQuery.data?.data ?? [];
-  const yearlyFulfilledTotals = yearlyFulfilledTotalsQuery.data?.data ?? [];
+  const workflowDailyTrends = safeArray<WorkflowDailyTrendDataPoint>(workflowDailyTrendsQuery.data?.data);
+  const monthlyFulfilledTotals = safeArray<FulfilledTotalDataPoint>(monthlyFulfilledTotalsQuery.data?.data);
+  const yearlyFulfilledTotals = safeArray<FulfilledTotalDataPoint>(yearlyFulfilledTotalsQuery.data?.data);
 
   const completedTodayOrders = useMemo((): Order[] => {
-    const deliveredOrders = deliveredOrdersQuery.data ?? [];
+    const deliveredOrders = safeArray<Order>(deliveredOrdersQuery.data);
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 

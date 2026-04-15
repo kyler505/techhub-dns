@@ -5,6 +5,10 @@ import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 import { isValidOrderId } from "../utils/orderIds";
 
+function safeArray<T>(value: unknown): T[] {
+    return Array.isArray(value) ? value : [];
+}
+
 type SavedQAChecklist = {
     orderId: string; // internal id
     inflowOrderId: string; // display id
@@ -53,7 +57,7 @@ export default function OrderQAChecklist() {
                 status: OrderStatus.QA,
                 search: search.trim() ? search.trim() : undefined,
             });
-            setOrders(data);
+            setOrders(safeArray<Order>(data));
         } catch (error) {
             console.error("Failed to load orders:", error);
             toast.error("Failed to load orders");
@@ -64,7 +68,7 @@ export default function OrderQAChecklist() {
 
     const completedMap = useMemo(() => {
         const map = new Map<string, string>(); // orderId -> submittedAt
-        for (const o of orders) {
+        for (const o of safeArray<Order>(orders)) {
             if (o.qa_completed_at) {
                 map.set(o.id, o.qa_completed_at);
             } else {
@@ -80,6 +84,8 @@ export default function OrderQAChecklist() {
         }
         return map;
     }, [orders]);
+
+    const displayOrders = useMemo(() => safeArray<Order>(orders), [orders]);
 
     return (
         <div className="p-4">
@@ -124,7 +130,7 @@ export default function OrderQAChecklist() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/70">
-                                {orders
+                                {displayOrders
                                     .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => {
                                         return ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status);
@@ -164,13 +170,13 @@ export default function OrderQAChecklist() {
                                     );
                                 })}
 
-                                {orders
+                                {displayOrders
                                     .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
                                     .length === 0 && (
                                         <tr>
                                             <td className="px-3 py-6 text-center text-sm text-muted-foreground" colSpan={4}>
-                                                {orders.length === 0
+                                                {displayOrders.length === 0
                                                     ? "No orders need QA at this time."
                                                     : "All eligible orders have completed QA."}
                                             </td>
