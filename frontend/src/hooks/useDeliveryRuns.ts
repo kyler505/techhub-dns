@@ -67,10 +67,19 @@ export function useDeliveryRuns(socketUrl?: string) {
     });
 
     socket.on("disconnect", () => {
+      // Transient disconnects are normal with long-polling fallback.
     });
 
     socket.on("connect_error", () => {
-      setSocketError("Socket.IO connection failed - using cached data");
+      // Transient errors expected during reconnection cycle.
+    });
+
+    socket.on("reconnect_failed", () => {
+      setSocketError("Socket.IO reconnection failed — using cached data");
+    });
+
+    socket.on("connect", () => {
+      setSocketError(null);
     });
 
     return () => {
