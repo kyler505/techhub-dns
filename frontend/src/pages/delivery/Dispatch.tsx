@@ -218,7 +218,6 @@ export default function DeliveryDispatchPage() {
   const getStartDisabledReason = useCallback(
     (vehicle: Vehicle): string | null => {
       const status = statusByVehicle[vehicle];
-      if (selectedOrders.size === 0) return "Select pre-delivery orders";
       if (statusesLoading) return "Vehicle status is loading";
 
       if (status.delivery_run_active) {
@@ -240,7 +239,7 @@ export default function DeliveryDispatchPage() {
 
       return null;
     },
-    [selectedOrders.size, statusByVehicle, statusesLoading, user]
+    [statusByVehicle, statusesLoading, user]
   );
 
   const handleToggleVisible = () => {
