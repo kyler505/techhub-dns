@@ -95,7 +95,7 @@ export default function OrderDetail({
   order,
   auditLogs,
   notifications,
-  onStatusChange,
+  _onStatusChange,
   onTagOrder,
   onRequestTags,
   onGeneratePicklist,

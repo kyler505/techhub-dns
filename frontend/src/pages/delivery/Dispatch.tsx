@@ -15,7 +15,6 @@ import DispatchOrderLane from "../../components/delivery/DispatchOrderLane";
 import {
   DELIVERY_RUN_PRIORITY_OPTIONS,
   getPriorityActionSelection,
-  derivePrioritySemantics,
   formatTimeSince,
   type DeliveryRunPriorityPurpose,
 } from "../../components/delivery/vehiclePriority";
@@ -214,10 +213,7 @@ export default function DeliveryDispatchPage() {
     [selectedOrdersList]
   );
 
-  const selectedVehicle = useMemo(
-    () => VEHICLES.find((vehicle) => vehicle.id === selectedVehicleId) ?? null,
-    [selectedVehicleId]
-  );
+  // Determine vehicle availability for action bar
 
   const getStartDisabledReason = useCallback(
     (vehicle: Vehicle): string | null => {
@@ -529,10 +525,8 @@ export default function DeliveryDispatchPage() {
         <span className="text-xs font-medium text-muted-foreground">Vehicles:</span>
         {VEHICLES.map((vehicle) => {
           const status = statusByVehicle[vehicle.id];
-          const semantics = derivePrioritySemantics(status);
           const isSelected = selectedVehicleId === vehicle.id;
           const since = formatTimeSince(status.checked_out_at);
-          const canUse = !status.checked_out && !status.delivery_run_active;
           const isOwnedByMe = checkedOutByCurrentUser(status, user);
 
           return (
