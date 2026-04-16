@@ -90,6 +90,15 @@ class VehicleCheckoutService:
             return
 
         lock_name = f"vehicle-checkout:{vehicle}"
+
+        # Defensive: release any stale lock on this connection (connection pool reuse)
+        try:
+            self.db.execute(
+                text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+            )
+        except Exception:
+            pass
+
         acquired = self.db.execute(
             text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
             {"lock_name": lock_name, "timeout_seconds": 10},
@@ -110,8 +119,14 @@ class VehicleCheckoutService:
                 self.db.execute(
                     text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
                 )
+                # Ensure release is committed — PA MySQL may roll back if session is dirty
+                self.db.commit()
             except Exception:
                 logger.warning("Failed to release vehicle lock: %s", lock_name, exc_info=True)
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
 
     def recover_stale_vehicle_locks(self, max_lock_age_minutes: int = 10) -> int:
         """Release any vehicle locks that have been held longer than max_lock_age_minutes."""
