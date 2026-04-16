@@ -445,9 +445,10 @@ export default function DeliveryDispatchPage() {
 
   // Sticky action bar validation
   const actionBarBlocker = useMemo(() => {
-    if (selectedOrders.size === 0) return "Select orders";
     if (!selectedVehicleId) return "Pick a vehicle";
     if (!selectedPurpose) return "Pick a purpose";
+    const action = getPriorityActionSelection(selectedPurpose);
+    if (action.createsRun && selectedOrders.size === 0) return "Select orders";
     const reason = getStartDisabledReason(selectedVehicleId);
     if (reason) return reason;
     return null;
@@ -520,25 +521,18 @@ export default function DeliveryDispatchPage() {
         )}
       </Card>
 
-      {/* ── Vehicle Status (inline, no tabs) ── */}
+      {/* ── Vehicle Status (read-only display) ── */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Vehicles:</span>
         {VEHICLES.map((vehicle) => {
           const status = statusByVehicle[vehicle.id];
-          const isSelected = selectedVehicleId === vehicle.id;
           const since = formatTimeSince(status.checked_out_at);
           const isOwnedByMe = checkedOutByCurrentUser(status, user);
 
           return (
-            <button
+            <div
               key={vehicle.id}
-              type="button"
-              className={`inline-flex min-h-[40px] items-center gap-2 rounded-md border px-3 py-1.5 text-xs transition-colors ${
-                isSelected
-                  ? "border-accent bg-accent/10 text-foreground"
-                  : "border-border bg-background text-muted-foreground hover:border-border/80 hover:text-foreground"
-              }`}
-              onClick={() => setSelectedVehicleId(vehicle.id)}
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground"
             >
               <span>{vehicle.icon}</span>
               <span className="font-medium">{vehicle.label}</span>
@@ -546,23 +540,20 @@ export default function DeliveryDispatchPage() {
                 {formatVehicleStatus(status)}
               </Badge>
               {status.checked_out && since && (
-                <span className="text-muted-foreground">{since}</span>
+                <span>{since}</span>
               )}
               {isOwnedByMe && status.checked_out && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-[10px]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleCheckin(vehicle.id);
-                  }}
+                  onClick={() => void handleCheckin(vehicle.id)}
                   disabled={isActionLoading}
                 >
                   Check in
                 </Button>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
