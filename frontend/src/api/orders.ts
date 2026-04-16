@@ -2,14 +2,19 @@ import apiClient from "./client";
 import { Order, OrderDetail, OrderStatus, OrderStatusUpdate, BulkStatusUpdate, AuditLog, ShippingWorkflowStatus } from "../types/order";
 import { normalizeExpectedUpdatedAt } from "./expectedUpdatedAt";
 
-function safeArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value : [];
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  skip: number;
+  limit: number;
 }
 
 export const ordersApi = {
   getOrders: async (params?: { status?: OrderStatus; search?: string }): Promise<Order[]> => {
-    const response = await apiClient.get<Order[]>("/orders", { params });
-    return safeArray<Order>(response.data);
+    const response = await apiClient.get<PaginatedResponse<Order> | Order[]>("/orders", { params });
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    return Array.isArray(data?.items) ? data.items : [];
   },
 
   getOrder: async (orderId: string): Promise<OrderDetail> => {
