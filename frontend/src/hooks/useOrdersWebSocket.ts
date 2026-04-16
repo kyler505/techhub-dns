@@ -54,6 +54,7 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       });
       socketRef.current = socket;
     } catch (e) {
+      console.error("Socket.IO init failed:", e);
     }
 
     if (!socket) {
@@ -84,9 +85,11 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
     });
 
     socket.on("disconnect", () => {
+      console.warn("Socket.IO disconnected — real-time updates paused");
     });
 
-    socket.on("connect_error", () => {
+    socket.on("connect_error", (err) => {
+      console.error("Socket.IO connect_error:", err);
     });
 
     return () => {

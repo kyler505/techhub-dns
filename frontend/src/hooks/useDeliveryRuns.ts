@@ -37,6 +37,7 @@ export function useDeliveryRuns(socketUrl?: string) {
       });
       socketRef.current = socket;
     } catch (e) {
+      console.error("Socket.IO init failed (delivery runs):", e);
     }
 
     if (!socket) {
