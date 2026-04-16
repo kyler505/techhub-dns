@@ -62,9 +62,9 @@ def _do_broadcast_active_runs(db_session):
         try:
             from app.main import socketio
 
-            # Dashboard listens to 'active_runs' and joins 'orders' room
+            # Frontend joins 'delivery-runs' room for active run updates
             socketio.emit(
-                "active_runs", {"type": "active_runs", "data": payload}, room="orders"
+                "active_runs", {"type": "active_runs", "data": payload}, room="delivery-runs"
             )
         except Exception as e:
             import logging
