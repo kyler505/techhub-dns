@@ -70,9 +70,9 @@ class VehicleCheckoutService:
         if not user_id:
             raise ValidationError("Authentication required")
 
-        user = getattr(g, "user", None)
-        email = (getattr(user, "email", None) or "").strip()
-        display_name = (getattr(user, "display_name", None) or "").strip() or None
+        email = (getattr(g, "user_email", None) or "").strip()
+        user_data = getattr(g, "user_data", None) or {}
+        display_name = (user_data.get("display_name") or "").strip() or None
 
         if not email:
             raise ValidationError("Authenticated user missing email")
