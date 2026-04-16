@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from flask import has_request_context, request
 from sqlalchemy.orm import Session as DbSession
 
 from app.config import settings
@@ -20,68 +19,6 @@ from app.models.session import Session
 from app.utils.exceptions import DNSApiError
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_origin(raw_url: Optional[str]) -> Optional[str]:
-    """Return scheme://host for a URL-like string, or None if missing."""
-    if not raw_url:
-        return None
-
-    raw = str(raw_url).strip()
-    if not raw:
-        return None
-
-    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
-    host = parsed.netloc or parsed.path
-    if not host:
-        return None
-
-    scheme = parsed.scheme or "https"
-    return f"{scheme}://{host}".rstrip("/")
-
-
-def _fallback_request_origin() -> Optional[str]:
-    if not has_request_context():
-        return None
-
-    host = (request.host or "").strip()
-    if not host:
-        return None
-
-    scheme = "https" if request.is_secure or "pythonanywhere.com" in host.lower() else "http"
-    return f"{scheme}://{host}".rstrip("/")
-
-
-def _resolve_public_origin(configured_url: Optional[str], frontend_url: Optional[str]) -> str:
-    """Resolve the public SP origin for SAML URLs.
-
-    Prefer an explicitly configured SAML origin when it matches the app's frontend
-    origin. If the app is deployed on a different host (e.g. dev vs prod), fall
-    back to the frontend origin so the ACS/entity IDs stay aligned with the live
-    website.
-    """
-    configured_origin = _normalize_origin(configured_url)
-    frontend_origin = _normalize_origin(frontend_url)
-
-    if frontend_origin and configured_origin and frontend_origin != configured_origin:
-        logger.warning(
-            "SAML origin mismatch: configured=%s frontend=%s; using frontend origin",
-            configured_origin,
-            frontend_origin,
-        )
-        return frontend_origin
-
-    if configured_origin:
-        return configured_origin
-
-    if frontend_origin:
-        return frontend_origin
-
-    request_origin = _fallback_request_origin()
-    if request_origin:
-        return request_origin
-
-    return "https://techhub.pythonanywhere.com"
 
 
 class SamlAuthService:
@@ -150,17 +87,16 @@ class SamlAuthService:
                 details={"reason": "cert_invalid_pem", "cert_path": cert_path},
             )
 
-        # Determine the public origin for this deployment.
-        public_origin = _resolve_public_origin(settings.saml_sp_entity_id, settings.frontend_url)
-        acs_url = f"{public_origin}/auth/saml/callback"
+        # Parse ACS URL for SP settings
+        acs_parsed = urlparse(settings.saml_acs_url)
 
         self._settings_cache = {
             "strict": True,
             "debug": settings.flask_env == "development",
             "sp": {
-                "entityId": public_origin,
+                "entityId": settings.saml_sp_entity_id,
                 "assertionConsumerService": {
-                    "url": acs_url,
+                    "url": settings.saml_acs_url,
                     "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
                 },
                 "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
