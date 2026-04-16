@@ -29,7 +29,7 @@ _RATE_LIMIT_LOCK = Lock()
 
 # Routes that don't require authentication
 PUBLIC_ROUTES = [
-    "/auth/",  # All auth routes
+    "/api/auth/",  # All auth routes
     "/health",
     "/api/inflow/webhook",  # Inflow webhook callbacks
     "/api/system/print-agent/",  # Fixed desktop print agent token auth

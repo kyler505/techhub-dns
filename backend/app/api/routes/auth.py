@@ -17,7 +17,7 @@ from app.utils.csrf import csrf_protect
 
 logger = logging.getLogger(__name__)
 
-bp = Blueprint("auth", __name__, url_prefix="/auth")
+bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 @bp.route("/saml/login", methods=["GET"])
