@@ -91,42 +91,40 @@ class VehicleCheckoutService:
 
         lock_name = f"vehicle-checkout:{vehicle}"
 
-        # Defensive: release any stale lock on this connection (connection pool reuse)
+        # Use a dedicated raw connection for the advisory lock so it's released
+        # automatically when the connection is closed — no session-state risk.
+        lock_conn = bind.connect()
         try:
-            self.db.execute(
-                text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
-            )
-        except Exception:
-            pass
-
-        acquired = self.db.execute(
-            text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
-            {"lock_name": lock_name, "timeout_seconds": 10},
-        ).scalar()
-        if acquired != 1:
-            logger.warning(
-                "Timed out waiting for vehicle checkout lock: vehicle=%s", vehicle
-            )
-            raise ValidationError(
-                f"Vehicle {vehicle} is busy processing another request. Please try again.",
-                details={"vehicle": vehicle, "lock_timeout_seconds": 10},
-            )
-
-        try:
-            yield
-        finally:
-            try:
-                self.db.execute(
-                    text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+            acquired = lock_conn.execute(
+                text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
+                {"lock_name": lock_name, "timeout_seconds": 10},
+            ).scalar()
+            if acquired != 1:
+                logger.warning(
+                    "Timed out waiting for vehicle checkout lock: vehicle=%s", vehicle
                 )
-                # Ensure release is committed — PA MySQL may roll back if session is dirty
-                self.db.commit()
-            except Exception:
-                logger.warning("Failed to release vehicle lock: %s", lock_name, exc_info=True)
+                raise ValidationError(
+                    f"Vehicle {vehicle} is busy processing another request. Please try again.",
+                    details={"vehicle": vehicle, "lock_timeout_seconds": 10},
+                )
+
+            try:
+                yield
+            finally:
                 try:
-                    self.db.rollback()
+                    lock_conn.execute(
+                        text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+                    )
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to release vehicle lock: %s", lock_name, exc_info=True
+                    )
+        finally:
+            # Closing the connection releases any remaining lock as a safety net
+            try:
+                lock_conn.close()
+            except Exception:
+                pass
 
     def recover_stale_vehicle_locks(self, max_lock_age_minutes: int = 10) -> int:
         """Release any vehicle locks that have been held longer than max_lock_age_minutes."""
