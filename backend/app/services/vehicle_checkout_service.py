@@ -92,7 +92,7 @@ class VehicleCheckoutService:
         lock_name = f"vehicle-checkout:{vehicle}"
         acquired = self.db.execute(
             text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
-            {"lock_name": lock_name, "timeout_seconds": 2},  # Reduced from 5
+            {"lock_name": lock_name, "timeout_seconds": 10},
         ).scalar()
         if acquired != 1:
             logger.warning(
@@ -100,7 +100,7 @@ class VehicleCheckoutService:
             )
             raise ValidationError(
                 f"Vehicle {vehicle} is busy processing another request. Please try again.",
-                details={"vehicle": vehicle, "lock_timeout_seconds": 2},
+                details={"vehicle": vehicle, "lock_timeout_seconds": 10},
             )
 
         try:
