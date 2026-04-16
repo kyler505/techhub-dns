@@ -442,8 +442,15 @@ export default function DeliveryDispatchPage() {
     navigate(`/orders/${orderId}`);
   };
 
+  // Find vehicle checked out by current user (you can only have one)
+  const userCheckedOutVehicle = useMemo(() => {
+    const hit = VEHICLES.find((v) => checkedOutByCurrentUser(statusByVehicle[v.id], user));
+    return hit ? hit.id : null;
+  }, [statusByVehicle, user]);
+
   // Sticky action bar validation
   const actionBarBlocker = useMemo(() => {
+    if (userCheckedOutVehicle) return null; // check-in mode — always enabled
     if (!selectedVehicleId) return "Pick a vehicle";
     if (!selectedPurpose) return "Pick a purpose";
     const action = getPriorityActionSelection(selectedPurpose);
@@ -451,10 +458,10 @@ export default function DeliveryDispatchPage() {
     const reason = getStartDisabledReason(selectedVehicleId);
     if (reason) return reason;
     return null;
-  }, [selectedOrders.size, selectedVehicleId, selectedPurpose, getStartDisabledReason]);
+  }, [selectedOrders.size, selectedVehicleId, selectedPurpose, getStartDisabledReason, userCheckedOutVehicle]);
 
   const canStartRun = actionBarBlocker === null;
-  const isActionLoading = selectedVehicleId ? activeVehicleAction === selectedVehicleId : false;
+  const isActionLoading = activeVehicleAction !== null;
   const selectedAction = selectedPurpose ? getPriorityActionSelection(selectedPurpose) : null;
 
   if (loading) {
@@ -542,15 +549,7 @@ export default function DeliveryDispatchPage() {
                 <span>{since}</span>
               )}
               {isOwnedByMe && status.checked_out && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[10px]"
-                  onClick={() => void handleCheckin(vehicle.id)}
-                  disabled={isActionLoading}
-                >
-                  Check in
-                </Button>
+                <span className="text-[10px] text-accent font-medium">your vehicle</span>
               )}
             </div>
           );
@@ -619,85 +618,108 @@ export default function DeliveryDispatchPage() {
       {/* ── Sticky Action Bar ── */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          {/* Selected count */}
-          <div className="flex items-center gap-2 text-sm">
-            {selectedOrders.size > 0 ? (
-              <Badge variant="default" className="text-xs">
-                {selectedOrders.size} selected
-              </Badge>
-            ) : (
-              <span className="text-xs text-muted-foreground">No orders selected</span>
-            )}
-            {selectedPartialPickCount > 0 && (
-              <Badge variant="warning" className="text-[10px]">
-                {selectedPartialPickCount} partial
-              </Badge>
-            )}
-          </div>
+          {userCheckedOutVehicle ? (
+            /* ── Check-in mode: user has a vehicle out ── */
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span>{VEHICLES.find((v) => v.id === userCheckedOutVehicle)?.icon}</span>
+                <span className="font-medium">
+                  {VEHICLES.find((v) => v.id === userCheckedOutVehicle)?.label} checked out
+                </span>
+              </div>
+              <div className="flex-1" />
+              <Button
+                onClick={() => void handleCheckin(userCheckedOutVehicle)}
+                disabled={isActionLoading}
+                className="h-9 min-w-[120px]"
+                variant="destructive"
+              >
+                {isActionLoading ? "Checking in..." : "Check In"}
+              </Button>
+            </>
+          ) : (
+            /* ── Checkout mode: normal flow ── */
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                {selectedOrders.size > 0 ? (
+                  <Badge variant="default" className="text-xs">
+                    {selectedOrders.size} selected
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No orders selected</span>
+                )}
+                {selectedPartialPickCount > 0 && (
+                  <Badge variant="warning" className="text-[10px]">
+                    {selectedPartialPickCount} partial
+                  </Badge>
+                )}
+              </div>
 
-          <div className="h-5 w-px bg-border" />
+              <div className="h-5 w-px bg-border" />
 
-          {/* Vehicle selector */}
-          <div className="flex items-center gap-1.5">
-            {VEHICLES.map((vehicle) => {
-              const isActive = vehicle.id === selectedVehicleId;
-              const status = statusByVehicle[vehicle.id];
-              const canUse = !status.checked_out && !status.delivery_run_active;
-              return (
-                <button
-                  key={vehicle.id}
-                  type="button"
-                  className={`inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs transition-colors ${
-                    isActive
-                      ? "border-accent bg-accent/10 text-foreground font-medium"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  } ${!canUse ? "opacity-50" : ""}`}
-                  onClick={() => setSelectedVehicleId(vehicle.id)}
-                >
-                  {vehicle.icon} {vehicle.label}
-                </button>
-              );
-            })}
-          </div>
+              {/* Vehicle selector */}
+              <div className="flex items-center gap-1.5">
+                {VEHICLES.map((vehicle) => {
+                  const isActive = vehicle.id === selectedVehicleId;
+                  const status = statusByVehicle[vehicle.id];
+                  const canUse = !status.checked_out && !status.delivery_run_active;
+                  return (
+                    <button
+                      key={vehicle.id}
+                      type="button"
+                      className={`inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs transition-colors ${
+                        isActive
+                          ? "border-accent bg-accent/10 text-foreground font-medium"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      } ${!canUse ? "opacity-50" : ""}`}
+                      onClick={() => setSelectedVehicleId(vehicle.id)}
+                    >
+                      {vehicle.icon} {vehicle.label}
+                    </button>
+                  );
+                })}
+              </div>
 
-          <div className="h-5 w-px bg-border" />
+              <div className="h-5 w-px bg-border" />
 
-          {/* Purpose selector */}
-          <div className="flex items-center gap-1.5">
-            {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
-              const isSelected = selectedPurpose === option.purpose;
-              return (
-                <button
-                  key={option.purpose}
-                  type="button"
-                  className={`inline-flex h-8 items-center rounded-md border px-2 text-xs transition-colors ${
-                    isSelected
-                      ? "border-accent bg-accent text-accent-foreground font-medium"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setSelectedPurpose(option.purpose)}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
+              {/* Purpose selector */}
+              <div className="flex items-center gap-1.5">
+                {DELIVERY_RUN_PRIORITY_OPTIONS.map((option) => {
+                  const isSelected = selectedPurpose === option.purpose;
+                  return (
+                    <button
+                      key={option.purpose}
+                      type="button"
+                      className={`inline-flex h-8 items-center rounded-md border px-2 text-xs transition-colors ${
+                        isSelected
+                          ? "border-accent bg-accent text-accent-foreground font-medium"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setSelectedPurpose(option.purpose)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
 
-          <div className="flex-1" />
+              <div className="flex-1" />
 
-          {/* Action button */}
-          {actionBarBlocker ? (
-            <span className="text-xs text-muted-foreground">{actionBarBlocker}</span>
-          ) : null}
-          <Button
-            onClick={() => void handleStartRun()}
-            disabled={!canStartRun || isActionLoading}
-            className="h-9 min-w-[120px]"
-          >
-            {isActionLoading
-              ? "Starting..."
-              : selectedAction?.buttonLabel ?? "Start Run"}
-          </Button>
+              {/* Action button */}
+              {actionBarBlocker ? (
+                <span className="text-xs text-muted-foreground">{actionBarBlocker}</span>
+              ) : null}
+              <Button
+                onClick={() => void handleStartRun()}
+                disabled={!canStartRun || isActionLoading}
+                className="h-9 min-w-[120px]"
+              >
+                {isActionLoading
+                  ? "Starting..."
+                  : selectedAction?.buttonLabel ?? "Start Run"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
