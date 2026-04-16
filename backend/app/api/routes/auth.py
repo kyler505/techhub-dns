@@ -6,6 +6,7 @@ Provides endpoints for SAML login/logout and session management.
 
 import logging
 from datetime import datetime
+from urllib.parse import urlparse
 from flask import Blueprint, request, redirect, make_response, jsonify, g
 
 from app.config import settings
@@ -18,6 +19,36 @@ from app.utils.csrf import csrf_protect
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+
+
+def _sanitize_relay_state(relay_state: str | None, request_host: str | None) -> str:
+    """Return a safe internal redirect target after SAML auth.
+
+    Keeps same-origin paths, strips absolute URLs back to their path when the
+    host matches the current request, and prevents loops back to the login page.
+    """
+    raw_state = (relay_state or "").strip()
+    if not raw_state or raw_state == "None":
+        return "/"
+
+    parsed = urlparse(raw_state)
+
+    # Allow absolute URLs only when they stay on the current host and remain HTTPS.
+    if parsed.scheme or parsed.netloc:
+        current_host = (request_host or "").strip().lower()
+        if parsed.scheme.lower() != "https" or not current_host or parsed.netloc.strip().lower() != current_host:
+            return "/"
+        raw_state = f"{parsed.path or '/'}{f'?{parsed.query}' if parsed.query else ''}{f'#{parsed.fragment}' if parsed.fragment else ''}"
+        parsed = urlparse(raw_state)
+
+    path = parsed.path or raw_state
+    if not path.startswith("/"):
+        return "/"
+
+    if path == "/login" or path.startswith("/login?") or path.startswith("/login#"):
+        return "/"
+
+    return raw_state
 
 
 @bp.route("/saml/login", methods=["GET"])
@@ -102,13 +133,8 @@ def saml_callback():
                 ip_address=request.remote_addr,
             )
 
-        # Get redirect target from RelayState
-        relay_state = request.form.get("RelayState", "/")
-        if not relay_state or relay_state == "None":
-            relay_state = "/"
-        # Prevent redirect loop - don't redirect back to login page after successful auth
-        if relay_state == "/login" or relay_state.startswith("/login?"):
-            relay_state = "/"
+        # Get redirect target from RelayState and normalize it to a safe internal path.
+        relay_state = _sanitize_relay_state(request.form.get("RelayState"), request.host)
 
         # Create response with session cookie
         response = make_response(redirect(relay_state))
