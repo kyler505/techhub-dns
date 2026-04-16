@@ -56,12 +56,10 @@ interface OrderDetailProps {
   auditLogs: AuditLog[];
   notifications: TeamsNotification[];
   onStatusChange: (newStatus: OrderStatus, reason?: string) => void;
-  onRetryNotification: () => void;
   onTagOrder: (tagIds: string[]) => Promise<void>;
   onRequestTags: () => Promise<void>;
   onGeneratePicklist: () => Promise<void>;
   generatingPicklist: boolean;
-  retryingNotification: boolean;
 }
 
 type OrderItemLine = {
@@ -93,17 +91,15 @@ const getLineSerials = (line: OrderItemLine): string[] => {
 
   return (line.quantity.serialNumbers ?? []).map((serial) => String(serial));
 };
-
 export default function OrderDetail({
   order,
   auditLogs,
   notifications,
-  onRetryNotification,
+  onStatusChange,
   onTagOrder,
   onRequestTags,
   onGeneratePicklist,
   generatingPicklist,
-  retryingNotification,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
@@ -427,9 +423,6 @@ export default function OrderDetail({
                     <span className="font-medium">Error:</span>{" "}
                     {latestNotification.error_message}
                   </p>
-                  <Button onClick={onRetryNotification} className="mt-2" size="sm" disabled={retryingNotification}>
-                    {retryingNotification ? "Retrying..." : "Retry Notification"}
-                  </Button>
                 </div>
               )}
             </div>

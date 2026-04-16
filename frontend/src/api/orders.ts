@@ -50,11 +50,6 @@ export const ordersApi = {
     return response.data;
   },
 
-  retryNotification: async (orderId: string) => {
-    const response = await apiClient.post(`/orders/${orderId}/retry-notification`);
-    return response.data;
-  },
-
   tagOrder: async (orderId: string, payload: { tag_ids: string[]; technician?: string; expected_updated_at?: string }) => {
     const response = await apiClient.post<Order>(`/orders/${orderId}/tag`, normalizeExpectedUpdatedAt(payload));
     return response.data;

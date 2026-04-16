@@ -104,17 +104,13 @@ def saml_callback():
         if errors:
             logger.error(f"SAML errors: {errors}")
             logger.error(f"SAML last error reason: {auth.get_last_error_reason()}")
-            return jsonify({"error": "Authentication failed", "details": errors}), 401
+            return jsonify({"error": "Authentication failed"}), 401
 
         if not auth.is_authenticated():
             reason = auth.get_last_error_reason()
             logger.error(f"SAML authentication failed: {errors}")
             logger.error(f"Failure reason: {reason}")
-            return jsonify({
-                "error": "Authentication failed",
-                "details": errors,
-                "reason": reason
-            }), 401
+            return jsonify({"error": "Authentication failed"}), 401
 
         # Extract SAML attributes
         saml_attributes = auth.get_attributes()
