@@ -12,7 +12,7 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, abort, jsonify, request, send_file
 from typing import Dict, Any, cast, Optional, Sequence
 from datetime import datetime, timezone
 import requests

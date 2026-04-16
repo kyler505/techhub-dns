@@ -22,8 +22,8 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       setError(null);
       setLoading(true);
       // Try to fetch orders via HTTP API as fallback
-      const response = await apiClient.get('/api/orders');
-      setOrders(response.data);
+      const response = await apiClient.get('/orders');
+      setOrders(response.data.items);
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch orders via HTTP:", err);
