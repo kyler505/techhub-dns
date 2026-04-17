@@ -17,7 +17,7 @@ class CanopyOrdersUploaderService:
         self.store_base = settings.canopyorders_store_base
         self.dav_root_path = settings.canopyorders_dav_root_path
         self.base_dir = settings.canopyorders_base_dir
-        self.username = settings.canopyorders_username
+        self.username = settings.canopyorders_username or settings.webdav_username
         self.user_agent = settings.canopyorders_user_agent
         self.teams_workflow_url = settings.canopyorders_teams_workflow_url
         self.teams_shared_secret = settings.canopyorders_teams_shared_secret
@@ -31,7 +31,11 @@ class CanopyOrdersUploaderService:
         return self._webdav_password
 
     def _get_webdav_password(self) -> str:
-        env_password = getattr(settings, "canopyorders_password", None)
+        # Prefer canopyorders-specific, fall back to shared webdav password
+        env_password = (
+            getattr(settings, "canopyorders_password", None)
+            or getattr(settings, "webdav_password", None)
+        )
         if env_password is not None:
             env_password_str = str(env_password)
             if env_password_str.strip():
