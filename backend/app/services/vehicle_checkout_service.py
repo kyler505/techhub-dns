@@ -70,9 +70,9 @@ class VehicleCheckoutService:
         if not user_id:
             raise ValidationError("Authentication required")
 
-        user = getattr(g, "user", None)
-        email = (getattr(user, "email", None) or "").strip()
-        display_name = (getattr(user, "display_name", None) or "").strip() or None
+        email = (getattr(g, "user_email", None) or "").strip()
+        user_data = getattr(g, "user_data", None) or {}
+        display_name = (user_data.get("display_name") or "").strip() or None
 
         if not email:
             raise ValidationError("Authenticated user missing email")
@@ -90,28 +90,41 @@ class VehicleCheckoutService:
             return
 
         lock_name = f"vehicle-checkout:{vehicle}"
-        acquired = self.db.execute(
-            text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
-            {"lock_name": lock_name, "timeout_seconds": 2},  # Reduced from 5
-        ).scalar()
-        if acquired != 1:
-            logger.warning(
-                "Timed out waiting for vehicle checkout lock: vehicle=%s", vehicle
-            )
-            raise ValidationError(
-                f"Vehicle {vehicle} is busy processing another request. Please try again.",
-                details={"vehicle": vehicle, "lock_timeout_seconds": 2},
-            )
 
+        # Use a dedicated raw connection for the advisory lock so it's released
+        # automatically when the connection is closed — no session-state risk.
+        lock_conn = bind.connect()
         try:
-            yield
-        finally:
-            try:
-                self.db.execute(
-                    text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+            acquired = lock_conn.execute(
+                text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
+                {"lock_name": lock_name, "timeout_seconds": 10},
+            ).scalar()
+            if acquired != 1:
+                logger.warning(
+                    "Timed out waiting for vehicle checkout lock: vehicle=%s", vehicle
                 )
+                raise ValidationError(
+                    f"Vehicle {vehicle} is busy processing another request. Please try again.",
+                    details={"vehicle": vehicle, "lock_timeout_seconds": 10},
+                )
+
+            try:
+                yield
+            finally:
+                try:
+                    lock_conn.execute(
+                        text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name}
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to release vehicle lock: %s", lock_name, exc_info=True
+                    )
+        finally:
+            # Closing the connection releases any remaining lock as a safety net
+            try:
+                lock_conn.close()
             except Exception:
-                logger.warning("Failed to release vehicle lock: %s", lock_name, exc_info=True)
+                pass
 
     def recover_stale_vehicle_locks(self, max_lock_age_minutes: int = 10) -> int:
         """Release any vehicle locks that have been held longer than max_lock_age_minutes."""
