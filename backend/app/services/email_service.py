@@ -31,10 +31,7 @@ class EmailService:
 
     def is_configured(self) -> bool:
         """Check if email is properly configured (Graph API must be configured)."""
-        return bool(
-            graph_service.is_configured() and
-            self.from_address
-        )
+        return graph_service.is_configured()
 
     def send_email(
         self,
