@@ -50,29 +50,29 @@ const verificationSteps = [
     {
         id: "verifyAssetTagSerialMatch",
         label:
-            "3. Verify that system asset tag has been applied and that the serial number on the device, sticker and pick list all match.",
+            "3. Confirm the asset tag is applied and the device serial number, sticker, and pick list all match.",
     },
     {
         id: "verifyOrderDetailsTemplateSent",
         label:
-            "4. Verify that the order details template has been sent to the customer before completing a delivery.",
+            "4. Confirm the order details template was sent to the customer before completing a delivery.",
     },
     {
         id: "verifyPackagedProperly",
-        label: "5. Verify that system and all materials included are packaged properly",
+        label: "5. Confirm the system and all included materials are packaged properly.",
     },
     {
         id: "verifyPackingSlipSerialsMatch",
-        label: "6. Verify packing slip and picked items and serial numbers match.",
+        label: "6. Confirm the packing slip, picked items, and serial numbers all match.",
     },
     {
         id: "verifyElectronicPackingSlipSaved",
         label:
-            "7. Verify there is an electronic packing slip saved on the shipping and receiving computer.",
+            "7. Confirm an electronic packing slip is saved on the shipping and receiving computer.",
     },
     {
         id: "verifyBoxesLabeledCorrectly",
-        label: "8. Verify boxes are labeled with correct order details and shipping labels are marked out.",
+        label: "8. Confirm boxes are labeled with the correct order details and shipping labels are marked out.",
     },
 ];
 
@@ -223,7 +223,7 @@ export default function OrderQAPage() {
                 <div className="space-y-1 text-foreground">
                     <h1 className="text-3xl font-semibold">QA Checklist</h1>
                     <p className="text-sm text-muted-foreground">
-                        Complete the checklist for <span className="font-semibold text-foreground">{order.inflow_order_id}</span> before submission.
+                        Use this checklist to verify tagging, packaging, and documentation before you submit <span className="font-semibold text-foreground">{order.inflow_order_id}</span>.
                     </p>
                     {lastSavedAt && (
                         <p className="text-xs text-muted-foreground">Previously submitted: {formatToCentralTime(lastSavedAt)}</p>
