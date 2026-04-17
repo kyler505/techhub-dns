@@ -337,6 +337,15 @@ class DeliveryRunService:
         email = (getattr(g, "user_email", None) or "").strip()
         user_data = getattr(g, "user_data", None) or {}
         display_name = (user_data.get("display_name") or "").strip() or None
+
+        if not email:
+            legacy_user = getattr(g, "user", None)
+            legacy_email = getattr(legacy_user, "email", None) if legacy_user else None
+            email = (legacy_email or "").strip()
+            if not display_name and legacy_user is not None:
+                legacy_display_name = getattr(legacy_user, "display_name", None)
+                display_name = (legacy_display_name or "").strip() or None
+
         if not email:
             raise ValidationError("Authenticated user missing email")
 
