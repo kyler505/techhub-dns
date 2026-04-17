@@ -615,7 +615,7 @@ export default function DeliveryDispatchPage() {
       </section>
 
       {/* ── Sticky Action Bar ── */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:left-[var(--sidebar-width)]">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           {userCheckedOutVehicle ? (
             /* ── Check-in mode: user has a vehicle out ── */
