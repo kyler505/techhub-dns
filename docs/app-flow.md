@@ -151,6 +151,8 @@ Once all three steps complete:
 - Bulk mark orders as fulfilled in inFlow
 - Record success/failure per order
 - Close run with completion timestamp
+- Auto check the vehicle back in when the final delivery is completed
+
 
 ---
 
