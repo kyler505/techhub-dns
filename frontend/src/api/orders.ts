@@ -8,8 +8,8 @@ function safeArray<T>(value: unknown): T[] {
 
 export const ordersApi = {
   getOrders: async (params?: { status?: OrderStatus; search?: string }): Promise<Order[]> => {
-    const response = await apiClient.get<Order[]>("/orders", { params });
-    return safeArray<Order>(response.data);
+    const response = await apiClient.get<{ items?: Order[]; total?: number; skip?: number; limit?: number }>("/orders", { params });
+    return safeArray<Order>(response.data?.items);
   },
 
   getOrder: async (orderId: string): Promise<OrderDetail> => {
@@ -47,11 +47,6 @@ export const ordersApi = {
     const response = await apiClient.get<{ id: string; order_number: string }>("/orders/resolve", {
       params: { order_number: orderNumber },
     });
-    return response.data;
-  },
-
-  retryNotification: async (orderId: string) => {
-    const response = await apiClient.post(`/orders/${orderId}/retry-notification`);
     return response.data;
   },
 

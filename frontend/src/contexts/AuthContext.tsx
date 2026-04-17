@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const refreshAuth = async () => {
         try {
-            // Auth endpoints are at /auth, not /api/auth
+            // Auth endpoints are at /api/auth
             const response = await apiClient.get('/auth/me', { withCredentials: true });
             setUser(response.data.user);
             setSession(response.data.session);
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const logout = async () => {
         try {
-            // Auth endpoints are at /auth, not /api/auth
+            // Auth endpoints are at /api/auth
             await apiClient.post('/auth/logout', {}, { withCredentials: true });
         } catch (error) {
             console.error('Logout error:', error);

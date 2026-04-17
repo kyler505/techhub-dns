@@ -208,8 +208,10 @@ class Settings(BaseSettings):
     # Vetting Editor (env-only, no Key Vault integration)
     vetting_editor_download_url: Optional[str] = None
     vetting_editor_upload_url: Optional[str] = None
-    vetting_editor_webdav_username: Optional[str] = None
-    vetting_editor_webdav_password: Optional[str] = None
+
+    # Compatibility Editor Staging (env-only, no Key Vault integration)
+    compatibility_editor_staging_download_url: Optional[str] = None
+    compatibility_editor_staging_upload_url: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env", case_sensitive=False, extra="ignore"

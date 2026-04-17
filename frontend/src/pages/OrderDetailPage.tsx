@@ -112,23 +112,6 @@ export default function OrderDetailPage() {
         },
     });
 
-    const retryNotificationMutation = useMutation({
-        mutationFn: () => {
-            if (!orderId) {
-                throw new Error("Order id is required");
-            }
-
-            return ordersApi.retryNotification(orderId);
-        },
-        onSuccess: async () => {
-            await refreshOrder();
-        },
-        onError: (error) => {
-            console.error("Failed to retry notification:", error);
-            toast.error("Failed to retry notification");
-        },
-    });
-
     const tagOrderMutation = useMutation({
         mutationFn: (tagIds: string[]) => {
             if (!orderId || !order) {
@@ -228,15 +211,6 @@ export default function OrderDetailPage() {
         }
     };
 
-    const handleRetryNotification = async () => {
-        if (!order) return;
-        try {
-            await retryNotificationMutation.mutateAsync();
-        } catch {
-            // Handled by mutation callbacks.
-        }
-    };
-
     const getUserName = () => user?.display_name || user?.email || "Unknown User";
 
     const handleTagOrder = async (tagIds: string[]) => {
@@ -312,12 +286,10 @@ export default function OrderDetailPage() {
                 auditLogs={auditLogs}
                 notifications={notifications}
                 onStatusChange={handleStatusChange}
-                onRetryNotification={handleRetryNotification}
                 onTagOrder={handleTagOrder}
                 onRequestTags={handleRequestTags}
                 onGeneratePicklist={handleGeneratePicklist}
                 generatingPicklist={generatePicklistMutation.isPending}
-                retryingNotification={retryNotificationMutation.isPending}
             />
             {transitioningStatus && (
                 <StatusTransition

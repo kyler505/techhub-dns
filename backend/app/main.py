@@ -121,6 +121,8 @@ app.register_blueprint(analytics.bp, url_prefix="/api/analytics")
 app.register_blueprint(observability.bp, url_prefix="/api/observability")
 app.register_blueprint(sharepoint.sharepoint_bp)
 app.register_blueprint(auth.bp)
+# Compatibility alias for older frontend bundles that still hit /auth/*.
+app.register_blueprint(auth.bp, url_prefix="/auth", name_prefix="legacy_auth")
 app.register_blueprint(system.bp)
 
 

@@ -22,8 +22,8 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       setError(null);
       setLoading(true);
       // Try to fetch orders via HTTP API as fallback
-      const response = await apiClient.get('/api/orders');
-      setOrders(response.data);
+      const response = await apiClient.get('/orders');
+      setOrders(response.data.items);
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch orders via HTTP:", err);
@@ -54,6 +54,7 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       });
       socketRef.current = socket;
     } catch (e) {
+      console.error("Socket.IO init failed:", e);
     }
 
     if (!socket) {
@@ -84,9 +85,17 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
     });
 
     socket.on("disconnect", () => {
+      // Transient disconnects are normal with long-polling fallback.
+      // Socket.IO auto-reconnects; only flag if reconnection fails.
     });
 
-    socket.on("connect_error", () => {
+    socket.on("reconnect_failed", () => {
+      console.error("Socket.IO reconnection failed — real-time updates unavailable");
+      setError("Real-time updates disconnected");
+    });
+
+    socket.on("connect", () => {
+      setError(null);
     });
 
     return () => {
