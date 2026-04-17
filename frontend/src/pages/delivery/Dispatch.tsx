@@ -46,8 +46,8 @@ type VehicleDescriptor = {
 };
 
 const VEHICLES: VehicleDescriptor[] = [
-  { id: "van", label: "Van", icon: "🚐" },
-  { id: "golf_cart", label: "Golf Cart", icon: "🏌️" },
+  { id: "van", label: "Van", icon: "" },
+  { id: "golf_cart", label: "Golf Cart", icon: "" },
 ];
 
 function getApiErrorMessage(error: unknown): string {
@@ -540,7 +540,6 @@ export default function DeliveryDispatchPage() {
               key={vehicle.id}
               className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground"
             >
-              <span>{vehicle.icon}</span>
               <span className="font-medium">{vehicle.label}</span>
               <Badge variant={getVehicleStatusVariant(status)} className="text-[10px]">
                 {formatVehicleStatus(status)}
@@ -622,7 +621,6 @@ export default function DeliveryDispatchPage() {
             /* ── Check-in mode: user has a vehicle out ── */
             <>
               <div className="flex items-center gap-2 text-sm">
-                <span>{VEHICLES.find((v) => v.id === userCheckedOutVehicle)?.icon}</span>
                 <span className="font-medium">
                   {VEHICLES.find((v) => v.id === userCheckedOutVehicle)?.label} checked out
                 </span>
@@ -674,7 +672,7 @@ export default function DeliveryDispatchPage() {
                       } ${!canUse ? "opacity-50" : ""}`}
                       onClick={() => setSelectedVehicleId(vehicle.id)}
                     >
-                      {vehicle.icon} {vehicle.label}
+                      {vehicle.label}
                     </button>
                   );
                 })}
