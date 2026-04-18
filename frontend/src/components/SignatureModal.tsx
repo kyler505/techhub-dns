@@ -14,7 +14,7 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [hasSignature, setHasSignature] = useState(false);
-    const [requirePenInput, setRequirePenInput] = useState(true);
+    const [requirePenInput, setRequirePenInput] = useState(false);
     const [debugInfo, setDebugInfo] = useState<string>("");
 
     // Reset canvas when opening
@@ -192,8 +192,8 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         Add Signature
                     </DialogTitle>
                     <DialogDescription>
-                        Sign below using your pencil. Use finger or mouse for the rest of the app.
-                        {requirePenInput && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
+                    Sign with mouse, touch, or pen. Use the toggle below to require pen input if needed.
+                    {requirePenInput && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
                     </DialogDescription>
                 </DialogHeader>
  

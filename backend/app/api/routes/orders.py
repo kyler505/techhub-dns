@@ -673,6 +673,27 @@ def sign_order(order_id):
         order.signed_picklist_path = bundled_path
         order.updated_at = datetime.utcnow()
 
+        delivery_vehicle = order.delivery_run.vehicle if order.delivery_run else None
+        if delivery_vehicle:
+            from app.services.vehicle_checkout_service import VehicleCheckoutService
+
+            try:
+                checkout_service = VehicleCheckoutService(db)
+                checkout_service.checkin(
+                    vehicle=delivery_vehicle,
+                    notes=f"Auto check-in after completing delivery for {order.inflow_order_id or order.id}",
+                    allow_active_delivery_run=True,
+                )
+            except Exception as exc:
+                import logging
+
+                logging.warning(
+                    "Auto check-in failed after signing order %s on vehicle %s: %s",
+                    order.inflow_order_id or order.id,
+                    delivery_vehicle,
+                    exc,
+                )
+
         db.commit()
         db.refresh(order)
 
