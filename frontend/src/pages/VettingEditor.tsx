@@ -15,7 +15,6 @@ import {
 } from "../api/vettingEditor";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { cn } from "../lib/utils";
@@ -311,14 +310,12 @@ export default function VettingEditor() {
   if (authLoading || loading) {
     return (
       <div className="container mx-auto py-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading vetting editor...
-            </div>
-          </CardContent>
-        </Card>
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading vetting editor...
+          </div>
+        </section>
       </div>
     );
   }
@@ -330,15 +327,15 @@ export default function VettingEditor() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Vetting Editor</h1>
           <p className="text-sm text-muted-foreground">Admin-only vetting list editor.</p>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Access denied</CardTitle>
-            <CardDescription>Admin access is required to view this page.</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+          <h2 className="text-base font-semibold tracking-tight">Access denied</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Admin access is required to view this page.
+          </p>
+          <p className="mt-4 text-sm text-muted-foreground">
             {user?.email ? `Signed in as ${user.email}.` : "You are not signed in."}
-          </CardContent>
-        </Card>
+          </p>
+        </section>
       </div>
     );
   }
@@ -364,14 +361,14 @@ export default function VettingEditor() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Products</CardTitle>
-          <CardDescription>
-            {rowCount} total · {sectionSummary}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Products</h2>
+            <p className="text-sm text-muted-foreground">{rowCount} total · {sectionSummary}</p>
+          </div>
+        </div>
+        <div className="mt-4">
           {rows.length === 0 ? (
             <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
               No products found. Add a product to begin.
@@ -648,8 +645,8 @@ export default function VettingEditor() {
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
         <div className="container mx-auto flex items-center gap-2 px-0">

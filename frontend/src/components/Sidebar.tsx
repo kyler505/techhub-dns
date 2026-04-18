@@ -161,7 +161,7 @@ export function Sidebar({ className }: { className?: string }) {
         animate={isMobile ? { x: isMobileOpen ? 0 : -288 } : { width: collapsed ? 72 : 256 }}
         transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
-          "fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-border bg-card text-foreground will-change-transform",
+          "fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-border bg-background text-foreground will-change-transform",
           isMobile ? "w-[288px] max-w-[calc(100vw-3rem)] shadow-2xl" : "",
           className
         )}
@@ -230,7 +230,7 @@ export function Sidebar({ className }: { className?: string }) {
                   "flex min-h-[44px] items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
                   showExpandedContent ? "gap-3 px-3" : "justify-center px-0",
                   active
-                    ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                    ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )}
               >
@@ -277,7 +277,7 @@ export function Sidebar({ className }: { className?: string }) {
                   "flex min-h-[44px] items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
                   showExpandedContent ? "gap-3 px-3" : "justify-center px-0",
                   active
-                    ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
+                    ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )}
               >
