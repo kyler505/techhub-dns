@@ -343,7 +343,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none xl:col-span-2 h-full">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none xl:col-span-2 h-full">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-base">Live Status</h2>
             <div className="flex flex-col items-end gap-1 text-right">
@@ -358,8 +358,8 @@ export default function Dashboard() {
                 <span className="text-[11px] text-muted-foreground">Fallback refresh every 60 seconds</span>
               )}
             </div>
-                    </div>
-          <div>
+          </div>
+          <div className="mt-4">
             <SectionErrorBoundary
               title="Live delivery widget failed"
               message="Try the live status panel again. The rest of the dashboard is still available."
@@ -404,12 +404,12 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-base">Completed Today</h2>
             <span className="text-xs text-muted-foreground">Last 24h</span>
-                    </div>
-          <div>
+          </div>
+          <div className="mt-4">
             {completedLoading ? (
               <div className="space-y-3">
                 <Skeleton className="h-4 w-40" />
@@ -441,7 +441,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
           <div className="flex flex-row items-center justify-between gap-3">
             <div>
               <h2 className="text-base">Orders Daily Workflow</h2>
@@ -469,8 +469,8 @@ export default function Dashboard() {
                   30d
                 </Button>
             </div>
-                    </div>
-          <div>
+          </div>
+          <div className="mt-4">
             <SectionErrorBoundary
               title="Workflow chart failed"
               message="Try reloading this chart. The rest of the dashboard data is still available."
@@ -485,12 +485,12 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
           <div>
             <h2 className="text-base">Monthly Fulfilled Totals</h2>
             <p className="text-xs text-muted-foreground">Last 12 months</p>
-                    </div>
-          <div>
+          </div>
+          <div className="mt-4">
             <SectionErrorBoundary
               title="Monthly totals chart failed"
               message="Try reloading the monthly fulfilled totals chart."
@@ -502,12 +502,12 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
           <div>
             <h2 className="text-base">Yearly Fulfilled Totals</h2>
             <p className="text-xs text-muted-foreground">Last 5 years</p>
-                    </div>
-          <div>
+          </div>
+          <div className="mt-4">
             <SectionErrorBoundary
               title="Yearly totals chart failed"
               message="Try reloading the yearly fulfilled totals chart."
