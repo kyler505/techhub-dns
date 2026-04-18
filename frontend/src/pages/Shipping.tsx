@@ -1,34 +1,31 @@
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-
 export default function Shipping() {
     return (
         <div className="container mx-auto py-6 space-y-6">
             <div className="space-y-2">
-                <h1 className="text-2xl font-bold tracking-tight">Shipping</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Shipping</h1>
+                <p className="text-sm text-muted-foreground">Track shipment work without the dashboard-box feel.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2 border-slate-200">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Shipment Queue</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-                            No shipments in the queue.
-                        </div>
-                    </CardContent>
-                </Card>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none lg:col-span-2">
+                    <div className="space-y-2 border-b border-border/60 pb-4">
+                        <h2 className="text-base font-semibold tracking-tight">Shipment Queue</h2>
+                        <p className="text-sm text-muted-foreground">Current shipments waiting to be processed.</p>
+                    </div>
+                    <div className="mt-4 flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
+                        No shipments in the queue.
+                    </div>
+                </section>
 
-                <Card className="border-slate-200">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Upcoming Pickups</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-                            No pickups scheduled.
-                        </div>
-                    </CardContent>
-                </Card>
+                <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                    <div className="space-y-2 border-b border-border/60 pb-4">
+                        <h2 className="text-base font-semibold tracking-tight">Upcoming Pickups</h2>
+                        <p className="text-sm text-muted-foreground">Planned pickups and handoff timing.</p>
+                    </div>
+                    <div className="mt-4 flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
+                        No pickups scheduled.
+                    </div>
+                </section>
             </div>
         </div>
     );
