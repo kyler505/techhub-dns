@@ -50,13 +50,15 @@ export function useDeliveryRuns(socketUrl?: string) {
       };
     }
 
-    socket.on("connect", () => {
+    const socketInstance = socket;
+
+    socketInstance.on("connect", () => {
       setSocketError(null);
       // Join delivery-runs namespace/room
-      socket.emit("join", { room: "delivery-runs" });
+      socketInstance.emit("join", { room: "delivery-runs" });
     });
 
-    socket.on("active_runs", (payload: { type: string; data: DeliveryRun[] }) => {
+    socketInstance.on("active_runs", (payload: { type: string; data: DeliveryRun[] }) => {
       try {
         if (payload.type === "active_runs") {
           queryClient.setQueryData(deliveryRunsQueryKeys.active(), safeArray<DeliveryRun>(payload.data));
@@ -66,19 +68,19 @@ export function useDeliveryRuns(socketUrl?: string) {
       }
     });
 
-    socket.on("disconnect", () => {
+    socketInstance.on("disconnect", () => {
       // Transient disconnects are normal with long-polling fallback.
     });
 
-    socket.on("connect_error", () => {
+    socketInstance.on("connect_error", () => {
       // Transient errors expected during reconnection cycle.
     });
 
-    socket.on("reconnect_failed", () => {
+    socketInstance.on("reconnect_failed", () => {
       setSocketError("Socket.IO reconnection failed — using cached data");
     });
 
-    socket.on("connect", () => {
+    socketInstance.on("connect", () => {
       setSocketError(null);
     });
 

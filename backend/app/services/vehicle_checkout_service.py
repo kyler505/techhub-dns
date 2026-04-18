@@ -75,6 +75,14 @@ class VehicleCheckoutService:
         display_name = (user_data.get("display_name") or "").strip() or None
 
         if not email:
+            legacy_user = getattr(g, "user", None)
+            legacy_email = getattr(legacy_user, "email", None) if legacy_user else None
+            email = (legacy_email or "").strip()
+            if not display_name and legacy_user is not None:
+                legacy_display_name = getattr(legacy_user, "display_name", None)
+                display_name = (legacy_display_name or "").strip() or None
+
+        if not email:
             raise ValidationError("Authenticated user missing email")
 
         return user_id, email, display_name
@@ -224,6 +232,7 @@ class VehicleCheckoutService:
         self,
         vehicle: str,
         notes: Optional[str] = None,
+        allow_active_delivery_run: bool = False,
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
@@ -231,7 +240,7 @@ class VehicleCheckoutService:
             actor_email, actor_display_name
         )
         with self._vehicle_lock(vehicle_norm):
-            if self._delivery_run_active(vehicle_norm):
+            if self._delivery_run_active(vehicle_norm) and not allow_active_delivery_run:
                 raise ValidationError(
                     f"Cannot check in {vehicle_norm} while a delivery run is active",
                     details={"vehicle": vehicle_norm, "delivery_run_active": True},
