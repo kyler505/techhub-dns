@@ -84,7 +84,7 @@ function AppContent() {
 				<Sidebar />
 
 				<main className="min-h-screen transition-[margin] duration-300 lg:ml-[var(--sidebar-width)]">
-					<div className="sticky top-0 z-30 h-12 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+					<div className="sticky top-0 z-30 h-12 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/80">
 						<div className="flex h-full items-center px-4 pl-16 sm:px-6 lg:px-8 lg:pl-8">
 							<Breadcrumbs />
 						</div>
@@ -92,7 +92,7 @@ function AppContent() {
 
 					<SyncHealthBanner />
 
-					<div className="p-4 sm:p-6 lg:p-8">
+					<div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
                         <RouteContentErrorBoundary>
                             <Suspense fallback={
                                 <div className="space-y-4">

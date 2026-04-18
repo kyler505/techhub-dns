@@ -123,7 +123,7 @@ export default function OrderTable({
     }
 
     return (
-        <div className="rounded-lg border border-border bg-card shadow-premium overflow-hidden" style={{ scrollbarGutter: "stable" }}>
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none" style={{ scrollbarGutter: "stable" }}>
             <div className="md:hidden divide-y divide-border">
                 {sortedOrders.map((order, index) => {
                     const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;

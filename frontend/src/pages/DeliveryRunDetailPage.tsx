@@ -6,7 +6,6 @@ import { AlertCircle, ArrowDown, ArrowLeft, ArrowUp, CheckCircle, Clock, Package
 import { deliveryRunsApi } from "../api/deliveryRuns";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { useDeliveryRun } from "../hooks/useDeliveryRun";
@@ -325,14 +324,14 @@ export default function DeliveryRunDetailPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Completion Readiness</CardTitle>
-          <CardDescription>
+            <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold tracking-tight">Completion Readiness</h3>
+          <p className="text-sm text-muted-foreground">
             Resolve blockers below before completing this run.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          </p>
+        </div>
+        <div className="mt-4 space-y-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded-lg border border-border/70 p-3">
               <div className="text-xs text-muted-foreground">Blocking orders</div>
@@ -401,17 +400,15 @@ export default function DeliveryRunDetailPage() {
               })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="flex flex-col gap-4">
+          <h3 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
             <Truck className="h-5 w-5" />
             Run Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </h3>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
             <div className="flex items-center gap-3">
               <User className="h-5 w-5 text-muted-foreground" />
@@ -448,7 +445,7 @@ export default function DeliveryRunDetailPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 border-t pt-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 border-t pt-6 md:grid-cols-2">
             <div className="flex items-center gap-3">
               <Clock className="h-5 w-5 text-muted-foreground" />
               <div>
@@ -465,18 +462,18 @@ export default function DeliveryRunDetailPage() {
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Orders in This Run</CardTitle>
-          <CardDescription>
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold tracking-tight">Orders in This Run</h3>
+          <p className="text-sm text-muted-foreground">
             {run.orders.length} order{run.orders.length !== 1 ? "s" : ""} assigned to this delivery run
             {reorderMode ? " - reorder mode enabled" : ""}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div className="mt-4">
           {run.orders.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">No orders assigned to this run</div>
           ) : (
@@ -564,8 +561,8 @@ export default function DeliveryRunDetailPage() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
         <DialogContent>

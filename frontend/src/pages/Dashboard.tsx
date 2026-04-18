@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { io, Socket } from "socket.io-client";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
 import { Order } from "../types/order";
@@ -76,26 +76,20 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
   };
 
   return (
-    <div className="group">
-        <Card className="relative overflow-hidden" data-transition="card-hover">
-        <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            {title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {loading ? (
-            <Skeleton className="h-9 w-16" />
-          ) : (
-            <div className="text-3xl font-bold text-foreground tabular-nums" key={value}>
-              {animatedValue}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none transition-colors hover:bg-card">
+      <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <div className="mt-3">
+        {loading ? (
+          <Skeleton className="h-9 w-16" />
+        ) : (
+          <div className="text-3xl font-semibold tracking-tight text-foreground tabular-nums" key={value}>
+            {animatedValue}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -349,9 +343,9 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        <Card className="xl:col-span-2 h-full">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">Live Status</CardTitle>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none xl:col-span-2 h-full">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-base">Live Status</h2>
             <div className="flex flex-col items-end gap-1 text-right">
               <span
                 className={`text-xs text-muted-foreground${socketStatus === "connected" ? " status-live" : ""}`}
@@ -364,8 +358,8 @@ export default function Dashboard() {
                 <span className="text-[11px] text-muted-foreground">Fallback refresh every 60 seconds</span>
               )}
             </div>
-          </CardHeader>
-          <CardContent>
+                    </div>
+          <div>
             <SectionErrorBoundary
               title="Live delivery widget failed"
               message="Try the live status panel again. The rest of the dashboard is still available."
@@ -374,8 +368,8 @@ export default function Dashboard() {
                 <LiveDeliveryDashboard />
               </Suspense>
             </SectionErrorBoundary>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 h-full">
           <StatCard
@@ -410,12 +404,12 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">Completed Today</CardTitle>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-base">Completed Today</h2>
             <span className="text-xs text-muted-foreground">Last 24h</span>
-          </CardHeader>
-          <CardContent>
+                    </div>
+          <div>
             {completedLoading ? (
               <div className="space-y-3">
                 <Skeleton className="h-4 w-40" />
@@ -444,13 +438,13 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+          <div className="flex flex-row items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Orders Daily Workflow</CardTitle>
+              <h2 className="text-base">Orders Daily Workflow</h2>
               <p className="text-xs text-muted-foreground">Last {workflowTrendDays} days</p>
             </div>
             <div className="flex items-center gap-1 rounded-md border p-1">
@@ -475,8 +469,8 @@ export default function Dashboard() {
                   30d
                 </Button>
             </div>
-          </CardHeader>
-          <CardContent>
+                    </div>
+          <div>
             <SectionErrorBoundary
               title="Workflow chart failed"
               message="Try reloading this chart. The rest of the dashboard data is still available."
@@ -486,17 +480,17 @@ export default function Dashboard() {
                 <WorkflowDailyLineChart data={workflowDailyTrends} loading={trendsLoading} />
               </Suspense>
             </SectionErrorBoundary>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Monthly Fulfilled Totals</CardTitle>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+          <div>
+            <h2 className="text-base">Monthly Fulfilled Totals</h2>
             <p className="text-xs text-muted-foreground">Last 12 months</p>
-          </CardHeader>
-          <CardContent>
+                    </div>
+          <div>
             <SectionErrorBoundary
               title="Monthly totals chart failed"
               message="Try reloading the monthly fulfilled totals chart."
@@ -505,15 +499,15 @@ export default function Dashboard() {
                 <FulfilledTotalsBarChart data={monthlyFulfilledTotals} loading={trendsLoading} />
               </Suspense>
             </SectionErrorBoundary>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Yearly Fulfilled Totals</CardTitle>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+          <div>
+            <h2 className="text-base">Yearly Fulfilled Totals</h2>
             <p className="text-xs text-muted-foreground">Last 5 years</p>
-          </CardHeader>
-          <CardContent>
+                    </div>
+          <div>
             <SectionErrorBoundary
               title="Yearly totals chart failed"
               message="Try reloading the yearly fulfilled totals chart."
@@ -522,8 +516,8 @@ export default function Dashboard() {
                 <FulfilledTotalsBarChart data={yearlyFulfilledTotals} loading={trendsLoading} />
               </Suspense>
             </SectionErrorBoundary>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
 
     </div>
