@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
-import { AlertCircle, ArrowLeft, FileSearch, PackageSearch } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronRight, FileSearch, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 
 import { ordersApi } from "../api/orders";
@@ -278,7 +278,74 @@ export default function OrderDetailPage() {
                 Back
             </Button>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+                <aside className="lg:sticky lg:top-6 h-fit">
+                    <Card className="overflow-hidden border-border/70 bg-card/90 shadow-sm backdrop-blur">
+                        <CardHeader className="border-b border-border/60 bg-muted/20 px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 space-y-1">
+                                    <CardTitle className="text-base font-semibold">Orders</CardTitle>
+                                    <p className="text-xs text-muted-foreground">Keep browsing without losing the selected order.</p>
+                                </div>
+                                <Badge variant="secondary" className="shrink-0">
+                                    {sidebarOrders.length}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {sidebarLoading ? (
+                                <div className="p-4">
+                                    <SkeletonCard header={false} lines={5} />
+                                </div>
+                            ) : sidebarOrders.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+                                    <PackageSearch className="mb-3 h-7 w-7 text-muted-foreground/60" />
+                                    <p className="text-sm font-medium text-foreground">No orders available</p>
+                                </div>
+                            ) : (
+                                <div className="max-h-[calc(100vh-12rem)] divide-y divide-border/60 overflow-auto">
+                                    {sidebarOrders.map((sidebarOrder) => {
+                                        const isSelected = sidebarOrder.id === order.id;
+                                        return (
+                                            <button
+                                                key={sidebarOrder.id}
+                                                type="button"
+                                                onClick={() => handleSelectOrder(sidebarOrder.id)}
+                                                className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none ${
+                                                    isSelected ? "bg-primary/5" : "bg-transparent"
+                                                }`}
+                                            >
+                                                <div
+                                                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+                                                        isSelected ? "bg-primary" : "bg-muted-foreground/30"
+                                                    }`}
+                                                />
+                                                <div className="min-w-0 flex-1 space-y-1">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-semibold text-foreground">{sidebarOrder.inflow_order_id}</p>
+                                                            <p className="truncate text-xs text-muted-foreground">{sidebarOrder.recipient_name || "N/A"}</p>
+                                                        </div>
+                                                        <div className="flex shrink-0 items-center gap-2">
+                                                            <Badge variant="secondary" className="capitalize">
+                                                                {OrderStatusDisplayNames[sidebarOrder.status] ?? sidebarOrder.status}
+                                                            </Badge>
+                                                            <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isSelected ? "translate-x-0.5 text-foreground" : ""}`} />
+                                                        </div>
+                                                    </div>
+                                                    <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                                        {formatDeliveryLocation(sidebarOrder)}
+                                                    </p>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </aside>
+
                 <div className="space-y-4">
                     <OrderDetailComponent
                         order={order}
@@ -303,54 +370,6 @@ export default function OrderDetailPage() {
                         </CardContent>
                     </Card>
                 </div>
-
-                <aside className="lg:sticky lg:top-6 h-fit space-y-4">
-                    <Card>
-                        <CardHeader className="space-y-1">
-                            <CardTitle className="text-lg">Orders</CardTitle>
-                            <p className="text-sm text-muted-foreground">Browse the queue while keeping the selected order open.</p>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            {sidebarLoading ? (
-                                <SkeletonCard header={false} lines={5} />
-                            ) : sidebarOrders.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-10 text-center">
-                                    <PackageSearch className="mb-3 h-7 w-7 text-muted-foreground/60" />
-                                    <p className="text-sm font-medium text-foreground">No orders available</p>
-                                </div>
-                            ) : (
-                                <div className="max-h-[calc(100vh-12rem)] space-y-2 overflow-auto pr-1">
-                                    {sidebarOrders.map((sidebarOrder) => {
-                                        const isSelected = sidebarOrder.id === order.id;
-                                        return (
-                                            <button
-                                                key={sidebarOrder.id}
-                                                type="button"
-                                                onClick={() => handleSelectOrder(sidebarOrder.id)}
-                                                className={`w-full rounded-xl border p-3 text-left transition hover:bg-muted/40 ${
-                                                    isSelected ? "border-accent bg-accent/5" : "border-border bg-card"
-                                                }`}
-                                            >
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="min-w-0 space-y-1">
-                                                        <p className="truncate text-sm font-semibold text-foreground">{sidebarOrder.inflow_order_id}</p>
-                                                        <p className="truncate text-xs text-muted-foreground">{sidebarOrder.recipient_name || "N/A"}</p>
-                                                    </div>
-                                                    <Badge variant="secondary" className="shrink-0 capitalize">
-                                                        {OrderStatusDisplayNames[sidebarOrder.status] ?? sidebarOrder.status}
-                                                    </Badge>
-                                                </div>
-                                                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                                                    {formatDeliveryLocation(sidebarOrder)}
-                                                </p>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </aside>
             </div>
 
             {transitioningStatus && (
