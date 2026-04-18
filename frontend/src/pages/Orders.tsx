@@ -6,7 +6,6 @@ import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
-import { Card, CardContent } from "../components/ui/card";
 import { SkeletonTable } from "../components/Skeleton";
 import { PackageSearch } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
@@ -185,8 +184,8 @@ export default function Orders() {
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
             </div>
 
-            <Card>
-                <div className="p-6 pb-4">
+            <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
+                <div className="p-5 pb-4 sm:p-6 sm:pb-4">
                     <Filters
                         status={statusFilter}
                         onStatusChange={setStatusFilter}
@@ -195,7 +194,7 @@ export default function Orders() {
                         loading={loading}
                     />
                 </div>
-                <CardContent className="min-h-[280px]">
+                <div className="min-h-[280px] px-5 pb-5 sm:px-6 sm:pb-6">
                     {loading && isInitialLoad ? (
                         <div className="transition-opacity duration-150 opacity-100">
                             <SkeletonTable rows={6} columns={5} />
@@ -217,8 +216,8 @@ export default function Orders() {
                             />
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </section>
             {transitioningOrder && (
                 <StatusTransition
                     currentStatus={transitioningOrder.currentStatus}
