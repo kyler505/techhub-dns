@@ -212,7 +212,7 @@ export default function TagRequest() {
             </div>
 
             <div className="grid gap-4 sm:gap-6 xl:grid-cols-[3fr_2fr]">
-                <section className="min-w-0 overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
+                <section className="min-w-0 overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
                     <div className="pb-3">
                         <div className="flex items-start justify-between gap-3">
                             <h2 className="text-base font-semibold tracking-tight">Batch Builder</h2>
@@ -339,7 +339,7 @@ export default function TagRequest() {
                     </div>
                 </section>
 
-                <section className="self-start rounded-2xl border border-border/70 bg-card/80 shadow-none lg:sticky lg:top-6">
+                <section className="self-start rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none lg:sticky lg:top-6">
                     <div className="pb-3">
                         <h2 className="text-base font-semibold tracking-tight">Upload summary</h2>
                     </div>
