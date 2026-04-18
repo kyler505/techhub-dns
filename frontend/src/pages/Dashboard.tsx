@@ -272,29 +272,31 @@ export default function Dashboard() {
       };
     }
 
-    socket.on("connect", () => {
+    const socketInstance = socket;
+
+    socketInstance.on("connect", () => {
       setSocketStatus("connected");
       if (socketReconnectTimeoutRef.current) {
         window.clearTimeout(socketReconnectTimeoutRef.current);
         socketReconnectTimeoutRef.current = null;
       }
-      socket.emit("join", { room: "orders" });
+      socketInstance.emit("join", { room: "orders" });
     });
 
     // Listen for orders_update and active_runs events - refetch all metrics
-    socket.on("orders_update", () => {
+    socketInstance.on("orders_update", () => {
       refreshFromSocket();
     });
 
-    socket.on("active_runs", () => {
+    socketInstance.on("active_runs", () => {
       refreshFromSocket();
     });
 
-    socket.on("disconnect", () => {
+    socketInstance.on("disconnect", () => {
       setSocketStatus("disconnected");
     });
 
-    socket.on("connect_error", () => {
+    socketInstance.on("connect_error", () => {
       setSocketStatus("connecting");
       if (socketReconnectTimeoutRef.current) {
         window.clearTimeout(socketReconnectTimeoutRef.current);

@@ -2,23 +2,23 @@ import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
-import { AlertCircle, ArrowLeft, FileSearch } from "lucide-react";
+import { AlertCircle, ArrowLeft, FileSearch, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "../contexts/AuthContext";
+
 import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
+import { useAuth } from "../contexts/AuthContext";
 import OrderDetailComponent from "../components/OrderDetail";
-import { Skeleton } from "../components/Skeleton";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import StatusTransition from "../components/StatusTransition";
+import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
-import {
-    getOrderAuditQueryOptions,
-    getOrderDetailQueryOptions,
-    invalidateOrderQueries,
-} from "../queries/orders";
-import { OrderStatus } from "../types/order";
+import { getOrderAuditQueryOptions, getOrderDetailQueryOptions, getOrdersListQueryOptions, invalidateOrderQueries } from "../queries/orders";
+import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
+import { formatDeliveryLocation } from "../utils/location";
 import { isValidOrderId } from "../utils/orderIds";
 
 export default function OrderDetailPage() {
@@ -33,7 +33,6 @@ export default function OrderDetailPage() {
     } | null>(null);
     const queryClient = useQueryClient();
 
-    // WebSocket hook for real-time order updates
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
 
@@ -49,10 +48,14 @@ export default function OrderDetailPage() {
         throwOnError: shouldThrowToBoundary,
     });
 
+    const listQuery = useQuery(getOrdersListQueryOptions({ status: null, search: "" }));
+
     const order = orderQuery.data ?? null;
     const auditLogs = auditQuery.data ?? [];
     const notifications = order?.teams_notifications ?? [];
+    const sidebarOrders = listQuery.data ?? [];
     const loading = orderQuery.isPending || auditQuery.isPending;
+    const sidebarLoading = listQuery.isPending && sidebarOrders.length === 0;
 
     const renderState = (title: string, description: string, icon: "error" | "missing") => (
         <div className="mx-auto flex min-h-[50vh] max-w-xl items-center justify-center px-4">
@@ -79,6 +82,8 @@ export default function OrderDetailPage() {
 
         await invalidateOrderQueries(queryClient, orderId);
     };
+
+    const getUserName = () => user?.display_name || user?.email || "Unknown User";
 
     const updateStatusMutation = useMutation({
         mutationFn: ({ newStatus, reason, expectedUpdatedAt }: {
@@ -166,71 +171,6 @@ export default function OrderDetailPage() {
         },
     });
 
-    // Track WebSocket updates and refetch if this order might have changed
-    useEffect(() => {
-        if (websocketOrders.length > 0 && orderId) {
-            const updateTime = Date.now();
-            // Only refetch if this is a new update (not the initial connection)
-            // and the current order is in the updated list
-            if (lastWebSocketUpdate.current > 0) {
-                const orderUpdated = websocketOrders.some(wo => wo.id === orderId);
-                if (orderUpdated) {
-                    void refreshOrder();
-                }
-            }
-            lastWebSocketUpdate.current = updateTime;
-        }
-    }, [orderId, websocketOrders]);
-
-    useEffect(() => {
-        if (invalidOrderId) {
-            return;
-        }
-    }, [invalidOrderId]);
-
-    const handleStatusChange = (newStatus: OrderStatus, reason?: string) => {
-        if (!order) return;
-        const requireReason = newStatus === OrderStatus.ISSUE;
-        if (requireReason && reason === undefined) {
-            setTransitioningStatus({ newStatus, requireReason: true });
-        } else {
-            performStatusChange(newStatus, reason);
-        }
-    };
-
-    const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
-        if (!order) return;
-        try {
-            await updateStatusMutation.mutateAsync({
-                newStatus,
-                reason,
-                expectedUpdatedAt: order.updated_at,
-            });
-        } catch {
-            // Handled by mutation callbacks.
-        }
-    };
-
-    const getUserName = () => user?.display_name || user?.email || "Unknown User";
-
-    const handleTagOrder = async (tagIds: string[]) => {
-        if (!order) return;
-        try {
-            await tagOrderMutation.mutateAsync(tagIds);
-        } catch {
-            // Handled by mutation callbacks.
-        }
-    };
-
-    const handleGeneratePicklist = async () => {
-        if (!order) return;
-        try {
-            await generatePicklistMutation.mutateAsync();
-        } catch {
-            // Handled by mutation callbacks.
-        }
-    };
-
     const handleRequestTags = async () => {
         if (!order) return;
         const inflowOrderId = order.inflow_order_id;
@@ -252,13 +192,69 @@ export default function OrderDetailPage() {
         }
     };
 
+    useEffect(() => {
+        if (websocketOrders.length > 0 && orderId) {
+            const updateTime = Date.now();
+            if (lastWebSocketUpdate.current > 0) {
+                const orderUpdated = websocketOrders.some((wo) => wo.id === orderId);
+                if (orderUpdated) {
+                    void refreshOrder();
+                }
+            }
+            lastWebSocketUpdate.current = updateTime;
+        }
+    }, [orderId, websocketOrders]);
+
+    const handleStatusChange = (newStatus: OrderStatus, reason?: string) => {
+        if (!order) return;
+        const requireReason = newStatus === OrderStatus.ISSUE;
+        if (requireReason && reason === undefined) {
+            setTransitioningStatus({ newStatus, requireReason: true });
+        } else {
+            void performStatusChange(newStatus, reason);
+        }
+    };
+
+    const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
+        if (!order) return;
+        try {
+            await updateStatusMutation.mutateAsync({
+                newStatus,
+                reason,
+                expectedUpdatedAt: order.updated_at,
+            });
+        } catch {
+            // Handled by mutation callbacks.
+        }
+    };
+
+    const handleTagOrder = async (tagIds: string[]) => {
+        if (!order) return;
+        try {
+            await tagOrderMutation.mutateAsync(tagIds);
+        } catch {
+            // Handled by mutation callbacks.
+        }
+    };
+
+    const handleGeneratePicklist = async () => {
+        if (!order) return;
+        try {
+            await generatePicklistMutation.mutateAsync();
+        } catch {
+            // Handled by mutation callbacks.
+        }
+    };
+
+    const handleSelectOrder = (nextOrderId: string) => {
+        navigate(`/orders/${nextOrderId}`);
+    };
 
     if (loading) {
         return (
-            <div className="space-y-4 p-4">
-                <Skeleton className="h-10 w-28" />
-                <Skeleton className="h-10 w-48" />
+            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_22rem] sm:p-6">
                 <Skeleton className="h-72 w-full rounded-lg" />
+                <SkeletonCard className="lg:sticky lg:top-6" lines={6} />
             </div>
         );
     }
@@ -281,24 +277,88 @@ export default function OrderDetailPage() {
                 <ArrowLeft className="h-4 w-4" />
                 Back
             </Button>
-            <OrderDetailComponent
-                order={order}
-                auditLogs={auditLogs}
-                notifications={notifications}
-                onStatusChange={handleStatusChange}
-                onTagOrder={handleTagOrder}
-                onRequestTags={handleRequestTags}
-                onGeneratePicklist={handleGeneratePicklist}
-                generatingPicklist={generatePicklistMutation.isPending}
-            />
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                <div className="space-y-4">
+                    <OrderDetailComponent
+                        order={order}
+                        auditLogs={auditLogs}
+                        notifications={notifications}
+                        onStatusChange={handleStatusChange}
+                        onTagOrder={handleTagOrder}
+                        onRequestTags={handleRequestTags}
+                        onGeneratePicklist={handleGeneratePicklist}
+                        generatingPicklist={generatePicklistMutation.isPending}
+                    />
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Quick links</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex flex-wrap gap-3">
+                            <Button variant="outline" onClick={() => void refreshOrder()}>
+                                Refresh this order
+                            </Button>
+                            <Button variant="outline" onClick={() => navigate("/orders")}>Back to list</Button>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <aside className="lg:sticky lg:top-6 h-fit space-y-4">
+                    <Card>
+                        <CardHeader className="space-y-1">
+                            <CardTitle className="text-lg">Orders</CardTitle>
+                            <p className="text-sm text-muted-foreground">Browse the queue while keeping the selected order open.</p>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {sidebarLoading ? (
+                                <SkeletonCard header={false} lines={5} />
+                            ) : sidebarOrders.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-center">
+                                    <PackageSearch className="mb-3 h-7 w-7 text-muted-foreground/60" />
+                                    <p className="text-sm font-medium text-foreground">No orders available</p>
+                                </div>
+                            ) : (
+                                <div className="max-h-[calc(100vh-12rem)] space-y-2 overflow-auto pr-1">
+                                    {sidebarOrders.map((sidebarOrder) => {
+                                        const isSelected = sidebarOrder.id === order.id;
+                                        return (
+                                            <button
+                                                key={sidebarOrder.id}
+                                                type="button"
+                                                onClick={() => handleSelectOrder(sidebarOrder.id)}
+                                                className={`w-full rounded-xl border p-3 text-left transition hover:bg-muted/40 ${
+                                                    isSelected ? "border-accent bg-accent/5" : "border-border bg-card"
+                                                }`}
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0 space-y-1">
+                                                        <p className="truncate text-sm font-semibold text-foreground">{sidebarOrder.inflow_order_id}</p>
+                                                        <p className="truncate text-xs text-muted-foreground">{sidebarOrder.recipient_name || "N/A"}</p>
+                                                    </div>
+                                                    <Badge variant="secondary" className="shrink-0 capitalize">
+                                                        {OrderStatusDisplayNames[sidebarOrder.status] ?? sidebarOrder.status}
+                                                    </Badge>
+                                                </div>
+                                                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                                                    {formatDeliveryLocation(sidebarOrder)}
+                                                </p>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </aside>
+            </div>
+
             {transitioningStatus && (
                 <StatusTransition
                     currentStatus={order.status}
                     newStatus={transitioningStatus.newStatus}
                     requireReason={transitioningStatus.requireReason}
-                    onConfirm={(reason) =>
-                        performStatusChange(transitioningStatus.newStatus, reason)
-                    }
+                    onConfirm={(reason) => performStatusChange(transitioningStatus.newStatus, reason)}
                     onCancel={() => setTransitioningStatus(null)}
                     submitting={updateStatusMutation.isPending}
                 />
