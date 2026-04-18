@@ -739,52 +739,50 @@ export default function Admin() {
                         title="Runtime diagnostics failed"
                         message="Try reloading the runtime summary panel. The rest of the admin screen is still available."
                     >
-                    <Card>
-                        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <CardTitle className="text-base">System Status</CardTitle>
-                                <CardDescription>High-level health and configuration signals.</CardDescription>
+                                <h2 className="text-base font-semibold tracking-tight">System Status</h2>
+                                <p className="text-sm text-muted-foreground">High-level health and configuration signals.</p>
                             </div>
                             {activeWebhook ? (
                                 <Badge variant="success">Webhook active</Badge>
                             ) : (
                                 <Badge variant="warning">Webhook not registered</Badge>
                             )}
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {systemStatusList.map((feature) => (
-                                    <Card key={feature.name} className="shadow-none">
-                                        <CardHeader className="p-4 pb-3">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <CardTitle className="text-sm">{feature.name}</CardTitle>
-                                                    {feature.details && (
-                                                        <CardDescription className="mt-1">{feature.details}</CardDescription>
-                                                    )}
-                                                </div>
-                                                <Badge variant={getStatusBadgeVariant(feature.status)}>{feature.status}</Badge>
+                        </div>
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                            {systemStatusList.map((feature) => (
+                                <Card key={feature.name} className="shadow-none">
+                                    <CardHeader className="p-4 pb-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <CardTitle className="text-sm">{feature.name}</CardTitle>
+                                                {feature.details && (
+                                                    <CardDescription className="mt-1">{feature.details}</CardDescription>
+                                                )}
                                             </div>
-                                        </CardHeader>
-                                        {feature.error && (
-                                            <CardContent className="p-4 pt-0">
-                                                <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                                                    <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
-                                                    <p className="text-sm text-destructive">{feature.error}</p>
-                                                </div>
-                                            </CardContent>
-                                        )}
-                                    </Card>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                            <Badge variant={getStatusBadgeVariant(feature.status)}>{feature.status}</Badge>
+                                        </div>
+                                    </CardHeader>
+                                    {feature.error && (
+                                        <CardContent className="p-4 pt-0">
+                                            <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">
+                                                <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
+                                                <p className="text-sm text-destructive">{feature.error}</p>
+                                            </div>
+                                        </CardContent>
+                                    )}
+                                </Card>
+                            ))}
+                        </div>
+                    </section>
 
-                    <Card>
-                        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <CardTitle className="text-base">Runtime Summary</CardTitle>
-                                <CardDescription>Live workload, polling, database, and admin throttle state.</CardDescription>
+                                <h2 className="text-base font-semibold tracking-tight">Runtime Summary</h2>
+                                <p className="text-sm text-muted-foreground">Live workload, polling, database, and admin throttle state.</p>
                             </div>
                             <div className="flex items-center gap-2">
                                 {runtimeGeneratedLabel ? (
@@ -801,8 +799,8 @@ export default function Admin() {
                                     Refresh summary
                                 </Button>
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
+                        </div>
+                        <div className="mt-4 space-y-4">
                             {runtimeSummary ? (
                                 <>
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -862,18 +860,18 @@ export default function Admin() {
                                     Runtime diagnostics unavailable.
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </section>
                     </SectionErrorBoundary>
                 </TabsContent>
 
                 <TabsContent value="notifications" className="mt-4 space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Notification Settings</CardTitle>
-                            <CardDescription>Enable or disable services. Core configuration is managed via environment variables.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                    <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                        <div className="space-y-2">
+                            <h2 className="text-base font-semibold tracking-tight">Notification Settings</h2>
+                            <p className="text-sm text-muted-foreground">Enable or disable services. Core configuration is managed via environment variables.</p>
+                        </div>
+                        <div className="mt-4 space-y-3">
                             {([
                                 {
                                     key: "email_notifications_enabled",
@@ -900,7 +898,7 @@ export default function Admin() {
                                                     {settingsLoading ? "Loading" : enabled ? "Enabled" : "Disabled"}
                                                 </Badge>
                                             </div>
-                                            <p className="text-sm text-muted-foreground mt-1">{current.description}</p>
+                                            <p className="mt-1 text-sm text-muted-foreground">{current.description}</p>
                                         </div>
                                         <Button
                                             type="button"
@@ -916,18 +914,18 @@ export default function Admin() {
                                     </div>
                                 );
                             })}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </section>
                 </TabsContent>
 
                 <TabsContent value="operations" className="mt-4 space-y-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Service Testing</CardTitle>
-                                <CardDescription>Trigger test sends and verify connectivity.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-2">
+                        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                            <div className="space-y-2">
+                                <h2 className="text-base font-semibold tracking-tight">Service Testing</h2>
+                                <p className="text-sm text-muted-foreground">Trigger test sends and verify connectivity.</p>
+                            </div>
+                            <div className="mt-4 space-y-4">
                                 <div className="space-y-2">
                                     <label className="text-xs font-medium text-muted-foreground">Recipient email</label>
                                     <Input
@@ -936,7 +934,7 @@ export default function Admin() {
                                         value={testEmailAddress}
                                         onChange={(e) => setTestEmailAddress(e.target.value)}
                                     />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                         <Button
                                             onClick={handleTestEmail}
                                             disabled={testingService !== null}
@@ -960,8 +958,8 @@ export default function Admin() {
 
                                 <div className="rounded-lg border bg-muted/30 p-4">
                                     <p className="text-sm font-medium text-foreground">System Connections</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Smoke-test backend connectivity.</p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                                    <p className="mt-1 text-xs text-muted-foreground">Smoke-test backend connectivity.</p>
+                                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                                         <Button
                                             onClick={handleTestInflow}
                                             disabled={testingService !== null}
@@ -982,14 +980,14 @@ export default function Admin() {
                                         </Button>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </section>
 
-                        <Card>
-                            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                            <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <CardTitle className="text-base">Manual Order Sync</CardTitle>
-                                    <CardDescription>Fetch recent Started orders from Inflow.</CardDescription>
+                                    <h2 className="text-base font-semibold tracking-tight">Manual Order Sync</h2>
+                                    <p className="text-sm text-muted-foreground">Fetch recent Started orders from Inflow.</p>
                                 </div>
                                 <Button
                                     onClick={() => setSyncDialogOpen(true)}
@@ -999,13 +997,11 @@ export default function Admin() {
                                     {manualSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                     Sync now
                                 </Button>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                                    This triggers a backend sync and may take a moment depending on queue size.
-                                </div>
-                                </CardContent>
-                            </Card>
+                            </div>
+                            <div className="mt-4 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                                This triggers a backend sync and may take a moment depending on queue size.
+                            </div>
+                        </section>
 
                             <SectionErrorBoundary
                                 title="Print recovery panel failed"
