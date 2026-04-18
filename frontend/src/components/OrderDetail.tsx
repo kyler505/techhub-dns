@@ -30,7 +30,6 @@ import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChevronDown } from "lucide-react";
 import {
   Dialog,
@@ -334,11 +333,11 @@ export default function OrderDetail({
       </section>
 
       {getInflowLines(order).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Order Items</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+          <div>
+            <h2 className="text-xl">Order Items</h2>
+          </div>
+          <div>
             <div className="rounded-lg border border-border">
               <Table>
                 <TableHeader>
@@ -378,16 +377,16 @@ export default function OrderDetail({
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
 
       {latestNotification && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Teams Notification</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+          <div>
+            <h2 className="text-xl">Teams Notification</h2>
+          </div>
+          <div>
             <div className="space-y-2">
               <p className="text-sm text-foreground">
                 <span className="font-medium">Status:</span>{" "}
@@ -418,15 +417,15 @@ export default function OrderDetail({
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Status Path</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+        <div>
+          <h2 className="text-xl">Status Path</h2>
+        </div>
+        <div className="space-y-3">
           {auditLogs.length > 0 ? (
             <>
               <StatusPathViz auditLogs={auditLogs} title="Workflow path" />
@@ -453,25 +452,25 @@ export default function OrderDetail({
               No workflow audit history available.
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {order.inflow_data && (
-        <Card>
+        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
           <details className="group">
             <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
-              <CardHeader className="relative pr-10">
-                <CardTitle className="text-xl">Inflow Data</CardTitle>
+              <div className="relative pr-10">
+                <h2 className="text-xl">Inflow Data</h2>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-transform group-open:rotate-180" />
-              </CardHeader>
+              </div>
             </summary>
-            <CardContent>
+            <div>
               <pre className="rounded-md bg-muted/50 p-4 overflow-auto text-sm">
                 {JSON.stringify(order.inflow_data, null, 2)}
               </pre>
-            </CardContent>
+            </div>
           </details>
-        </Card>
+        </section>
       )}
 
       <Dialog

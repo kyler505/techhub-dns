@@ -7,7 +7,7 @@ import { ordersApi } from "../api/orders";
 import { OrderDetail } from "../types/order";
 import { signatureCache, type LastSignature } from "../lib/signatureCache";
 import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
+
 import { PenTool, X } from "lucide-react";
 
 const SignatureModal = lazy(() => import("../components/SignatureModal").then((module) => ({ default: module.SignatureModal })));
@@ -941,7 +941,7 @@ function DocumentSigningPage() {
                     </div>
                 </header>
 
-                <Card className="overflow-hidden">
+                <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
                     <div className="flex flex-col gap-2 border-b border-border bg-gradient-to-r from-muted/40 to-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">Picklist</span>
@@ -1011,7 +1011,7 @@ function DocumentSigningPage() {
                             {error}
                         </div>
                     )}
-                </Card>
+                </section>
             </div>
         </div>
     );
