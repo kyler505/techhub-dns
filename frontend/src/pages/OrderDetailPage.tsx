@@ -13,8 +13,8 @@ import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import StatusTransition from "../components/StatusTransition";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
+
 import { getOrderAuditQueryOptions, getOrderDetailQueryOptions, getOrdersListQueryOptions, invalidateOrderQueries } from "../queries/orders";
 import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
@@ -280,19 +280,19 @@ export default function OrderDetailPage() {
 
             <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
                 <aside className="lg:sticky lg:top-6 h-fit">
-                    <Card className="overflow-hidden border-border/70 bg-card/90 shadow-sm backdrop-blur">
-                        <CardHeader className="border-b border-border/60 bg-muted/20 px-4 py-3">
+                    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
+                        <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
-                                    <CardTitle className="text-base font-semibold">Orders</CardTitle>
+                                    <h2 className="text-base font-semibold tracking-tight">Orders</h2>
                                     <p className="text-xs text-muted-foreground">Keep browsing without losing the selected order.</p>
                                 </div>
                                 <Badge variant="secondary" className="shrink-0">
                                     {sidebarOrders.length}
                                 </Badge>
                             </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
+                        </div>
+                        <div className="p-0">
                             {sidebarLoading ? (
                                 <div className="p-4">
                                     <SkeletonCard header={false} lines={5} />
@@ -342,8 +342,8 @@ export default function OrderDetailPage() {
                                     })}
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </section>
                 </aside>
 
                 <div className="space-y-4">
@@ -358,17 +358,14 @@ export default function OrderDetailPage() {
                         generatingPicklist={generatePicklistMutation.isPending}
                     />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-lg">Quick links</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex flex-wrap gap-3">
+                    <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                        <div className="flex flex-wrap gap-3">
                             <Button variant="outline" onClick={() => void refreshOrder()}>
                                 Refresh this order
                             </Button>
                             <Button variant="outline" onClick={() => navigate("/orders")}>Back to list</Button>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </section>
                 </div>
             </div>
 

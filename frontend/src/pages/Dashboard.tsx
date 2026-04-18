@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { io, Socket } from "socket.io-client";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/Skeleton";
 import { Order } from "../types/order";
@@ -76,26 +75,20 @@ function StatCard({ title, value, icon: Icon, loading, accent = "slate" }: StatC
   };
 
   return (
-    <div className="group">
-        <Card className="relative overflow-hidden" data-transition="card-hover">
-        <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            {title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {loading ? (
-            <Skeleton className="h-9 w-16" />
-          ) : (
-            <div className="text-3xl font-bold text-foreground tabular-nums" key={value}>
-              {animatedValue}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none transition-colors hover:bg-card">
+      <div className={`absolute bottom-0 right-0 rounded-tl-2xl p-3 ${accentClasses[accent]}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <div className="mt-3">
+        {loading ? (
+          <Skeleton className="h-9 w-16" />
+        ) : (
+          <div className="text-3xl font-semibold tracking-tight text-foreground tabular-nums" key={value}>
+            {animatedValue}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

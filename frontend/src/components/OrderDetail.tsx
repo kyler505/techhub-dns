@@ -154,11 +154,9 @@ export default function OrderDetail({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Order {order.inflow_order_id}</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="flex flex-col gap-5">
+          <h2 className="text-lg font-semibold tracking-tight">Order {order.inflow_order_id}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
@@ -213,7 +211,7 @@ export default function OrderDetail({
             )}
           </div>
           {order.status === OrderStatus.IN_DELIVERY && (
-            <div className="mt-6">
+            <div>
               <Button asChild variant="destructive">
                 <Link to={`/document-signing?orderId=${order.id}`}>
                   Open Document Signing
@@ -221,14 +219,12 @@ export default function OrderDetail({
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Preparation Checklist</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold tracking-tight">Preparation Checklist</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -332,13 +328,10 @@ export default function OrderDetail({
                   </p>
                 )}
               </div>
-              <Badge variant={order.qa_completed_at ? "success" : "secondary"}>
-                {order.qa_completed_at ? "QA Completed" : "QA Pending"}
-              </Badge>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {getInflowLines(order).length > 0 && (
         <Card>
