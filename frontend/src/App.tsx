@@ -92,7 +92,7 @@ function AppContent() {
 
 					<SyncHealthBanner />
 
-					<div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
+					<div className="w-full">
                         <RouteContentErrorBoundary>
                             <Suspense fallback={
                                 <div className="space-y-4">

@@ -259,7 +259,7 @@ export default function DeliveryRunDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-4 sm:p-6 space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="outline" size="sm" onClick={() => navigate(backTo)}>

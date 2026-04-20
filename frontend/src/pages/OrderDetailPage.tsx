@@ -272,16 +272,17 @@ export default function OrderDetailPage() {
     }
 
     return (
-        <>
-            <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-4" onClick={() => navigate(-1)} disabled={loading}>
-                <ArrowLeft className="h-4 w-4" />
-                Back
-            </Button>
+        <div>
+            <div className="px-4 sm:px-6 lg:px-8">
+                <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={() => navigate(-1)} disabled={loading}>
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </Button>
+            </div>
 
-            <div className="lg:flex">
-                <aside className="lg:shrink-0 lg:w-64">
-                    <div className="lg:sticky lg:top-6 lg:-ml-8 lg:w-64">
-                        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:border-y-0 lg:border-l-0 lg:rounded-r-2xl">
+            <div className="lg:flex lg:items-start">
+                <aside className="lg:sticky lg:top-0 lg:shrink-0 lg:w-64 lg:self-start">
+                    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:min-h-[calc(100vh-3.5rem)] lg:border-r-0 lg:rounded-r-none">
                         <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
@@ -345,10 +346,9 @@ export default function OrderDetailPage() {
                             )}
                         </div>
                     </section>
-                    </div>
                 </aside>
 
-                <div className="space-y-4 lg:pl-4 lg:min-w-0 lg:flex-1">
+                <div className="space-y-4 lg:flex-1 lg:min-w-0 px-4 sm:px-6 lg:px-8">
                     <OrderDetailComponent
                         order={order}
                         auditLogs={auditLogs}
@@ -381,6 +381,6 @@ export default function OrderDetailPage() {
                     submitting={updateStatusMutation.isPending}
                 />
             )}
-        </>
+        </div>
     );
 }

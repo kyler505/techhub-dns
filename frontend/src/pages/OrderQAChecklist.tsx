@@ -88,7 +88,7 @@ export default function OrderQAChecklist() {
     const displayOrders = useMemo(() => safeArray<Order>(orders), [orders]);
 
     return (
-        <div className="p-4">
+        <div className="container mx-auto p-4 sm:p-6">
             <header className="mb-4">
                 <h1 className="text-2xl font-bold text-gray-900">QA Checklist Dashboard</h1>
                 <p className="text-sm text-muted-foreground">Monitor orders awaiting QA review.</p>
