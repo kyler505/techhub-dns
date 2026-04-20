@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
 import Filters, { StatusFilter } from "../components/Filters";
@@ -38,6 +38,7 @@ export default function Orders() {
         requireReason: boolean;
     } | null>(null);
     const navigate = useNavigate();
+    const location = useLocation();
     const queryClient = useQueryClient();
 
     // WebSocket hook for real-time order updates
@@ -171,7 +172,7 @@ export default function Orders() {
             toast.error("Order details are unavailable for this row");
             return;
         }
-        navigate(`/orders/${orderId}`);
+        navigate(`/orders/${orderId}`, { state: { fromList: true, fromPath: location.pathname } });
     };
 
     if (ordersQuery.isError && orders.length === 0) {

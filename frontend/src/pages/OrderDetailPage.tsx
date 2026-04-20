@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { isAxiosError } from "axios";
+import { motion } from "framer-motion";
 import { AlertCircle, ArrowLeft, ChevronRight, FileSearch, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +27,8 @@ export default function OrderDetailPage() {
     const orderId = isValidOrderId(rawOrderId) ? rawOrderId : null;
     const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
+    const location = useLocation();
+    const fromList = Boolean((location.state as Record<string, unknown>)?.fromList);
     const { user } = useAuth();
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
@@ -247,7 +250,7 @@ export default function OrderDetailPage() {
     };
 
     const handleSelectOrder = (nextOrderId: string) => {
-        navigate(`/orders/${nextOrderId}`);
+        navigate(`/orders/${nextOrderId}`, { state: { fromList: true } });
     };
 
     if (loading) {
@@ -281,7 +284,12 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="lg:flex lg:items-start">
-                <aside className="lg:sticky lg:top-0 lg:shrink-0 lg:w-64 lg:self-start">
+                <motion.aside
+                    className="lg:sticky lg:top-0 lg:shrink-0 lg:w-64 lg:self-start"
+                    initial={fromList ? { opacity: 0, x: -20 } : false}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                >
                     <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:min-h-[calc(100vh-3.5rem)] lg:border-r-0 lg:rounded-r-none">
                         <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
@@ -346,9 +354,14 @@ export default function OrderDetailPage() {
                             )}
                         </div>
                     </section>
-                </aside>
+                    </motion.aside>
 
-                <div className="space-y-4 lg:flex-1 lg:min-w-0 px-4 sm:px-6 lg:px-8">
+                <motion.div
+                    className="space-y-4 lg:flex-1 lg:min-w-0 px-4 sm:px-6 lg:px-8"
+                    initial={fromList ? { opacity: 0, x: 20 } : false}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, ease: "easeOut", delay: fromList ? 0.12 : 0 }}
+                >
                     <OrderDetailComponent
                         order={order}
                         auditLogs={auditLogs}
@@ -368,7 +381,7 @@ export default function OrderDetailPage() {
                             <Button variant="outline" onClick={() => navigate("/orders")}>Back to list</Button>
                         </div>
                     </section>
-                </div>
+                </motion.div>
             </div>
 
             {transitioningStatus && (
