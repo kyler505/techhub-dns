@@ -36,6 +36,14 @@ function AppContent() {
     const { isAuthenticated, isLoading } = useAuth();
     const location = useLocation();
 
+    /** Stable key for AnimatePresence — suppresses transition when clicking between orders. */
+    const pageKey = (() => {
+        const p = location.pathname;
+        if (p === "/orders") return "/orders";
+        if (/^\/orders\/[^/]+$/.test(p)) return "/orders/:orderId";
+        return p;
+    })();
+
     useEffect(() => {
         if (typeof window === "undefined") return;
         const idleCallback = window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(cb, 250));
@@ -102,7 +110,7 @@ function AppContent() {
                             }>
                                 <AnimatePresence mode="wait">
                                     <motion.div
-                                        key={location.pathname}
+                                        key={pageKey}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -8 }}
