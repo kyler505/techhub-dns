@@ -272,7 +272,7 @@ export default function OrderDetailPage() {
     }
 
     return (
-        <div className="container mx-auto p-4 sm:p-6">
+        <>
             <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-4" onClick={() => navigate(-1)} disabled={loading}>
                 <ArrowLeft className="h-4 w-4" />
                 Back
@@ -379,6 +379,6 @@ export default function OrderDetailPage() {
                     submitting={updateStatusMutation.isPending}
                 />
             )}
-        </div>
+        </>
     );
 }
