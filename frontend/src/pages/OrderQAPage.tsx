@@ -260,7 +260,7 @@ export default function OrderQAPage() {
                                     return (
                                         <label
                                             key={step.id}
-                                            className={`flex gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
+                                            className={`flex gap-3 rounded-2xl border px-4 py-3 text-sm transition-colors ${
                                                 checked
                                                     ? "border-green-200 bg-green-50 text-green-900"
                                                     : "border-border bg-card hover:border-accent"
@@ -298,7 +298,7 @@ export default function OrderQAPage() {
                                 {(["Delivery", "Shipping"] as QAMethod[]).map((method) => (
                                     <label
                                         key={method}
-                                        className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition ${
+                                        className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
                                             form.method === method
                                                 ? "border-accent bg-accent text-white"
                                                 : "border-border bg-card text-foreground hover:border-accent"
@@ -336,7 +336,7 @@ export default function OrderQAPage() {
                                 type="button"
                                 onClick={submitQA}
                                 disabled={submitQaMutation.isPending || !isFormComplete(form)}
-                                className={`rounded-2xl px-5 py-2 text-sm font-semibold text-white transition ${
+                                className={`rounded-2xl px-5 py-2 text-sm font-semibold text-white transition-colors ${
                                     submitQaMutation.isPending || !isFormComplete(form)
                                         ? "bg-muted text-muted-foreground/70 cursor-not-allowed"
                                         : "bg-accent hover:bg-maroon-800"

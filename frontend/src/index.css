@@ -177,18 +177,6 @@
     scrollbar-width: none;
   }
 
-  .animate-in {
-    animation: fade-in 0.3s ease-out;
-  }
-
-  .animate-slide-in {
-    animation: slide-in-right 0.3s ease-out;
-  }
-
-  .animate-scale-in {
-    animation: scale-in 0.2s ease-out;
-  }
-
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
