@@ -114,10 +114,10 @@ function AppContent() {
                                 <AnimatePresence mode="wait">
                                     <motion.div
                                         key={pageKey}
-                                        initial={isOrderDetailTransition ? false : { opacity: 0, y: 10 }}
-                                        animate={isOrderDetailTransition ? undefined : { opacity: 1, y: 0 }}
-                                        exit={isOrderDetailTransition ? undefined : { opacity: 0, y: -8 }}
-                                        transition={isOrderDetailTransition ? { duration: 0 } : { duration: 0.2 }}
+                                        initial={isOrderDetailTransition ? false : { opacity: 0, scale: 0.985 }}
+                                        animate={isOrderDetailTransition ? undefined : { opacity: 1, scale: 1 }}
+                                        exit={isOrderDetailTransition ? undefined : { opacity: 0, scale: 0.99 }}
+                                        transition={isOrderDetailTransition ? { duration: 0 } : { duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
                                     >
                                         <Routes location={location}>
                                             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
