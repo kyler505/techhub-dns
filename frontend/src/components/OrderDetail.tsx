@@ -333,11 +333,8 @@ export default function OrderDetail({
       </section>
 
       {getInflowLines(order).length > 0 && (
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
-          <div>
-            <h2 className="text-xl">Order Items</h2>
-          </div>
-          <div>
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+          <h3 className="text-xl font-semibold tracking-tight">Order Items</h3>
             <div className="rounded-lg border border-border">
               <Table>
                 <TableHeader>
@@ -377,17 +374,13 @@ export default function OrderDetail({
                 </TableBody>
               </Table>
             </div>
-          </div>
         </section>
       )}
 
       {latestNotification && (
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
-          <div>
-            <h2 className="text-xl">Teams Notification</h2>
-          </div>
-          <div>
-            <div className="space-y-2">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+          <h3 className="text-xl font-semibold tracking-tight">Teams Notification</h3>
+          <div className="mt-4 space-y-2">
               <p className="text-sm text-foreground">
                 <span className="font-medium">Status:</span>{" "}
                 <Badge
@@ -417,15 +410,11 @@ export default function OrderDetail({
                 </div>
               )}
             </div>
-          </div>
         </section>
       )}
 
-      <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
-        <div>
-          <h2 className="text-xl">Status Path</h2>
-        </div>
-        <div className="space-y-3">
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <h3 className="text-xl font-semibold tracking-tight">Status Path</h3>
           {auditLogs.length > 0 ? (
             <>
               <StatusPathViz auditLogs={auditLogs} title="Workflow path" />
@@ -452,23 +441,20 @@ export default function OrderDetail({
               No workflow audit history available.
             </div>
           )}
-        </div>
       </section>
 
       {order.inflow_data && (
-        <section className="rounded-2xl border border-border/70 bg-card/80 shadow-none">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
           <details className="group">
             <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
               <div className="relative pr-10">
-                <h2 className="text-xl">Inflow Data</h2>
+                <h3 className="text-xl font-semibold tracking-tight">Inflow Data</h3>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-transform group-open:rotate-180" />
               </div>
             </summary>
-            <div>
-              <pre className="rounded-md bg-muted/50 p-4 overflow-auto text-sm">
+            <pre className="mt-4 rounded-md bg-muted/50 p-4 overflow-auto text-sm">
                 {JSON.stringify(order.inflow_data, null, 2)}
               </pre>
-            </div>
           </details>
         </section>
       )}
