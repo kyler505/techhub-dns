@@ -21,7 +21,7 @@ class EmailService:
 
     def __init__(self):
         self.from_name = settings.email_from_name
-        self.from_address = settings.smtp_from_address
+        self.from_address = settings.smtp_from_address or "techhub@tamu.edu"
 
     @property
     def is_enabled(self) -> bool:
@@ -34,8 +34,12 @@ class EmailService:
         return SystemSettingService.is_setting_enabled(SETTING_EMAIL_ENABLED)
 
     def is_configured(self) -> bool:
-        """Check if email is properly configured (Graph API must be configured)."""
-        return bool(graph_service.is_configured() and self.from_address)
+        """Check if email is properly configured (Graph API must be configured).
+
+        Note: graph_service.send_email() already falls back to techhub@tamu.edu
+        when smtp_from_address is not set, so we don't gate on from_address here.
+        """
+        return bool(graph_service.is_configured())
 
     def send_email(
         self,

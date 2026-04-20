@@ -43,7 +43,6 @@ class TeamsRecipientService:
         recipient_name: str,
         order_number: str,
         delivery_runner: str,
-        estimated_time: str = "Shortly",
         order_items: List[str] = None,
         force: bool = False,
     ) -> bool:
@@ -56,7 +55,6 @@ class TeamsRecipientService:
             recipient_name: Name of the recipient
             order_number: Order number (e.g., TH1234)
             delivery_runner: Name of the person delivering
-            estimated_time: Estimated delivery time
             order_items: List of items in the order
             force: If True, send even if disabled in settings
         """
@@ -74,7 +72,7 @@ class TeamsRecipientService:
 
         # Construct payload matching the Power Automate "Parse JSON" schema
         # Schema fields: id, type, recipientEmail, recipientName, orderNumber,
-        # deliveryRunner, estimatedTime, createdAt
+        # deliveryRunner, createdAt
         payload = {
             "id": f"notif_{order_number}_{int(datetime.now().timestamp())}",
             "type": "delivery_notification",
@@ -82,7 +80,6 @@ class TeamsRecipientService:
             "recipientName": recipient_name,
             "orderNumber": order_number,
             "deliveryRunner": delivery_runner,
-            "estimatedTime": estimated_time,
             "createdAt": to_utc_iso_z(datetime.utcnow()),
         }
 
@@ -146,7 +143,6 @@ class TeamsRecipientService:
                         recipient_name=order.recipient_name,
                         order_number=order.inflow_order_id,
                         delivery_runner=order.assigned_deliverer or "TechHub Staff",
-                        estimated_time="Shortly",
                         order_items=item_names,
                         force=force,
                     )
