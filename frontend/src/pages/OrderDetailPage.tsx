@@ -278,9 +278,10 @@ export default function OrderDetailPage() {
                 Back
             </Button>
 
-            <div className="relative lg:flex lg:gap-4">
-                <aside className="lg:sticky lg:top-6 lg:shrink-0 lg:w-64 lg:-ml-8 lg:pl-0">
-                    <section className="overflow-hidden border-y-0 border-l-0 lg:rounded-r-2xl border border-border/70 bg-card/80 shadow-none">
+            <div className="lg:flex">
+                <aside className="lg:shrink-0 lg:w-64">
+                    <div className="lg:sticky lg:top-6 lg:-ml-8 lg:w-64">
+                        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:border-y-0 lg:border-l-0 lg:rounded-r-2xl">
                         <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
@@ -344,9 +345,10 @@ export default function OrderDetailPage() {
                             )}
                         </div>
                     </section>
+                    </div>
                 </aside>
 
-                <div className="space-y-4">
+                <div className="space-y-4 lg:pl-4 lg:min-w-0 lg:flex-1">
                     <OrderDetailComponent
                         order={order}
                         auditLogs={auditLogs}
