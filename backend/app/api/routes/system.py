@@ -1433,7 +1433,6 @@ def test_teams_recipient():
             recipient_name=recipient_name,
             order_number="TEST-123",
             delivery_runner="System Administrator",
-            estimated_time="Currently (Test)",
             order_items=["Test Item 1", "Test Item 2"],
             force=True,  # Force send even if disabled in settings
         )
