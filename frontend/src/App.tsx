@@ -44,6 +44,9 @@ function AppContent() {
         return p;
     })();
 
+    /** Disable outer page fade for order detail transitions — inner animations own the motion. */
+    const isOrderDetailTransition = location.pathname !== "/orders" && /^\/orders\/[^/]+$/.test(location.pathname);
+
     useEffect(() => {
         if (typeof window === "undefined") return;
         const idleCallback = window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(cb, 250));
@@ -111,10 +114,10 @@ function AppContent() {
                                 <AnimatePresence mode="wait">
                                     <motion.div
                                         key={pageKey}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -8 }}
-                                        transition={{ duration: 0.2 }}
+                                        initial={isOrderDetailTransition ? false : { opacity: 0, y: 10 }}
+                                        animate={isOrderDetailTransition ? undefined : { opacity: 1, y: 0 }}
+                                        exit={isOrderDetailTransition ? undefined : { opacity: 0, y: -8 }}
+                                        transition={isOrderDetailTransition ? { duration: 0 } : { duration: 0.2 }}
                                     >
                                         <Routes location={location}>
                                             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

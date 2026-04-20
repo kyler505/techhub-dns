@@ -286,9 +286,9 @@ export default function OrderDetailPage() {
             <div className="lg:flex lg:items-start">
                 <motion.aside
                     className="lg:sticky lg:top-0 lg:shrink-0 lg:w-64 lg:self-start"
-                    initial={fromList ? { opacity: 0, x: -20 } : false}
+                    initial={fromList ? { opacity: 0, x: -30 } : false}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    transition={fromList ? { type: "spring", stiffness: 260, damping: 25 } : { duration: 0 }}
                 >
                     <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:min-h-[calc(100vh-3.5rem)] lg:border-r-0 lg:rounded-r-none">
                         <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
@@ -358,9 +358,9 @@ export default function OrderDetailPage() {
 
                 <motion.div
                     className="space-y-4 lg:flex-1 lg:min-w-0 px-4 sm:px-6 lg:px-8"
-                    initial={fromList ? { opacity: 0, x: 20 } : false}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, ease: "easeOut", delay: fromList ? 0.12 : 0 }}
+                    initial={fromList ? { opacity: 0, scale: 0.97 } : false}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={fromList ? { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 } : { duration: 0 }}
                 >
                     <OrderDetailComponent
                         order={order}
