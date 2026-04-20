@@ -278,9 +278,9 @@ export default function OrderDetailPage() {
                 Back
             </Button>
 
-            <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
-                <aside className="lg:sticky lg:top-6 h-fit">
-                    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
+            <div className="relative lg:flex lg:gap-4">
+                <aside className="lg:sticky lg:top-6 lg:shrink-0 lg:w-64 lg:-ml-8 lg:pl-0">
+                    <section className="overflow-hidden border-y-0 border-l-0 lg:rounded-r-2xl border border-border/70 bg-card/80 shadow-none">
                         <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
