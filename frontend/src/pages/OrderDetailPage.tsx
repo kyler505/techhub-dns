@@ -3,23 +3,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { isAxiosError } from "axios";
 import { motion } from "framer-motion";
-import { AlertCircle, ArrowLeft, ChevronRight, FileSearch, PackageSearch } from "lucide-react";
+import { AlertCircle, ArrowLeft, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 
 import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
+import OrdersRail from "../components/OrdersRail";
 import { useAuth } from "../contexts/AuthContext";
 import OrderDetailComponent from "../components/OrderDetail";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import StatusTransition from "../components/StatusTransition";
-import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 
 import { getOrderAuditQueryOptions, getOrderDetailQueryOptions, getOrdersListQueryOptions, invalidateOrderQueries } from "../queries/orders";
-import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
+import { OrderStatus } from "../types/order";
 import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
-import { formatDeliveryLocation } from "../utils/location";
 import { isValidOrderId } from "../utils/orderIds";
 
 export default function OrderDetailPage() {
@@ -32,6 +31,14 @@ export default function OrderDetailPage() {
     const fromList = Boolean(locationState?.fromList);
     const rawOriginPath = typeof locationState?.fromPath === "string" ? locationState.fromPath : "/orders";
     const originPath = /^\/orders\/[^/]+$/.test(rawOriginPath) ? "/orders" : rawOriginPath;
+    const sidebarStatus = Array.isArray(locationState?.sidebarStatus)
+        ? (locationState?.sidebarStatus as OrderStatus[])
+        : typeof locationState?.sidebarStatus === "string"
+            ? (locationState.sidebarStatus as OrderStatus)
+            : locationState?.sidebarStatus === null
+                ? null
+                : null;
+    const sidebarSearch = typeof locationState?.sidebarSearch === "string" ? locationState.sidebarSearch : "";
     const { user } = useAuth();
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
@@ -54,7 +61,7 @@ export default function OrderDetailPage() {
         throwOnError: shouldThrowToBoundary,
     });
 
-    const listQuery = useQuery(getOrdersListQueryOptions({ status: null, search: "" }));
+    const listQuery = useQuery(getOrdersListQueryOptions({ status: sidebarStatus, search: sidebarSearch }));
 
     const order = orderQuery.data ?? null;
     const auditLogs = auditQuery.data ?? [];
@@ -255,7 +262,12 @@ export default function OrderDetailPage() {
     const handleSelectOrder = (nextOrderId: string) => {
         navigate(`/orders/${nextOrderId}`, {
             replace: true,
-            state: { fromList: true, fromPath: originPath },
+            state: {
+                fromList: true,
+                fromPath: originPath,
+                sidebarStatus,
+                sidebarSearch,
+            },
         });
     };
 
@@ -284,77 +296,16 @@ export default function OrderDetailPage() {
                 </Button>
             </div>
 
-            <motion.aside
-                className="lg:h-full lg:shrink-0 lg:w-64"
-                initial={fromList ? { opacity: 0, x: -30 } : false}
-                animate={{ opacity: 1, x: 0 }}
-                transition={fromList ? { type: "spring", stiffness: 260, damping: 25 } : { duration: 0 }}
-            >
-                <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:flex lg:h-full lg:flex-col lg:border-r-0 lg:rounded-r-none">
-                    <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 space-y-1">
-                                <h2 className="text-base font-semibold tracking-tight">Orders</h2>
-                                <p className="text-xs text-muted-foreground">Keep browsing without losing the selected order.</p>
-                            </div>
-                            <Badge variant="secondary" className="shrink-0">
-                                {sidebarOrders.length}
-                            </Badge>
-                        </div>
-                    </div>
-                    <div className="p-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-                        {sidebarLoading ? (
-                            <div className="p-4">
-                                <SkeletonCard header={false} lines={5} />
-                            </div>
-                        ) : sidebarOrders.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-                                <PackageSearch className="mb-3 h-7 w-7 text-muted-foreground/60" />
-                                <p className="text-sm font-medium text-foreground">No orders available</p>
-                            </div>
-                        ) : (
-                            <div className="max-h-[calc(100vh-12rem)] divide-y divide-border/60 overflow-auto lg:min-h-0 lg:flex-1 lg:max-h-none">
-                                {sidebarOrders.map((sidebarOrder) => {
-                                    const isSelected = sidebarOrder.id === orderId;
-                                    return (
-                                        <button
-                                            key={sidebarOrder.id}
-                                            type="button"
-                                            onClick={() => handleSelectOrder(sidebarOrder.id)}
-                                            className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none ${
-                                                isSelected ? "bg-primary/5" : "bg-transparent"
-                                            }`}
-                                        >
-                                            <div
-                                                className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
-                                                    isSelected ? "bg-primary" : "bg-muted-foreground/30"
-                                                }`}
-                                            />
-                                            <div className="min-w-0 flex-1 space-y-1">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-sm font-semibold text-foreground">{sidebarOrder.inflow_order_id}</p>
-                                                        <p className="truncate text-xs text-muted-foreground">{sidebarOrder.recipient_name || "N/A"}</p>
-                                                    </div>
-                                                    <div className="flex shrink-0 items-center gap-2">
-                                                        <Badge variant="secondary" className="capitalize">
-                                                            {OrderStatusDisplayNames[sidebarOrder.status] ?? sidebarOrder.status}
-                                                        </Badge>
-                                                        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isSelected ? "translate-x-0.5 text-foreground" : ""}`} />
-                                                    </div>
-                                                </div>
-                                                <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                                    {formatDeliveryLocation(sidebarOrder)}
-                                                </p>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                </section>
-            </motion.aside>
+            <div className="lg:h-full lg:shrink-0 lg:w-64">
+                <OrdersRail
+                    orders={sidebarOrders}
+                    selectedOrderId={orderId}
+                    onSelectOrder={handleSelectOrder}
+                    loading={sidebarLoading}
+                    count={sidebarOrders.length}
+                    variant="sidebar"
+                />
+            </div>
 
             <div className="lg:flex lg:h-full lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-hidden px-4 sm:px-6 lg:px-8">
                 <section className="hidden lg:flex lg:shrink-0 lg:items-center lg:justify-between lg:gap-3 lg:border-b lg:border-border/60 lg:bg-background lg:py-3">
@@ -371,9 +322,9 @@ export default function OrderDetailPage() {
 
                 <motion.div
                     className="space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pt-4 lg:pb-6"
-                    initial={fromList ? { opacity: 0, scale: 0.97 } : false}
+                    initial={fromList ? { opacity: 0, scale: 0.985 } : false}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={fromList ? { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 } : { duration: 0 }}
+                    transition={fromList ? { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.04 } : { duration: 0 }}
                 >
                     {detailLoading ? (
                         <>

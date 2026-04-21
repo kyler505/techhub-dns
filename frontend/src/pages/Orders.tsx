@@ -4,6 +4,7 @@ import { isAxiosError } from "axios";
 import { useNavigate, useLocation } from "react-router-dom";
 import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
+import OrdersRail from "../components/OrdersRail";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 import { SkeletonTable } from "../components/Skeleton";
@@ -37,6 +38,7 @@ export default function Orders() {
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
+    const [selectedOrderIdForTransition, setSelectedOrderIdForTransition] = useState<string | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -172,7 +174,18 @@ export default function Orders() {
             toast.error("Order details are unavailable for this row");
             return;
         }
-        navigate(`/orders/${orderId}`, { state: { fromList: true, fromPath: location.pathname } });
+
+        setSelectedOrderIdForTransition(orderId);
+        window.requestAnimationFrame(() => {
+            navigate(`/orders/${orderId}`, {
+                state: {
+                    fromList: true,
+                    fromPath: location.pathname,
+                    sidebarStatus: statusFilter,
+                    sidebarSearch: debouncedSearch,
+                },
+            });
+        });
     };
 
     if (ordersQuery.isError && orders.length === 0) {
@@ -208,13 +221,25 @@ export default function Orders() {
                         </div>
                     ) : (
                         <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
-                            <OrderTable
-                                orders={orders}
-                                onStatusChange={handleStatusChange}
-                                onViewDetail={handleViewDetail}
-                                showEmptyState={false}
-                                loading={loading}
-                            />
+                            <div className="hidden lg:block">
+                                <OrdersRail
+                                    orders={orders}
+                                    selectedOrderId={selectedOrderIdForTransition}
+                                    onSelectOrder={handleViewDetail}
+                                    loading={loading && orders.length === 0}
+                                    count={orders.length}
+                                    variant="full"
+                                />
+                            </div>
+                            <div className="lg:hidden">
+                                <OrderTable
+                                    orders={orders}
+                                    onStatusChange={handleStatusChange}
+                                    onViewDetail={handleViewDetail}
+                                    showEmptyState={false}
+                                    loading={loading}
+                                />
+                            </div>
                         </div>
                     )}
                 </div>
