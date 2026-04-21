@@ -287,10 +287,9 @@ export default function OrderDetailPage() {
 
     return (
         <div className="-mx-4 sm:-mx-6 lg:-mx-8">
-            <div className="lg:flex lg:items-stretch lg:min-h-[calc(100vh-7.5rem)]">
-                <aside className="hidden lg:block lg:w-80 lg:shrink-0 lg:border-r lg:border-border/60">
-                    <div className="sticky top-12 max-h-[calc(100vh-3rem)] overflow-y-auto">
-                        <OrdersRail
+            <div className="lg:flex lg:items-stretch h-[calc(100vh-6rem)] lg:overflow-hidden">
+                <aside className="hidden lg:block lg:w-80 lg:shrink-0 lg:border-r lg:border-border/60 lg:overflow-y-auto">
+                    <OrdersRail
                             orders={sidebarOrders}
                             selectedOrderId={orderId}
                             loading={sidebarLoading}
@@ -298,10 +297,9 @@ export default function OrderDetailPage() {
                             onStatusChange={setSidebarStatusFilter}
                             onSelectOrder={handleSelectOrder}
                         />
-                    </div>
                 </aside>
 
-                <div className="min-w-0 flex-1 px-4 sm:px-6 lg:px-8">
+                <div className="min-w-0 flex-1 px-4 sm:px-6 lg:px-8 lg:overflow-y-auto">
                     <div className="lg:hidden space-y-3">
                         <Button
                             type="button"
