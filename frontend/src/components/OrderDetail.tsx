@@ -153,9 +153,9 @@ export default function OrderDetail({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+      <section className="rounded-2xl border border-transparent bg-card p-6 shadow-none">
         <div className="flex flex-col gap-5">
-          <h2 className="text-lg font-semibold tracking-tight">Order {order.inflow_order_id}</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Order {order.inflow_order_id}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
@@ -165,7 +165,9 @@ export default function OrderDetail({
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Recipient</p>
-              <p className="text-sm text-foreground">{order.recipient_name || "N/A"}</p>
+              <p className="text-sm text-foreground">
+                {order.recipient_name || <span className="text-muted-foreground italic">N/A</span>}
+              </p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Contact</p>
@@ -223,7 +225,7 @@ export default function OrderDetail({
 
       <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
         <div className="space-y-4">
-          <h3 className="text-xl font-semibold tracking-tight">Preparation Checklist</h3>
+          <h3 className="text-lg font-semibold tracking-tight">Preparation Checklist</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -334,7 +336,7 @@ export default function OrderDetail({
 
       {getInflowLines(order).length > 0 && (
         <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-          <h3 className="text-xl font-semibold tracking-tight">Order Items</h3>
+          <h3 className="text-lg font-semibold tracking-tight">Order Items</h3>
             <div className="rounded-lg border border-border">
               <Table>
                 <TableHeader>
@@ -379,7 +381,7 @@ export default function OrderDetail({
 
       {latestNotification && (
         <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-          <h3 className="text-xl font-semibold tracking-tight">Teams Notification</h3>
+          <h3 className="text-lg font-semibold tracking-tight">Teams Notification</h3>
           <div className="mt-4 space-y-2">
               <p className="text-sm text-foreground">
                 <span className="font-medium">Status:</span>{" "}
@@ -414,7 +416,7 @@ export default function OrderDetail({
       )}
 
       <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-        <h3 className="text-xl font-semibold tracking-tight">Status Path</h3>
+        <h3 className="text-lg font-semibold tracking-tight">Status Path</h3>
           {auditLogs.length > 0 ? (
             <>
               <StatusPathViz auditLogs={auditLogs} title="Workflow path" />
@@ -448,7 +450,7 @@ export default function OrderDetail({
           <details className="group">
             <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
               <div className="relative pr-10">
-                <h3 className="text-xl font-semibold tracking-tight">Inflow Data</h3>
+                <h3 className="text-lg font-semibold tracking-tight">Inflow Data</h3>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-transform group-open:rotate-180" />
               </div>
             </summary>
@@ -473,7 +475,7 @@ export default function OrderDetail({
 
           <div className="space-y-1 text-sm">
             <p className="text-foreground">
-              <span className="font-medium">Recipient:</span> {order.recipient_name || "N/A"}
+              <span className="font-medium">Recipient:</span> {order.recipient_name || <span className="text-muted-foreground italic">N/A</span>}
             </p>
             <p className="text-foreground">
               <span className="font-medium">Location:</span> {order.delivery_location || "N/A"}

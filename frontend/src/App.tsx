@@ -32,6 +32,30 @@ const prefetchRoutes = () => {
     void import("./pages/Orders");
 };
 
+function AppRoutes() {
+    return (
+        <Routes>
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+            <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+            <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
+            <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
+            <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
+            <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
+            <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
+                <Route index element={<Navigate to="dispatch" replace />} />
+                <Route path="dispatch" element={<DeliveryDispatchPage />} />
+                <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
+            </Route>
+            <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
+            <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
+            <Route path="/login" element={<Navigate to="/" replace />} />
+        </Routes>
+    );
+}
+
 function AppContent() {
     const { isAuthenticated, isLoading } = useAuth();
     const location = useLocation();
@@ -103,25 +127,7 @@ function AppContent() {
                             </div>
                         }>
                             {isOrdersRoute ? (
-                                <Routes location={location}>
-                                    <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                                    <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-                                    <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
-                                    <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
-                                    <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
-                                    <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
-                                    <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
-                                    <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
-                                        <Route index element={<Navigate to="dispatch" replace />} />
-                                        <Route path="dispatch" element={<DeliveryDispatchPage />} />
-                                        <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
-                                    </Route>
-                                    <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
-                                    <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
-                                    <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-                                    <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
-                                    <Route path="/login" element={<Navigate to="/" replace />} />
-                                </Routes>
+                                <AppRoutes />
                             ) : (
                                 <AnimatePresence mode="wait">
                                     <motion.div
@@ -131,25 +137,7 @@ function AppContent() {
                                         exit={{ opacity: 0, y: -8 }}
                                         transition={{ duration: 0.2 }}
                                     >
-                                        <Routes location={location}>
-                                            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                                            <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-                                            <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
-                                            <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
-                                            <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
-                                            <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
-                                            <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
-                                            <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
-                                                <Route index element={<Navigate to="dispatch" replace />} />
-                                                <Route path="dispatch" element={<DeliveryDispatchPage />} />
-                                                <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
-                                            </Route>
-                                            <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
-                                            <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
-                                            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-                                            <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
-                                            <Route path="/login" element={<Navigate to="/" replace />} />
-                                        </Routes>
+                                        <AppRoutes />
                                     </motion.div>
                                 </AnimatePresence>
                             )}

@@ -1,4 +1,5 @@
 import { PackageSearch } from "lucide-react";
+import { useCallback, useState } from "react";
 import type { Order } from "../types/order";
 import StatusBadge from "./StatusBadge";
 import { formatDeliveryLocation } from "../utils/location";
@@ -12,19 +13,66 @@ interface OrdersRailProps {
     onSelectOrder: (orderId: string) => void;
 }
 
+function getUrgencyClasses(status: string | undefined | null): string {
+    const s = (status ?? "").toUpperCase();
+    if (s === "ISSUE") return "border-l-4 border-l-destructive";
+    if (s === "PICKED" || s === "QA") return "border-l-4 border-l-amber-500";
+    if (s === "DELIVERED" || s === "CANCELLED") return "opacity-60";
+    return "border-l-4 border-l-primary/30";
+}
+
 export default function OrdersRail({
     orders,
     selectedOrderId = null,
     loading = false,
     onSelectOrder,
 }: OrdersRailProps) {
+    const [focusedIndex, setFocusedIndex] = useState(0);
+
+    const handleKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (orders.length === 0) return;
+
+            let nextIndex = focusedIndex;
+            switch (e.key) {
+                case "ArrowDown":
+                    e.preventDefault();
+                    nextIndex = Math.min(focusedIndex + 1, orders.length - 1);
+                    break;
+                case "ArrowUp":
+                    e.preventDefault();
+                    nextIndex = Math.max(focusedIndex - 1, 0);
+                    break;
+                case "Home":
+                    e.preventDefault();
+                    nextIndex = 0;
+                    break;
+                case "End":
+                    e.preventDefault();
+                    nextIndex = orders.length - 1;
+                    break;
+                default:
+                    return;
+            }
+
+            setFocusedIndex(nextIndex);
+            // Focus the button after state update
+            requestAnimationFrame(() => {
+                const container = e.currentTarget as HTMLElement;
+                const buttons = container.querySelectorAll<HTMLElement>("[data-order-button]");
+                buttons[nextIndex]?.focus();
+            });
+        },
+        [focusedIndex, orders.length],
+    );
+
     if (loading && orders.length === 0) {
         return (
             <div className="rounded-lg border border-border bg-card shadow-sm">
                 <div className="border-b border-border px-4 py-3">
                     <div className="h-5 w-28 rounded bg-muted" />
                 </div>
-                <div className="space-y-3 p-4">
+                <div role="status" aria-label="Loading orders" className="space-y-3 p-4">
                     {Array.from({ length: 5 }).map((_, index) => (
                         <div key={index} className="space-y-2 rounded-md border border-border/60 p-3">
                             <Skeleton className="h-4 w-32" />
@@ -61,18 +109,25 @@ export default function OrdersRail({
                 </div>
             </div>
             <div className="max-h-[calc(100vh-14rem)] overflow-y-auto">
-                <div className="divide-y divide-border">
+                <div className="divide-y divide-border" onKeyDown={handleKeyDown}>
                     {orders.map((order, index) => {
                         const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
                         const isSelected = selectedOrderId === orderId;
+                        const isFocused = focusedIndex === index;
+                        const urgencyClasses = getUrgencyClasses(order.status);
+                        const orderLabel = `Order ${order.inflow_order_id || order.id}, ${order.recipient_name || "N/A"}, ${order.status ?? "Unknown"}`;
 
                         return (
                             <button
                                 key={orderId}
                                 type="button"
+                                data-order-button
+                                tabIndex={isFocused ? 0 : -1}
                                 onClick={() => onSelectOrder(orderId)}
+                                onFocus={() => setFocusedIndex(index)}
                                 aria-current={isSelected ? "page" : undefined}
-                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 ${isSelected ? "bg-primary/10 ring-inset ring-1 ring-primary/20" : ""}`}
+                                aria-label={orderLabel}
+                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15 ring-inset ring-1 ring-primary/20" : ""} ${urgencyClasses}`}
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0 space-y-1">
