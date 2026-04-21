@@ -155,7 +155,7 @@ export default function OrdersRail({
                                 onFocus={() => setFocusedIndex(index)}
                                 aria-current={isSelected ? "page" : undefined}
                                 aria-label={orderLabel}
-                                className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""}`}
+                                className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""}`}
                             >
                                 <span className="truncate text-sm text-foreground">
                                     {order.inflow_order_id || order.id}
