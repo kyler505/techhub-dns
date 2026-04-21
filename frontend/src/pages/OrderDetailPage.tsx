@@ -298,16 +298,22 @@ export default function OrderDetailPage() {
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
-                <OrderDetailComponent
-                    order={order!}
-                    auditLogs={auditLogs}
-                    notifications={notifications}
-                    onStatusChange={handleStatusChange}
-                    onTagOrder={handleTagOrder}
-                    onRequestTags={handleRequestTags}
-                    onGeneratePicklist={handleGeneratePicklist}
-                    generatingPicklist={generatePicklistMutation.isPending}
-                />
+                {order ? (
+                    <OrderDetailComponent
+                        order={order}
+                        auditLogs={auditLogs}
+                        notifications={notifications}
+                        onStatusChange={handleStatusChange}
+                        onTagOrder={handleTagOrder}
+                        onRequestTags={handleRequestTags}
+                        onGeneratePicklist={handleGeneratePicklist}
+                        generatingPicklist={generatePicklistMutation.isPending}
+                    />
+                ) : (
+                    <div className="rounded-2xl border border-border/70 bg-card/80 p-5">
+                        <div className="h-48 animate-pulse rounded-lg bg-muted" />
+                    </div>
+                )}
                 {order && transitioningStatus && (
                     <StatusTransition
                         currentStatus={order.status}
