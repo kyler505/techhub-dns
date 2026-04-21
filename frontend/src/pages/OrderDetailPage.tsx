@@ -284,38 +284,41 @@ export default function OrderDetailPage() {
     }
 
     return (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-            <aside className="hidden lg:block">
-                <OrdersRail
-                    orders={sidebarOrders}
-                    selectedOrderId={orderId}
-                    loading={sidebarLoading}
-                    onSelectOrder={handleSelectOrder}
-                />
-            </aside>
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+            <div className="lg:flex lg:items-stretch lg:min-h-[calc(100vh-7.5rem)]">
+                <aside className="hidden lg:block lg:w-80 lg:shrink-0 lg:border-r lg:border-border/60">
+                    <div className="sticky top-12 max-h-[calc(100vh-3rem)] overflow-y-auto">
+                        <OrdersRail
+                            orders={sidebarOrders}
+                            selectedOrderId={orderId}
+                            loading={sidebarLoading}
+                            onSelectOrder={handleSelectOrder}
+                        />
+                    </div>
+                </aside>
 
-            <div className="min-w-0 space-y-4 sm:space-y-6">
-                <div className="lg:hidden">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full justify-between min-h-11 gap-2 px-4"
-                        onClick={() => setMobileShowOrders((prev) => !prev)}
-                    >
-                        Orders
-                        <ChevronDown className={`h-4 w-4 transition-transform ${mobileShowOrders ? "rotate-180" : ""}`} />
-                    </Button>
-                    {mobileShowOrders && (
-                        <div className="mt-3">
-                            <OrdersRail
-                                orders={sidebarOrders}
-                                selectedOrderId={orderId}
-                                loading={sidebarLoading}
-                                onSelectOrder={handleSelectOrder}
-                            />
-                        </div>
-                    )}
-                </div>
+                <div className="min-w-0 flex-1 px-4 sm:px-6 lg:px-8">
+                    <div className="lg:hidden space-y-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full justify-between min-h-11 gap-2 px-4"
+                            onClick={() => setMobileShowOrders((prev) => !prev)}
+                        >
+                            Orders
+                            <ChevronDown className={`h-4 w-4 transition-transform ${mobileShowOrders ? "rotate-180" : ""}`} />
+                        </Button>
+                        {mobileShowOrders && (
+                            <div className="mt-3">
+                                <OrdersRail
+                                    orders={sidebarOrders}
+                                    selectedOrderId={orderId}
+                                    loading={sidebarLoading}
+                                    onSelectOrder={handleSelectOrder}
+                                />
+                            </div>
+                        )}
+                    </div>
 
                 <div className="lg:hidden">
                     <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={handleBack} disabled={detailLoading}>
@@ -347,6 +350,7 @@ export default function OrderDetailPage() {
                         submitting={updateStatusMutation.isPending}
                     />
                 )}
+                </div>
             </div>
         </div>
     );
