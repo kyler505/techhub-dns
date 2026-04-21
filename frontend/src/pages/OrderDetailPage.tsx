@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { isAxiosError } from "axios";
 import type { StatusFilter } from "../components/Filters";
-import { AlertCircle, ArrowLeft, FileSearch } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronDown, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 
 import { ordersApi } from "../api/orders";
@@ -19,6 +19,7 @@ import { getOrderAuditQueryOptions, getOrderDetailQueryOptions, getOrdersListQue
 import { OrderStatus } from "../types/order";
 import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
 import { isValidOrderId } from "../utils/orderIds";
+import { SkeletonCard } from "../components/Skeleton";
 
 export default function OrderDetailPage() {
     const { orderId: rawOrderId } = useParams<{ orderId: string }>();
@@ -38,6 +39,7 @@ export default function OrderDetailPage() {
         requireReason: boolean;
     } | null>(null);
     const queryClient = useQueryClient();
+    const [mobileShowOrders, setMobileShowOrders] = useState(false);
 
     const { orders: websocketOrders } = useOrdersWebSocket();
     const lastWebSocketUpdate = useRef<number>(0);
@@ -45,16 +47,23 @@ export default function OrderDetailPage() {
     const orderQuery = useQuery({
         ...getOrderDetailQueryOptions(orderId ?? ""),
         enabled: Boolean(orderId),
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
         throwOnError: shouldThrowToBoundary,
     });
 
     const auditQuery = useQuery({
         ...getOrderAuditQueryOptions(orderId ?? ""),
         enabled: Boolean(orderId),
+        refetchOnWindowFocus: false,
         throwOnError: shouldThrowToBoundary,
     });
 
-    const listQuery = useQuery(getOrdersListQueryOptions({ status: sidebarStatusFilter, search: sidebarSearch }));
+    const listQuery = useQuery({
+        ...getOrdersListQueryOptions({ status: sidebarStatusFilter, search: sidebarSearch }),
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+    });
 
     const order = orderQuery.data ?? null;
     const auditLogs = auditQuery.data ?? [];
@@ -64,15 +73,7 @@ export default function OrderDetailPage() {
     const sidebarLoading = listQuery.isPending && sidebarOrders.length === 0;
 
     const handleBack = () => {
-        if (typeof window !== "undefined" && window.history.length > 1) {
-            navigate(-1);
-            return;
-        }
-
-        navigate("/orders", {
-            replace: true,
-            state: locationState ?? undefined,
-        });
+        navigate(-1);
     };
 
     const renderState = (title: string, description: string, icon: "error" | "missing") => (
@@ -294,10 +295,34 @@ export default function OrderDetailPage() {
             </aside>
 
             <div className="min-w-0 space-y-4 sm:space-y-6">
-                <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={handleBack} disabled={detailLoading}>
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                </Button>
+                <div className="lg:hidden">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between min-h-11 gap-2 px-4"
+                        onClick={() => setMobileShowOrders((prev) => !prev)}
+                    >
+                        Orders
+                        <ChevronDown className={`h-4 w-4 transition-transform ${mobileShowOrders ? "rotate-180" : ""}`} />
+                    </Button>
+                    {mobileShowOrders && (
+                        <div className="mt-3">
+                            <OrdersRail
+                                orders={sidebarOrders}
+                                selectedOrderId={orderId}
+                                loading={sidebarLoading}
+                                onSelectOrder={handleSelectOrder}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                <div className="lg:hidden">
+                    <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={handleBack} disabled={detailLoading}>
+                        <ArrowLeft className="h-4 w-4" />
+                        Back
+                    </Button>
+                </div>
                 {order ? (
                     <OrderDetailComponent
                         order={order}
@@ -310,9 +335,7 @@ export default function OrderDetailPage() {
                         generatingPicklist={generatePicklistMutation.isPending}
                     />
                 ) : (
-                    <div className="rounded-2xl border border-border/70 bg-card/80 p-5">
-                        <div className="h-48 animate-pulse rounded-lg bg-muted" />
-                    </div>
+                    <SkeletonCard lines={4} />
                 )}
                 {order && transitioningStatus && (
                     <StatusTransition
