@@ -1,21 +1,38 @@
-import { PackageSearch } from "lucide-react";
+import { ChevronDown, PackageSearch } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { Order } from "../types/order";
+import { OrderStatus, OrderStatusDisplayNames } from "../types/order";
 import StatusBadge from "./StatusBadge";
-import { formatToCentralTime } from "../utils/timezone";
 import { Skeleton } from "./Skeleton";
+import type { StatusFilter } from "./Filters";
 
 interface OrdersRailProps {
     orders: Order[];
     selectedOrderId?: string | null;
     loading?: boolean;
+    status?: StatusFilter;
+    onStatusChange?: (status: StatusFilter) => void;
     onSelectOrder: (orderId: string) => void;
 }
+
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+    { value: [OrderStatus.PICKED, OrderStatus.QA], label: "Active" },
+    { value: null, label: "All" },
+    { value: OrderStatus.PICKED, label: OrderStatusDisplayNames[OrderStatus.PICKED] },
+    { value: OrderStatus.QA, label: OrderStatusDisplayNames[OrderStatus.QA] },
+    { value: OrderStatus.PRE_DELIVERY, label: OrderStatusDisplayNames[OrderStatus.PRE_DELIVERY] },
+    { value: OrderStatus.IN_DELIVERY, label: OrderStatusDisplayNames[OrderStatus.IN_DELIVERY] },
+    { value: OrderStatus.SHIPPING, label: OrderStatusDisplayNames[OrderStatus.SHIPPING] },
+    { value: OrderStatus.DELIVERED, label: OrderStatusDisplayNames[OrderStatus.DELIVERED] },
+    { value: OrderStatus.ISSUE, label: OrderStatusDisplayNames[OrderStatus.ISSUE] },
+];
 
 export default function OrdersRail({
     orders,
     selectedOrderId = null,
     loading = false,
+    status,
+    onStatusChange,
     onSelectOrder,
 }: OrdersRailProps) {
     const [focusedIndex, setFocusedIndex] = useState(0);
@@ -93,11 +110,31 @@ export default function OrdersRail({
 
     return (
         <div className="bg-card">
-            <div className="border-b border-border px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-sm font-semibold text-foreground">Orders</h2>
-                    <span className="text-xs text-muted-foreground">{orders.length}</span>
-                </div>
+            <div className="border-b border-border px-4 py-2.5">
+                {onStatusChange ? (
+                    <div className="relative">
+                        <select
+                            value={status !== undefined ? JSON.stringify(status) : JSON.stringify([OrderStatus.PICKED, OrderStatus.QA])}
+                            onChange={(e) => {
+                                const parsed = JSON.parse(e.target.value) as StatusFilter;
+                                onStatusChange(parsed);
+                            }}
+                            className="w-full appearance-none rounded-md border border-border bg-background py-1.5 pl-3 pr-8 text-sm font-medium text-foreground"
+                        >
+                            {STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.label} value={JSON.stringify(opt.value)}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-between gap-3">
+                        <h2 className="text-sm font-semibold text-foreground">Orders</h2>
+                        <span className="text-xs text-muted-foreground">{orders.length}</span>
+                    </div>
+                )}
             </div>
 
             <div className="max-h-[calc(100vh-8rem)] overflow-y-auto" onKeyDown={handleKeyDown}>
@@ -106,7 +143,7 @@ export default function OrdersRail({
                         const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
                         const isSelected = selectedOrderId === orderId;
                         const isFocused = focusedIndex === index;
-                        const orderLabel = `Order ${order.inflow_order_id || order.id}, ${order.recipient_name || "N/A"}, ${order.status ?? "Unknown"}`;
+                        const orderLabel = `Order ${order.inflow_order_id || order.id}, ${order.status ?? "Unknown"}`;
 
                         return (
                             <button
@@ -118,22 +155,12 @@ export default function OrdersRail({
                                 onFocus={() => setFocusedIndex(index)}
                                 aria-current={isSelected ? "page" : undefined}
                                 aria-label={orderLabel}
-                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""}`}
+                                className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""}`}
                             >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="truncate text-sm font-medium text-foreground">
-                                        {order.inflow_order_id || order.id}
-                                    </span>
-                                    <StatusBadge status={order.status} />
-                                </div>
-                                <div className="mt-1 flex items-center justify-between gap-2">
-                                    <span className="truncate text-xs text-muted-foreground">
-                                        {order.recipient_name || "—"}
-                                    </span>
-                                    <span className="shrink-0 text-xs text-muted-foreground">
-                                        {formatToCentralTime(order.created_at, "MMM d")}
-                                    </span>
-                                </div>
+                                <span className="truncate text-sm text-foreground">
+                                    {order.inflow_order_id || order.id}
+                                </span>
+                                <StatusBadge status={order.status} />
                             </button>
                         );
                     })}

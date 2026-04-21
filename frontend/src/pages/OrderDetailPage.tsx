@@ -31,7 +31,9 @@ export default function OrderDetailPage() {
         statusFilter?: StatusFilter;
         search?: string;
     } | null);
-    const sidebarStatusFilter = locationState?.statusFilter ?? [OrderStatus.PICKED, OrderStatus.QA];
+    const [sidebarStatusFilter, setSidebarStatusFilter] = useState<StatusFilter>(
+        locationState?.statusFilter ?? [OrderStatus.PICKED, OrderStatus.QA],
+    );
     const sidebarSearch = locationState?.search ?? "";
     const { user } = useAuth();
     const [transitioningStatus, setTransitioningStatus] = useState<{
@@ -292,6 +294,8 @@ export default function OrderDetailPage() {
                             orders={sidebarOrders}
                             selectedOrderId={orderId}
                             loading={sidebarLoading}
+                            status={sidebarStatusFilter}
+                            onStatusChange={setSidebarStatusFilter}
                             onSelectOrder={handleSelectOrder}
                         />
                     </div>
@@ -314,6 +318,8 @@ export default function OrderDetailPage() {
                                     orders={sidebarOrders}
                                     selectedOrderId={orderId}
                                     loading={sidebarLoading}
+                                    status={sidebarStatusFilter}
+                                    onStatusChange={setSidebarStatusFilter}
                                     onSelectOrder={handleSelectOrder}
                                 />
                             </div>
