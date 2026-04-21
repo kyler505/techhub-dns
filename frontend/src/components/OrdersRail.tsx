@@ -2,7 +2,6 @@ import { PackageSearch } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { Order } from "../types/order";
 import StatusBadge from "./StatusBadge";
-import { formatDeliveryLocation } from "../utils/location";
 import { formatToCentralTime } from "../utils/timezone";
 import { Skeleton } from "./Skeleton";
 
@@ -109,15 +108,6 @@ export default function OrdersRail({
                 </div>
             </div>
 
-            {/* Column headers */}
-            <div className="hidden border-b border-border/60 px-4 py-2 text-xs font-semibold text-muted-foreground lg:grid lg:grid-cols-[1fr_1fr_minmax(0,1.5fr)_auto_auto] lg:gap-3">
-                <span>Order</span>
-                <span>Recipient</span>
-                <span>Location</span>
-                <span>Status</span>
-                <span>Date</span>
-            </div>
-
             <div className="max-h-[calc(100vh-8rem)] overflow-y-auto" onKeyDown={handleKeyDown}>
                 <div className="divide-y divide-border">
                     {orders.map((order, index) => {
@@ -137,40 +127,19 @@ export default function OrdersRail({
                                 onFocus={() => setFocusedIndex(index)}
                                 aria-current={isSelected ? "page" : undefined}
                                 aria-label={orderLabel}
-                                className={`block w-full text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""} ${urgencyClasses}`}
+                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""} ${urgencyClasses}`}
                             >
-                                {/* Mobile layout */}
-                                <div className="px-4 py-3 lg:hidden">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0 space-y-1">
-                                            <span className="truncate text-sm font-medium text-foreground">
-                                                {order.inflow_order_id || order.id}
-                                            </span>
-                                            <p className="text-xs text-muted-foreground">
-                                                {order.recipient_name || "N/A"}
-                                            </p>
-                                        </div>
-                                        <StatusBadge status={order.status} />
-                                    </div>
-                                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                                        <span className="line-clamp-1">{formatDeliveryLocation(order)}</span>
-                                        <span className="whitespace-nowrap">{formatToCentralTime(order.created_at, "MMM d")}</span>
-                                    </div>
-                                </div>
-
-                                {/* Desktop table-row layout */}
-                                <div className="hidden px-4 py-2.5 lg:grid lg:grid-cols-[1fr_1fr_minmax(0,1.5fr)_auto_auto] lg:gap-3 lg:items-center">
+                                <div className="flex items-center justify-between gap-2">
                                     <span className="truncate text-sm font-medium text-foreground">
                                         {order.inflow_order_id || order.id}
                                     </span>
-                                    <span className="truncate text-sm text-muted-foreground">
+                                    <StatusBadge status={order.status} />
+                                </div>
+                                <div className="mt-1 flex items-center justify-between gap-2">
+                                    <span className="truncate text-xs text-muted-foreground">
                                         {order.recipient_name || "—"}
                                     </span>
-                                    <span className="truncate text-sm text-muted-foreground">
-                                        {formatDeliveryLocation(order)}
-                                    </span>
-                                    <StatusBadge status={order.status} />
-                                    <span className="whitespace-nowrap text-xs text-muted-foreground">
+                                    <span className="shrink-0 text-xs text-muted-foreground">
                                         {formatToCentralTime(order.created_at, "MMM d")}
                                     </span>
                                 </div>
