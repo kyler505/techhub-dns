@@ -57,7 +57,7 @@ export default function OrderDetailPage() {
     const auditLogs = auditQuery.data ?? [];
     const notifications = order?.teams_notifications ?? [];
     const sidebarOrders = listQuery.data ?? [];
-    const loading = orderQuery.isPending || auditQuery.isPending;
+    const detailLoading = orderQuery.isPending || auditQuery.isPending;
     const sidebarLoading = listQuery.isPending && sidebarOrders.length === 0;
 
     const renderState = (title: string, description: string, icon: "error" | "missing") => (
@@ -70,7 +70,7 @@ export default function OrderDetailPage() {
                 )}
                 <h1 className="text-lg font-semibold text-foreground">{title}</h1>
                 <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-                <Button type="button" variant="ghost" className="mt-4 min-h-11 gap-2 px-4" onClick={() => navigate(-1)} disabled={loading}>
+                <Button type="button" variant="ghost" className="mt-4 min-h-11 gap-2 px-4" onClick={() => navigate(-1)} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -253,31 +253,22 @@ export default function OrderDetailPage() {
         navigate(`/orders/${nextOrderId}`, { state: { fromList: true } });
     };
 
-    if (loading) {
-        return (
-            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_22rem] sm:p-6">
-                <Skeleton className="h-72 w-full rounded-lg" />
-                <SkeletonCard className="lg:sticky lg:top-6" lines={6} />
-            </div>
-        );
-    }
-
     if (invalidOrderId) {
         return renderState("Invalid order link", "This order link is malformed or missing a valid order id.", "missing");
     }
 
-    if (orderQuery.isError) {
+    if (!detailLoading && orderQuery.isError) {
         return renderState("Failed to load order details", "Try refreshing the page or return to the orders list and try again.", "error");
     }
 
-    if (!order) {
+    if (!detailLoading && !order) {
         return renderState("Order not found", "The order may have been removed or you may not have access to it.", "missing");
     }
 
     return (
         <div>
             <div className="px-4 sm:px-6 lg:px-8">
-                <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={() => navigate(-1)} disabled={loading}>
+                <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={() => navigate(-1)} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -315,7 +306,7 @@ export default function OrderDetailPage() {
                             ) : (
                                 <div className="max-h-[calc(100vh-12rem)] divide-y divide-border/60 overflow-auto">
                                     {sidebarOrders.map((sidebarOrder) => {
-                                        const isSelected = sidebarOrder.id === order.id;
+                                        const isSelected = sidebarOrder.id === orderId;
                                         return (
                                             <button
                                                 key={sidebarOrder.id}
@@ -362,29 +353,38 @@ export default function OrderDetailPage() {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={fromList ? { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 } : { duration: 0 }}
                 >
-                    <OrderDetailComponent
-                        order={order}
-                        auditLogs={auditLogs}
-                        notifications={notifications}
-                        onStatusChange={handleStatusChange}
-                        onTagOrder={handleTagOrder}
-                        onRequestTags={handleRequestTags}
-                        onGeneratePicklist={handleGeneratePicklist}
-                        generatingPicklist={generatePicklistMutation.isPending}
-                    />
+                    {detailLoading ? (
+                        <>
+                            <Skeleton className="h-72 w-full rounded-2xl" />
+                            <SkeletonCard lines={6} />
+                        </>
+                    ) : (
+                        <>
+                            <OrderDetailComponent
+                                order={order!}
+                                auditLogs={auditLogs}
+                                notifications={notifications}
+                                onStatusChange={handleStatusChange}
+                                onTagOrder={handleTagOrder}
+                                onRequestTags={handleRequestTags}
+                                onGeneratePicklist={handleGeneratePicklist}
+                                generatingPicklist={generatePicklistMutation.isPending}
+                            />
 
-                    <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-                        <div className="flex flex-wrap gap-3">
-                            <Button variant="outline" onClick={() => void refreshOrder()}>
-                                Refresh this order
-                            </Button>
-                            <Button variant="outline" onClick={() => navigate("/orders")}>Back to list</Button>
-                        </div>
-                    </section>
+                            <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                                <div className="flex flex-wrap gap-3">
+                                    <Button variant="outline" onClick={() => void refreshOrder()}>
+                                        Refresh this order
+                                    </Button>
+                                    <Button variant="outline" onClick={() => navigate("/orders")}>Back to list</Button>
+                                </div>
+                            </section>
+                        </>
+                    )}
                 </motion.div>
             </div>
 
-            {transitioningStatus && (
+            {order && transitioningStatus && (
                 <StatusTransition
                     currentStatus={order.status}
                     newStatus={transitioningStatus.newStatus}
