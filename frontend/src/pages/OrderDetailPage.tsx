@@ -366,9 +366,6 @@ export default function OrderDetailPage() {
                         <Button variant="outline" onClick={() => void refreshOrder()} disabled={detailLoading}>
                             Refresh this order
                         </Button>
-                        <Button variant="outline" onClick={() => navigate("/orders")}>
-                            Back to list
-                        </Button>
                     </div>
                 </section>
 
@@ -401,7 +398,9 @@ export default function OrderDetailPage() {
                                     <Button variant="outline" onClick={() => void refreshOrder()}>
                                         Refresh this order
                                     </Button>
-                                    <Button variant="outline" onClick={() => navigate("/orders")}>Back to list</Button>
+                                    <Button variant="outline" onClick={handleBackToOrigin}>
+                                        Back
+                                    </Button>
                                 </div>
                             </section>
                         </>
