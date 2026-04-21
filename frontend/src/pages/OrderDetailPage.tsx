@@ -80,7 +80,7 @@ export default function OrderDetailPage() {
                 )}
                 <h1 className="text-lg font-semibold text-foreground">{title}</h1>
                 <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-                <Button type="button" variant="ghost" className="mt-4 min-h-11 gap-2 px-4" onClick={handleBackToOrigin} disabled={detailLoading}>
+                <Button type="button" variant="outline" className="mt-4 min-h-11 gap-2 px-4" onClick={handleBackToOrigin} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -290,7 +290,7 @@ export default function OrderDetailPage() {
     return (
         <div className="lg:flex lg:h-[calc(100vh-3rem)] lg:items-stretch lg:overflow-hidden">
             <div className="px-4 sm:px-6 lg:hidden lg:px-8">
-                <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={handleBackToOrigin} disabled={detailLoading}>
+                <Button type="button" variant="outline" className="mb-4 min-h-11 gap-2" onClick={handleBackToOrigin} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -309,7 +309,7 @@ export default function OrderDetailPage() {
 
             <div className="lg:flex lg:h-full lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-hidden px-4 sm:px-6 lg:px-8">
                 <section className="hidden lg:flex lg:shrink-0 lg:items-center lg:justify-between lg:gap-3 lg:border-b lg:border-border/60 lg:bg-background lg:py-3">
-                    <Button type="button" variant="ghost" className="min-h-11 gap-2 px-0" onClick={handleBackToOrigin} disabled={detailLoading}>
+                    <Button type="button" variant="outline" className="min-h-11 gap-2" onClick={handleBackToOrigin} disabled={detailLoading}>
                         <ArrowLeft className="h-4 w-4" />
                         Back
                     </Button>
