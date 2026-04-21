@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AppShellErrorBoundary, RouteContentErrorBoundary } from "./components/error-boundaries/AppErrorBoundaries";
@@ -35,17 +35,6 @@ const prefetchRoutes = () => {
 function AppContent() {
     const { isAuthenticated, isLoading } = useAuth();
     const location = useLocation();
-
-    /** Stable key for AnimatePresence — suppresses transition when clicking between orders. */
-    const pageKey = (() => {
-        const p = location.pathname;
-        if (p === "/orders") return "/orders";
-        if (/^\/orders\/[^/]+$/.test(p)) return "/orders/:orderId";
-        return p;
-    })();
-
-    /** Disable outer page fade for order detail transitions — inner animations own the motion. */
-    const isOrderDetailTransition = location.pathname !== "/orders" && /^\/orders\/[^/]+$/.test(location.pathname);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -90,77 +79,99 @@ function AppContent() {
         );
     }
 
-	return (
-		<div className="min-h-screen bg-background overflow-x-hidden">
-				<Sidebar />
+    const isOrdersRoute = location.pathname === "/orders" || location.pathname.startsWith("/orders/");
 
-				<main className="min-h-screen transition-[margin] duration-300 lg:ml-[var(--sidebar-width)]">
-					<div className="sticky top-0 z-30 h-12 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-						<div className="flex h-full items-center px-4 pl-16 sm:px-6 lg:px-8 lg:pl-8">
-							<Breadcrumbs />
-						</div>
-					</div>
+    return (
+        <div className="min-h-screen bg-background overflow-x-hidden">
+            <Sidebar />
 
-					<SyncHealthBanner />
-
-					<div className="w-full">
-                        <RouteContentErrorBoundary>
-                            <Suspense fallback={
-                                <div className="space-y-4">
-                                    <Skeleton className="h-8 w-64" />
-                                    <Skeleton className="h-64 w-full rounded-lg" />
-                                </div>
-                            }>
-                                <LayoutGroup id="orders-route-transition">
-                                    <AnimatePresence mode="sync">
-                                        <motion.div
-                                            key={pageKey}
-                                            initial={isOrderDetailTransition ? false : { opacity: 0, scale: 0.985 }}
-                                            animate={isOrderDetailTransition ? undefined : { opacity: 1, scale: 1 }}
-                                            exit={isOrderDetailTransition ? undefined : { opacity: 0, scale: 0.99 }}
-                                            transition={isOrderDetailTransition ? { duration: 0 } : { duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                        >
-                                            <Routes location={location}>
-                                                <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                                                <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-                                                <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
-                                                <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
-                                                <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
-                                                <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
-                                                <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
-                                                <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
-                                                    <Route index element={<Navigate to="dispatch" replace />} />
-                                                    <Route path="dispatch" element={<DeliveryDispatchPage />} />
-                                                    <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
-                                                </Route>
-                                                <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
-                                                <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
-                                                <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-                                                <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
-                                                <Route path="/login" element={<Navigate to="/" replace />} />
-                                            </Routes>
-                                        </motion.div>
-                                    </AnimatePresence>
-                                </LayoutGroup>
-                            </Suspense>
-                        </RouteContentErrorBoundary>
+            <main className="min-h-screen transition-[margin] duration-300 lg:ml-[var(--sidebar-width)]">
+                <div className="sticky top-0 z-30 h-12 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <div className="flex h-full items-center px-4 pl-16 sm:px-6 lg:px-8 lg:pl-8">
+                        <Breadcrumbs />
                     </div>
-                                    <OfflineBanner />
-                </main>
+                </div>
 
-					<Toaster
-						position="top-right"
-						toastOptions={{
-							style: {
-								background: "hsl(var(--popover))",
-								color: "hsl(var(--popover-foreground))",
-								border: "1px solid hsl(var(--border))",
-								borderRadius: "var(--radius)",
-							},
-						}}
-					/>
-				</div>
-	);
+                <SyncHealthBanner />
+
+                <div className="p-4 sm:p-6 lg:p-8">
+                    <RouteContentErrorBoundary>
+                        <Suspense fallback={
+                            <div className="space-y-4">
+                                <Skeleton className="h-8 w-64" />
+                                <Skeleton className="h-64 w-full rounded-lg" />
+                            </div>
+                        }>
+                            {isOrdersRoute ? (
+                                <Routes location={location}>
+                                    <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                                    <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+                                    <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+                                    <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
+                                    <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
+                                    <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
+                                    <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
+                                    <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
+                                        <Route index element={<Navigate to="dispatch" replace />} />
+                                        <Route path="dispatch" element={<DeliveryDispatchPage />} />
+                                        <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
+                                    </Route>
+                                    <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
+                                    <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
+                                    <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                                    <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
+                                    <Route path="/login" element={<Navigate to="/" replace />} />
+                                </Routes>
+                            ) : (
+                                <AnimatePresence mode="wait">
+                                    <motion.div
+                                        key={location.pathname}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -8 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        <Routes location={location}>
+                                            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                                            <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+                                            <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+                                            <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
+                                            <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
+                                            <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
+                                            <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
+                                            <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>
+                                                <Route index element={<Navigate to="dispatch" replace />} />
+                                                <Route path="dispatch" element={<DeliveryDispatchPage />} />
+                                                <Route path="runs/:runId" element={<DeliveryRunDetailPage />} />
+                                            </Route>
+                                            <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
+                                            <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
+                                            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                                            <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
+                                            <Route path="/login" element={<Navigate to="/" replace />} />
+                                        </Routes>
+                                    </motion.div>
+                                </AnimatePresence>
+                            )}
+                        </Suspense>
+                    </RouteContentErrorBoundary>
+                </div>
+                <OfflineBanner />
+            </main>
+
+            <Toaster
+                position="top-right"
+                toastOptions={{
+                    style: {
+                        background: "hsl(var(--popover))",
+                        color: "hsl(var(--popover-foreground))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "var(--radius)",
+                    },
+                }}
+            />
+        </div>
+    );
 }
 
 function App() {

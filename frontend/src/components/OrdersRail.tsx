@@ -1,147 +1,103 @@
-import { motion } from "framer-motion";
-import { ChevronRight, PackageSearch } from "lucide-react";
-
-import type { Order, OrderStatus } from "../types/order";
-import { Badge } from "./ui/badge";
-import { SkeletonCard } from "./Skeleton";
+import { PackageSearch } from "lucide-react";
+import type { Order } from "../types/order";
+import StatusBadge from "./StatusBadge";
 import { formatDeliveryLocation } from "../utils/location";
-import { OrderStatusDisplayNames } from "../types/order";
+import { formatToCentralTime } from "../utils/timezone";
+import { Skeleton } from "./Skeleton";
 
-type OrdersRailProps = {
+interface OrdersRailProps {
     orders: Order[];
     selectedOrderId?: string | null;
-    onSelectOrder: (orderId: string) => void;
     loading?: boolean;
-    count?: number;
-    variant: "full" | "sidebar";
-};
-
-const shellLayoutId = "orders-shell";
-const rowLayoutId = (orderId: string) => `orders-row-${orderId}`;
-const titleLayoutId = "orders-shell-title";
-const subtitleLayoutId = "orders-shell-subtitle";
-const countLayoutId = "orders-shell-count";
+    onSelectOrder: (orderId: string) => void;
+}
 
 export default function OrdersRail({
     orders,
     selectedOrderId = null,
-    onSelectOrder,
     loading = false,
-    count,
-    variant,
+    onSelectOrder,
 }: OrdersRailProps) {
-    const isSidebar = variant === "sidebar";
-
-    return (
-        <motion.section
-            layout
-            layoutId={shellLayoutId}
-            transition={{ layout: { type: "spring", stiffness: 240, damping: 28 } }}
-            className={[
-                "overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none",
-                isSidebar ? "lg:flex lg:h-full lg:flex-col lg:border-r-0 lg:rounded-r-none" : "",
-            ].join(" ")}
-        >
-            <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                        <motion.h2 layoutId={titleLayoutId} className="text-base font-semibold tracking-tight">
-                            Orders
-                        </motion.h2>
-                        <motion.p layoutId={subtitleLayoutId} className="text-xs text-muted-foreground">
-                            Keep browsing without losing the selected order.
-                        </motion.p>
-                    </div>
-                    <motion.div layoutId={countLayoutId}>
-                        <Badge variant="secondary" className="shrink-0">
-                            {count ?? orders.length}
-                        </Badge>
-                    </motion.div>
+    if (loading && orders.length === 0) {
+        return (
+            <div className="rounded-lg border border-border bg-card shadow-sm">
+                <div className="border-b border-border px-4 py-3">
+                    <div className="h-5 w-28 rounded bg-muted" />
+                </div>
+                <div className="space-y-3 p-4">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                        <div key={index} className="space-y-2 rounded-md border border-border/60 p-3">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-3 w-full" />
+                        </div>
+                    ))}
                 </div>
             </div>
+        );
+    }
 
-            <div className={isSidebar ? "p-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col" : "p-0"}>
-                {loading ? (
-                    <div className="p-4">
-                        <SkeletonCard header={false} lines={isSidebar ? 5 : 8} />
-                    </div>
-                ) : orders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-                        <PackageSearch className="mb-3 h-7 w-7 text-muted-foreground/60" />
-                        <p className="text-sm font-medium text-foreground">No orders available</p>
-                    </div>
-                ) : (
-                    <motion.div
-                        layout
-                        transition={{ layout: { type: "spring", stiffness: 240, damping: 30 } }}
-                        className={[
-                            "divide-y divide-border/60 overflow-auto",
-                            isSidebar ? "max-h-[calc(100vh-12rem)] lg:min-h-0 lg:flex-1 lg:max-h-none" : "max-h-[70vh]",
-                        ].join(" ")}
-                    >
-                        {orders.map((order) => {
-                            const isSelected = order.id === selectedOrderId;
-                            return (
-                                <motion.button
-                                    layout
-                                    layoutId={rowLayoutId(order.id)}
-                                    transition={{ layout: { type: "spring", stiffness: 240, damping: 30 } }}
-                                    key={order.id}
-                                    type="button"
-                                    onClick={() => onSelectOrder(order.id)}
-                                    className={[
-                                        "flex w-full items-start gap-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none",
-                                        isSidebar ? "px-4 py-3" : "px-5 py-4 sm:px-6",
-                                        isSelected ? "bg-primary/5" : "bg-transparent",
-                                    ].join(" ")}
-                                >
-                                    <div
-                                        className={[
-                                            "mt-1 shrink-0 rounded-full",
-                                            isSidebar ? "h-2.5 w-2.5" : "h-3 w-3",
-                                            isSelected ? "bg-primary" : "bg-muted-foreground/30",
-                                        ].join(" ")}
-                                    />
+    if (orders.length === 0) {
+        return (
+            <div className="rounded-lg border border-border bg-card shadow-sm">
+                <div className="border-b border-border px-4 py-3">
+                    <h2 className="text-sm font-semibold text-foreground">Orders</h2>
+                </div>
+                <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-muted-foreground">
+                    <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
+                    <p className="text-sm font-medium text-foreground">No orders found</p>
+                    <p className="text-xs text-muted-foreground">Try adjusting your filters or search.</p>
+                </div>
+            </div>
+        );
+    }
 
-                                    <div className="min-w-0 flex-1 space-y-1">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className={[
-                                                    "truncate font-semibold text-foreground",
-                                                    isSidebar ? "text-sm" : "text-base",
-                                                ].join(" ")}>
-                                                    {order.inflow_order_id}
-                                                </p>
-                                                <p className="truncate text-xs text-muted-foreground sm:text-sm">
-                                                    {order.recipient_name || "N/A"}
-                                                </p>
-                                            </div>
+    return (
+        <div className="rounded-lg border border-border bg-card shadow-sm">
+            <div className="border-b border-border px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-sm font-semibold text-foreground">Orders</h2>
+                    <span className="text-xs text-muted-foreground">{orders.length} shown</span>
+                </div>
+            </div>
+            <div className="max-h-[calc(100vh-14rem)] overflow-y-auto">
+                <div className="divide-y divide-border">
+                    {orders.map((order, index) => {
+                        const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
+                        const isSelected = selectedOrderId === orderId;
 
-                                            <div className="flex shrink-0 items-center gap-2">
-                                                <Badge variant="secondary" className="capitalize">
-                                                    {OrderStatusDisplayNames[order.status as OrderStatus] ?? order.status}
-                                                </Badge>
-                                                <ChevronRight className={[
-                                                    "text-muted-foreground transition-transform",
-                                                    isSidebar ? "h-4 w-4" : "h-4 w-4",
-                                                    isSelected ? "translate-x-0.5 text-foreground" : "",
-                                                ].join(" ")} />
-                                            </div>
+                        return (
+                            <button
+                                key={orderId}
+                                type="button"
+                                onClick={() => onSelectOrder(orderId)}
+                                aria-current={isSelected ? "page" : undefined}
+                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 ${isSelected ? "bg-primary/10 ring-inset ring-1 ring-primary/20" : ""}`}
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 space-y-1">
+                                        <div className="flex min-h-11 items-center gap-2">
+                                            <span className="truncate text-sm font-medium text-foreground">
+                                                {order.inflow_order_id || order.id}
+                                            </span>
                                         </div>
-
-                                        <p className={[
-                                            "text-muted-foreground",
-                                            isSidebar ? "line-clamp-2 text-xs leading-5" : "line-clamp-1 text-sm leading-5",
-                                        ].join(" ")}>
-                                            {formatDeliveryLocation(order)}
+                                        <p className="break-words text-sm text-muted-foreground">
+                                            {order.recipient_name || "N/A"}
                                         </p>
                                     </div>
-                                </motion.button>
-                            );
-                        })}
-                    </motion.div>
-                )}
+                                    <StatusBadge status={order.status} />
+                                </div>
+                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                    <p className="line-clamp-2 break-words text-foreground/90">
+                                        {formatDeliveryLocation(order)}
+                                    </p>
+                                    <p>{formatToCentralTime(order.created_at, "MMM d, yyyy")}</p>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
-        </motion.section>
+        </div>
     );
 }
