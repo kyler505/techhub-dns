@@ -370,7 +370,7 @@ export default function DeliveryRunDetailPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {isValidOrderId(order.id) ? (
-                        <Link to={`/orders/${order.id}`}>
+                        <Link to={`/orders/${order.id}`} state={{ fromPath: location.pathname }}>
                           <Button variant="outline" size="sm">
                             View Order
                           </Button>
@@ -510,7 +510,7 @@ export default function DeliveryRunDetailPage() {
                     ) : null}
 
                     {isValidOrderId(order.id) ? (
-                      <Link to={`/orders/${order.id}`}>
+                      <Link to={`/orders/${order.id}`} state={{ fromPath: location.pathname }}>
                         <Button variant="outline" size="sm">
                           View Details
                         </Button>

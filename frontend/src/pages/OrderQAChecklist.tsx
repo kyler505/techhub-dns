@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
@@ -25,13 +25,14 @@ const storageKey = (orderId: string) => `order-qa-checklist-v2:${orderId}`;
 
 export default function OrderQAChecklist() {
     const navigate = useNavigate();
+    const location = useLocation();
 
     const openOrder = (orderId?: string) => {
         if (!isValidOrderId(orderId)) {
             toast.error("Order details are unavailable for this row");
             return;
         }
-        navigate(`/orders/${orderId}`);
+        navigate(`/orders/${orderId}`, { state: { fromPath: location.pathname } });
     };
 
     const openQa = (orderId?: string) => {

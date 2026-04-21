@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { AlertTriangle, ChevronDown, ChevronUp, Truck } from "lucide-react";
 import { toast } from "sonner";
@@ -96,8 +96,9 @@ function getVehicleStatusVariant(
   return "secondary";
 }
 
-export default function DeliveryDispatchPage() {
+export default function Dispatch() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { orders: websocketOrders } = useOrdersWebSocket();
   const { statusByVehicle, isLoading: statusesLoading, refresh: refreshStatuses } = useVehicleStatuses();
@@ -439,7 +440,7 @@ export default function DeliveryDispatchPage() {
       toast.error("Order details are unavailable for this row.");
       return;
     }
-    navigate(`/orders/${orderId}`);
+    navigate(`/orders/${orderId}`, { state: { fromPath: location.pathname } });
   };
 
   // Find vehicle checked out by current user (you can only have one)

@@ -28,7 +28,10 @@ export default function OrderDetailPage() {
     const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
     const location = useLocation();
-    const fromList = Boolean((location.state as Record<string, unknown>)?.fromList);
+    const locationState = (location.state as Record<string, unknown> | null) ?? null;
+    const fromList = Boolean(locationState?.fromList);
+    const rawOriginPath = typeof locationState?.fromPath === "string" ? locationState.fromPath : "/orders";
+    const originPath = /^\/orders\/[^/]+$/.test(rawOriginPath) ? "/orders" : rawOriginPath;
     const { user } = useAuth();
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
@@ -70,7 +73,7 @@ export default function OrderDetailPage() {
                 )}
                 <h1 className="text-lg font-semibold text-foreground">{title}</h1>
                 <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-                <Button type="button" variant="ghost" className="mt-4 min-h-11 gap-2 px-4" onClick={() => navigate(-1)} disabled={detailLoading}>
+                <Button type="button" variant="ghost" className="mt-4 min-h-11 gap-2 px-4" onClick={handleBackToOrigin} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -250,7 +253,14 @@ export default function OrderDetailPage() {
     };
 
     const handleSelectOrder = (nextOrderId: string) => {
-        navigate(`/orders/${nextOrderId}`, { state: { fromList: true } });
+        navigate(`/orders/${nextOrderId}`, {
+            replace: true,
+            state: { fromList: true, fromPath: originPath },
+        });
+    };
+
+    const handleBackToOrigin = () => {
+        navigate(originPath);
     };
 
     if (invalidOrderId) {
@@ -268,7 +278,7 @@ export default function OrderDetailPage() {
     return (
         <div>
             <div className="px-4 sm:px-6 lg:px-8">
-                <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={() => navigate(-1)} disabled={detailLoading}>
+                <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={handleBackToOrigin} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
