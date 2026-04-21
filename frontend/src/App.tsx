@@ -10,6 +10,7 @@ import { Skeleton } from "./components/Skeleton";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { SyncHealthBanner } from "./components/SyncHealthBanner";
 import { OfflineBanner } from "./components/OfflineBanner";
+import { getOrdersPageTransitionKey, isOrderDetailRoute } from "./utils/orderTransitions";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -37,15 +38,10 @@ function AppContent() {
     const location = useLocation();
 
     /** Stable key for AnimatePresence — suppresses transition when clicking between orders. */
-    const pageKey = (() => {
-        const p = location.pathname;
-        if (p === "/orders") return "/orders";
-        if (/^\/orders\/[^/]+$/.test(p)) return "/orders/:orderId";
-        return p;
-    })();
+    const pageKey = getOrdersPageTransitionKey(location.pathname);
 
     /** Disable outer page fade for order detail transitions — inner animations own the motion. */
-    const isOrderDetailTransition = location.pathname !== "/orders" && /^\/orders\/[^/]+$/.test(location.pathname);
+    const isOrderDetailTransition = location.pathname !== "/orders" && isOrderDetailRoute(location.pathname);
 
     useEffect(() => {
         if (typeof window === "undefined") return;

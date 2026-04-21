@@ -20,6 +20,7 @@ import { getOrderAuditQueryOptions, getOrderDetailQueryOptions, getOrdersListQue
 import { OrderStatus } from "../types/order";
 import { extractApiErrorMessage, shouldThrowToBoundary } from "../utils/apiErrors";
 import { isValidOrderId } from "../utils/orderIds";
+import { buildOrderDetailNavigationState, resolveOrderDetailNavigationState } from "../utils/orderTransitions";
 
 export default function OrderDetailPage() {
     const { orderId: rawOrderId } = useParams<{ orderId: string }>();
@@ -27,18 +28,12 @@ export default function OrderDetailPage() {
     const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
     const location = useLocation();
-    const locationState = (location.state as Record<string, unknown> | null) ?? null;
-    const fromList = Boolean(locationState?.fromList);
-    const rawOriginPath = typeof locationState?.fromPath === "string" ? locationState.fromPath : "/orders";
-    const originPath = /^\/orders\/[^/]+$/.test(rawOriginPath) ? "/orders" : rawOriginPath;
-    const sidebarStatus = Array.isArray(locationState?.sidebarStatus)
-        ? (locationState?.sidebarStatus as OrderStatus[])
-        : typeof locationState?.sidebarStatus === "string"
-            ? (locationState.sidebarStatus as OrderStatus)
-            : locationState?.sidebarStatus === null
-                ? null
-                : null;
-    const sidebarSearch = typeof locationState?.sidebarSearch === "string" ? locationState.sidebarSearch : "";
+    const {
+        animateFromList,
+        originPath,
+        sidebarStatus,
+        sidebarSearch,
+    } = resolveOrderDetailNavigationState(location.state);
     const { user } = useAuth();
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
@@ -262,12 +257,12 @@ export default function OrderDetailPage() {
     const handleSelectOrder = (nextOrderId: string) => {
         navigate(`/orders/${nextOrderId}`, {
             replace: true,
-            state: {
-                fromList: true,
+            state: buildOrderDetailNavigationState({
+                source: "sidebar",
                 fromPath: originPath,
                 sidebarStatus,
                 sidebarSearch,
-            },
+            }),
         });
     };
 
@@ -322,9 +317,9 @@ export default function OrderDetailPage() {
 
                 <motion.div
                     className="space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pt-4 lg:pb-6"
-                    initial={fromList ? { opacity: 0, scale: 0.985 } : false}
+                    initial={animateFromList ? { opacity: 0, scale: 0.985 } : false}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={fromList ? { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.04 } : { duration: 0 }}
+                    transition={animateFromList ? { duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: 0.02 } : { duration: 0 }}
                 >
                     {detailLoading ? (
                         <>

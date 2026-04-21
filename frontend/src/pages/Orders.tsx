@@ -17,6 +17,7 @@ import {
 } from "../queries/orders";
 import { toast } from "sonner";
 import { isValidOrderId } from "../utils/orderIds";
+import { buildOrderDetailNavigationState } from "../utils/orderTransitions";
 
 const PREFETCH_STATUS_FILTERS: StatusFilter[] = [
     null,
@@ -178,12 +179,12 @@ export default function Orders() {
         setSelectedOrderIdForTransition(orderId);
         window.requestAnimationFrame(() => {
             navigate(`/orders/${orderId}`, {
-                state: {
-                    fromList: true,
+                state: buildOrderDetailNavigationState({
+                    source: "list",
                     fromPath: location.pathname,
                     sidebarStatus: statusFilter,
                     sidebarSearch: debouncedSearch,
-                },
+                }),
             });
         });
     };

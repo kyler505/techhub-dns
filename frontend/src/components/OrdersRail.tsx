@@ -2,10 +2,10 @@ import { motion } from "framer-motion";
 import { ChevronRight, PackageSearch } from "lucide-react";
 
 import type { Order, OrderStatus } from "../types/order";
-import { Badge } from "./ui/badge";
-import { SkeletonCard } from "./Skeleton";
-import { formatDeliveryLocation } from "../utils/location";
 import { OrderStatusDisplayNames } from "../types/order";
+import { formatDeliveryLocation } from "../utils/location";
+import { SkeletonCard } from "./Skeleton";
+import { Badge } from "./ui/badge";
 
 type OrdersRailProps = {
     orders: Order[];
@@ -17,10 +17,18 @@ type OrdersRailProps = {
 };
 
 const shellLayoutId = "orders-shell";
-const rowLayoutId = (orderId: string) => `orders-row-${orderId}`;
 const titleLayoutId = "orders-shell-title";
 const subtitleLayoutId = "orders-shell-subtitle";
 const countLayoutId = "orders-shell-count";
+const rowLayoutId = (orderId: string) => `orders-row-${orderId}`;
+const shellLayoutTransition = {
+    duration: 0.38,
+    ease: [0.22, 1, 0.36, 1] as const,
+};
+const selectedRowTransition = {
+    duration: 0.32,
+    ease: [0.22, 1, 0.36, 1] as const,
+};
 
 export default function OrdersRail({
     orders,
@@ -34,9 +42,9 @@ export default function OrdersRail({
 
     return (
         <motion.section
-            layout
             layoutId={shellLayoutId}
-            transition={{ layout: { type: "spring", stiffness: 240, damping: 28 } }}
+            initial={false}
+            transition={{ layout: shellLayoutTransition }}
             className={[
                 "overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none",
                 isSidebar ? "lg:flex lg:h-full lg:flex-col lg:border-r-0 lg:rounded-r-none" : "",
@@ -45,14 +53,14 @@ export default function OrdersRail({
             <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
-                        <motion.h2 layoutId={titleLayoutId} className="text-base font-semibold tracking-tight">
+                        <motion.h2 layoutId={titleLayoutId} initial={false} className="text-base font-semibold tracking-tight">
                             Orders
                         </motion.h2>
-                        <motion.p layoutId={subtitleLayoutId} className="text-xs text-muted-foreground">
+                        <motion.p layoutId={subtitleLayoutId} initial={false} className="text-xs text-muted-foreground">
                             Keep browsing without losing the selected order.
                         </motion.p>
                     </div>
-                    <motion.div layoutId={countLayoutId}>
+                    <motion.div layoutId={countLayoutId} initial={false}>
                         <Badge variant="secondary" className="shrink-0">
                             {count ?? orders.length}
                         </Badge>
@@ -71,9 +79,7 @@ export default function OrdersRail({
                         <p className="text-sm font-medium text-foreground">No orders available</p>
                     </div>
                 ) : (
-                    <motion.div
-                        layout
-                        transition={{ layout: { type: "spring", stiffness: 240, damping: 30 } }}
+                    <div
                         className={[
                             "divide-y divide-border/60 overflow-auto",
                             isSidebar ? "max-h-[calc(100vh-12rem)] lg:min-h-0 lg:flex-1 lg:max-h-none" : "max-h-[70vh]",
@@ -81,20 +87,8 @@ export default function OrdersRail({
                     >
                         {orders.map((order) => {
                             const isSelected = order.id === selectedOrderId;
-                            return (
-                                <motion.button
-                                    layout
-                                    layoutId={rowLayoutId(order.id)}
-                                    transition={{ layout: { type: "spring", stiffness: 240, damping: 30 } }}
-                                    key={order.id}
-                                    type="button"
-                                    onClick={() => onSelectOrder(order.id)}
-                                    className={[
-                                        "flex w-full items-start gap-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none",
-                                        isSidebar ? "px-4 py-3" : "px-5 py-4 sm:px-6",
-                                        isSelected ? "bg-primary/5" : "bg-transparent",
-                                    ].join(" ")}
-                                >
+                            const rowContent = (
+                                <>
                                     <div
                                         className={[
                                             "mt-1 shrink-0 rounded-full",
@@ -121,11 +115,12 @@ export default function OrdersRail({
                                                 <Badge variant="secondary" className="capitalize">
                                                     {OrderStatusDisplayNames[order.status as OrderStatus] ?? order.status}
                                                 </Badge>
-                                                <ChevronRight className={[
-                                                    "text-muted-foreground transition-transform",
-                                                    isSidebar ? "h-4 w-4" : "h-4 w-4",
-                                                    isSelected ? "translate-x-0.5 text-foreground" : "",
-                                                ].join(" ")} />
+                                                <ChevronRight
+                                                    className={[
+                                                        "h-4 w-4 text-muted-foreground transition-transform",
+                                                        isSelected ? "translate-x-0.5 text-foreground" : "",
+                                                    ].join(" ")}
+                                                />
                                             </div>
                                         </div>
 
@@ -136,10 +131,43 @@ export default function OrdersRail({
                                             {formatDeliveryLocation(order)}
                                         </p>
                                     </div>
-                                </motion.button>
+                                </>
+                            );
+
+                            const sharedClassName = [
+                                "flex w-full items-start gap-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none",
+                                isSidebar ? "px-4 py-3" : "px-5 py-4 sm:px-6",
+                                isSelected ? "bg-primary/5" : "bg-transparent",
+                            ].join(" ");
+
+                            if (isSelected) {
+                                return (
+                                    <motion.button
+                                        key={order.id}
+                                        type="button"
+                                        onClick={() => onSelectOrder(order.id)}
+                                        layoutId={rowLayoutId(order.id)}
+                                        initial={false}
+                                        transition={{ layout: selectedRowTransition }}
+                                        className={sharedClassName}
+                                    >
+                                        {rowContent}
+                                    </motion.button>
+                                );
+                            }
+
+                            return (
+                                <button
+                                    key={order.id}
+                                    type="button"
+                                    onClick={() => onSelectOrder(order.id)}
+                                    className={sharedClassName}
+                                >
+                                    {rowContent}
+                                </button>
                             );
                         })}
-                    </motion.div>
+                    </div>
                 )}
             </div>
         </motion.section>
