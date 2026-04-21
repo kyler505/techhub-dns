@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
 import OrdersRail from "../components/OrdersRail";
@@ -38,9 +38,7 @@ export default function Orders() {
         newStatus: OrderStatus;
         requireReason: boolean;
     } | null>(null);
-    const [selectedOrderIdForTransition, setSelectedOrderIdForTransition] = useState<string | null>(null);
     const navigate = useNavigate();
-    const location = useLocation();
     const queryClient = useQueryClient();
 
     // WebSocket hook for real-time order updates
@@ -174,17 +172,11 @@ export default function Orders() {
             toast.error("Order details are unavailable for this row");
             return;
         }
-
-        setSelectedOrderIdForTransition(orderId);
-        window.requestAnimationFrame(() => {
-            navigate(`/orders/${orderId}`, {
-                state: {
-                    fromList: true,
-                    fromPath: location.pathname,
-                    sidebarStatus: statusFilter,
-                    sidebarSearch: debouncedSearch,
-                },
-            });
+        navigate(`/orders/${orderId}`, {
+            state: {
+                statusFilter,
+                search,
+            },
         });
     };
 
@@ -224,11 +216,9 @@ export default function Orders() {
                             <div className="hidden lg:block">
                                 <OrdersRail
                                     orders={orders}
-                                    selectedOrderId={selectedOrderIdForTransition}
+                                    selectedOrderId={null}
                                     onSelectOrder={handleViewDetail}
                                     loading={loading && orders.length === 0}
-                                    count={orders.length}
-                                    variant="full"
                                 />
                             </div>
                             <div className="lg:hidden">

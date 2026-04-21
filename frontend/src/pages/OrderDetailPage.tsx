@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { isAxiosError } from "axios";
-import { motion } from "framer-motion";
+import type { StatusFilter } from "../components/Filters";
 import { AlertCircle, ArrowLeft, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,7 +11,6 @@ import { settingsApi } from "../api/settings";
 import OrdersRail from "../components/OrdersRail";
 import { useAuth } from "../contexts/AuthContext";
 import OrderDetailComponent from "../components/OrderDetail";
-import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import StatusTransition from "../components/StatusTransition";
 import { Button } from "../components/ui/button";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
@@ -27,18 +26,12 @@ export default function OrderDetailPage() {
     const invalidOrderId = Boolean(rawOrderId) && !orderId;
     const navigate = useNavigate();
     const location = useLocation();
-    const locationState = (location.state as Record<string, unknown> | null) ?? null;
-    const fromList = Boolean(locationState?.fromList);
-    const rawOriginPath = typeof locationState?.fromPath === "string" ? locationState.fromPath : "/orders";
-    const originPath = /^\/orders\/[^/]+$/.test(rawOriginPath) ? "/orders" : rawOriginPath;
-    const sidebarStatus = Array.isArray(locationState?.sidebarStatus)
-        ? (locationState?.sidebarStatus as OrderStatus[])
-        : typeof locationState?.sidebarStatus === "string"
-            ? (locationState.sidebarStatus as OrderStatus)
-            : locationState?.sidebarStatus === null
-                ? null
-                : null;
-    const sidebarSearch = typeof locationState?.sidebarSearch === "string" ? locationState.sidebarSearch : "";
+    const locationState = (location.state as {
+        statusFilter?: StatusFilter;
+        search?: string;
+    } | null);
+    const sidebarStatusFilter = locationState?.statusFilter ?? [OrderStatus.PICKED, OrderStatus.QA];
+    const sidebarSearch = locationState?.search ?? "";
     const { user } = useAuth();
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
@@ -61,7 +54,7 @@ export default function OrderDetailPage() {
         throwOnError: shouldThrowToBoundary,
     });
 
-    const listQuery = useQuery(getOrdersListQueryOptions({ status: sidebarStatus, search: sidebarSearch }));
+    const listQuery = useQuery(getOrdersListQueryOptions({ status: sidebarStatusFilter, search: sidebarSearch }));
 
     const order = orderQuery.data ?? null;
     const auditLogs = auditQuery.data ?? [];
@@ -69,6 +62,18 @@ export default function OrderDetailPage() {
     const sidebarOrders = listQuery.data ?? [];
     const detailLoading = orderQuery.isPending || auditQuery.isPending;
     const sidebarLoading = listQuery.isPending && sidebarOrders.length === 0;
+
+    const handleBack = () => {
+        if (typeof window !== "undefined" && window.history.length > 1) {
+            navigate(-1);
+            return;
+        }
+
+        navigate("/orders", {
+            replace: true,
+            state: locationState ?? undefined,
+        });
+    };
 
     const renderState = (title: string, description: string, icon: "error" | "missing") => (
         <div className="mx-auto flex min-h-[50vh] max-w-xl items-center justify-center px-4">
@@ -80,7 +85,7 @@ export default function OrderDetailPage() {
                 )}
                 <h1 className="text-lg font-semibold text-foreground">{title}</h1>
                 <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-                <Button type="button" variant="outline" className="mt-4 min-h-11 gap-2 px-4" onClick={handleBackToOrigin} disabled={detailLoading}>
+                <Button type="button" variant="outline" className="mt-4 min-h-11 gap-2 px-4" onClick={handleBack} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -261,18 +266,8 @@ export default function OrderDetailPage() {
 
     const handleSelectOrder = (nextOrderId: string) => {
         navigate(`/orders/${nextOrderId}`, {
-            replace: true,
-            state: {
-                fromList: true,
-                fromPath: originPath,
-                sidebarStatus,
-                sidebarSearch,
-            },
+            state: locationState ?? undefined,
         });
-    };
-
-    const handleBackToOrigin = () => {
-        navigate(originPath);
     };
 
     if (invalidOrderId) {
@@ -288,87 +283,42 @@ export default function OrderDetailPage() {
     }
 
     return (
-        <div className="lg:flex lg:h-[calc(100vh-3rem)] lg:items-stretch lg:overflow-hidden">
-            <div className="px-4 sm:px-6 lg:hidden lg:px-8">
-                <Button type="button" variant="outline" className="mb-4 min-h-11 gap-2" onClick={handleBackToOrigin} disabled={detailLoading}>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+            <aside className="hidden lg:block">
+                <OrdersRail
+                    orders={sidebarOrders}
+                    selectedOrderId={order!.id}
+                    loading={sidebarLoading}
+                    onSelectOrder={handleSelectOrder}
+                />
+            </aside>
+
+            <div className="min-w-0 space-y-4 sm:space-y-6">
+                <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={handleBack} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
-            </div>
-
-            <div className="lg:h-full lg:shrink-0 lg:w-64">
-                <OrdersRail
-                    orders={sidebarOrders}
-                    selectedOrderId={orderId}
-                    onSelectOrder={handleSelectOrder}
-                    loading={sidebarLoading}
-                    count={sidebarOrders.length}
-                    variant="sidebar"
+                <OrderDetailComponent
+                    order={order!}
+                    auditLogs={auditLogs}
+                    notifications={notifications}
+                    onStatusChange={handleStatusChange}
+                    onTagOrder={handleTagOrder}
+                    onRequestTags={handleRequestTags}
+                    onGeneratePicklist={handleGeneratePicklist}
+                    generatingPicklist={generatePicklistMutation.isPending}
                 />
+                {transitioningStatus && (
+                    <StatusTransition
+                        currentStatus={order!.status}
+                        newStatus={transitioningStatus.newStatus}
+                        requireReason={transitioningStatus.requireReason}
+                        onConfirm={(reason) => performStatusChange(transitioningStatus.newStatus, reason)}
+                        onCancel={() => setTransitioningStatus(null)}
+                        submitting={updateStatusMutation.isPending}
+                    />
+                )}
             </div>
-
-            <div className="lg:flex lg:h-full lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-hidden px-4 sm:px-6 lg:px-8">
-                <section className="hidden lg:flex lg:shrink-0 lg:items-center lg:justify-between lg:gap-3 lg:border-b lg:border-border/60 lg:bg-background lg:py-3">
-                    <Button type="button" variant="outline" className="min-h-11 gap-2" onClick={handleBackToOrigin} disabled={detailLoading}>
-                        <ArrowLeft className="h-4 w-4" />
-                        Back
-                    </Button>
-                    <div className="flex flex-wrap gap-3">
-                        <Button variant="outline" onClick={() => void refreshOrder()} disabled={detailLoading}>
-                            Refresh this order
-                        </Button>
-                    </div>
-                </section>
-
-                <motion.div
-                    className="space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pt-4 lg:pb-6"
-                    initial={fromList ? { opacity: 0, scale: 0.985 } : false}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={fromList ? { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.04 } : { duration: 0 }}
-                >
-                    {detailLoading ? (
-                        <>
-                            <Skeleton className="h-72 w-full rounded-2xl" />
-                            <SkeletonCard lines={6} />
-                        </>
-                    ) : (
-                        <>
-                            <OrderDetailComponent
-                                order={order!}
-                                auditLogs={auditLogs}
-                                notifications={notifications}
-                                onStatusChange={handleStatusChange}
-                                onTagOrder={handleTagOrder}
-                                onRequestTags={handleRequestTags}
-                                onGeneratePicklist={handleGeneratePicklist}
-                                generatingPicklist={generatePicklistMutation.isPending}
-                            />
-
-                            <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none lg:hidden">
-                                <div className="flex flex-wrap gap-3">
-                                    <Button variant="outline" onClick={() => void refreshOrder()}>
-                                        Refresh this order
-                                    </Button>
-                                    <Button variant="outline" onClick={handleBackToOrigin}>
-                                        Back
-                                    </Button>
-                                </div>
-                            </section>
-                        </>
-                    )}
-                </motion.div>
-            </div>
-
-            {order && transitioningStatus && (
-                <StatusTransition
-                    currentStatus={order.status}
-                    newStatus={transitioningStatus.newStatus}
-                    requireReason={transitioningStatus.requireReason}
-                    onConfirm={(reason) => performStatusChange(transitioningStatus.newStatus, reason)}
-                    onCancel={() => setTransitioningStatus(null)}
-                    submitting={updateStatusMutation.isPending}
-                />
-            )}
         </div>
     );
 }
