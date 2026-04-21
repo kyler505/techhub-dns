@@ -276,22 +276,22 @@ export default function OrderDetailPage() {
     }
 
     return (
-        <div>
-            <div className="px-4 sm:px-6 lg:px-8">
+        <div className="lg:flex lg:h-[calc(100vh-3rem)] lg:flex-col lg:overflow-hidden">
+            <div className="px-4 sm:px-6 lg:shrink-0 lg:px-8">
                 <Button type="button" variant="ghost" className="mb-4 min-h-11 gap-2 px-0" onClick={handleBackToOrigin} disabled={detailLoading}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
             </div>
 
-            <div className="lg:flex lg:items-start">
+            <div className="lg:flex lg:min-h-0 lg:flex-1 lg:items-stretch lg:overflow-hidden">
                 <motion.aside
-                    className="lg:sticky lg:top-0 lg:shrink-0 lg:w-64 lg:self-start"
+                    className="lg:h-full lg:shrink-0 lg:w-64"
                     initial={fromList ? { opacity: 0, x: -30 } : false}
                     animate={{ opacity: 1, x: 0 }}
                     transition={fromList ? { type: "spring", stiffness: 260, damping: 25 } : { duration: 0 }}
                 >
-                    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:min-h-[calc(100vh-3.5rem)] lg:border-r-0 lg:rounded-r-none">
+                    <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none lg:flex lg:h-full lg:flex-col lg:border-r-0 lg:rounded-r-none">
                         <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
@@ -314,7 +314,7 @@ export default function OrderDetailPage() {
                                     <p className="text-sm font-medium text-foreground">No orders available</p>
                                 </div>
                             ) : (
-                                <div className="max-h-[calc(100vh-12rem)] divide-y divide-border/60 overflow-auto">
+                                <div className="max-h-[calc(100vh-12rem)] divide-y divide-border/60 overflow-auto lg:min-h-0 lg:flex-1 lg:max-h-none">
                                     {sidebarOrders.map((sidebarOrder) => {
                                         const isSelected = sidebarOrder.id === orderId;
                                         return (
@@ -358,7 +358,7 @@ export default function OrderDetailPage() {
                     </motion.aside>
 
                 <motion.div
-                    className="space-y-4 lg:flex-1 lg:min-w-0 px-4 sm:px-6 lg:px-8"
+                    className="space-y-4 lg:flex lg:h-full lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-y-auto px-4 sm:px-6 lg:px-8"
                     initial={fromList ? { opacity: 0, scale: 0.97 } : false}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={fromList ? { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 } : { duration: 0 }}
