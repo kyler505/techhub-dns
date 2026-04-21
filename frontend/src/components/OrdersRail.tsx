@@ -12,14 +12,6 @@ interface OrdersRailProps {
     onSelectOrder: (orderId: string) => void;
 }
 
-function getUrgencyClasses(status: string | undefined | null): string {
-    const s = (status ?? "").toUpperCase();
-    if (s === "ISSUE") return "border-l-4 border-l-destructive";
-    if (s === "PICKED" || s === "QA") return "border-l-4 border-l-amber-500";
-    if (s === "DELIVERED" || s === "CANCELLED") return "opacity-60";
-    return "border-l-4 border-l-primary/30";
-}
-
 export default function OrdersRail({
     orders,
     selectedOrderId = null,
@@ -114,7 +106,6 @@ export default function OrdersRail({
                         const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
                         const isSelected = selectedOrderId === orderId;
                         const isFocused = focusedIndex === index;
-                        const urgencyClasses = getUrgencyClasses(order.status);
                         const orderLabel = `Order ${order.inflow_order_id || order.id}, ${order.recipient_name || "N/A"}, ${order.status ?? "Unknown"}`;
 
                         return (
@@ -127,7 +118,7 @@ export default function OrdersRail({
                                 onFocus={() => setFocusedIndex(index)}
                                 aria-current={isSelected ? "page" : undefined}
                                 aria-label={orderLabel}
-                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""} ${urgencyClasses}`}
+                                className={`block w-full px-4 py-3 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isSelected ? "bg-primary/15" : ""}`}
                             >
                                 <div className="flex items-center justify-between gap-2">
                                     <span className="truncate text-sm font-medium text-foreground">
