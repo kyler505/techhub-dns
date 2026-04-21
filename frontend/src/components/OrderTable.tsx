@@ -28,7 +28,7 @@ export default function OrderTable({
     showEmptyState = true,
     loading = false,
 }: OrderTableProps) {
-    const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status">("date");
+    const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status" | "assigned" | "updated">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -86,6 +86,12 @@ export default function OrderTable({
                     break;
                 case "status":
                     comparison = compareText(a.status, b.status);
+                    break;
+                case "assigned":
+                    comparison = compareText(a.assigned_deliverer, b.assigned_deliverer);
+                    break;
+                case "updated":
+                    comparison = compareDate(a.updated_at, b.updated_at);
                     break;
                 case "date":
                 default:
@@ -172,7 +178,7 @@ export default function OrderTable({
             </div>
 
             <div className="hidden md:block overflow-x-auto ios-scroll">
-                <Table className="min-w-[720px]">
+                <Table className="min-w-[960px]">
                     <TableHeader className="sticky top-0 z-20 bg-muted/40">
                         <TableRow>
                             <TableHead className="w-[220px] lg:w-[260px]" aria-sort={sortKey === "id" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
@@ -187,21 +193,33 @@ export default function OrderTable({
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead className="hidden lg:table-cell" aria-sort={sortKey === "location" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
+                            <TableHead aria-sort={sortKey === "location" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("location")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Location
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead className="hidden whitespace-nowrap lg:table-cell" aria-sort={sortKey === "date" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
+                            <TableHead className="whitespace-nowrap" aria-sort={sortKey === "date" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("date")} className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Order Date
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
+                            <TableHead aria-sort={sortKey === "assigned" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
+                                <button type="button" onClick={() => toggleSort("assigned")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Assigned
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
                             <TableHead aria-sort={sortKey === "status" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("status")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Status
+                                    <ArrowUpDown className="h-3.5 w-3.5" />
+                                </button>
+                            </TableHead>
+                            <TableHead className="whitespace-nowrap" aria-sort={sortKey === "updated" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
+                                <button type="button" onClick={() => toggleSort("updated")} className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    Updated
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
@@ -224,11 +242,13 @@ export default function OrderTable({
                                     </Button>
                                 </TableCell>
                                 <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
-                                <TableCell className="hidden break-words lg:table-cell">{formatDeliveryLocation(order)}</TableCell>
-                                <TableCell className="hidden whitespace-nowrap lg:table-cell">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
+                                <TableCell className="break-words">{formatDeliveryLocation(order)}</TableCell>
+                                <TableCell className="whitespace-nowrap">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
+                                <TableCell>{order.assigned_deliverer || "—"}</TableCell>
                                 <TableCell>
                                     <StatusBadge status={order.status} />
                                 </TableCell>
+                                <TableCell className="whitespace-nowrap">{formatToCentralTime(order.updated_at, "MMM d, yyyy")}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
