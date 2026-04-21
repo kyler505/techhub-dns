@@ -4,7 +4,6 @@ import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
 import { OrderStatus } from "../types/order";
 import OrderTable from "../components/OrderTable";
-import OrdersRail from "../components/OrdersRail";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 import { SkeletonTable } from "../components/Skeleton";
@@ -185,7 +184,7 @@ export default function Orders() {
     }
 
     return (
-        <div className="container mx-auto py-6 space-y-4">
+        <div className="max-w-[1600px] mx-auto py-6 space-y-4">
             <div className="space-y-1">
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
             </div>
@@ -213,23 +212,13 @@ export default function Orders() {
                         </div>
                     ) : (
                         <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
-                            <div className="hidden lg:block">
-                                <OrdersRail
-                                    orders={orders}
-                                    selectedOrderId={null}
-                                    onSelectOrder={handleViewDetail}
-                                    loading={loading && orders.length === 0}
-                                />
-                            </div>
-                            <div className="lg:hidden">
-                                <OrderTable
-                                    orders={orders}
-                                    onStatusChange={handleStatusChange}
-                                    onViewDetail={handleViewDetail}
-                                    showEmptyState={false}
-                                    loading={loading}
-                                />
-                            </div>
+                            <OrderTable
+                                orders={orders}
+                                onStatusChange={handleStatusChange}
+                                onViewDetail={handleViewDetail}
+                                showEmptyState={false}
+                                loading={loading}
+                            />
                         </div>
                     )}
                 </div>
