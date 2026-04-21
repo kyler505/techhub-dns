@@ -287,7 +287,7 @@ export default function OrderDetailPage() {
             <aside className="hidden lg:block">
                 <OrdersRail
                     orders={sidebarOrders}
-                    selectedOrderId={order!.id}
+                    selectedOrderId={orderId}
                     loading={sidebarLoading}
                     onSelectOrder={handleSelectOrder}
                 />
@@ -308,9 +308,9 @@ export default function OrderDetailPage() {
                     onGeneratePicklist={handleGeneratePicklist}
                     generatingPicklist={generatePicklistMutation.isPending}
                 />
-                {transitioningStatus && (
+                {order && transitioningStatus && (
                     <StatusTransition
-                        currentStatus={order!.status}
+                        currentStatus={order.status}
                         newStatus={transitioningStatus.newStatus}
                         requireReason={transitioningStatus.requireReason}
                         onConfirm={(reason) => performStatusChange(transitioningStatus.newStatus, reason)}
