@@ -427,6 +427,7 @@ export default function Dashboard() {
                   <div key={order.id} className="flex items-center justify-between text-sm">
                     <Link
                       to={`/orders/${order.id}`}
+                      state={{ fromPath: "/" }}
                       className="font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
                     >
                       {order.inflow_order_id || order.id.slice(0, 8)}
