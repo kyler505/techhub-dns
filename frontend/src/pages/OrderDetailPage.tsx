@@ -303,7 +303,7 @@ export default function OrderDetailPage() {
                                 </Badge>
                             </div>
                         </div>
-                        <div className="p-0">
+                        <div className="p-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                             {sidebarLoading ? (
                                 <div className="p-4">
                                     <SkeletonCard header={false} lines={5} />
@@ -357,12 +357,13 @@ export default function OrderDetailPage() {
                     </section>
                     </motion.aside>
 
-                <motion.div
-                    className="space-y-4 lg:flex lg:h-full lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-y-auto px-4 sm:px-6 lg:px-8"
-                    initial={fromList ? { opacity: 0, scale: 0.97 } : false}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={fromList ? { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 } : { duration: 0 }}
-                >
+                <div className="lg:flex lg:h-full lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-hidden px-4 sm:px-6 lg:px-8">
+                    <motion.div
+                        className="space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pt-1 lg:pb-6"
+                        initial={fromList ? { opacity: 0, scale: 0.97 } : false}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={fromList ? { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 } : { duration: 0 }}
+                    >
                     {detailLoading ? (
                         <>
                             <Skeleton className="h-72 w-full rounded-2xl" />
@@ -391,7 +392,8 @@ export default function OrderDetailPage() {
                             </section>
                         </>
                     )}
-                </motion.div>
+                    </motion.div>
+                </div>
             </div>
 
             {order && transitioningStatus && (
