@@ -172,15 +172,44 @@ class SamlAuthService:
         Returns:
             User object (new or existing)
         """
-        # Extract attributes from SAML response
-        # Azure sends these as lists, take first value
-        oid = self._get_attr(saml_attributes, 'http://schemas.microsoft.com/identity/claims/objectidentifier')
-        email = self._get_attr(saml_attributes, 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress')
-        display_name = self._get_attr(saml_attributes, 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name')
-        given_name = self._get_attr(saml_attributes, 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname')
-        surname = self._get_attr(saml_attributes, 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname')
+        # Extract attributes from SAML response.
+        # Azure/Entra can surface either the standard claim URIs or custom
+        # short claim names depending on how the SAML app is configured.
+        oid = self._get_attr(
+            saml_attributes,
+            'http://schemas.microsoft.com/identity/claims/objectidentifier',
+            'oid',
+            'objectidentifier',
+        )
+        email = self._get_attr(
+            saml_attributes,
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+            'email',
+            'userprincipalname',
+            'upn',
+        )
+        display_name = self._get_attr(
+            saml_attributes,
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name',
+            'display_name',
+            'displayname',
+            'name',
+        )
+        given_name = self._get_attr(
+            saml_attributes,
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
+            'given_name',
+            'givenname',
+        )
+        surname = self._get_attr(
+            saml_attributes,
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
+            'surname',
+            'family_name',
+            'familyname',
+        )
         department = self._get_attr(saml_attributes, 'department')
-        employee_id = self._get_attr(saml_attributes, 'employeeid')
+        employee_id = self._get_attr(saml_attributes, 'employeeid', 'employee_id')
 
         # Fallback: construct display name from given name + surname if not provided
         if not display_name and (given_name or surname):
@@ -220,13 +249,14 @@ class SamlAuthService:
         db.refresh(user)
         return user
 
-    def _get_attr(self, attributes: dict, key: str) -> Optional[str]:
-        """Extract single value from SAML attributes (handles list format)."""
-        value = attributes.get(key)
-        if isinstance(value, list) and len(value) > 0:
-            return value[0]
-        if isinstance(value, str):
-            return value
+    def _get_attr(self, attributes: dict, *keys: str) -> Optional[str]:
+        """Extract the first single-value attribute found for any candidate key."""
+        for key in keys:
+            value = attributes.get(key)
+            if isinstance(value, list) and len(value) > 0:
+                return value[0]
+            if isinstance(value, str):
+                return value
         return None
 
     def create_session(
