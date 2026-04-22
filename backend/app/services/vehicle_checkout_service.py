@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.models.vehicle_checkout import VehicleCheckout
 from app.utils.exceptions import ValidationError
+from app.utils.display_labels import resolve_user_display
 from app.utils.timezone import to_utc_iso_z
 
 logger = logging.getLogger(__name__)
@@ -366,7 +367,7 @@ class VehicleCheckoutService:
                     **{
                         "id": str(c.id),
                         "vehicle": c.vehicle,
-                        "checked_out_by": c.checked_out_by,
+                        "checked_out_by": resolve_user_display(self.db, c.checked_out_by),
                         "checked_out_by_user_id": c.checked_out_by_user_id,
                         "checked_out_by_email": c.checked_out_by_email,
                         "checkout_type": c.checkout_type,
@@ -374,7 +375,7 @@ class VehicleCheckoutService:
                         "notes": c.notes,
                         "checked_out_at": to_utc_iso_z(c.checked_out_at),
                         "checked_in_at": to_utc_iso_z(c.checked_in_at),
-                        "checked_in_by": c.checked_in_by,
+                        "checked_in_by": resolve_user_display(self.db, c.checked_in_by),
                     }
                 }
                 for c in items

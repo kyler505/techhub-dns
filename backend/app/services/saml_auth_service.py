@@ -226,11 +226,14 @@ class SamlAuthService:
         user = db.query(User).filter(User.tamu_oid == oid).first()
 
         if user:
-            # Update user info on login
+            # Update user info on login.
             user.email = email
-            user.display_name = display_name
-            user.department = department
-            user.employee_id = employee_id
+            if display_name is not None:
+                user.display_name = display_name
+            if department is not None:
+                user.department = department
+            if employee_id is not None:
+                user.employee_id = employee_id
             user.last_login_at = datetime.utcnow()
             logger.info(f"User login: {email}")
         else:

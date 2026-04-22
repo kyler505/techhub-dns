@@ -14,6 +14,7 @@ import {
   type VettingEditorSection,
 } from "../api/vettingEditor";
 import { useAuth } from "../contexts/AuthContext";
+import { getUserDisplayName } from "../utils/userDisplay";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
@@ -116,7 +117,8 @@ const buildPayload = (rows: VettingEditorRow[]): VettingEditorPayload => {
 };
 
 export default function VettingEditor() {
-  const { isAdmin, isLoading: authLoading, user } = useAuth();
+    const { isAdmin, isLoading: authLoading, user } = useAuth();
+    const currentUserLabel = getUserDisplayName(user, "you");
   const [rows, setRows] = useState<VettingEditorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -333,7 +335,7 @@ export default function VettingEditor() {
             Admin access is required to view this page.
           </p>
           <p className="mt-4 text-sm text-muted-foreground">
-            {user?.email ? `Signed in as ${user.email}.` : "You are not signed in."}
+            {currentUserLabel ? `Signed in as ${currentUserLabel}.` : "You are not signed in."}
           </p>
         </section>
       </div>
