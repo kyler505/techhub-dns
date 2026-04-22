@@ -286,7 +286,7 @@ export default function OrderDetailPage() {
     }
 
     return (
-        <div className="-mx-4 sm:-mx-6 lg:-mx-8 h-full">
+        <div className="h-full">
             <div className="lg:flex lg:h-full lg:items-stretch lg:overflow-hidden">
                 <aside className="hidden lg:block lg:h-full lg:w-80 lg:shrink-0 lg:border-r lg:border-border/60">
                     <OrdersRail
