@@ -207,8 +207,8 @@ export default function OrderQAPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="text-lg">Loading order...</div>
+            <div className="flex h-full min-h-0 items-center justify-center bg-background px-4 py-8">
+                <div className="text-lg text-foreground">Loading order...</div>
             </div>
         );
     }
@@ -218,7 +218,7 @@ export default function OrderQAPage() {
     const hasIncompleteSteps = verificationSteps.some((step) => !form[step.id as keyof QAFormState]);
 
     return (
-        <div className="bg-background px-4 py-8">
+        <div className="h-full min-h-0 overflow-y-auto bg-background px-4 py-8">
             <div className="mx-auto max-w-4xl space-y-6">
                 <div className="space-y-1 text-foreground">
                     <h1 className="text-3xl font-semibold">QA Checklist</h1>
