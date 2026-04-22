@@ -218,7 +218,7 @@ export default function OrderQAPage() {
     const hasIncompleteSteps = verificationSteps.some((step) => !form[step.id as keyof QAFormState]);
 
     return (
-        <div className="bg-background min-h-screen px-4 py-8">
+        <div className="bg-background px-4 py-8">
             <div className="mx-auto max-w-4xl space-y-6">
                 <div className="space-y-1 text-foreground">
                     <h1 className="text-3xl font-semibold">QA Checklist</h1>
@@ -246,7 +246,7 @@ export default function OrderQAPage() {
                         </div>
 
                         <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 text-sm text-foreground">
-                            Technician recorded as <span className="font-semibold text-accent">{currentUserName}</span> on submission.
+                            Technician recorded as <span className="font-semibold text-foreground">{currentUserName}</span> on submission.
                         </div>
 
                         <div className="space-y-4">
