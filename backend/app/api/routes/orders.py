@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, abort, send_file, current_app
+from flask import Blueprint, request, jsonify, abort, send_file, current_app, g
 from flask_socketio import emit
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 from app.database import get_db
+from app.models.user import User
 from app.services.order_service import OrderService
 from app.services.inflow_service import InflowService
 from app.utils.broadcast_dedup import broadcast_dedup
@@ -55,6 +56,24 @@ def _order_detail_response_json(order) -> dict:
     return current_app.json.loads(
         OrderDetailResponse.model_validate(order).model_dump_json()
     )
+
+
+def _get_current_user_display_name() -> str:
+    user_data = getattr(g, "user_data", None) or {}
+    display_name = (user_data.get("display_name") or "").strip()
+    if display_name:
+        return display_name
+
+    current_user = get_current_user_email()
+    if current_user and current_user != "system":
+        with get_db() as db:
+            user = db.query(User).filter(User.email == current_user).first()
+            if user:
+                display_name = (user.display_name or "").strip()
+                if display_name:
+                    return display_name
+
+    return current_user
 
 
 def _order_list_item_json(order, pick_status_data=None) -> str:
@@ -535,7 +554,7 @@ def submit_qa(order_id):
 
         # Auto-assign technician from auth context
         current_user = get_current_user_email()
-        technician = current_user if current_user != "system" else submission.technician
+        technician = _get_current_user_display_name() if current_user != "system" else submission.technician
 
         order = service.submit_qa(
             order_id=order_id,
