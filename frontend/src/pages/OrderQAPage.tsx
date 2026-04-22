@@ -93,6 +93,7 @@ export default function OrderQAPage() {
     const navigate = useNavigate();
     const { orderId } = useParams<{ orderId: string }>();
     const { user } = useAuth();
+    const currentUserName = user?.display_name || user?.email || "Current User";
 
     const [form, setForm] = useState<QAFormState>(() => defaultForm(""));
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -140,9 +141,8 @@ export default function OrderQAPage() {
 
     const setupDefaults = (orderNumber: string) => {
         const defaults = defaultForm(orderNumber);
-        if (user?.display_name) {
-            defaults.qaSignature = user.display_name;
-        }
+        defaults.qaSignature = currentUserName;
+        defaults.technician = currentUserName;
         setForm(defaults);
         setLastSavedAt(null);
     };
@@ -184,9 +184,9 @@ export default function OrderQAPage() {
             await submitQaMutation.mutateAsync({
                 responses: {
                     ...form,
-                    qaSignature: user?.display_name || user?.email || "System",
+                    qaSignature: currentUserName,
                 },
-                technician: user?.email || "system",
+                technician: currentUserName,
                 expected_updated_at: order.updated_at,
             });
 
@@ -246,7 +246,7 @@ export default function OrderQAPage() {
                         </div>
 
                         <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 text-sm text-foreground">
-                            Technician recorded as <span className="font-semibold text-accent">{user?.display_name || user?.email || "Current User"}</span> on submission.
+                            Technician recorded as <span className="font-semibold text-accent">{currentUserName}</span> on submission.
                         </div>
 
                         <div className="space-y-4">
@@ -285,7 +285,7 @@ export default function OrderQAPage() {
                                 9. QA Signature <span className="text-red-600">*</span>
                             </label>
                             <div className="rounded-xl border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                                {user?.display_name || user?.email || "Current User"}
+                                {currentUserName}
                             </div>
                             <p className="text-xs text-muted-foreground">Automatic signature recorded on submit.</p>
                         </div>
