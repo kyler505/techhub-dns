@@ -101,7 +101,7 @@ def test_qa_pdf_generation():
 
 def test_pdf_bundling():
     """Test PDF bundling (isolated)"""
-    from pypdf import PdfMerger
+    from pypdf import PdfWriter
 
     # Create temp directory
     temp_dir = Path("storage/temp")
@@ -128,11 +128,11 @@ def test_pdf_bundling():
     # Test bundling
     output_path = temp_dir / "test-bundle.pdf"
 
-    merger = PdfMerger()
-    merger.append(str(pdf1_path))
-    merger.append(str(pdf2_path))
-    merger.write(str(output_path))
-    merger.close()
+    writer = PdfWriter()
+    writer.append(str(pdf1_path))
+    writer.append(str(pdf2_path))
+    with open(output_path, "wb") as output_file:
+        writer.write(output_file)
 
     if output_path.exists():
         print(f"[SUCCESS] Bundled PDF created: {output_path}")
