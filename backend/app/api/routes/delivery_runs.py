@@ -16,7 +16,9 @@ from app.schemas.delivery_run import (
     ReorderDeliveryRunOrdersRequest,
 )
 from app.models.delivery_run import VehicleEnum
+from app.models.user import User
 from app.utils.exceptions import ValidationError
+from app.utils.display_labels import resolve_runner_display
 from app.utils.timezone import to_utc_iso_z
 from app.utils.broadcast_dedup import broadcast_dedup
 from pydantic import ValidationError as PydanticValidationError
@@ -46,7 +48,7 @@ def _do_broadcast_active_runs(db_session):
             payload.append(
                 {
                     "id": str(r.id),
-                    "runner": r.runner,
+                    "runner": _resolve_runner_display(db_session, r.runner),
                     "vehicle": r.vehicle.value
                     if hasattr(r.vehicle, "value")
                     else str(r.vehicle),
@@ -116,7 +118,7 @@ def create_run():
             response = DeliveryRunResponse(
                 id=run.id,
                 name=run.name,
-                runner=run.runner,
+                runner=_resolve_runner_display(db, run.runner),
                 vehicle=run.vehicle,
                 status=run.status,
                 start_time=run.start_time,
@@ -147,7 +149,7 @@ def get_runs():
                 DeliveryRunResponse(
                     id=r.id,
                     name=r.name,
-                    runner=r.runner,
+                    runner=_resolve_runner_display(db, r.runner),
                     vehicle=r.vehicle,
                     status=r.status,
                     start_time=r.start_time,
@@ -171,7 +173,7 @@ def get_active_runs():
                 DeliveryRunResponse(
                     id=r.id,
                     name=r.name,
-                    runner=r.runner,
+                    runner=_resolve_runner_display(db, r.runner),
                     vehicle=r.vehicle,
                     status=r.status,
                     start_time=r.start_time,
@@ -209,7 +211,7 @@ def get_run(run_id):
         response = DeliveryRunDetailResponse(
             id=run.id,
             name=run.name,
-            runner=run.runner,
+            runner=_resolve_runner_display(db, run.runner),
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,
@@ -267,7 +269,7 @@ def finish_run(run_id):
             response = DeliveryRunResponse(
                 id=run.id,
                 name=run.name,
-                runner=run.runner,
+                runner=_resolve_runner_display(db, run.runner),
                 vehicle=run.vehicle,
                 status=run.status,
                 start_time=run.start_time,
@@ -307,7 +309,7 @@ def recall_run_order(run_id, order_id):
         response = DeliveryRunResponse(
             id=run.id,
             name=run.name,
-            runner=run.runner,
+            runner=_resolve_runner_display(db, run.runner),
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,
@@ -343,7 +345,7 @@ def reorder_run_orders(run_id):
         response = DeliveryRunResponse(
             id=run.id,
             name=run.name,
-            runner=run.runner,
+            runner=_resolve_runner_display(db, run.runner),
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,

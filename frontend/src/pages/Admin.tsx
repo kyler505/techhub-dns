@@ -36,6 +36,7 @@ import { extractApiErrorMessage } from "../utils/apiErrors";
 import { shouldThrowToBoundary } from "../utils/apiErrors";
 import { ordersQueryKeys } from "../queries/orders";
 import { formatToCentralTime } from "../utils/timezone";
+import { getUserDisplayName } from "../utils/userDisplay";
 import { SectionErrorBoundary } from "../components/error-boundaries/AppErrorBoundaries";
 
 interface FeatureStatus {
@@ -115,6 +116,8 @@ interface PrintJobOrderSummary {
 export default function Admin() {
     const { user, isAdmin, isLoading: authLoading } = useAuth();
     const queryClient = useQueryClient();
+
+    const currentUserLabel = getUserDisplayName(user, "you");
 
     const [activeTab, setActiveTab] = useState<"overview" | "notifications" | "operations" | "admins" | "flow">("overview");
 
@@ -595,7 +598,7 @@ export default function Admin() {
                         <CardDescription>Admin access is required to view this page.</CardDescription>
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground">
-                        {user?.email ? `Signed in as ${user.email}.` : "You are not signed in."}
+                        {currentUserLabel ? `Signed in as ${currentUserLabel}.` : "You are not signed in."}
                     </CardContent>
                 </Card>
             </div>
@@ -643,7 +646,7 @@ export default function Admin() {
                     <p className="text-sm text-muted-foreground">System status, notification switches, and operational tools.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    {user?.email && <span className="text-xs text-muted-foreground">Signed in as {user.email}</span>}
+                    {currentUserLabel && <span className="text-xs text-muted-foreground">Signed in as {currentUserLabel}</span>}
                     <Button
                         variant="outline"
                         size="sm"
