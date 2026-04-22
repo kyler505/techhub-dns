@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { AlertTriangle, ChevronDown, ChevronUp, Truck } from "lucide-react";
@@ -119,7 +119,9 @@ export default function Dispatch() {
   const [preDeliveryOrders, setPreDeliveryOrders] = useState<Order[]>([]);
   const [inDeliveryOrders, setInDeliveryOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [draggingOrderId, setDraggingOrderId] = useState<string | null>(null);
+  const [dragOverOrderId, setDragOverOrderId] = useState<string | null>(null);
   const [activeVehicleAction, setActiveVehicleAction] = useState<Vehicle | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<Vehicle | null>(null);
   const [selectedPurpose, setSelectedPurpose] = useState<DeliveryRunPriorityPurpose | null>(null);
@@ -165,19 +167,27 @@ export default function Dispatch() {
     if (available) setSelectedVehicleId(available.id);
   }, [selectedVehicleId, statusByVehicle]);
 
+  const selectedOrdersById = useMemo(
+    () => new Map(preDeliveryOrders.map((order) => [order.id, order])),
+    [preDeliveryOrders]
+  );
+
+  const selectedOrderIdSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
+
   const selectedOrdersList = useMemo(
-    () => preDeliveryOrders.filter((order) => selectedOrders.has(order.id)),
-    [preDeliveryOrders, selectedOrders]
+    () => selectedOrderIds.map((orderId) => selectedOrdersById.get(orderId)).filter((order): order is Order => Boolean(order)),
+    [preDeliveryOrders, selectedOrderIds, selectedOrdersById]
   );
 
   useEffect(() => {
-    setSelectedOrders((previous) => {
-      if (previous.size === 0) return previous;
+    setSelectedOrderIds((previous) => {
+      if (previous.length === 0) return previous;
       const availableIds = new Set(preDeliveryOrders.map((order) => order.id));
-      const next = new Set(Array.from(previous).filter((orderId) => availableIds.has(orderId)));
-      return next.size === previous.size ? previous : next;
+      const next = previous.filter((orderId) => availableIds.has(orderId));
+      return next.length === previous.length ? previous : next;
     });
   }, [preDeliveryOrders]);
+
 
   const preDeliveryFilteredOrders = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -229,7 +239,7 @@ export default function Dispatch() {
   const activeDeliveryOrderCount = activeDeliveryRunGroups.reduce((total, group) => total + group.orders.length, 0);
 
   const allVisibleSelected =
-    preDeliveryFilteredOrders.length > 0 && preDeliveryFilteredOrders.every((order) => selectedOrders.has(order.id));
+    preDeliveryFilteredOrders.length > 0 && preDeliveryFilteredOrders.every((order) => selectedOrderIdSet.has(order.id));
 
   const selectedPartialPickCount = useMemo(
     () => selectedOrdersList.filter((order) => order.pick_status && !order.pick_status.is_fully_picked).length,
@@ -267,32 +277,67 @@ export default function Dispatch() {
 
   const handleToggleVisible = () => {
     if (allVisibleSelected) {
-      setSelectedOrders((previous) => {
-        const next = new Set(previous);
-        for (const order of preDeliveryFilteredOrders) {
-          next.delete(order.id);
-        }
-        return next;
+      setSelectedOrderIds((previous) => {
+        const visibleIds = new Set(preDeliveryFilteredOrders.map((order) => order.id));
+        return previous.filter((orderId) => !visibleIds.has(orderId));
       });
       return;
     }
 
-    setSelectedOrders((previous) => {
-      const next = new Set(previous);
+    setSelectedOrderIds((previous) => {
+      const next = [...previous];
+      const existing = new Set(previous);
       for (const order of preDeliveryFilteredOrders) {
-        next.add(order.id);
+        if (!existing.has(order.id)) next.push(order.id);
       }
       return next;
     });
   };
 
   const handleSelectOrder = (orderId: string) => {
-    setSelectedOrders((previous) => {
-      const next = new Set(previous);
-      if (next.has(orderId)) next.delete(orderId);
-      else next.add(orderId);
+    setSelectedOrderIds((previous) => {
+      if (previous.includes(orderId)) {
+        return previous.filter((currentId) => currentId !== orderId);
+      }
+      return [...previous, orderId];
+    });
+  };
+
+  const handleDragStartOrder = (orderId: string, event: DragEvent<HTMLDivElement>) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", orderId);
+    setDraggingOrderId(orderId);
+    setDragOverOrderId(orderId);
+  };
+
+  const handleDropOrderBefore = (targetOrderId: string) => {
+    setSelectedOrderIds((previous) => {
+      const fromIndex = previous.indexOf(draggingOrderId ?? "");
+      const toIndex = previous.indexOf(targetOrderId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return previous;
+
+      const next = [...previous];
+      const [moved] = next.splice(fromIndex, 1);
+      const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+      next.splice(adjustedToIndex, 0, moved);
       return next;
     });
+    setDraggingOrderId(null);
+    setDragOverOrderId(null);
+  };
+
+  const handleDropOrderToEnd = () => {
+    setSelectedOrderIds((previous) => {
+      if (!draggingOrderId) return previous;
+      const fromIndex = previous.indexOf(draggingOrderId);
+      if (fromIndex < 0 || fromIndex === previous.length - 1) return previous;
+      const next = [...previous];
+      const [moved] = next.splice(fromIndex, 1);
+      next.push(moved);
+      return next;
+    });
+    setDraggingOrderId(null);
+    setDragOverOrderId(null);
   };
 
   const doStartRun = async (
@@ -302,7 +347,7 @@ export default function Dispatch() {
       skipPartialPickConfirm?: boolean;
     }
   ) => {
-    if (selectedOrders.size === 0) {
+    if (selectedOrderIds.length === 0) {
       toast.error("Select at least one order to start a run");
       return;
     }
@@ -361,11 +406,11 @@ export default function Dispatch() {
       }
 
       await deliveryRunsApi.createRun({
-        order_ids: Array.from(selectedOrders),
+        order_ids: selectedOrderIds,
         vehicle,
       });
       toast.success("Delivery run started");
-      setSelectedOrders(new Set());
+      setSelectedOrderIds([]);
       await Promise.all([loadOrders(), refreshStatuses()]);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -477,11 +522,12 @@ export default function Dispatch() {
     if (!selectedVehicleId) return "Pick a vehicle";
     if (!selectedPurpose) return "Pick a purpose";
     const action = getPriorityActionSelection(selectedPurpose);
-    if (action.createsRun && selectedOrders.size === 0) return "Select orders";
+    if (action.createsRun && selectedOrderIds.length === 0) return "Select orders";
     const reason = getStartDisabledReason(selectedVehicleId);
     if (reason) return reason;
     return null;
-  }, [selectedOrders.size, selectedVehicleId, selectedPurpose, getStartDisabledReason, userCheckedOutVehicle]);
+  }, [selectedOrderIds.length, selectedVehicleId, selectedPurpose, getStartDisabledReason, userCheckedOutVehicle]);
+
 
   const canStartRun = actionBarBlocker === null;
   const isActionLoading = activeVehicleAction !== null;
@@ -673,7 +719,7 @@ export default function Dispatch() {
             title="Needs Attention"
             description="Partial picks or exceptions to review."
             orders={needsAttentionOrders}
-            selectedOrderIds={selectedOrders}
+            selectedOrderIds={selectedOrderIdSet}
             emptyText="No exception orders"
             onToggleOrder={handleSelectOrder}
             onViewOrder={handleViewDetail}
@@ -682,13 +728,97 @@ export default function Dispatch() {
             title="Ready to Dispatch"
             description="Fully picked and ready for vehicle assignment."
             orders={readyOrders}
-            selectedOrderIds={selectedOrders}
+            selectedOrderIds={selectedOrderIdSet}
             emptyText="No ready orders"
             onToggleOrder={handleSelectOrder}
             onViewOrder={handleViewDetail}
           />
         </div>
       </section>
+
+      {selectedOrderIds.length > 0 && (
+        <section className="space-y-3 rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Delivery Order</h2>
+              <p className="text-xs text-muted-foreground">Drag selected orders to set the stop order before starting the run.</p>
+            </div>
+            <Badge variant="secondary">{selectedOrderIds.length} stops</Badge>
+          </div>
+
+          <div
+            className="space-y-2"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              handleDropOrderToEnd();
+            }}
+          >
+            {selectedOrdersList.map((order, index) => {
+              const isDragging = draggingOrderId === order.id;
+              const isDropTarget = dragOverOrderId === order.id;
+              return (
+                <div
+                  key={order.id}
+                  draggable
+                  onDragStart={(event) => handleDragStartOrder(order.id, event)}
+                  onDragEnd={() => {
+                    setDraggingOrderId(null);
+                    setDragOverOrderId(null);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragOverOrderId(order.id);
+                  }}
+                  onDragLeave={() => {
+                    setDragOverOrderId((current) => (current === order.id ? null : current));
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    handleDropOrderBefore(order.id);
+                  }}
+                  className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-3 transition-colors ${
+                    isDragging
+                      ? "border-accent/50 bg-accent/10 opacity-70"
+                      : isDropTarget
+                        ? "border-accent/50 bg-accent/5"
+                        : "border-border/60 bg-background"
+                  }`}
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="cursor-grab select-none text-muted-foreground" aria-hidden="true">
+                        ⋮⋮
+                      </span>
+                      <Badge variant="secondary">Stop {index + 1}</Badge>
+                      <button
+                        type="button"
+                        className="truncate text-left text-sm font-medium text-foreground hover:underline"
+                        onClick={() => handleViewDetail(order.id)}
+                      >
+                        {order.inflow_order_id || order.id}
+                      </button>
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {order.recipient_name || "Unknown recipient"}
+                      {formatDeliveryLocation(order) ? ` — ${formatDeliveryLocation(order)}` : ""}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="shrink-0">
+                      {order.status.toLowerCase().replace(/_/g, " ")}
+                    </Badge>
+                    <Button variant="ghost" size="sm" onClick={() => handleSelectOrder(order.id)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* ── Sticky Action Bar ── */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:left-[var(--sidebar-width)]">
@@ -715,9 +845,9 @@ export default function Dispatch() {
             /* ── Checkout mode: normal flow ── */
             <>
               <div className="flex items-center gap-2 text-sm">
-                {selectedOrders.size > 0 ? (
+                {selectedOrderIds.length > 0 ? (
                   <Badge variant="default" className="text-xs">
-                    {selectedOrders.size} selected
+                    {selectedOrderIds.length} selected
                   </Badge>
                 ) : (
                   <span className="text-xs text-muted-foreground">No orders selected</span>
