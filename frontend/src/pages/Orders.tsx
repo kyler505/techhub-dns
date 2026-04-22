@@ -184,57 +184,59 @@ export default function Orders() {
     }
 
     return (
-        <div className="max-w-[1600px] mx-auto py-6 space-y-4">
-            <div className="space-y-1">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
-            </div>
+        <div className="h-full min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-[1600px] space-y-4">
+                <div className="space-y-1">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Orders</h1>
+                </div>
 
-            <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
-                <div className="p-5 pb-4 sm:p-6 sm:pb-4">
-                    <Filters
-                        status={statusFilter}
-                        onStatusChange={setStatusFilter}
-                        search={search}
-                        onSearchChange={setSearch}
-                        loading={loading}
+                <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
+                    <div className="p-5 pb-4 sm:p-6 sm:pb-4">
+                        <Filters
+                            status={statusFilter}
+                            onStatusChange={setStatusFilter}
+                            search={search}
+                            onSearchChange={setSearch}
+                            loading={loading}
+                        />
+                    </div>
+                    <div className="min-h-[280px] px-5 pb-5 sm:px-6 sm:pb-6">
+                        {loading && isInitialLoad ? (
+                            <div className="transition-opacity duration-150 opacity-100">
+                                <SkeletonTable rows={6} columns={5} />
+                            </div>
+                        ) : !loading && orders.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 text-center">
+                                <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
+                                <p className="text-sm font-medium text-foreground">No orders to display</p>
+                                <p className="text-xs text-muted-foreground">Adjust your filters or clear search to see orders.</p>
+                            </div>
+                        ) : (
+                            <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
+                                <OrderTable
+                                    orders={orders}
+                                    onStatusChange={handleStatusChange}
+                                    onViewDetail={handleViewDetail}
+                                    showEmptyState={false}
+                                    loading={loading}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </section>
+                {transitioningOrder && (
+                    <StatusTransition
+                        currentStatus={transitioningOrder.currentStatus}
+                        newStatus={transitioningOrder.newStatus}
+                        requireReason={transitioningOrder.requireReason}
+                        onConfirm={(reason) =>
+                            performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
+                        }
+                        onCancel={() => setTransitioningOrder(null)}
+                        submitting={updateStatusMutation.isPending}
                     />
-                </div>
-                <div className="min-h-[280px] px-5 pb-5 sm:px-6 sm:pb-6">
-                    {loading && isInitialLoad ? (
-                        <div className="transition-opacity duration-150 opacity-100">
-                            <SkeletonTable rows={6} columns={5} />
-                        </div>
-                    ) : !loading && orders.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                            <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
-                            <p className="text-sm font-medium text-foreground">No orders to display</p>
-                            <p className="text-xs text-muted-foreground">Adjust your filters or clear search to see orders.</p>
-                        </div>
-                    ) : (
-                        <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
-                            <OrderTable
-                                orders={orders}
-                                onStatusChange={handleStatusChange}
-                                onViewDetail={handleViewDetail}
-                                showEmptyState={false}
-                                loading={loading}
-                            />
-                        </div>
-                    )}
-                </div>
-            </section>
-            {transitioningOrder && (
-                <StatusTransition
-                    currentStatus={transitioningOrder.currentStatus}
-                    newStatus={transitioningOrder.newStatus}
-                    requireReason={transitioningOrder.requireReason}
-                    onConfirm={(reason) =>
-                        performStatusChange(transitioningOrder.orderId, transitioningOrder.newStatus, reason)
-                    }
-                    onCancel={() => setTransitioningOrder(null)}
-                    submitting={updateStatusMutation.isPending}
-                />
-            )}
+                )}
+            </div>
         </div>
     );
 }
