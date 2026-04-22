@@ -300,7 +300,7 @@ export default function OrderQAPage() {
                                         key={method}
                                         className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
                                             form.method === method
-                                                ? "border-accent bg-accent text-white"
+                                                ? "border-primary bg-primary text-primary-foreground"
                                                 : "border-border bg-card text-foreground hover:border-accent"
                                         }`}
                                     >
@@ -336,10 +336,10 @@ export default function OrderQAPage() {
                                 type="button"
                                 onClick={submitQA}
                                 disabled={submitQaMutation.isPending || !isFormComplete(form)}
-                                className={`rounded-2xl px-5 py-2 text-sm font-semibold text-white transition-colors ${
+                                className={`rounded-2xl px-5 py-2 text-sm font-semibold transition-colors ${
                                     submitQaMutation.isPending || !isFormComplete(form)
                                         ? "bg-muted text-muted-foreground/70 cursor-not-allowed"
-                                        : "bg-accent hover:bg-maroon-800"
+                                        : "bg-primary text-primary-foreground hover:bg-maroon-800 hover:text-white"
                                 }`}
                             >
                                 {submitQaMutation.isPending ? "Submitting..." : "Submit QA Checklist"}
