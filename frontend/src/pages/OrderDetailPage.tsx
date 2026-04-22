@@ -288,7 +288,7 @@ export default function OrderDetailPage() {
     return (
         <div className="-mx-4 sm:-mx-6 lg:-mx-8">
             <div className="lg:flex lg:items-stretch h-[calc(100vh-6rem)] lg:overflow-hidden">
-                <aside className="hidden lg:block lg:w-80 lg:shrink-0 lg:border-r lg:border-border/60 lg:overflow-y-auto">
+                <aside className="hidden lg:block lg:w-80 lg:shrink-0 lg:border-r lg:border-border/60">
                     <OrdersRail
                             orders={sidebarOrders}
                             selectedOrderId={orderId}
