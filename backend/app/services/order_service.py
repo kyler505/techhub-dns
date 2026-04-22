@@ -1924,9 +1924,13 @@ class OrderService:
 
         signed_picklist_dest = order_dir / "signed_picklist.pdf"
         qa_form_dest = order_dir / "qa_form.pdf"
+        bundle_pdf_dest = order_dir / "bundle.pdf"
 
         shutil.copy2(signed_picklist_path, signed_picklist_dest)
         shutil.copy2(qa_pdf_path, qa_form_dest)
+
+        # Create a combined bundle PDF for download/archival convenience
+        self._bundle_pdfs([str(signed_picklist_dest), str(qa_form_dest)], str(bundle_pdf_dest))
 
         # Clean up temporary files
         Path(signed_picklist_path).unlink(missing_ok=True)
@@ -2175,13 +2179,13 @@ class OrderService:
         return str(output_path)
 
     def _bundle_pdfs(self, pdf_paths: list[str], output_path: str) -> None:
-        """Combine multiple PDFs into single document"""
+        """Combine multiple PDFs into a single document."""
 
-        from pypdf import PdfMerger
+        from pypdf import PdfWriter
 
-        merger = PdfMerger()
+        writer = PdfWriter()
         for pdf_path in pdf_paths:
-            merger.append(pdf_path)
+            writer.append(pdf_path)
 
-        merger.write(output_path)
-        merger.close()
+        with open(output_path, "wb") as output_file:
+            writer.write(output_file)
