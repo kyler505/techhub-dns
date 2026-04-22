@@ -75,7 +75,9 @@ export default function OrderDetailPage() {
     const sidebarLoading = listQuery.isPending && sidebarOrders.length === 0;
 
     const handleBack = () => {
-        navigate(-1);
+        navigate("/orders", {
+            state: locationState ?? undefined,
+        });
     };
 
     const renderState = (title: string, description: string, icon: "error" | "missing") => (
@@ -299,7 +301,7 @@ export default function OrderDetailPage() {
                         />
                 </aside>
 
-                <div className="min-w-0 flex-1 px-4 sm:px-6 lg:px-8 lg:h-full lg:min-h-0 lg:overflow-y-auto">
+                <div className="min-w-0 flex-1 px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pt-6 lg:h-full lg:min-h-0 lg:overflow-y-auto">
                     <div className="lg:hidden space-y-3">
                         <Button
                             type="button"
@@ -322,6 +324,13 @@ export default function OrderDetailPage() {
                                 />
                             </div>
                         )}
+                    </div>
+
+                    <div className="hidden lg:flex items-center pb-4">
+                        <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={handleBack} disabled={detailLoading}>
+                            <ArrowLeft className="h-4 w-4" />
+                            Back to orders
+                        </Button>
                     </div>
 
                 <div className="lg:hidden">
