@@ -109,7 +109,7 @@ export default function OrdersRail({
     }
 
     return (
-        <div className="bg-card">
+        <div className="bg-card lg:flex lg:h-full lg:min-h-0 lg:flex-col">
             <div className="border-b border-border px-4 py-2.5">
                 {onStatusChange ? (
                     <div className="relative">
@@ -137,7 +137,7 @@ export default function OrdersRail({
                 )}
             </div>
 
-            <div className="max-h-[calc(100vh-8rem)] overflow-y-auto" onKeyDown={handleKeyDown}>
+            <div className="min-h-0 flex-1 overflow-y-auto" onKeyDown={handleKeyDown}>
                 <div className="divide-y divide-border">
                     {orders.map((order, index) => {
                         const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
