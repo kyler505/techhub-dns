@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
 import type { PDFPageProxy } from "pdfjs-dist";
 // pdf-lib is used server-side for PDF bundling
@@ -8,7 +8,7 @@ import { OrderDetail } from "../types/order";
 import { signatureCache, type LastSignature } from "../lib/signatureCache";
 import { Button } from "../components/ui/button";
 
-import { PenTool, X } from "lucide-react";
+import { ArrowLeft, PenTool, X } from "lucide-react";
 
 const SignatureModal = lazy(() => import("../components/SignatureModal").then((module) => ({ default: module.SignatureModal })));
 const PdfPane = lazy(() => import("../components/document-signing/PdfPane"));
@@ -101,7 +101,7 @@ const PlacementOverlay = memo(function PlacementOverlay({
             tabIndex={0}
             aria-label="Signature placement"
             aria-describedby={instructionsId}
-            className={`group cursor-move touch-none select-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
+            className={`group z-20 cursor-move touch-none select-none pointer-events-auto focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? 'ring-2 ring-ring ring-offset-2 ring-offset-background' : ''}`}
             style={{
                 ...style,
                 touchAction: 'none',
@@ -268,6 +268,13 @@ function DocumentSigningPage() {
     }, [searchParams]);
 
     const selectedPdfUrl = useMemo(() => (selectedPdf ? selectedPdf.url : null), [selectedPdf]);
+    const returnTo = useMemo(() => {
+        const fromQuery = searchParams.get('returnTo');
+        if (fromQuery) {
+            return fromQuery;
+        }
+        return order ? `/orders/${order.id}` : '/orders';
+    }, [order, searchParams]);
 
     // Responsive sizing logic
     useEffect(() => {
@@ -862,7 +869,6 @@ function DocumentSigningPage() {
 
             await ordersApi.signOrder(order.id, payload);
 
-            const returnTo = searchParams.get('returnTo') || `/orders/${order.id}`;
             navigate(returnTo, {
                 state: { message: 'Document signed successfully!' }
             });
@@ -902,7 +908,7 @@ function DocumentSigningPage() {
             </Suspense>
 
             <div className="max-w-6xl mx-auto pt-6">
-                <header className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-foreground">Sign Delivery Document</h1>
                         <p className="text-muted-foreground">
@@ -914,7 +920,13 @@ function DocumentSigningPage() {
                             </p>
                         )}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Button asChild variant="ghost" className="gap-2">
+                            <Link to={returnTo}>
+                                <ArrowLeft className="h-4 w-4" />
+                                Back
+                            </Link>
+                        </Button>
                         <Button
                             variant="outline"
                             onClick={openSignatureModal}
