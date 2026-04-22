@@ -64,21 +64,7 @@ def _order_detail_response_json(order) -> dict:
 
 
 def _get_current_user_display_name() -> str:
-    user_data = getattr(g, "user_data", None) or {}
-    display_name = (user_data.get("display_name") or "").strip()
-    if display_name:
-        return display_name
-
-    current_user = get_current_user_email()
-    if current_user and current_user != "system":
-        with get_db() as db:
-            user = db.query(User).filter(User.email == current_user).first()
-            if user:
-                display_name = (user.display_name or "").strip()
-                if display_name:
-                    return display_name
-
-    return current_user
+    return get_current_user_display_name()
 
 
 def _order_list_item_json(order, pick_status_data=None) -> str:

@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
 from app.models.vehicle_checkout import VehicleCheckout
 from app.utils.exceptions import ValidationError
-from app.utils.display_labels import resolve_user_display
 from app.utils.timezone import to_utc_iso_z
 
 logger = logging.getLogger(__name__)
@@ -73,23 +72,27 @@ class VehicleCheckoutService:
 
         email = (getattr(g, "user_email", None) or "").strip()
         user_data = getattr(g, "user_data", None) or {}
-        display_name = (user_data.get("display_name") or "").strip() or None
+        display_name = (user_data.get("display_name") or "").strip()
+
+        if not display_name:
+            legacy_user = getattr(g, "user", None)
+            legacy_display_name = (
+                getattr(legacy_user, "display_name", None) if legacy_user else None
+            )
+            display_name = (legacy_display_name or "").strip()
+
+        if not display_name:
+            raise ValidationError("Authenticated user missing display name")
 
         if not email:
             legacy_user = getattr(g, "user", None)
             legacy_email = getattr(legacy_user, "email", None) if legacy_user else None
             email = (legacy_email or "").strip()
-            if not display_name and legacy_user is not None:
-                legacy_display_name = getattr(legacy_user, "display_name", None)
-                display_name = (legacy_display_name or "").strip() or None
-
-        if not email:
-            raise ValidationError("Authenticated user missing email")
 
         return user_id, email, display_name
 
-    def _format_actor_display(self, email: str, display_name: Optional[str]) -> str:
-        return (display_name or "").strip() or email.strip()
+    def _format_actor_display(self, display_name: str) -> str:
+        return (display_name or "").strip()
 
     @contextmanager
     def _vehicle_lock(self, vehicle: str):
@@ -159,9 +162,7 @@ class VehicleCheckoutService:
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
-        checked_out_by_display = self._format_actor_display(
-            actor_email, actor_display_name
-        )
+        checked_out_by_display = self._format_actor_display(actor_display_name)
 
         checkout_type_norm = (checkout_type or "").strip()
         if checkout_type_norm not in {"delivery_run", "other"}:
@@ -237,9 +238,7 @@ class VehicleCheckoutService:
     ) -> VehicleCheckout:
         vehicle_norm = self._validate_vehicle(vehicle)
         actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
-        checked_in_by_display = self._format_actor_display(
-            actor_email, actor_display_name
-        )
+        checked_in_by_display = self._format_actor_display(actor_display_name)
         with self._vehicle_lock(vehicle_norm):
             if self._delivery_run_active(vehicle_norm) and not allow_active_delivery_run:
                 raise ValidationError(
@@ -305,9 +304,11 @@ class VehicleCheckoutService:
                 {
                     "vehicle": vehicle,
                     "checked_out": active_checkout is not None,
-                    "checked_out_by": active_checkout.checked_out_by
-                    if active_checkout
-                    else None,
+                    "checked_out_by": (
+                        (active_checkout.checked_out_by_display_name or active_checkout.checked_out_by or None)
+                        if active_checkout
+                        else None
+                    ),
                     "checked_out_by_user_id": active_checkout.checked_out_by_user_id
                     if active_checkout
                     else None,
@@ -367,7 +368,9 @@ class VehicleCheckoutService:
                     **{
                         "id": str(c.id),
                         "vehicle": c.vehicle,
-                        "checked_out_by": resolve_user_display(self.db, c.checked_out_by),
+                        "checked_out_by": (
+                            (c.checked_out_by_display_name or c.checked_out_by or "").strip()
+                        ),
                         "checked_out_by_user_id": c.checked_out_by_user_id,
                         "checked_out_by_email": c.checked_out_by_email,
                         "checkout_type": c.checkout_type,
@@ -375,7 +378,9 @@ class VehicleCheckoutService:
                         "notes": c.notes,
                         "checked_out_at": to_utc_iso_z(c.checked_out_at),
                         "checked_in_at": to_utc_iso_z(c.checked_in_at),
-                        "checked_in_by": resolve_user_display(self.db, c.checked_in_by),
+                        "checked_in_by": (
+                            (c.checked_in_by_display_name or c.checked_in_by or "").strip()
+                        ),
                     }
                 }
                 for c in items
