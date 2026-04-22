@@ -351,11 +351,10 @@ export default function DeliveryRunDetailPage() {
             <div className="rounded-lg border border-emerald-300/40 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               All orders are delivered. This run is ready for completion.
             </div>
-          ) : (
+          ) : nonSignableBlockingOrders.length > 0 ? (
             <div className="space-y-2">
-              {blockingOrders.map((order) => {
+              {nonSignableBlockingOrders.map((order) => {
                 const orderLabel = order.inflow_order_id || order.id.slice(0, 8);
-                const isSignable = order.status === OrderStatus.IN_DELIVERY;
 
                 return (
                   <div
@@ -380,24 +379,16 @@ export default function DeliveryRunDetailPage() {
                           View Order
                         </Button>
                       )}
-                      {isSignable ? (
-                        <>
-                          <Link to={`/document-signing?orderId=${order.id}&returnTo=/delivery/runs/${run.id}`}>
-                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                              Sign Now
-                            </Button>
-                          </Link>
-                          <Button size="sm" variant="outline" onClick={() => openRecallDialog(order.id)}>
-                            Recall Order
-                          </Button>
-                        </>
-                      ) : (
-                        <Badge variant="warning">Move to In Delivery first</Badge>
-                      )}
+                      <Badge variant="warning">Move to In Delivery first</Badge>
                     </div>
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-300/40 bg-amber-50/60 px-3 py-2 text-sm text-amber-900">
+              {pendingSignatureOrders.length} order{pendingSignatureOrders.length !== 1 ? "s" : ""} still need
+              signature or proof. Use the run list below to sign them.
             </div>
           )}
         </div>
