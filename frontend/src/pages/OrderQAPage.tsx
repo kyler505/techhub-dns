@@ -4,6 +4,7 @@ import { isAxiosError } from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
+import { getUserDisplayName } from "../utils/userDisplay";
 import { ordersApi } from "../api/orders";
 import { getOrderDetailQueryOptions, invalidateOrderQueries } from "../queries/orders";
 import type { OrderDetail } from "../types/order";
@@ -93,7 +94,7 @@ export default function OrderQAPage() {
     const navigate = useNavigate();
     const { orderId } = useParams<{ orderId: string }>();
     const { user } = useAuth();
-    const currentUserName = user?.display_name || user?.email || "Current User";
+    const currentUserName = getUserDisplayName(user, "Current User");
 
     const [form, setForm] = useState<QAFormState>(() => defaultForm(""));
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -141,7 +142,7 @@ export default function OrderQAPage() {
 
     const setupDefaults = (orderNumber: string) => {
         const defaults = defaultForm(orderNumber);
-        defaults.qaSignature = currentUserName;
+        defaults.qaSignature = getUserDisplayName(user, defaults.qaSignature);
         defaults.technician = currentUserName;
         setForm(defaults);
         setLastSavedAt(null);

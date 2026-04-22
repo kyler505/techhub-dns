@@ -191,6 +191,8 @@ class SamlAuthService:
         display_name = self._get_attr(
             saml_attributes,
             'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name',
+            'http://schemas.microsoft.com/identity/claims/displayname',
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/displayname',
             'display_name',
             'displayname',
             'name',

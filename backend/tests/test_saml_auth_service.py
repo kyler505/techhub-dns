@@ -64,6 +64,14 @@ def test_get_or_create_user_uses_custom_display_name_claim():
             },
             "Tech Three",
         ),
+        (
+            {
+                "http://schemas.microsoft.com/identity/claims/objectidentifier": ["oid-999"],
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": ["tech4@example.com"],
+                "http://schemas.microsoft.com/identity/claims/displayname": ["Tech Four"],
+            },
+            "Tech Four",
+        ),
     ],
 )
 def test_get_or_create_user_supports_standard_and_custom_aliases(saml_attributes, expected_display_name):

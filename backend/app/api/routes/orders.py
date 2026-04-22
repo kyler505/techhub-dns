@@ -37,7 +37,12 @@ from app.utils.exceptions import (
     ValidationError,
 )
 from app.utils.timezone import to_utc_iso_z
-from app.api.auth_middleware import get_current_user_email, require_auth, require_admin
+from app.api.auth_middleware import (
+    get_current_user_display_name,
+    get_current_user_email,
+    require_auth,
+    require_admin,
+)
 import logging
 
 bp = Blueprint("orders", __name__)
@@ -419,7 +424,7 @@ def update_order(order_id):
 def update_order_status(order_id):
     """Transition order status"""
     data = request.get_json()
-    changed_by = request.args.get("changed_by")
+    changed_by = request.args.get("changed_by") or get_current_user_display_name()
 
     with get_db() as db:
         service = OrderService(db)
@@ -449,7 +454,7 @@ def update_order_status(order_id):
 def bulk_transition_status():
     """Bulk transition multiple orders"""
     data = request.get_json()
-    changed_by = request.args.get("changed_by")
+    changed_by = request.args.get("changed_by") or get_current_user_display_name()
 
     with get_db() as db:
         service = OrderService(db)

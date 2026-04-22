@@ -33,6 +33,7 @@ import { Input } from "../../components/ui/input";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDeliveryRuns } from "../../hooks/useDeliveryRuns";
 import { isValidOrderId } from "../../utils/orderIds";
+import { getUserDisplayName } from "../../utils/userDisplay";
 import { useOrdersWebSocket } from "../../hooks/useOrdersWebSocket";
 import { useVehicleStatuses } from "../../hooks/useVehicleStatuses";
 import type { User } from "../../contexts/AuthContext";
@@ -69,7 +70,7 @@ function checkedOutByCurrentUser(status: VehicleStatusItem, user: User | null): 
   const checkedOutBy = status.checked_out_by;
   if (!checkedOutBy) return false;
 
-  const candidates = [user?.display_name, user?.email].filter(
+  const candidates = [getUserDisplayName(user, ""), user?.email].filter(
     (value): value is string => typeof value === "string" && Boolean(value.trim())
   );
   return candidates.some((candidate) => candidate === checkedOutBy);
@@ -385,7 +386,8 @@ export default function Dispatch() {
         const checkedOutByUserId = status.checked_out_by_user_id;
         const checkedOutByName = status.checked_out_by;
         const currentUserId = user?.id ?? null;
-        const currentUserCandidates = [user?.display_name, user?.email].filter(
+        const currentUserDisplayName = getUserDisplayName(user, "");
+        const currentUserCandidates = [currentUserDisplayName, user?.email].filter(
           (value): value is string => typeof value === "string" && Boolean(value.trim())
         );
         const isCheckedOutByCurrentUser =

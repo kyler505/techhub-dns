@@ -10,6 +10,7 @@ import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import OrdersRail from "../components/OrdersRail";
 import { useAuth } from "../contexts/AuthContext";
+import { getUserDisplayName } from "../utils/userDisplay";
 import OrderDetailComponent from "../components/OrderDetail";
 import StatusTransition from "../components/StatusTransition";
 import { Button } from "../components/ui/button";
@@ -106,7 +107,7 @@ export default function OrderDetailPage() {
         await invalidateOrderQueries(queryClient, orderId);
     };
 
-    const getUserName = () => user?.display_name || user?.email || "Unknown User";
+    const getUserName = () => getUserDisplayName(user, "Unknown User");
 
     const updateStatusMutation = useMutation({
         mutationFn: ({ newStatus, reason, expectedUpdatedAt }: {
