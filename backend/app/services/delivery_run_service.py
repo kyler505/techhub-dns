@@ -1,23 +1,23 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence
-from flask import g
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from typing import Any, Dict, List, Optional, Sequence, Union
 from uuid import UUID
-from typing import Union
 
-from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
-from app.utils.timezone import get_date_in_cst, is_morning_in_cst, to_utc_iso_z
-from sqlalchemy import func
-from app.models.order import Order, OrderStatus
+from flask import g
+from sqlalchemy import and_, func
+from sqlalchemy.orm import Session
+
+from app.database import get_db
 from app.models.audit_log import AuditLog
+from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
+from app.models.order import Order, OrderStatus
 from app.models.order_status_history import OrderStatusHistory
+from app.models.user import User
+from app.models.vehicle_checkout import VehicleCheckout
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
-from app.models.vehicle_checkout import VehicleCheckout
 from app.utils.exceptions import ConflictError, NotFoundError, ValidationError
-
+from app.utils.timezone import get_date_in_cst, is_morning_in_cst, to_utc_iso_z
 
 class DeliveryRunService:
     def __init__(self, db: Session):
@@ -329,30 +329,40 @@ class DeliveryRunService:
             )
         return vehicle_norm
 
-    def _get_authenticated_actor(self) -> tuple[str, str, Optional[str]]:
+    def _get_authenticated_actor(self) -> tuple[str, str, str]:
         user_id = (getattr(g, "user_id", None) or "").strip()
         if not user_id:
             raise ValidationError("Authentication required")
 
-        email = (getattr(g, "user_email", None) or "").strip()
         user_data = getattr(g, "user_data", None) or {}
-        display_name = (user_data.get("display_name") or "").strip() or None
+        display_name = (user_data.get("display_name") or "").strip()
 
+        if not display_name:
+            legacy_user = getattr(g, "user", None)
+            if legacy_user is not None:
+                display_name = (
+                    (getattr(legacy_user, "display_name", None) or "").strip()
+                )
+
+        if not display_name:
+            with get_db() as db:
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    display_name = (user.display_name or "").strip()
+
+        if not display_name:
+            raise ValidationError("Authenticated user missing display name")
+
+        email = (getattr(g, "user_email", None) or "").strip()
         if not email:
             legacy_user = getattr(g, "user", None)
-            legacy_email = getattr(legacy_user, "email", None) if legacy_user else None
-            email = (legacy_email or "").strip()
-            if not display_name and legacy_user is not None:
-                legacy_display_name = getattr(legacy_user, "display_name", None)
-                display_name = (legacy_display_name or "").strip() or None
+            if legacy_user is not None:
+                email = (getattr(legacy_user, "email", None) or "").strip()
 
-        if not email:
-            raise ValidationError("Authenticated user missing email")
+        return user_id, display_name, email
 
-        return user_id, email, display_name
-
-    def _format_actor_display(self, email: str, display_name: Optional[str]) -> str:
-        return (display_name or "").strip() or email.strip()
+    def _format_actor_display(self, display_name: str) -> str:
+        return (display_name or "").strip()
 
     def _get_active_checkout(self, vehicle: str) -> VehicleCheckout | None:
         return (
@@ -370,8 +380,8 @@ class DeliveryRunService:
         self, order_ids: Sequence[Union[UUID, str]], vehicle: str
     ) -> DeliveryRun:
         vehicle_norm = self._validate_vehicle(vehicle)
-        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
-        runner_display = self._format_actor_display(actor_email, actor_display_name)
+        actor_user_id, actor_display_name, actor_email = self._get_authenticated_actor()
+        runner_display = self._format_actor_display(actor_display_name)
 
         active_checkout = self._get_active_checkout(vehicle_norm)
         if not active_checkout:
@@ -738,8 +748,8 @@ class DeliveryRunService:
         if not reason_value:
             raise ValidationError("Recall reason is required", field="reason")
 
-        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
-        actor = self._format_actor_display(actor_email, actor_display_name)
+        actor_user_id, actor_display_name, actor_email = self._get_authenticated_actor()
+        actor = self._format_actor_display(actor_display_name)
 
         run_id_str = str(run_id)
         order_id_str = str(order_id)
