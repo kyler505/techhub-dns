@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { AlertTriangle, ChevronDown, ChevronUp, Truck } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { useAuth } from "../../contexts/AuthContext";
+import { useDeliveryRuns } from "../../hooks/useDeliveryRuns";
 import { isValidOrderId } from "../../utils/orderIds";
 import { useOrdersWebSocket } from "../../hooks/useOrdersWebSocket";
 import { useVehicleStatuses } from "../../hooks/useVehicleStatuses";
@@ -96,12 +97,24 @@ function getVehicleStatusVariant(
   return "secondary";
 }
 
+function getRunStatusVariant(status: string) {
+  const normalized = status.toLowerCase().replace(/\s+/g, "_");
+
+  if (/(cancel|canceled|cancelled|fail|failed|error)/.test(normalized)) return "destructive" as const;
+  if (/(complete|completed|done|delivered)/.test(normalized)) return "secondary" as const;
+  if (/(pending|queued|waiting|paused)/.test(normalized)) return "warning" as const;
+  if (/(active|live|in_progress|inprogress|en_route|on_route|running)/.test(normalized)) return "success" as const;
+
+  return "outline" as const;
+}
+
 export default function Dispatch() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { orders: websocketOrders } = useOrdersWebSocket();
   const { statusByVehicle, isLoading: statusesLoading, refresh: refreshStatuses } = useVehicleStatuses();
+  const { runs: activeDeliveryRuns, loading: activeRunsLoading } = useDeliveryRuns();
 
   const [preDeliveryOrders, setPreDeliveryOrders] = useState<Order[]>([]);
   const [inDeliveryOrders, setInDeliveryOrders] = useState<Order[]>([]);
@@ -195,16 +208,25 @@ export default function Dispatch() {
     [preDeliveryFilteredOrders]
   );
 
-  const activeDeliveryPreview = useMemo(() => {
-    const sorted = [...inDeliveryOrders].sort((left, right) => {
-      const leftTime = Date.parse(left.updated_at);
-      const rightTime = Date.parse(right.updated_at);
-      const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
-      const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
-      return safeRightTime - safeLeftTime;
-    });
-    return sorted.slice(0, 6);
-  }, [inDeliveryOrders]);
+  const activeDeliveryRunGroups = useMemo(() => {
+    const ordersById = new Map(inDeliveryOrders.map((order) => [order.id, order]));
+    return [...activeDeliveryRuns]
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.updated_at ?? left.start_time ?? "");
+        const rightTime = Date.parse(right.updated_at ?? right.start_time ?? "");
+        const safeLeftTime = Number.isNaN(leftTime) ? 0 : leftTime;
+        const safeRightTime = Number.isNaN(rightTime) ? 0 : rightTime;
+        return safeRightTime - safeLeftTime;
+      })
+      .map((run) => ({
+        run,
+        orders: run.order_ids
+          .map((orderId) => ordersById.get(orderId))
+          .filter((order): order is Order => Boolean(order)),
+      }));
+  }, [activeDeliveryRuns, inDeliveryOrders]);
+
+  const activeDeliveryOrderCount = activeDeliveryRunGroups.reduce((total, group) => total + group.orders.length, 0);
 
   const allVisibleSelected =
     preDeliveryFilteredOrders.length > 0 && preDeliveryFilteredOrders.every((order) => selectedOrders.has(order.id));
@@ -471,7 +493,7 @@ export default function Dispatch() {
 
   return (
     <div className="space-y-5 pb-28">
-      {/* ── Active Delivery Orders (above the fold) ── */}
+      {/* ── Active Delivery Runs (above the fold) ── */}
       <Card>
         <button
           type="button"
@@ -480,8 +502,13 @@ export default function Dispatch() {
         >
           <div className="flex items-center gap-2">
             <Truck className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Active Delivery</h2>
-            <Badge variant="secondary">{inDeliveryOrders.length}</Badge>
+            <div>
+              <h2 className="text-sm font-semibold">Active Delivery</h2>
+              <p className="text-xs text-muted-foreground">
+                {activeDeliveryRunGroups.length} run{activeDeliveryRunGroups.length === 1 ? "" : "s"}
+                {activeDeliveryOrderCount ? ` · ${activeDeliveryOrderCount} orders` : ""}
+              </p>
+            </div>
           </div>
           {activeRunsExpanded ? (
             <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -491,37 +518,85 @@ export default function Dispatch() {
         </button>
 
         {activeRunsExpanded && (
-          <CardContent className="space-y-2 border-t px-4 py-3">
-            {activeDeliveryPreview.length === 0 ? (
+          <CardContent className="space-y-3 border-t px-4 py-3">
+            {activeRunsLoading ? (
+              <div className="py-4 text-center text-xs text-muted-foreground">Loading active delivery runs...</div>
+            ) : activeDeliveryRunGroups.length === 0 ? (
               <div className="py-4 text-center text-xs text-muted-foreground">
                 No orders are currently in delivery
               </div>
             ) : (
-              <div className="divide-y divide-border/60">
-                {activeDeliveryPreview.map((order) => (
-                  <div key={order.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-                    <div className="min-w-0">
-                      <button
-                        type="button"
-                        className="text-sm font-medium text-foreground hover:underline"
-                        onClick={() => handleViewDetail(order.id)}
-                      >
-                        {order.inflow_order_id}
-                      </button>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {order.assigned_deliverer || "Unassigned"} — {formatDeliveryLocation(order) || "Unknown destination"}
+              <div className="space-y-3">
+                {activeDeliveryRunGroups.map(({ run, orders }) => {
+                  const runLabel = run.name?.trim() || formatRunLabel(run.id);
+                  const orderCount = run.order_ids.length;
+                  return (
+                    <section key={run.id} className="rounded-lg border border-border/70 bg-background/60 p-4 shadow-none">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Delivery Run
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              className="truncate text-left text-sm font-semibold text-foreground hover:underline"
+                              onClick={() => void navigate(`/delivery/runs/${run.id}`)}
+                            >
+                              {runLabel}
+                            </button>
+                            <Badge variant={getRunStatusVariant(run.status)}>{run.status}</Badge>
+                            <Badge variant="secondary">{orderCount} order{orderCount === 1 ? "" : "s"}</Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span>Vehicle: {run.vehicle.replace(/_/g, " ")}</span>
+                            <span>Runner: {run.runner}</span>
+                          </div>
+                        </div>
+
+                        <Link
+                          to={`/delivery/runs/${run.id}`}
+                          className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          View run
+                        </Link>
                       </div>
-                    </div>
-                    <Badge variant="secondary" className="shrink-0">
-                      {formatRunLabel(order.delivery_run_id)}
-                    </Badge>
-                  </div>
-                ))}
-                {inDeliveryOrders.length > activeDeliveryPreview.length && (
-                  <div className="text-xs text-muted-foreground">
-                    +{inDeliveryOrders.length - activeDeliveryPreview.length} more
-                  </div>
-                )}
+
+                      <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                        {orders.length === 0 ? (
+                          <div className="text-xs text-muted-foreground">Order details are still syncing.</div>
+                        ) : (
+                          orders.map((order, index) => (
+                            <div
+                              key={order.id}
+                              className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">Stop {index + 1}</Badge>
+                                  <button
+                                    type="button"
+                                    className="truncate text-left text-sm font-medium text-foreground hover:underline"
+                                    onClick={() => handleViewDetail(order.id)}
+                                  >
+                                    {order.inflow_order_id || order.id}
+                                  </button>
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {order.recipient_name || "Unknown recipient"}
+                                  {formatDeliveryLocation(order) ? ` — ${formatDeliveryLocation(order)}` : ""}
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="shrink-0">
+                                {order.status.toLowerCase().replace(/_/g, " ")}
+                              </Badge>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
               </div>
             )}
           </CardContent>
