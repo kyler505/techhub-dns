@@ -151,7 +151,7 @@ function DocumentSigningPage() {
         if (fromQuery) {
             return fromQuery;
         }
-        return order ? `/orders/${order.id}` : '/orders';
+        return order ? `/orders/${order.inflow_order_id || order.id}` : '/orders';
     }, [order, searchParams]);
 
     // Responsive sizing logic
