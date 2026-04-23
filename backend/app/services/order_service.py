@@ -1936,6 +1936,30 @@ class OrderService:
         Path(signed_picklist_path).unlink(missing_ok=True)
         Path(qa_pdf_path).unlink(missing_ok=True)
 
+        # Upload signed picklist, QA form, and bundle PDF to SharePoint asynchronously
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            from app.services.background_tasks import run_in_background
+
+            def _schedule_sp_upload(filepath: str, subfolder: str, filename: str) -> None:
+                def _upload():
+                    try:
+                        sp = get_sharepoint_service()
+                        if sp.is_enabled:
+                            sp.upload_pdf(filepath, subfolder, filename)
+                            logger.info(f"[Background] Uploaded {subfolder}/{filename} to SharePoint")
+                    except Exception as exc:
+                        logger.warning(f"[Background] SharePoint upload failed for {filename}: {exc}")
+
+                run_in_background(_upload, task_name=f"upload_{subfolder}_{filename}")
+
+            base_filename = f"{order.inflow_order_id or order.id}"
+            _schedule_sp_upload(str(signed_picklist_dest), "signed", f"{base_filename}_signed.pdf")
+            _schedule_sp_upload(str(qa_form_dest), "qa", f"{base_filename}_qa.pdf")
+            _schedule_sp_upload(str(bundle_pdf_dest), "bundles", f"{base_filename}_bundle.pdf")
+        except Exception as e:
+            logger.warning(f"[Background] SharePoint upload tasks failed to schedule: {e}")
+
         return str(order_dir)
 
     def _apply_signature_to_pdf(self, pdf_path: str, signature_data: dict) -> str:
