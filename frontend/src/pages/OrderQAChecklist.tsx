@@ -145,7 +145,7 @@ export default function OrderQAChecklist() {
                                             <td className="px-3 py-2 text-sm text-foreground">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openOrder(o.id)}
+                                                    onClick={() => openOrder(o.inflow_order_id || o.id)}
                                                     disabled={loadingOrders}
                                                     className={`rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${loadingOrders ? "opacity-75 cursor-not-allowed" : ""}`}
                                                 >
@@ -157,7 +157,7 @@ export default function OrderQAChecklist() {
                                             <td className="px-3 py-2 text-sm">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openQa(o.id)}
+                                                    onClick={() => openQa(o.inflow_order_id || o.id)}
                                                     disabled={loadingOrders}
                                                     className={`flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${loadingOrders ? "opacity-75 cursor-not-allowed" : ""}`}
                                                 >

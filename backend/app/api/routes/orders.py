@@ -345,7 +345,7 @@ def get_tag_request_candidates():
         return jsonify(needing_request)
 
 
-@bp.route("/<uuid:order_id>", methods=["GET"])
+@bp.route("/<order_id>", methods=["GET"])
 @require_auth
 def get_order(order_id):
     """Get order detail with audit logs and notifications"""
@@ -367,7 +367,7 @@ def get_order(order_id):
         return jsonify(response_data)
 
 
-@bp.route("/<uuid:order_id>", methods=["PATCH"])
+@bp.route("/<order_id>", methods=["PATCH"])
 @require_auth
 def update_order(order_id):
     """Update order fields"""
@@ -405,7 +405,7 @@ def update_order(order_id):
         return jsonify(_order_response_json(order))
 
 
-@bp.route("/<uuid:order_id>/status", methods=["PATCH"])
+@bp.route("/<order_id>/status", methods=["PATCH"])
 @require_auth
 def update_order_status(order_id):
     """Transition order status"""
@@ -464,7 +464,7 @@ def bulk_transition_status():
         return jsonify([_order_response_json(o) for o in orders])
 
 
-@bp.route("/<uuid:order_id>/audit", methods=["GET"])
+@bp.route("/<order_id>/audit", methods=["GET"])
 @require_auth
 def get_order_audit(order_id):
     """Get audit log for an order"""
@@ -482,7 +482,7 @@ def get_order_audit(order_id):
         )
 
 
-@bp.route("/<uuid:order_id>/tag", methods=["POST"])
+@bp.route("/<order_id>/tag", methods=["POST"])
 @require_auth
 def tag_order(order_id):
     """Mock asset tagging step"""
@@ -507,7 +507,7 @@ def tag_order(order_id):
         return jsonify(_order_response_json(order))
 
 
-@bp.route("/<uuid:order_id>/picklist", methods=["POST"])
+@bp.route("/<order_id>/picklist", methods=["POST"])
 @require_auth
 def generate_picklist(order_id):
     """Generate a picklist PDF for the order"""
@@ -533,7 +533,7 @@ def generate_picklist(order_id):
         return jsonify(_order_response_json(order))
 
 
-@bp.route("/<uuid:order_id>/qa", methods=["POST"])
+@bp.route("/<order_id>/qa", methods=["POST"])
 @require_auth
 def submit_qa(order_id):
     """Submit QA checklist for an order"""
@@ -560,7 +560,7 @@ def submit_qa(order_id):
         return jsonify(_order_response_json(order))
 
 
-@bp.route("/<uuid:order_id>/picklist", methods=["GET"])
+@bp.route("/<order_id>/picklist", methods=["GET"])
 @require_auth
 def get_picklist(order_id):
     """Download generated picklist PDF (from local storage or SharePoint)"""
@@ -618,7 +618,7 @@ def get_picklist(order_id):
             )
 
 
-@bp.route("/<uuid:order_id>/fulfill", methods=["POST"])
+@bp.route("/<order_id>/fulfill", methods=["POST"])
 @require_admin
 def fulfill_order(order_id):
     """Mark an order as fulfilled in Inflow (best-effort)."""
@@ -637,7 +637,7 @@ def fulfill_order(order_id):
         return jsonify({"success": True, "result": result})
 
 
-@bp.route("/<uuid:order_id>/sign", methods=["POST"])
+@bp.route("/<order_id>/sign", methods=["POST"])
 @require_auth
 def sign_order(order_id):
     """Complete order signing, generate bundled documents, and transition to Delivered status"""
@@ -723,7 +723,7 @@ def sign_order(order_id):
         )
 
 
-@bp.route("/<uuid:order_id>/shipping-workflow", methods=["PATCH"])
+@bp.route("/<order_id>/shipping-workflow", methods=["PATCH"])
 @require_auth
 def update_shipping_workflow(order_id):
     """Update shipping workflow status for an order"""
@@ -747,7 +747,7 @@ def update_shipping_workflow(order_id):
         return jsonify(_order_response_json(order))
 
 
-@bp.route("/<uuid:order_id>/shipping-workflow", methods=["GET"])
+@bp.route("/<order_id>/shipping-workflow", methods=["GET"])
 @require_auth
 def get_shipping_workflow(order_id):
     """Get shipping workflow status for an order"""
@@ -769,7 +769,7 @@ def get_shipping_workflow(order_id):
         return jsonify(response.model_dump())
 
 
-@bp.route("/<uuid:order_id>/order-details.pdf", methods=["GET"])
+@bp.route("/<order_id>/order-details.pdf", methods=["GET"])
 @require_auth
 def get_order_details_pdf(order_id):
     """Generate and download Order Details PDF"""
@@ -817,7 +817,7 @@ def get_order_details_pdf(order_id):
             abort(500, description="Failed to generate PDF")
 
 
-@bp.route("/<uuid:order_id>/send-order-details", methods=["POST"])
+@bp.route("/<order_id>/send-order-details", methods=["POST"])
 @require_auth
 def send_order_details_email(order_id):
     """Generate Order Details PDF and email to recipient"""

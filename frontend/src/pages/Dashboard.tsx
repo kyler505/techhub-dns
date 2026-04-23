@@ -426,7 +426,7 @@ export default function Dashboard() {
                 {completedTodayOrders.map((order) => (
                   <div key={order.id} className="flex items-center justify-between text-sm">
                     <Link
-                      to={`/orders/${order.id}`}
+                      to={`/orders/${order.inflow_order_id || order.id}`}
                       state={{ fromPath: "/" }}
                       className="font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
                     >

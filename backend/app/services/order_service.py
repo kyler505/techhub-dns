@@ -603,20 +603,38 @@ class OrderService:
         return orders, total
 
     def get_order_by_id(self, order_id: Union[UUID, str]) -> Optional[Order]:
-        """Get a single order by ID"""
-        order_id_str = str(order_id)
-        return self.db.query(Order).filter(Order.id == order_id_str).first()
+        """Get a single order by ID or order number."""
+        order_id_str = str(order_id).strip()
+        # Try UUID first for backward compatibility
+        order = self.db.query(Order).filter(Order.id == order_id_str).first()
+        if order is not None:
+            return order
+        # Fall back to order number
+        return self.db.query(Order).filter(Order.order_number == order_id_str).first()
 
     def get_order_detail(self, order_id: Union[UUID, str]) -> Optional[Order]:
-        """Get order with related data (audit logs, notifications)"""
-        order_id_str = str(order_id)
-        return (
+        """Get order with related data (audit logs, notifications) by ID or order number."""
+        order_id_str = str(order_id).strip()
+        # Try UUID first for backward compatibility
+        order = (
             self.db.query(Order)
             .options(
                 selectinload(Order.audit_logs),
                 selectinload(Order.print_jobs),
             )
             .filter(Order.id == order_id_str)
+            .first()
+        )
+        if order is not None:
+            return order
+        # Fall back to order number
+        return (
+            self.db.query(Order)
+            .options(
+                selectinload(Order.audit_logs),
+                selectinload(Order.print_jobs),
+            )
+            .filter(Order.order_number == order_id_str)
             .first()
         )
 
