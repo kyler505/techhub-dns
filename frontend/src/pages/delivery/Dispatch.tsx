@@ -625,7 +625,7 @@ export default function Dispatch() {
                                   <button
                                     type="button"
                                     className="truncate text-left text-sm font-medium text-foreground hover:underline"
-                                    onClick={() => handleViewDetail(order.id)}
+                                    onClick={() => handleViewDetail(order.inflow_order_id || order.id)}
                                   >
                                     {order.inflow_order_id || order.id}
                                   </button>
@@ -796,7 +796,7 @@ export default function Dispatch() {
                       <button
                         type="button"
                         className="truncate text-left text-sm font-medium text-foreground hover:underline"
-                        onClick={() => handleViewDetail(order.id)}
+                        onClick={() => handleViewDetail(order.inflow_order_id || order.id)}
                       >
                         {order.inflow_order_id || order.id}
                       </button>
@@ -951,7 +951,7 @@ export default function Dispatch() {
                     className="font-medium hover:underline"
                     onClick={() => {
                       handlePartialPickDialogOpenChange(false);
-                      handleViewDetail(order.id);
+                      handleViewDetail(order.inflow_order_id || order.id);
                     }}
                   >
                     {order.inflow_order_id}

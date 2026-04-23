@@ -140,8 +140,8 @@ export default function OrdersRail({
             <div className="min-h-0 flex-1 overflow-y-auto" onKeyDown={handleKeyDown}>
                 <div className="divide-y divide-border">
                     {orders.map((order, index) => {
-                        const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
-                        const isSelected = selectedOrderId === orderId;
+                        const orderId = order.inflow_order_id || order.id || `${order.created_at || "order"}-${index}`;
+                        const isSelected = selectedOrderId === orderId || selectedOrderId === order.id;
                         const isFocused = focusedIndex === index;
                         const orderLabel = `Order ${order.inflow_order_id || order.id}, ${order.status ?? "Unknown"}`;
 

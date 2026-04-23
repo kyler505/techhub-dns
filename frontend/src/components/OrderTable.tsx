@@ -115,6 +115,8 @@ export default function OrderTable({
 
     const navigateToOrder = (orderId: string) => onViewDetail(orderId);
 
+    const getOrderNumber = (order: Order) => order.inflow_order_id || order.id;
+
     if (orders.length === 0) {
         if (!showEmptyState) {
             return null;
@@ -234,7 +236,7 @@ export default function OrderTable({
                                         disabled={loading}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            navigateToOrder(order.id);
+                                            navigateToOrder(getOrderNumber(order));
                                         }}
                                         className={`h-auto min-h-0 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
                                     >
