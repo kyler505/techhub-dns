@@ -610,7 +610,7 @@ class OrderService:
         if order is not None:
             return order
         # Fall back to order number
-        return self.db.query(Order).filter(Order.order_number == order_id_str).first()
+        return self.db.query(Order).filter(Order.inflow_order_id == order_id_str).first()
 
     def get_order_detail(self, order_id: Union[UUID, str]) -> Optional[Order]:
         """Get order with related data (audit logs, notifications) by ID or order number."""
@@ -634,7 +634,7 @@ class OrderService:
                 selectinload(Order.audit_logs),
                 selectinload(Order.print_jobs),
             )
-            .filter(Order.order_number == order_id_str)
+            .filter(Order.inflow_order_id == order_id_str)
             .first()
         )
 

@@ -108,3 +108,37 @@ def test_get_or_create_user_preserves_existing_display_name_when_absent():
         assert user.email == "new@example.com"
     finally:
         db.close()
+
+
+def test_get_or_create_user_prefers_graph_api_display_name(monkeypatch):
+    """When Graph API returns a displayName, it should override SAML attributes."""
+    db = _new_db()
+
+    def _mock_get_user_profile(oid):
+        return {
+            "displayName": "Kyler Cao",
+            "givenName": "Kyler",
+            "surname": "Cao",
+            "department": "CS",
+            "employeeId": "12345",
+        }
+
+    monkeypatch.setattr(
+        "app.services.saml_auth_service.graph_service.get_user_profile",
+        _mock_get_user_profile,
+    )
+
+    try:
+        user = saml_auth_service.get_or_create_user(
+            db,
+            {
+                "http://schemas.microsoft.com/identity/claims/objectidentifier": ["oid-graph"],
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": ["kcao@tamu.edu"],
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name": ["kcao@tamu.edu"],  # SAML gives email as name
+            },
+        )
+        assert user.display_name == "Kyler Cao"
+        assert user.department == "CS"
+        assert user.employee_id == "12345"
+    finally:
+        db.close()

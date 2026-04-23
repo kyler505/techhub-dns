@@ -17,6 +17,7 @@ from app.config import settings
 from app.models.user import User
 from app.models.session import Session
 from app.utils.exceptions import DNSApiError
+from app.services.graph_service import graph_service
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +217,36 @@ class SamlAuthService:
         # Fallback: construct display name from given name + surname if not provided
         if not display_name and (given_name or surname):
             display_name = f"{given_name or ''} {surname or ''}".strip()
+
+        # =====================================================================
+        # Enrich from Microsoft Graph API (source of truth for directory data)
+        # =====================================================================
+        graph_profile = None
+        if oid:
+            try:
+                graph_profile = graph_service.get_user_profile(oid)
+            except Exception:
+                logger.exception("Graph user profile lookup failed; continuing with SAML attributes only")
+                graph_profile = None
+
+            if graph_profile:
+                graph_display_name = graph_profile.get("displayName")
+                graph_given_name = graph_profile.get("givenName")
+                graph_surname = graph_profile.get("surname")
+                graph_department = graph_profile.get("department")
+                graph_employee_id = graph_profile.get("employeeId")
+
+                if graph_display_name:
+                    display_name = graph_display_name
+                    logger.info(f"Overrode SAML display_name with Graph displayName for {email}")
+                if graph_given_name:
+                    given_name = graph_given_name
+                if graph_surname:
+                    surname = graph_surname
+                if graph_department:
+                    department = graph_department
+                if graph_employee_id:
+                    employee_id = graph_employee_id
 
         if not oid:
             raise ValueError("SAML response missing required 'objectidentifier' claim")
