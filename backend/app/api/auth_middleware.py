@@ -341,8 +341,8 @@ def get_current_user_display_name() -> str:
     """
     Get current user's display name for human-facing logs and UI labels.
 
-    Returns the user's display name when available, otherwise falls back to
-    their email or "system" for unauthenticated/background contexts.
+    Returns the user's display name when available, otherwise falls back to a
+    DB lookup for the stored display name. Does not fall back to email.
     """
     from app.models.user import User
 
@@ -360,8 +360,4 @@ def get_current_user_display_name() -> str:
                 if db_display_name:
                     return db_display_name
 
-                email = getattr(user, "email", None)
-                if email:
-                    return str(email)
-
-    return get_current_user_email()
+    return "system"

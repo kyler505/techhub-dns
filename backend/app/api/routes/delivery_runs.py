@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify, abort
 from flask_socketio import emit
-from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
@@ -15,10 +14,8 @@ from app.schemas.delivery_run import (
     RecallDeliveryRunOrderRequest,
     ReorderDeliveryRunOrdersRequest,
 )
-from app.models.delivery_run import VehicleEnum
-from app.models.user import User
+from app.models.delivery_run import DeliveryRun, VehicleEnum
 from app.utils.exceptions import ValidationError
-from app.utils.display_labels import resolve_runner_display
 from app.utils.timezone import to_utc_iso_z
 from app.utils.broadcast_dedup import broadcast_dedup
 from pydantic import ValidationError as PydanticValidationError
@@ -27,7 +24,27 @@ bp = Blueprint("delivery_runs", __name__)
 bp.strict_slashes = False
 
 
-def _broadcast_active_runs_sync(db_session: Session = None):
+def _prepare_runs_payload(runs: list[DeliveryRun]) -> list[dict]:
+    payload = []
+    for r in runs:
+        payload.append(
+            {
+                "id": str(r.id),
+                "runner": (r.runner or "").strip(),
+                "vehicle": r.vehicle.value
+                if hasattr(r.vehicle, "value")
+                else str(r.vehicle),
+                "status": r.status.value
+                if hasattr(r.status, "value")
+                else str(r.status),
+                "start_time": to_utc_iso_z(r.start_time),
+                "order_ids": [str(o.id) for o in r.orders],
+            }
+        )
+    return payload
+
+
+def _broadcast_active_runs_sync(db_session=None):
     """Send current active runs to all connected clients (sync version)."""
     if db_session is not None:
         _do_broadcast_active_runs(db_session)
@@ -43,22 +60,7 @@ def _do_broadcast_active_runs(db_session):
     try:
         service = DeliveryRunService(db_session)
         runs = service.get_active_runs_with_details()
-        payload = []
-        for r in runs:
-            payload.append(
-                {
-                    "id": str(r.id),
-                    "runner": _resolve_runner_display(db_session, r.runner),
-                    "vehicle": r.vehicle.value
-                    if hasattr(r.vehicle, "value")
-                    else str(r.vehicle),
-                    "status": r.status.value
-                    if hasattr(r.status, "value")
-                    else str(r.status),
-                    "start_time": to_utc_iso_z(r.start_time),
-                    "order_ids": [str(o.id) for o in r.orders],
-                }
-            )
+        payload = _prepare_runs_payload(runs)
 
         # Emit via SocketIO to all connected clients in 'orders' room
         try:
@@ -118,7 +120,7 @@ def create_run():
             response = DeliveryRunResponse(
                 id=run.id,
                 name=run.name,
-                runner=_resolve_runner_display(db, run.runner),
+                runner=(run.runner or "").strip(),
                 vehicle=run.vehicle,
                 status=run.status,
                 start_time=run.start_time,
@@ -149,7 +151,7 @@ def get_runs():
                 DeliveryRunResponse(
                     id=r.id,
                     name=r.name,
-                    runner=_resolve_runner_display(db, r.runner),
+                    runner=(r.runner or "").strip(),
                     vehicle=r.vehicle,
                     status=r.status,
                     start_time=r.start_time,
@@ -173,7 +175,7 @@ def get_active_runs():
                 DeliveryRunResponse(
                     id=r.id,
                     name=r.name,
-                    runner=_resolve_runner_display(db, r.runner),
+                    runner=(r.runner or "").strip(),
                     vehicle=r.vehicle,
                     status=r.status,
                     start_time=r.start_time,
@@ -211,7 +213,7 @@ def get_run(run_id):
         response = DeliveryRunDetailResponse(
             id=run.id,
             name=run.name,
-            runner=_resolve_runner_display(db, run.runner),
+            runner=(run.runner or "").strip(),
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,
@@ -269,7 +271,7 @@ def finish_run(run_id):
             response = DeliveryRunResponse(
                 id=run.id,
                 name=run.name,
-                runner=_resolve_runner_display(db, run.runner),
+                runner=(run.runner or "").strip(),
                 vehicle=run.vehicle,
                 status=run.status,
                 start_time=run.start_time,
@@ -309,7 +311,7 @@ def recall_run_order(run_id, order_id):
         response = DeliveryRunResponse(
             id=run.id,
             name=run.name,
-            runner=_resolve_runner_display(db, run.runner),
+            runner=(run.runner or "").strip(),
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,
@@ -345,7 +347,7 @@ def reorder_run_orders(run_id):
         response = DeliveryRunResponse(
             id=run.id,
             name=run.name,
-            runner=_resolve_runner_display(db, run.runner),
+            runner=(run.runner or "").strip(),
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,
