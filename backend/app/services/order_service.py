@@ -364,9 +364,21 @@ class OrderService:
             shutil.copy2(temp_path, local_path)
             logger.info(f"Picklist saved locally: {local_path}")
 
+            # Also upload to SharePoint immediately (synchronous)
+            try:
+                from app.services.sharepoint_service import get_sharepoint_service
+                sp_service = get_sharepoint_service()
+                if not sp_service.is_enabled:
+                    raise RuntimeError("SharePoint storage is not enabled")
+                sp_url = sp_service.upload_pdf(temp_path, "picklists", filename)
+                logger.info(f"Picklist uploaded to SharePoint: {sp_url}")
+            except Exception as e:
+                logger.error(f"SharePoint upload failed for picklist: {e}")
+                raise  # Fail fast — SharePoint is source of truth
+
             order.picklist_generated_at = datetime.utcnow()
             order.picklist_generated_by = generated_by
-            order.picklist_path = str(local_path)
+            order.picklist_path = sp_url  # Store SharePoint URL (source of truth)
             order.updated_at = datetime.utcnow()
         finally:
             # Clean up temporary file
@@ -544,9 +556,25 @@ class OrderService:
         except Exception as e:
             logger.error(f"Failed to save QA data locally: {e}")
             raise
+
+        # Upload QA JSON to SharePoint (source of truth) — synchronous
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+            if not sp_service.is_enabled:
+                raise RuntimeError("SharePoint storage is not enabled")
+            with open(local_qapath, "rb") as fp:
+                qa_bytes = fp.read()
+            sp_url = sp_service.upload_file(qa_bytes, "qa", qa_filename)
+            logger.info(f"QA data uploaded to SharePoint: {sp_url}")
+            order.qa_path = sp_url  # Source of truth
+        except Exception as e:
+            logger.error(f"SharePoint upload failed for QA: {e}")
+            raise  # Fail fast
+
         order.qa_completed_by = technician
         order.qa_data = qa_data
-        order.qa_path = qa_path
+        # order.qa_path already set to SharePoint sp_url above
         order.qa_method = qa_data.get("method")  # "Delivery" or "Shipping"
         order.updated_at = datetime.utcnow()
 
@@ -560,7 +588,7 @@ class OrderService:
             audit_metadata={
                 "qa_method": qa_data.get("method"),
                 "completed_by": technician,
-                "qa_file_path": qa_path,
+                "sharepoint_url": sp_url,
             },
         )
 
@@ -2011,7 +2039,38 @@ class OrderService:
         shutil.copy2(bundle_temp, bundle_local_path)
         logger.info(f"Bundle saved locally: {bundle_local_path}")
 
-        # All documents saved to local storage synchronously
+        # All documents saved locally — now upload to SharePoint
+        try:
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+            if not sp_service.is_enabled:
+                raise RuntimeError("SharePoint storage is not enabled")
+
+            # Upload signed picklist
+            with open(signed_local_path, "rb") as f:
+                signed_bytes = f.read()
+            signed_sp_url = sp_service.upload_pdf(signed_bytes, "signed", f"{base_filename}_signed.pdf")
+            logger.info(f"Signed picklist uploaded to SharePoint: {signed_sp_url}")
+
+            # Upload QA PDF
+            with open(qa_local_path, "rb") as f:
+                qa_bytes = f.read()
+            qa_sp_url = sp_service.upload_pdf(qa_bytes, "qa", f"{base_filename}_qa.pdf")
+            logger.info(f"QA PDF uploaded to SharePoint: {qa_sp_url}")
+
+            # Upload bundle
+            with open(bundle_local_path, "rb") as f:
+                bundle_bytes = f.read()
+            bundle_sp_url = sp_service.upload_pdf(bundle_bytes, "bundles", f"{base_filename}_bundle.pdf")
+            logger.info(f"Bundle uploaded to SharePoint: {bundle_sp_url}")
+
+            # Persist SharePoint URLs on order (source of truth)
+            order.signed_picklist_path = signed_sp_url
+            if hasattr(order, 'bundle_path'):
+                order.bundle_path = bundle_sp_url
+        except Exception as e:
+            logger.error(f"SharePoint upload failed in generate_bundled_documents: {e}")
+            raise  # No local fallback
 
         # Clean up temp files
         for p in [signed_temp, qa_temp, bundle_temp]:
@@ -2025,10 +2084,7 @@ class OrderService:
             except Exception as e:
                 logger.warning(f"Failed to delete temp picklist {picklist_temp_to_delete}: {e}")
 
-        # Persist signed_picklist_path and bundle_path on order (local storage)
-        order.signed_picklist_path = str(signed_local_path)
-
-        return str(signed_local_path), str(bundle_local_path)
+        return signed_sp_url, bundle_sp_url
 
 
     def _apply_signature_to_pdf(self, pdf_path: str, signature_data: dict) -> str:
