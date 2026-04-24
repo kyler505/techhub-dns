@@ -189,6 +189,13 @@ export default function Dispatch() {
     });
   }, [preDeliveryOrders]);
 
+  // Auto-select "Delivery" purpose when first order is selected
+  useEffect(() => {
+    if (selectedOrderIds.length > 0 && !selectedPurpose) {
+      setSelectedPurpose("Delivery");
+    }
+  }, [selectedOrderIds.length, selectedPurpose]);
+
 
   const preDeliveryFilteredOrders = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
