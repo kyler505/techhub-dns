@@ -1633,9 +1633,9 @@ def upload_canopy_orders():
             return jsonify({"error": "Order number cannot be empty"}), 400
 
         digits = compact[2:] if compact.startswith("TH") else compact
-        if len(digits) != 4 or not digits.isdigit():
+        if len(digits) not in (3, 4) or not digits.isdigit():
             return jsonify(
-                {"error": "Order number must be 4 digits (e.g., 1234 or TH1234)"}
+                {"error": "Order number must be 3 or 4 digits (e.g., 123 or TH1234)"}
             ), 400
 
         normalized = f"TH{digits}"
