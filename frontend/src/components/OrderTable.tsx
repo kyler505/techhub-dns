@@ -28,7 +28,7 @@ export default function OrderTable({
     showEmptyState = true,
     loading = false,
 }: OrderTableProps) {
-    const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status" | "assigned" | "updated">("date");
+    const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status" | "updated">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -86,9 +86,6 @@ export default function OrderTable({
                     break;
                 case "status":
                     comparison = compareText(a.status, b.status);
-                    break;
-                case "assigned":
-                    comparison = compareText(a.assigned_deliverer, b.assigned_deliverer);
                     break;
                 case "updated":
                     comparison = compareDate(a.updated_at, b.updated_at);
@@ -207,12 +204,6 @@ export default function OrderTable({
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead aria-sort={sortKey === "assigned" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
-                                <button type="button" onClick={() => toggleSort("assigned")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
-                                    Assigned
-                                    <ArrowUpDown className="h-3.5 w-3.5" />
-                                </button>
-                            </TableHead>
                             <TableHead aria-sort={sortKey === "status" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
                                 <button type="button" onClick={() => toggleSort("status")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                                     Status
@@ -246,7 +237,6 @@ export default function OrderTable({
                                 <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
                                 <TableCell className="break-words">{formatDeliveryLocation(order)}</TableCell>
                                 <TableCell className="whitespace-nowrap">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
-                                <TableCell>{order.assigned_deliverer || "—"}</TableCell>
                                 <TableCell>
                                     <StatusBadge status={order.status} />
                                 </TableCell>
