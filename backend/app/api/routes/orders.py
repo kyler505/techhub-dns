@@ -677,13 +677,13 @@ def sign_order(order_id):
     # Phase 1: generate documents BEFORE locking the order row (no DB lock held during PDF I/O)
     with get_db() as db:
         service = OrderService(db)
-        bundled_dir = service.generate_bundled_documents(
+        signed_sp_url, bundle_sp_url = service.generate_bundled_documents(
             order_id=order_id,
             signature_data=signature_data.model_dump(exclude={"expected_updated_at"}),
         )
-        bundled_dir_path = Path(bundled_dir)
-        signed_picklist_path = str(bundled_dir_path / "signed_picklist.pdf")
-        bundled_path = str(bundled_dir_path / "bundle.pdf")
+        # generate_bundled_documents now stores signed_picklist_path on the order internally
+        signed_picklist_path = signed_sp_url
+        bundled_path = bundle_sp_url
 
     # Phase 2: short locking transaction for status update + commit
     with get_db() as db:

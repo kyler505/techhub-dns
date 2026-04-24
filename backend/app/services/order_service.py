@@ -315,46 +315,41 @@ class OrderService:
 
         is_first_picklist = order.picklist_generated_at is None
 
-        picklist_dir = self._storage_path("picklists")
-        picklist_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{order.inflow_order_id or order.id}.pdf"
-        destination = picklist_dir / filename
 
-        # Generate the actual picklist PDF from inFlow data using PicklistService
-        from app.services.picklist_service import PicklistService
+        # Generate picklist to a temporary file, upload immediately, store SharePoint URL
+        import tempfile
+        from pathlib import Path
+        
+        temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        temp_path = temp_pdf.name
+        temp_pdf.close()
+        
+        try:
+            # Generate the actual picklist PDF from inFlow data using PicklistService
+            from app.services.picklist_service import PicklistService
+            picklist_svc = PicklistService()
+            picklist_svc.generate_picklist_pdf(order.inflow_data, temp_path)
 
-        picklist_svc = PicklistService()
-        picklist_svc.generate_picklist_pdf(order.inflow_data, str(destination))
-
-        # Upload to SharePoint asynchronously (non-blocking)
-        picklist_path = str(destination)  # Use local path immediately
-
-        def async_sharepoint_upload():
-            """Background task for SharePoint upload"""
+            # Upload to SharePoint immediately (synchronous)
+            from app.services.sharepoint_service import get_sharepoint_service
+            sp_service = get_sharepoint_service()
+            if not sp_service.is_enabled:
+                raise RuntimeError("SharePoint storage is not enabled")
+            
+            sp_url = sp_service.upload_pdf(temp_path, "picklists", filename)
+            logger.info(f"Picklist uploaded to SharePoint: {sp_url}")
+            
+            order.picklist_generated_at = datetime.utcnow()
+            order.picklist_generated_by = generated_by
+            order.picklist_path = sp_url
+            order.updated_at = datetime.utcnow()
+        finally:
+            # Clean up temporary file
             try:
-                from app.services.sharepoint_service import get_sharepoint_service
-
-                sp_service = get_sharepoint_service()
-                if sp_service.is_enabled:
-                    sp_service.upload_pdf(str(destination), "picklists", filename)
-                    logger.info(
-                        f"[Background] Picklist uploaded to SharePoint: {filename}"
-                    )
+                Path(temp_path).unlink(missing_ok=True)
             except Exception as e:
-                logger.warning(
-                    f"[Background] SharePoint upload failed for picklist: {e}"
-                )
-
-        from app.services.background_tasks import run_in_background
-
-        run_in_background(
-            async_sharepoint_upload, task_name=f"upload_picklist_{filename}"
-        )
-
-        order.picklist_generated_at = datetime.utcnow()
-        order.picklist_generated_by = generated_by
-        order.picklist_path = picklist_path
-        order.updated_at = datetime.utcnow()
+                logger.warning(f"Failed to delete temp picklist {temp_path}: {e}")
 
         queued_print_job = None
         if is_first_picklist and SystemSettingService.get_setting(
@@ -503,10 +498,7 @@ class OrderService:
                     details={"field_type": type(qa_data.get(field)).__name__},
                 )
 
-        qa_dir = self._storage_path("qa")
-        qa_dir.mkdir(parents=True, exist_ok=True)
         qa_filename = f"{order.inflow_order_id or order.id}.json"
-        qa_file = qa_dir / qa_filename
         qa_payload = {
             "order_id": str(order.id),
             "inflow_order_id": order.inflow_order_id,
@@ -514,24 +506,20 @@ class OrderService:
             "submitted_by": technician,
             "responses": qa_data,
         }
-        qa_file.write_text(
-            json.dumps(qa_payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
 
-        # Upload to SharePoint if enabled
-        qa_path = str(qa_file)
+        # Upload QA JSON directly to SharePoint (source of truth)
         try:
             from app.services.sharepoint_service import get_sharepoint_service
-
             sp_service = get_sharepoint_service()
-            if sp_service.is_enabled:
-                sp_url = sp_service.upload_json(qa_payload, "qa", qa_filename)
-                qa_path = sp_url
-                logger.info(f"QA data uploaded to SharePoint: {sp_url}")
+            if not sp_service.is_enabled:
+                raise RuntimeError("SharePoint storage is not enabled")
+            
+            sp_url = sp_service.upload_json(qa_payload, "qa", qa_filename)
+            logger.info(f"QA data uploaded to SharePoint: {sp_url}")
+            qa_path = sp_url
         except Exception as e:
-            logger.warning(
-                f"SharePoint upload failed for QA data, using local path: {e}"
-            )
+            logger.error(f"Failed to upload QA to SharePoint: {e}")
+            raise
 
         # Update order object (BUT DO NOT COMMIT YET to keep transition atomic)
         order.qa_completed_at = datetime.utcnow()
@@ -1743,30 +1731,21 @@ class OrderService:
                 pdf_bytes = pdf_service.generate_order_details_pdf(pdf_source_data)
 
                 # Save locally first
-                order_details_dir = self._storage_path("order_details")
-                order_details_dir.mkdir(parents=True, exist_ok=True)
-                pdf_path = order_details_dir / pdf_filename
-                pdf_path.write_bytes(pdf_bytes)
-                logger.info(f"Order Details PDF saved to {pdf_path}")
-                order_details_path = str(pdf_path)
-
-                # Upload to SharePoint if enabled
+                # Upload generated PDF directly to SharePoint — no local storage
                 try:
                     from app.services.sharepoint_service import get_sharepoint_service
-
                     sp_service = get_sharepoint_service()
-                    if sp_service.is_enabled:
-                        sp_url = sp_service.upload_file(
-                            pdf_bytes, "order-details", pdf_filename
-                        )
-                        order_details_path = sp_url
-                        logger.info(
-                            f"Order Details PDF uploaded to SharePoint: {sp_url}"
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"SharePoint upload failed for Order Details, using local path: {e}"
+                    if not sp_service.is_enabled:
+                        raise RuntimeError("SharePoint storage is not enabled")
+                    
+                    sp_url = sp_service.upload_file(
+                        pdf_bytes, "order-details", pdf_filename
                     )
+                    order_details_path = sp_url
+                    logger.info(f"Order Details PDF uploaded to SharePoint: {sp_url}")
+                except Exception as e:
+                    logger.error(f"SharePoint upload failed for Order Details: {e}")
+                    raise  # No local fallback
 
             # Update order with Order Details path
             order.order_details_path = order_details_path
@@ -1938,8 +1917,9 @@ class OrderService:
 
     def generate_bundled_documents(
         self, order_id: Union[UUID, str], signature_data: dict
-    ) -> str:
-        """Generate bundled documents: create folder with signed picklist and QA form"""
+    ) -> tuple[str, str]:
+        """Generate bundled documents directly in SharePoint (no local storage).
+        Returns (signed_picklist_sp_url, bundle_sp_url)."""
         order_id_str = str(order_id)
         order = self.db.query(Order).filter(Order.id == order_id_str).first()
         if not order:
@@ -1954,62 +1934,67 @@ class OrderService:
                 },
             )
 
-        # Create completed documents directory structure
-        completed_dir = self._storage_path("completed")
-        completed_dir.mkdir(parents=True, exist_ok=True)
+        import tempfile
+        from pathlib import Path
 
-        order_dir = completed_dir / (order.inflow_order_id or str(order.id))
-        order_dir.mkdir(parents=True, exist_ok=True)
-
-        # Generate individual PDFs
-        signed_picklist_path = self._apply_signature_to_pdf(
-            order.picklist_path, signature_data
-        )
-
-        qa_pdf_path = self._generate_qa_pdf(order.qa_data, order)
-
-        # Copy files to completed folder
-        import shutil
-
-        signed_picklist_dest = order_dir / "signed_picklist.pdf"
-        qa_form_dest = order_dir / "qa_form.pdf"
-        bundle_pdf_dest = order_dir / "bundle.pdf"
-
-        shutil.copy2(signed_picklist_path, signed_picklist_dest)
-        shutil.copy2(qa_pdf_path, qa_form_dest)
-
-        # Create a combined bundle PDF for download/archival convenience
-        self._bundle_pdfs([str(signed_picklist_dest), str(qa_form_dest)], str(bundle_pdf_dest))
-
-        # Clean up temporary files
-        Path(signed_picklist_path).unlink(missing_ok=True)
-        Path(qa_pdf_path).unlink(missing_ok=True)
-
-        # Upload signed picklist, QA form, and bundle PDF to SharePoint asynchronously
-        try:
+        base_filename = f"{order.inflow_order_id or order.id}"
+        
+        # Ensure picklist is locally available (download if it's a SharePoint URL)
+        picklist_temp_to_delete = None
+        if order.picklist_path.startswith("http"):
             from app.services.sharepoint_service import get_sharepoint_service
-            from app.services.background_tasks import run_in_background
+            sp = get_sharepoint_service()
+            picklist_bytes = sp.download_file("picklists", f"{base_filename}.pdf")
+            if not picklist_bytes:
+                raise NotFoundError("Picklist", base_filename)
+            tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+            tmp.write(picklist_bytes)
+            tmp.close()
+            local_picklist_path = tmp.name
+            picklist_temp_to_delete = local_picklist_path
+        else:
+            local_picklist_path = order.picklist_path
 
-            def _schedule_sp_upload(filepath: str, subfolder: str, filename: str) -> None:
-                def _upload():
-                    try:
-                        sp = get_sharepoint_service()
-                        if sp.is_enabled:
-                            sp.upload_pdf(filepath, subfolder, filename)
-                            logger.info(f"[Background] Uploaded {subfolder}/{filename} to SharePoint")
-                    except Exception as exc:
-                        logger.warning(f"[Background] SharePoint upload failed for {filename}: {exc}")
+        # Apply signature to get signed picklist (returns temp file path)
+        signed_temp = self._apply_signature_to_pdf(local_picklist_path, signature_data)
 
-                run_in_background(_upload, task_name=f"upload_{subfolder}_{filename}")
+        # Generate QA PDF (returns temp file path)
+        qa_temp = self._generate_qa_pdf(order.qa_data, order)
 
-            base_filename = f"{order.inflow_order_id or order.id}"
-            _schedule_sp_upload(str(signed_picklist_dest), "signed", f"{base_filename}_signed.pdf")
-            _schedule_sp_upload(str(qa_form_dest), "qa", f"{base_filename}_qa.pdf")
-            _schedule_sp_upload(str(bundle_pdf_dest), "bundles", f"{base_filename}_bundle.pdf")
-        except Exception as e:
-            logger.warning(f"[Background] SharePoint upload tasks failed to schedule: {e}")
+        # Upload signed picklist directly from temp
+        from app.services.sharepoint_service import get_sharepoint_service
+        sp_service = get_sharepoint_service()
+        signed_sp_url = sp_service.upload_pdf(signed_temp, "signed", f"{base_filename}_signed.pdf")
 
-        return str(order_dir)
+        # Upload QA PDF
+        qa_sp_url = sp_service.upload_pdf(qa_temp, "qa", f"{base_filename}_qa.pdf")
+
+        # Create bundle from signed + QA PDFs
+        tmp_bundle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        bundle_temp = tmp_bundle.name
+        tmp_bundle.close()
+        self._bundle_pdfs([signed_temp, qa_temp], bundle_temp)
+        bundle_sp_url = sp_service.upload_pdf(bundle_temp, "bundles", f"{base_filename}_bundle.pdf")
+
+        # All uploads performed synchronously above — no background tasks needed
+
+        # Clean up temp files
+        for p in [signed_temp, qa_temp, bundle_temp]:
+            try:
+                Path(p).unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Failed to delete temp file {p}: {e}")
+        if picklist_temp_to_delete:
+            try:
+                Path(picklist_temp_to_delete).unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Failed to delete temp picklist {picklist_temp_to_delete}: {e}")
+
+        # Persist signed_picklist_path on order (SharePoint URL)
+        order.signed_picklist_path = signed_sp_url
+
+        return signed_sp_url, bundle_sp_url
+
 
     def _apply_signature_to_pdf(self, pdf_path: str, signature_data: dict) -> str:
         """Apply signature overlay to existing PDF"""
@@ -2162,11 +2147,14 @@ class OrderService:
 
     def _generate_qa_pdf(self, qa_data: dict, order: Order) -> str:
         """Generate QA checklist PDF from JSON data"""
-        qa_dir = self._storage_path("temp")
-        qa_dir.mkdir(parents=True, exist_ok=True)
+        import tempfile
+        from pathlib import Path
 
         filename = f"{order.inflow_order_id or order.id}-qa.pdf"
-        output_path = qa_dir / filename
+        # Create temporary file; caller will upload and then delete
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        output_path = Path(tmp_file.name)
+        tmp_file.close()  # Allow reportlab to write
 
         pdf = canvas.Canvas(str(output_path), pagesize=letter)
         width, height = letter
