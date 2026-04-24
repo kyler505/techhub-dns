@@ -539,7 +539,7 @@ class OrderService:
             audit_metadata={
                 "qa_method": qa_data.get("method"),
                 "completed_by": technician,
-                "qa_file_path": str(qa_file),
+                "qa_file_path": qa_path,
             },
         )
 
