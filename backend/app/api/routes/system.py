@@ -1786,15 +1786,16 @@ def upload_canopy_orders():
 def _normalize_canopyorders_bypass_value(raw_value: str) -> str:
     trimmed = raw_value.strip()
     compact = "".join(trimmed.upper().split())
-    if len(compact) == 4 and compact.isdigit():
+    if len(compact) in (3, 4) and compact.isdigit():
         return f"TH{compact}"
-    if compact.startswith("TH") and len(compact) == 6 and compact[2:].isdigit():
+    if compact.startswith("TH") and len(compact) in (5, 6) and compact[2:].isdigit():
         return f"TH{compact[2:]}"
     return trimmed
 
 
 def _is_exact_th_order(value: str) -> bool:
-    if len(value) != 6:
+    # Accept TH followed by 3 or 4 digits (TH123 or TH1234)
+    if len(value) not in (5, 6):
         return False
     if not value.startswith("TH"):
         return False
