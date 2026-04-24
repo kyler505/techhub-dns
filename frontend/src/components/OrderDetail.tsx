@@ -227,7 +227,7 @@ export default function OrderDetail({
         <div className="space-y-4">
           <h3 className="text-lg font-semibold tracking-tight">Preparation Checklist</h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start md:items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-foreground">Asset Tagging</p>
                 <p className="text-sm text-muted-foreground">
@@ -245,7 +245,7 @@ export default function OrderDetail({
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start md:items-center gap-2">
                 {assetTagRequired &&
                   (requestSent ? (
                     <Button asChild variant="outline" size="sm">
@@ -272,7 +272,7 @@ export default function OrderDetail({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start md:items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-foreground">
                   Generate Picklist & Email Order Details
@@ -315,7 +315,7 @@ export default function OrderDetail({
               </Button>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start md:items-center justify-between gap-4">
               <div>
                 <p className="font-medium text-foreground">QA Checklist</p>
                 <p className="text-sm text-muted-foreground">
@@ -439,7 +439,7 @@ export default function OrderDetail({
               </div>
             </>
           ) : (
-            <div className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border bg-card p-4 text-left md:text-center text-sm text-muted-foreground">
               No workflow audit history available.
             </div>
           )}

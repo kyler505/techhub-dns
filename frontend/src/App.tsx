@@ -106,7 +106,7 @@ function AppContent() {
     const isOrdersRoute = location.pathname === "/orders" || location.pathname.startsWith("/orders/");
 
     return (
-        <div className="min-h-screen bg-background overflow-x-hidden">
+        <div className="min-h-screen bg-background overflow-x-hidden grain-overlay">
             <Sidebar />
 
             <main className={`transition-[margin] duration-300 lg:ml-[var(--sidebar-width)] ${isOrdersRoute ? "flex h-screen flex-col overflow-hidden" : "min-h-screen"}`}>

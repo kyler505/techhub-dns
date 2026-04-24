@@ -73,7 +73,11 @@ export default {
         },
       },
       borderRadius: {
+        sm: "0.375rem",
+        md: "0.5rem",
         lg: "var(--radius)",
+        xl: "1rem",
+        full: "9999px",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },

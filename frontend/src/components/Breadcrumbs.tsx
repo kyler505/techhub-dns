@@ -35,7 +35,7 @@ export function Breadcrumbs({ loading = false }: { loading?: boolean }) {
 
   return (
     <nav aria-label="Breadcrumb" className="min-w-0 flex-1 overflow-x-auto">
-      <div className="flex min-w-max items-center text-xs text-muted-foreground">
+      <div className="flex min-w-max items-start md:items-center text-xs text-muted-foreground">
         {loading ? (
           <span className="cursor-not-allowed opacity-75">Dashboard</span>
         ) : (
@@ -44,7 +44,7 @@ export function Breadcrumbs({ loading = false }: { loading?: boolean }) {
           </Link>
         )}
       {crumbs.map((crumb) => (
-        <div key={crumb.path} className="flex min-w-0 items-center">
+        <div key={crumb.path} className="flex min-w-0 items-start md:items-center">
           <ChevronRight className="mx-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
           {crumb.isId ? (
             <span className="max-w-[12rem] truncate text-foreground sm:max-w-[16rem]">{crumb.label}</span>
