@@ -18,6 +18,7 @@ const DeliveryLayout = lazy(() => import("./pages/delivery/DeliveryLayout"));
 const DeliveryDispatchPage = lazy(() => import("./pages/delivery/Dispatch"));
 const Shipping = lazy(() => import("./pages/Shipping"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Audit = lazy(() => import("./pages/audit/Audit"));
 const DocumentSigningPage = lazy(() => import("./pages/DocumentSigningPage"));
 const OrderQAChecklist = lazy(() => import("./pages/OrderQAChecklist"));
 const OrderQAPage = lazy(() => import("./pages/OrderQAPage"));
@@ -50,6 +51,8 @@ function AppRoutes() {
             <Route path="/shipping" element={<ProtectedRoute><Shipping /></ProtectedRoute>} />
             <Route path="/document-signing" element={<ProtectedRoute><DocumentSigningPage /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/audit" element={<ProtectedRoute><Audit /></ProtectedRoute>} />
+
             <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
             <Route path="/login" element={<Navigate to="/" replace />} />
         </Routes>

@@ -4,6 +4,7 @@ import {
   AuditLog,
   OrderDetail as OrderDetailType,
   OrderStatus,
+  OrderStatusDisplayNames,
   TeamsNotification,
 } from "../types/order";
 
@@ -30,7 +31,7 @@ import StatusBadge from "./StatusBadge";
 import { formatToCentralTime } from "../utils/timezone";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +98,7 @@ export default function OrderDetail({
   onTagOrder,
   onRequestTags,
   onGeneratePicklist,
+  onStatusChange,
   generatingPicklist,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
@@ -104,6 +106,7 @@ export default function OrderDetail({
   const [tagConfirming, setTagConfirming] = useState(false);
   const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
 
   const assetTagRequired = order.asset_tag_required !== false;
 
@@ -118,6 +121,12 @@ export default function OrderDetail({
     !order.tagged_at &&
     !requestSent &&
     Boolean(order.inflow_order_id);
+
+  const allowedTransitionsFromIssue: OrderStatus[] = [
+    OrderStatus.PICKED,
+    OrderStatus.QA,
+    OrderStatus.PRE_DELIVERY,
+  ];
 
   const handleRequestTags = async (): Promise<boolean> => {
     if (!canRequestTags) return false;
@@ -159,8 +168,36 @@ export default function OrderDetail({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
-              <div className="mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 <StatusBadge status={order.status} />
+                {order.status === OrderStatus.ISSUE && (
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                      className="flex items-center gap-1"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    {statusDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[120px] rounded-md border bg-popover p-1 shadow-md">
+                        {allowedTransitionsFromIssue.map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => {
+                              onStatusChange(status);
+                              setStatusDropdownOpen(false);
+                            }}
+                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                          >
+                            {OrderStatusDisplayNames[status]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div>

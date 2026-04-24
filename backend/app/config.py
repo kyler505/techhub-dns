@@ -1,3 +1,4 @@
+import os
 import json
 from typing import Optional, List, Any
 
@@ -28,7 +29,9 @@ class Settings(BaseSettings):
 
     # Storage
     storage_root: str = "storage"
-    picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
+
+    # Local document storage (set TECHUB_DNS_LOCAL_STORAGE to override)
+    local_document_storage: str = os.getenv("TECHUB_DNS_LOCAL_STORAGE", "/tmp/techhub-dns")    picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
 
     # SharePoint Storage
     sharepoint_enabled: bool = False  # Safety: disabled by default

@@ -70,6 +70,7 @@ export interface Order {
   status: OrderStatus;
   assigned_deliverer?: string;
   delivery_run_id?: string;
+  delivery_sequence?: number | null;
   issue_reason?: string;
   tagged_at?: string;
   tagged_by?: string;

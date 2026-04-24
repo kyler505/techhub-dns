@@ -246,7 +246,8 @@ export default function Dispatch() {
         run,
         orders: run.order_ids
           .map((orderId) => ordersById.get(orderId))
-          .filter((order): order is Order => Boolean(order)),
+          .filter((order): order is Order => Boolean(order))
+          .sort((a, b) => (a.delivery_sequence ?? 0) - (b.delivery_sequence ?? 0)),
       }));
   }, [activeDeliveryRuns, inDeliveryOrders]);
 

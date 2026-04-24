@@ -6,6 +6,9 @@ import json
 from app.config import settings
 from app.services.graph_service import graph_service
 from app.utils.timezone import to_utc_iso_z
+from app.database import get_db_session
+from app.models.user import User
+from app.utils.display_labels import _format_to_first_last
 
 
 logger = logging.getLogger(__name__)
@@ -128,6 +131,23 @@ class TeamsRecipientService:
         from app.services.background_tasks import run_in_background
 
         def _notify_task():
+            # Batch fetch display names for deliverers with email addresses
+            deliverer_emails = {
+                order.assigned_deliverer
+                for order in orders
+                if order.assigned_deliverer and "@" in order.assigned_deliverer
+            }
+            email_to_display = {}
+            if deliverer_emails:
+                db = get_db_session()
+                try:
+                    users = db.query(User).filter(User.email.in_(deliverer_emails)).all()
+                    for user in users:
+                        if user.display_name:
+                            email_to_display[user.email] = _format_to_first_last(user.display_name)
+                finally:
+                    db.close()
+
             for order in orders:
                 try:
                     # Get item names from inflow_data or use generic fallback
@@ -138,11 +158,21 @@ class TeamsRecipientService:
                             for line in order.inflow_data.get("lines", [])
                         ]
 
+                    # Resolve delivery runner display name
+                    assigned = order.assigned_deliverer
+                    if assigned:
+                        if "@" in assigned:
+                            delivery_runner = email_to_display.get(assigned, assigned)
+                        else:
+                            delivery_runner = assigned
+                    else:
+                        delivery_runner = "TechHub Staff"
+
                     self.send_delivery_notification(
                         recipient_email=order.recipient_contact,
                         recipient_name=order.recipient_name,
                         order_number=order.inflow_order_id,
-                        delivery_runner=order.assigned_deliverer or "TechHub Staff",
+                        delivery_runner=delivery_runner,
                         order_items=item_names,
                         force=force,
                     )
