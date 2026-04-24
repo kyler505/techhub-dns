@@ -229,6 +229,27 @@ export default function OrderDetailPage() {
         }
     }, [orderId, websocketOrders]);
 
+    // Auto-adjust sidebar filter so the opened order is visible
+    useEffect(() => {
+        if (!order) return;
+
+        const orderStatus = order.status;
+        const currentFilter = sidebarStatusFilter;
+
+        let wouldBeIncluded = false;
+        if (currentFilter === null) {
+            wouldBeIncluded = true; // "All" includes everything
+        } else if (Array.isArray(currentFilter)) {
+            wouldBeIncluded = currentFilter.includes(orderStatus);
+        } else {
+            wouldBeIncluded = currentFilter === orderStatus;
+        }
+
+        if (!wouldBeIncluded) {
+            setSidebarStatusFilter(orderStatus);
+        }
+    }, [order?.status]);
+
     const handleStatusChange = (newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
         const requireReason = newStatus === OrderStatus.ISSUE;

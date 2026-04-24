@@ -95,11 +95,34 @@ export default function OrdersRail({
 
     if (orders.length === 0) {
         return (
-            <div className="rounded-lg border border-border bg-card shadow-sm">
-                <div className="border-b border-border px-4 py-3">
-                    <h2 className="text-sm font-semibold text-foreground">Orders</h2>
+            <div className="bg-card lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+                <div className="border-b border-border px-4 py-2.5">
+                    {onStatusChange ? (
+                        <div className="relative">
+                            <select
+                                value={status !== undefined ? JSON.stringify(status) : JSON.stringify([OrderStatus.PICKED, OrderStatus.QA])}
+                                onChange={(e) => {
+                                    const parsed = JSON.parse(e.target.value) as StatusFilter;
+                                    onStatusChange(parsed);
+                                }}
+                                className="w-full appearance-none rounded-md border border-border bg-background py-1.5 pl-3 pr-8 text-sm font-medium text-foreground"
+                            >
+                                {STATUS_OPTIONS.map((opt) => (
+                                    <option key={opt.label} value={JSON.stringify(opt.value)}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-sm font-semibold text-foreground">Orders</h2>
+                            <span className="text-xs text-muted-foreground">0</span>
+                        </div>
+                    )}
                 </div>
-                <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-muted-foreground">
+                <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 text-center text-muted-foreground">
                     <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
                     <p className="text-sm font-medium text-foreground">No orders found</p>
                     <p className="text-xs text-muted-foreground">Try adjusting your filters or search.</p>
