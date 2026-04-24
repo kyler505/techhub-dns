@@ -69,7 +69,7 @@ def _resolve_order_user_fields(data: dict, db_session) -> dict:
     for field in user_fields:
         raw = data.get(field)
         if raw and isinstance(raw, str) and "@" in raw:
-            data[field] = resolve_user_display(db_session, raw, raw)
+            data[field] = resolve_user_display(db_session, raw)
     return data
 
 
