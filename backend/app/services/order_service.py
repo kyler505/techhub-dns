@@ -261,13 +261,21 @@ class OrderService:
         generated_by: Optional[str] = None,
         expected_updated_at: Optional[datetime] = None,
     ) -> Order:
-        order_id_str = str(order_id)
+        order_id_str = str(order_id).strip()
+        # Try UUID (internal id) first, fall back to inflow order number
         order = (
             self.db.query(Order)
             .filter(Order.id == order_id_str)
             .with_for_update()
             .first()
         )
+        if order is None:
+            order = (
+                self.db.query(Order)
+                .filter(Order.inflow_order_id == order_id_str)
+                .with_for_update()
+                .first()
+            )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
