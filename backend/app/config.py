@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     storage_root: str = "storage"
 
     # Local document storage (set TECHUB_DNS_LOCAL_STORAGE to override)
-    local_document_storage: str = os.getenv("TECHUB_DNS_LOCAL_STORAGE", "/tmp/techhub-dns")    picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
+    local_document_storage: str = os.getenv("TECHUB_DNS_LOCAL_STORAGE", "/tmp/techhub-dns")
+    picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
 
     # SharePoint Storage
     sharepoint_enabled: bool = False  # Safety: disabled by default
