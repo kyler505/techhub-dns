@@ -202,12 +202,20 @@ class OrderService:
         generated_by: Optional[str] = None,
     ) -> bool:
         order_id_str = str(order_id)
+        # Try UUID first, fall back to inflow_order_id (TH-number)
         order = (
             self.db.query(Order)
             .filter(Order.id == order_id_str)
             .with_for_update()
             .first()
         )
+        if order is None:
+            order = (
+                self.db.query(Order)
+                .filter(Order.inflow_order_id == order_id_str)
+                .with_for_update()
+                .first()
+            )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -221,12 +229,20 @@ class OrderService:
         expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
+        # Try UUID first, fall back to inflow_order_id (TH-number)
         order = (
             self.db.query(Order)
             .filter(Order.id == order_id_str)
             .with_for_update()
             .first()
         )
+        if order is None:
+            order = (
+                self.db.query(Order)
+                .filter(Order.inflow_order_id == order_id_str)
+                .with_for_update()
+                .first()
+            )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -686,13 +702,20 @@ class OrderService:
     ) -> Order:
         """Transition order status with validation and audit logging"""
         order_id_str = str(order_id)
+        # Try UUID first, fall back to inflow_order_id (TH-number)
         order = (
             self.db.query(Order)
             .filter(Order.id == order_id_str)
             .with_for_update()
             .first()
         )
-
+        if order is None:
+            order = (
+                self.db.query(Order)
+                .filter(Order.inflow_order_id == order_id_str)
+                .with_for_update()
+                .first()
+            )
         if not order:
             raise NotFoundError("Order", str(order_id))
 
