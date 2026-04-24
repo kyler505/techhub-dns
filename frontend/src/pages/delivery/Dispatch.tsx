@@ -210,13 +210,19 @@ export default function Dispatch() {
   }, [preDeliveryOrders, searchTerm]);
 
   const needsAttentionOrders = useMemo(
-    () => preDeliveryFilteredOrders.filter((order) => Boolean(order.pick_status && !order.pick_status.is_fully_picked)),
-    [preDeliveryFilteredOrders]
+    () =>
+      preDeliveryFilteredOrders.filter(
+        (order) => Boolean(order.pick_status && !order.pick_status.is_fully_picked) && !selectedOrderIdSet.has(order.id)
+      ),
+    [preDeliveryFilteredOrders, selectedOrderIdSet]
   );
 
   const readyOrders = useMemo(
-    () => preDeliveryFilteredOrders.filter((order) => !order.pick_status || order.pick_status.is_fully_picked),
-    [preDeliveryFilteredOrders]
+    () =>
+      preDeliveryFilteredOrders.filter(
+        (order) => (!order.pick_status || order.pick_status.is_fully_picked) && !selectedOrderIdSet.has(order.id)
+      ),
+    [preDeliveryFilteredOrders, selectedOrderIdSet]
   );
 
   const activeDeliveryRunGroups = useMemo(() => {
