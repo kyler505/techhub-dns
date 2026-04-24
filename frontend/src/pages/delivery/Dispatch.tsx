@@ -115,7 +115,7 @@ export default function Dispatch() {
   const { user } = useAuth();
   const { orders: websocketOrders } = useOrdersWebSocket();
   const { statusByVehicle, isLoading: statusesLoading, refresh: refreshStatuses } = useVehicleStatuses();
-  const { runs: activeDeliveryRuns, loading: activeRunsLoading } = useDeliveryRuns();
+  const { runs: activeDeliveryRuns, loading: activeRunsLoading, refetch: refreshDeliveryRuns } = useDeliveryRuns();
 
   const [preDeliveryOrders, setPreDeliveryOrders] = useState<Order[]>([]);
   const [inDeliveryOrders, setInDeliveryOrders] = useState<Order[]>([]);
@@ -426,7 +426,7 @@ export default function Dispatch() {
       });
       toast.success("Delivery run started");
       setSelectedOrderIds([]);
-      await Promise.all([loadOrders(), refreshStatuses()]);
+      await Promise.all([loadOrders(), refreshStatuses(), refreshDeliveryRuns()]);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
       await refreshStatuses();
