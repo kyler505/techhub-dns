@@ -433,6 +433,13 @@ fi
 git reset --hard "origin/$BRANCH"
 log "Git pull complete"
 
+# Clean up deprecated local document storage — now using SharePoint exclusively
+if [ -d "${PROJECT_ROOT}/storage" ]; then
+    log "Removing legacy local storage directory..."
+    rm -rf "${PROJECT_ROOT}/storage"
+    log "Legacy storage removed"
+fi
+
 if ! run_backend_migrations; then
     exit 1
 fi
