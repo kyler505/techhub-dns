@@ -376,7 +376,7 @@ class OrderService:
             audit_metadata={
                 "filename": filename,
                 "generated_by": generated_by,
-                "file_path": str(destination),
+                "sharepoint_url": sp_url,
             },
         )
 
