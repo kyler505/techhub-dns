@@ -36,6 +36,7 @@ from app.utils.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.utils.display_labels import resolve_runner_display, resolve_user_display
 from app.utils.timezone import to_utc_iso_z
 from app.api.auth_middleware import (
     get_current_user_display_name,
@@ -53,14 +54,35 @@ logger = logging.getLogger(__name__)
 _order_clients = set()
 
 
-def _order_response_json(order) -> dict:
-    return current_app.json.loads(OrderResponse.model_validate(order).model_dump_json())
+def _resolve_order_user_fields(data: dict, db_session) -> dict:
+    """Resolve raw email/user identifiers to display names in order response data."""
+    if not db_session:
+        return data
+    user_fields = [
+        "assigned_deliverer",
+        "tagged_by",
+        "picklist_generated_by",
+        "qa_completed_by",
+        "shipping_workflow_status_updated_by",
+        "shipped_to_carrier_by",
+    ]
+    for field in user_fields:
+        raw = data.get(field)
+        if raw and isinstance(raw, str) and "@" in raw:
+            data[field] = resolve_user_display(db_session, raw, raw)
+    return data
 
 
-def _order_detail_response_json(order) -> dict:
-    return current_app.json.loads(
+def _order_response_json(order, db_session=None) -> dict:
+    data = current_app.json.loads(OrderResponse.model_validate(order).model_dump_json())
+    return _resolve_order_user_fields(data, db_session)
+
+
+def _order_detail_response_json(order, db_session=None) -> dict:
+    data = current_app.json.loads(
         OrderDetailResponse.model_validate(order).model_dump_json()
     )
+    return _resolve_order_user_fields(data, db_session)
 
 
 def _get_current_user_display_name() -> str:
@@ -89,7 +111,7 @@ def _serialize_utc_datetime(value: Optional[datetime]) -> Optional[str]:
     return to_utc_iso_z(value)
 
 
-def _serialize_order_list_item(order, pick_status_data=None) -> dict:
+def _serialize_order_list_item(order, pick_status_data=None, db_session=None) -> dict:
     latest_job = getattr(order, "latest_picklist_print_job", None)
     latest_job_payload = None
     if latest_job is not None:
@@ -104,7 +126,7 @@ def _serialize_order_list_item(order, pick_status_data=None) -> dict:
             "last_error": latest_job.last_error,
         }
 
-    return {
+    data = {
         "id": str(order.id),
         "inflow_order_id": order.inflow_order_id,
         "inflow_sales_order_id": order.inflow_sales_order_id,
@@ -151,6 +173,7 @@ def _serialize_order_list_item(order, pick_status_data=None) -> dict:
         "pick_status": pick_status_data,
         "latest_picklist_print_job": latest_job_payload,
     }
+    return _resolve_order_user_fields(data, db_session)
 
 
 def _broadcast_orders_sync(db_session: Session = None):
@@ -171,6 +194,8 @@ def _do_broadcast_orders(db_session):
         orders, _ = service.get_orders(limit=1000)
         payload = []
         for order in orders:
+            raw_deliverer = order.assigned_deliverer
+            deliverer_label = resolve_user_display(db_session, raw_deliverer, raw_deliverer) if raw_deliverer and "@" in raw_deliverer else raw_deliverer
             payload.append(
                 {
                     "id": str(order.id),
@@ -179,7 +204,7 @@ def _do_broadcast_orders(db_session):
                     "status": order.status,
                     "updated_at": _serialize_utc_datetime(order.updated_at),
                     "delivery_location": order.delivery_location,
-                    "assigned_deliverer": order.assigned_deliverer,
+                    "assigned_deliverer": deliverer_label,
                 }
             )
 
@@ -248,7 +273,7 @@ def get_orders():
                         exc,
                     )
 
-            result.append(_serialize_order_list_item(o, pick_status_data))
+            result.append(_serialize_order_list_item(o, pick_status_data, db))
 
         return jsonify({
             "items": result,
@@ -338,7 +363,7 @@ def get_tag_request_candidates():
             ):
                 continue
 
-            needing_request.append(_order_response_json(order))
+            needing_request.append(_order_response_json(order, db))
             if len(needing_request) >= limit:
                 break
 
@@ -354,7 +379,7 @@ def get_order(order_id):
         order = service.get_order_detail(order_id)
         if not order:
             abort(404, description="Order not found")
-        response_data = _order_detail_response_json(order)
+        response_data = _order_detail_response_json(order, db)
         if order.inflow_data:
             inflow_service = InflowService()
             response_data["asset_tag_required"] = inflow_service.requires_asset_tags(
@@ -402,7 +427,7 @@ def update_order(order_id):
 
         db.commit()
         db.refresh(order)
-        return jsonify(_order_response_json(order))
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/<order_id>/status", methods=["PATCH"])
@@ -432,7 +457,7 @@ def update_order_status(order_id):
         # Broadcast order update via SocketIO
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
-        return jsonify(_order_response_json(order))
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/bulk-transition", methods=["POST"])
@@ -461,7 +486,7 @@ def bulk_transition_status():
         # Broadcast order updates via SocketIO
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
-        return jsonify([_order_response_json(o) for o in orders])
+        return jsonify([_order_response_json(o, db) for o in orders])
 
 
 @bp.route("/<order_id>/audit", methods=["GET"])
@@ -504,7 +529,7 @@ def tag_order(order_id):
         )
 
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-        return jsonify(_order_response_json(order))
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/<order_id>/picklist", methods=["POST"])
@@ -530,7 +555,7 @@ def generate_picklist(order_id):
         )
 
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-        return jsonify(_order_response_json(order))
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/<order_id>/qa", methods=["POST"])
@@ -557,7 +582,7 @@ def submit_qa(order_id):
         # Broadcast order update via SocketIO
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
-        return jsonify(_order_response_json(order))
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/<order_id>/picklist", methods=["GET"])
@@ -744,7 +769,7 @@ def update_shipping_workflow(order_id):
         # Broadcast order update via SocketIO
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
-        return jsonify(_order_response_json(order))
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/<order_id>/shipping-workflow", methods=["GET"])
