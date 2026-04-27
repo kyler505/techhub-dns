@@ -167,27 +167,14 @@ export function Sidebar({ className }: { className?: string }) {
         )}
       >
         <div className={cn("relative flex h-12 items-center border-b border-border", showExpandedContent ? "justify-between px-4" : "justify-center px-3")}>
-<<<<<<< Updated upstream
-          <div className={cn("flex items-center", showExpandedContent ? "gap-3" : "justify-center")}>
-            <motion.img
-              initial={false}
-              src={boxTAM}
-              alt="Texas A&M University"
-              className="h-8 w-auto"
-            />
-            {showExpandedContent && (
-=======
           {showExpandedContent && (
             <div className="flex items-center gap-3">
               <motion.img
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2 }}
+                initial={false}
                 src={boxTAM}
                 alt="Texas A&M University"
                 className="h-8 w-auto"
               />
->>>>>>> Stashed changes
               <motion.span
                 initial={false}
                 className="font-semibold leading-tight tracking-tight text-foreground"
