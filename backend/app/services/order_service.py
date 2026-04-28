@@ -2049,19 +2049,19 @@ class OrderService:
             # Upload signed picklist
             with open(signed_local_path, "rb") as f:
                 signed_bytes = f.read()
-            signed_sp_url = sp_service.upload_pdf(signed_bytes, "signed", f"{base_filename}_signed.pdf")
+            signed_sp_url = sp_service.upload_file(signed_bytes, "signed", f"{base_filename}_signed.pdf")
             logger.info(f"Signed picklist uploaded to SharePoint: {signed_sp_url}")
 
             # Upload QA PDF
             with open(qa_local_path, "rb") as f:
                 qa_bytes = f.read()
-            qa_sp_url = sp_service.upload_pdf(qa_bytes, "qa", f"{base_filename}_qa.pdf")
+            qa_sp_url = sp_service.upload_file(qa_bytes, "qa", f"{base_filename}_qa.pdf")
             logger.info(f"QA PDF uploaded to SharePoint: {qa_sp_url}")
 
             # Upload bundle
             with open(bundle_local_path, "rb") as f:
                 bundle_bytes = f.read()
-            bundle_sp_url = sp_service.upload_pdf(bundle_bytes, "bundles", f"{base_filename}_bundle.pdf")
+            bundle_sp_url = sp_service.upload_file(bundle_bytes, "bundles", f"{base_filename}_bundle.pdf")
             logger.info(f"Bundle uploaded to SharePoint: {bundle_sp_url}")
 
             # Persist SharePoint URLs on order (source of truth)
