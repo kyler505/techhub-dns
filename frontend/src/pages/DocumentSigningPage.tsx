@@ -280,7 +280,12 @@ function DocumentSigningPage() {
     }, []);
 
     const updatePlacement = useCallback((id: string, updater: (placement: Placement) => Placement) => {
-        setPlacements((prev) => prev.map((placement) => (placement.id === id ? updater(placement) : placement)));
+        setPlacements((prev) => {
+            const next = prev.map((placement) => (placement.id === id ? updater(placement) : placement));
+            console.log('updatePlacement:', id, 'prev ids:', prev.map(p => p.id), 'next ids:', next.map(p => p.id));
+            console.log('updatePlacement coords:', id, ' prev:', prev.map(p => ({x: p.x, y: p.y})), 'next:', next.map(p => ({x: p.x, y: p.y})));
+            return next;
+        });
     }, []);
 
     const pxToPoints = useCallback((px: number) => {
@@ -378,6 +383,7 @@ function DocumentSigningPage() {
                 expected_updated_at: order.updated_at,
             };
 
+            console.log('SIGN_PAYLOAD:', JSON.stringify(payload, null, 2));
             await ordersApi.signOrder(order.id, payload);
 
             navigate(returnTo, {
