@@ -7,9 +7,7 @@ import { SkeletonTable } from "../components/Skeleton";
 import { PackageSearch, Truck, CheckCircle } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 import { ordersApi } from "../api/orders";
-import {
-    invalidateOrderQueries,
-} from "../queries/orders";
+import { invalidateOrderQueries } from "../queries/orders";
 import { toast } from "sonner";
 import { isValidOrderId } from "../utils/orderIds";
 import { Button } from "../components/ui/button";
@@ -97,20 +95,11 @@ export default function Shipping() {
         <div className="h-full min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-[1600px] space-y-6">
                 <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Shipping</h1>
-                    <p className="text-sm text-muted-foreground">Orders outside Bryan/College Station — shipped via FedEx/UPS.</p>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Shipment Queue</h1>
+                    <p className="text-sm text-muted-foreground">Orders outside Bryan/College Station, ready to ship.</p>
                 </div>
 
                 <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
-                    <div className="p-5 pb-4 sm:p-6 sm:pb-4">
-                        <div className="flex items-center justify-between border-b border-border/60 pb-4">
-                            <div className="space-y-1">
-                                <h2 className="text-base font-semibold tracking-tight">Shipment Queue</h2>
-                                <p className="text-sm text-muted-foreground">Orders ready to be shipped (outside BCS area).</p>
-                            </div>
-                            <Truck className="h-5 w-5 text-muted-foreground/60" />
-                        </div>
-                    </div>
                     <div className="px-5 pb-5 sm:px-6 sm:pb-6">
                         <div className="mb-4">
                             <Input
@@ -128,7 +117,7 @@ export default function Shipping() {
                             <div className="flex flex-col items-center justify-center py-16 text-center">
                                 <PackageSearch className="mb-3 h-8 w-8 text-muted-foreground/60" />
                                 <p className="text-sm font-medium text-foreground">No shipments in the queue</p>
-                                <p className="text-xs text-muted-foreground">Orders with "Shipping" status will appear here once QA is complete.</p>
+                                <p className="text-xs text-muted-foreground">Orders with &quot;Shipping&quot; status will appear here once QA is complete.</p>
                             </div>
                         ) : (
                             <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
