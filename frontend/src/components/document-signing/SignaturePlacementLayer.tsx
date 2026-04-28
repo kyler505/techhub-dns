@@ -101,10 +101,13 @@ function SignaturePlacementItem({
       const deltaYPt = -(clientY - interaction.startClientY) / scale;
 
       if (interaction.mode === "drag") {
++        const newX = interaction.initialPlacement.x + deltaXPt;
++        const newY = interaction.initialPlacement.y + deltaYPt;
++        console.log('DRAG update:', {id: interaction.id, deltaXPt, deltaYPt, newX, newY, scale});
         onUpdatePlacement(interaction.id, (current) => ({
           ...current,
-          x: interaction.initialPlacement.x + deltaXPt,
-          y: interaction.initialPlacement.y + deltaYPt,
+          x: newX,
+          y: newY,
         }));
         return;
       }
@@ -132,6 +135,7 @@ function SignaturePlacementItem({
         nextWidth = nextHeight * interaction.aspectRatio;
       }
 
++      console.log('RESIZE update:', {id: interaction.id, nextWidth, nextHeight, newX: interaction.anchorX - nextWidth, newY: interaction.anchorY - nextHeight});
       onUpdatePlacement(interaction.id, (current) => ({
         ...current,
         x: interaction.anchorX - nextWidth,
