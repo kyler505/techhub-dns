@@ -16,7 +16,7 @@ interface OrdersRailProps {
 }
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-    { value: [OrderStatus.PICKED, OrderStatus.QA], label: "Active" },
+    { value: [OrderStatus.PICKED, OrderStatus.QA], label: "Picked + QA" },
     { value: null, label: "All" },
     { value: OrderStatus.PICKED, label: OrderStatusDisplayNames[OrderStatus.PICKED] },
     { value: OrderStatus.QA, label: OrderStatusDisplayNames[OrderStatus.QA] },
