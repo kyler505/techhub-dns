@@ -585,6 +585,7 @@ class OrderService:
             logger.error(f"SharePoint upload failed for QA: {e}")
             raise  # Fail fast
 
+        order.qa_completed_at = datetime.utcnow()
         order.qa_completed_by = technician
         order.qa_data = qa_data
         # order.qa_path already set to SharePoint sp_url above
