@@ -238,9 +238,68 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     assert generated_payloads[0]["pickLines"][0]["quantity"]["serialNumbers"] == [
         "SN-2"
     ]
-    assert order.order_details_path == "/tmp/techhub-dns/orders/TH1004.pdf"
+    assert order.order_details_path == "sharepoint://order-details/TH1004.pdf"
     assert order.order_details_generated_at is not None
     print("[PASS] Partial order details regenerate from remaining items")
+
+
+def test_order_details_generated_pdf_is_uploaded_to_sharepoint():
+    """Generated order-details PDFs should be uploaded and store the SharePoint URL."""
+
+    class FakeSharePointService:
+        is_enabled = True
+
+        def __init__(self) -> None:
+            self.upload_calls: list[tuple[bytes, str, str]] = []
+
+        def download_file(self, subfolder: str, filename: str) -> bytes | None:
+            return None
+
+        def upload_file(self, content: bytes, subfolder: str, filename: str) -> str:
+            self.upload_calls.append((content, subfolder, filename))
+            return f"sharepoint://{subfolder}/{filename}"
+
+    fake_sp_service = FakeSharePointService()
+
+    order = SimpleNamespace(
+        id="order-5",
+        inflow_order_id="TH1005",
+        recipient_contact="user@example.com",
+        recipient_name="User",
+        inflow_data={"orderNumber": "TH1005", "lines": [], "pickLines": [], "packLines": []},
+        order_details_path=None,
+        order_details_generated_at=None,
+    )
+
+    db = SimpleNamespace(commit=lambda: None, refresh=lambda _order: None)
+    service = OrderService(db=cast(Any, db))
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._storage_path = lambda *parts: Path(tmpdir).joinpath(*parts)  # type: ignore[method-assign]
+
+        with patch(
+            "app.services.sharepoint_service.get_sharepoint_service",
+            return_value=fake_sp_service,
+        ):
+            fake_pdf_module = types.ModuleType("app.services.pdf_service")
+            fake_pdf_module.pdf_service = SimpleNamespace(
+                generate_order_details_pdf=lambda payload: b"fresh-pdf"
+            )
+            with patch.dict(
+                sys.modules,
+                {"app.services.pdf_service": fake_pdf_module},
+            ):
+                with patch(
+                    "app.services.email_service.email_service.is_configured",
+                    return_value=False,
+                ):
+                    success = service._send_order_details_email(order)
+
+    assert success is False
+    assert fake_sp_service.upload_calls == [(b"fresh-pdf", "order-details", "TH1005.pdf")]
+    assert order.order_details_path == "sharepoint://order-details/TH1005.pdf"
+    assert order.order_details_generated_at is not None
+    print("[PASS] Generated order-details PDFs upload to SharePoint")
 
 
 if __name__ == "__main__":
@@ -250,6 +309,7 @@ if __name__ == "__main__":
     test_fulfill_sales_order_appends_new_partial_shipment_lines()
     test_asset_tag_serials_only_include_unshipped_remaining_items()
     test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf()
+    test_order_details_generated_pdf_is_uploaded_to_sharepoint()
 
     print()
     print("[SUCCESS] All partial-order workflow tests passed!")

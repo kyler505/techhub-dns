@@ -1796,8 +1796,7 @@ class OrderService:
             # Normalize PDF content to raw bytes for storage/email.
             pdf_content = pdf_bytes.getvalue() if hasattr(pdf_bytes, "getvalue") else pdf_bytes
 
-            # Save Order Details PDF locally
-            # Upload generated PDF directly to SharePoint — no local storage
+            # Save Order Details PDF locally and upload it to SharePoint.
             try:
                 from app.services.sharepoint_service import get_sharepoint_service
 
@@ -1810,7 +1809,10 @@ class OrderService:
                 od_path = self._local_doc_path("orders", pdf_filename)
                 od_path.write_bytes(pdf_content)
                 logger.info(f"Order Details PDF saved locally: {od_path}")
-                order_details_path = str(od_path)
+
+                uploaded_url = sp_service.upload_file(pdf_content, "order-details", pdf_filename)
+                logger.info(f"Order Details PDF uploaded to SharePoint: {uploaded_url}")
+                order_details_path = uploaded_url
             except Exception as e:
                 logger.error(f"SharePoint upload failed for Order Details: {e}")
                 raise  # No local fallback
