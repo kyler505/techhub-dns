@@ -17,6 +17,7 @@ from app.schemas.order import (
     OrderResponse,
     OrderDetailResponse,
     OrderStatusUpdate,
+    OrderRollbackUpdate,
     BulkStatusUpdate,
     OrderUpdate,
     AssetTagUpdate,
@@ -487,6 +488,29 @@ def update_order_status(order_id):
             teams_recipient_service.notify_orders_in_delivery([order])
 
         # Broadcast order update via SocketIO
+        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+
+        return jsonify(_order_response_json(order, db))
+
+
+@bp.route("/<order_id>/rollback", methods=["PATCH"])
+@require_auth
+def rollback_order_status(order_id):
+    """Rollback order status to an earlier workflow state."""
+    data = request.get_json()
+    changed_by = request.args.get("changed_by") or get_current_user_display_name()
+
+    with get_db() as db:
+        service = OrderService(db)
+        rollback_update = OrderRollbackUpdate(**data)
+        order = service.rollback_status(
+            order_id=order_id,
+            target_status=rollback_update.status,
+            changed_by=changed_by,
+            reason=rollback_update.reason,
+            expected_updated_at=rollback_update.expected_updated_at,
+        )
+
         broadcast_dedup.request_broadcast(_broadcast_orders_sync)
 
         return jsonify(_order_response_json(order, db))

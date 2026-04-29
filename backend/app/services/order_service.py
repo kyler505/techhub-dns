@@ -903,6 +903,154 @@ class OrderService:
 
         return order
 
+    def _rollback_targets_for_status(self, current_status: str) -> set[str]:
+        """Return the statuses an order can be rolled back to from the current status."""
+        allowed_targets = {
+            OrderStatus.QA.value: {OrderStatus.PICKED.value},
+            OrderStatus.PRE_DELIVERY.value: {
+                OrderStatus.PICKED.value,
+                OrderStatus.QA.value,
+            },
+            OrderStatus.IN_DELIVERY.value: {
+                OrderStatus.PICKED.value,
+                OrderStatus.QA.value,
+                OrderStatus.PRE_DELIVERY.value,
+            },
+            OrderStatus.SHIPPING.value: {
+                OrderStatus.PICKED.value,
+                OrderStatus.QA.value,
+                OrderStatus.PRE_DELIVERY.value,
+            },
+            OrderStatus.DELIVERED.value: {
+                OrderStatus.PICKED.value,
+                OrderStatus.QA.value,
+                OrderStatus.PRE_DELIVERY.value,
+            },
+            OrderStatus.ISSUE.value: {
+                OrderStatus.PICKED.value,
+                OrderStatus.QA.value,
+                OrderStatus.PRE_DELIVERY.value,
+            },
+        }
+        return allowed_targets.get(current_status, set())
+
+    def rollback_status(
+        self,
+        order_id: Union[UUID, str],
+        target_status: OrderStatus,
+        changed_by: Optional[str] = None,
+        reason: Optional[str] = None,
+        expected_updated_at: Optional[datetime] = None,
+    ) -> Order:
+        """Roll an order back to an earlier workflow status and clear downstream state."""
+        order_id_str = str(order_id)
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == order_id_str)
+            .with_for_update()
+            .first()
+        )
+        if order is None:
+            order = (
+                self.db.query(Order)
+                .filter(Order.inflow_order_id == order_id_str)
+                .with_for_update()
+                .first()
+            )
+        if not order:
+            raise NotFoundError("Order", str(order_id))
+
+        self.assert_not_stale(order, expected_updated_at)
+
+        current_status = order.status
+        allowed_targets = self._rollback_targets_for_status(current_status)
+        if target_status.value not in allowed_targets:
+            raise ValidationError(
+                f"Cannot rollback order from {current_status} to {target_status.value}",
+                details={
+                    "order_id": order.inflow_order_id,
+                    "current_status": current_status,
+                    "target_status": target_status.value,
+                    "allowed_targets": sorted(allowed_targets),
+                },
+            )
+
+        if current_status == target_status.value:
+            raise ValidationError("Order is already in the requested status")
+
+        cleared_fields: Dict[str, Any] = {}
+
+        def clear(field_name: str) -> None:
+            cleared_fields[field_name] = getattr(order, field_name)
+            setattr(order, field_name, None)
+
+        clear("issue_reason")
+        clear("delivery_run_id")
+        clear("delivery_sequence")
+        clear("shipping_workflow_status_updated_at")
+        clear("shipping_workflow_status_updated_by")
+        clear("shipped_to_carrier_at")
+        clear("shipped_to_carrier_by")
+        clear("carrier_name")
+        clear("tracking_number")
+        clear("signature_captured_at")
+        clear("signed_picklist_path")
+        order.shipping_workflow_status = ShippingWorkflowStatus.WORK_AREA.value
+
+        if target_status in (OrderStatus.QA, OrderStatus.PICKED):
+            clear("assigned_deliverer")
+
+        if target_status == OrderStatus.QA:
+            clear("qa_completed_at")
+            clear("qa_completed_by")
+            clear("qa_data")
+            clear("qa_path")
+            clear("qa_method")
+
+        if target_status == OrderStatus.PICKED:
+            clear("tagged_at")
+            clear("tagged_by")
+            clear("tag_data")
+            clear("picklist_generated_at")
+            clear("picklist_generated_by")
+            clear("picklist_path")
+            clear("order_details_path")
+            clear("order_details_generated_at")
+            clear("qa_completed_at")
+            clear("qa_completed_by")
+            clear("qa_data")
+            clear("qa_path")
+            clear("qa_method")
+
+        order.status = target_status.value
+        order.updated_at = datetime.utcnow()
+
+        audit_log = AuditLog(
+            order_id=order.id,
+            changed_by=changed_by,
+            from_status=current_status,
+            to_status=target_status.value,
+            reason=reason,
+            timestamp=datetime.utcnow(),
+        )
+        self.db.add(audit_log)
+        self._record_status_history(
+            order=order,
+            from_status=current_status,
+            to_status=target_status.value,
+            actor_identifier=changed_by,
+            metadata={
+                "reason": reason,
+                "rollback": True,
+                "cleared_fields": sorted(cleared_fields.keys()),
+            },
+        )
+
+        self.db.commit()
+        self.db.refresh(order)
+
+        return order
+
     def _is_valid_transition(self, from_status: str, to_status: str) -> bool:
         """Validate status transition"""
         valid_transitions = {

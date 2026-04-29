@@ -40,6 +40,9 @@ export default function OrderDetailPage() {
     const [transitioningStatus, setTransitioningStatus] = useState<{
         newStatus: OrderStatus;
         requireReason: boolean;
+        title?: string;
+        confirmLabel?: string;
+        action: "status" | "rollback";
     } | null>(null);
     const queryClient = useQueryClient();
     const [mobileShowOrders, setMobileShowOrders] = useState(false);
@@ -138,6 +141,38 @@ export default function OrderDetailPage() {
             }
 
             toast.error("Failed to update order status");
+        },
+    });
+
+    const rollbackStatusMutation = useMutation({
+        mutationFn: ({ newStatus, reason, expectedUpdatedAt }: {
+            newStatus: OrderStatus;
+            reason?: string;
+            expectedUpdatedAt?: string;
+        }) => {
+            if (!orderId) {
+                throw new Error("Order id is required");
+            }
+
+            return ordersApi.rollbackOrderStatus(orderId, {
+                status: newStatus,
+                reason,
+                expected_updated_at: expectedUpdatedAt,
+            });
+        },
+        onSuccess: async () => {
+            setTransitioningStatus(null);
+            await refreshOrder();
+        },
+        onError: async (error: unknown) => {
+            console.error("Failed to rollback status:", error);
+            if (isAxiosError(error) && error.response?.status === 409) {
+                toast.error("Order changed by another user. Reloaded the latest details.");
+                await refreshOrder();
+                return;
+            }
+
+            toast.error("Failed to rollback order status");
         },
     });
 
@@ -256,20 +291,30 @@ export default function OrderDetailPage() {
         if (!order) return;
         const requireReason = newStatus === OrderStatus.ISSUE;
         if (requireReason && reason === undefined) {
-            setTransitioningStatus({ newStatus, requireReason: true });
+            setTransitioningStatus({ newStatus, requireReason: true, title: "Change Status", confirmLabel: "Confirm", action: "status" });
         } else {
-            void performStatusChange(newStatus, reason);
+            void performTransition("status", newStatus, reason);
         }
     };
 
-    const performStatusChange = async (newStatus: OrderStatus, reason?: string) => {
+    const handleRollbackStatus = (newStatus: OrderStatus) => {
+        if (!order) return;
+        setTransitioningStatus({ newStatus, requireReason: true, title: "Rollback Order", confirmLabel: "Rollback", action: "rollback" });
+    };
+
+    const performTransition = async (action: "status" | "rollback", newStatus: OrderStatus, reason?: string) => {
         if (!order) return;
         try {
-            await updateStatusMutation.mutateAsync({
+            const payload = {
                 newStatus,
                 reason,
                 expectedUpdatedAt: order.updated_at,
-            });
+            };
+            if (action === "rollback") {
+                await rollbackStatusMutation.mutateAsync(payload);
+                return;
+            }
+            await updateStatusMutation.mutateAsync(payload);
         } catch {
             // Handled by mutation callbacks.
         }
@@ -369,6 +414,7 @@ export default function OrderDetailPage() {
                         auditLogs={auditLogs}
                         notifications={notifications}
                         onStatusChange={handleStatusChange}
+                        onRollbackStatus={handleRollbackStatus}
                         onTagOrder={handleTagOrder}
                         onRequestTags={handleRequestTags}
                         onGeneratePicklist={handleGeneratePicklist}
@@ -382,9 +428,11 @@ export default function OrderDetailPage() {
                         currentStatus={order.status}
                         newStatus={transitioningStatus.newStatus}
                         requireReason={transitioningStatus.requireReason}
-                        onConfirm={(reason) => performStatusChange(transitioningStatus.newStatus, reason)}
+                        title={transitioningStatus.title}
+                        confirmLabel={transitioningStatus.confirmLabel}
+                        onConfirm={(reason) => performTransition(transitioningStatus.action, transitioningStatus.newStatus, reason)}
                         onCancel={() => setTransitioningStatus(null)}
-                        submitting={updateStatusMutation.isPending}
+                        submitting={updateStatusMutation.isPending || rollbackStatusMutation.isPending}
                     />
                 )}
                 </div>
