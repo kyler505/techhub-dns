@@ -117,6 +117,21 @@ class OrderService:
             logger.info(f"Order {order.inflow_order_id} prep steps incomplete: {steps}")
         return complete
 
+    def _get_incomplete_steps(self, order: Order) -> list[str]:
+        """Return human-readable prep steps still required before Pre-Delivery."""
+        missing_steps: list[str] = []
+
+        if self._requires_asset_tags(order) and not order.tagged_at:
+            missing_steps.append("asset_tagging")
+
+        if not order.picklist_generated_at:
+            missing_steps.append("picklist")
+
+        if not order.qa_completed_at:
+            missing_steps.append("qa")
+
+        return missing_steps
+
     def _is_shipping_order(self, order: Order) -> bool:
         """Determine if an order is a shipping order (not local delivery)"""
         if not order.inflow_data:
