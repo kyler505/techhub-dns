@@ -56,6 +56,7 @@ interface OrderDetailProps {
   auditLogs: AuditLog[];
   notifications: TeamsNotification[];
   onStatusChange: (newStatus: OrderStatus, reason?: string) => void;
+  onRollbackStatus: (newStatus: OrderStatus) => void;
   onTagOrder: (tagIds: string[]) => Promise<void>;
   onRequestTags: () => Promise<void>;
   onGeneratePicklist: () => Promise<void>;
@@ -99,6 +100,7 @@ export default function OrderDetail({
   onRequestTags,
   onGeneratePicklist,
   onStatusChange,
+  onRollbackStatus,
   generatingPicklist,
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
@@ -107,6 +109,7 @@ export default function OrderDetail({
   const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [rollbackDropdownOpen, setRollbackDropdownOpen] = useState(false);
 
   const assetTagRequired = order.asset_tag_required !== false;
 
@@ -127,6 +130,22 @@ export default function OrderDetail({
     OrderStatus.QA,
     OrderStatus.PRE_DELIVERY,
   ];
+
+  const getRollbackTargets = (status: OrderStatus): OrderStatus[] => {
+    switch (status) {
+      case OrderStatus.QA:
+        return [OrderStatus.PICKED];
+      case OrderStatus.PRE_DELIVERY:
+        return [OrderStatus.PICKED, OrderStatus.QA];
+      case OrderStatus.IN_DELIVERY:
+      case OrderStatus.SHIPPING:
+      case OrderStatus.DELIVERED:
+      case OrderStatus.ISSUE:
+        return [OrderStatus.PICKED, OrderStatus.QA, OrderStatus.PRE_DELIVERY];
+      default:
+        return [];
+    }
+  };
 
   const handleRequestTags = async (): Promise<boolean> => {
     if (!canRequestTags) return false;
@@ -170,6 +189,38 @@ export default function OrderDetail({
               <p className="text-sm font-medium text-muted-foreground">Status</p>
               <div className="mt-1 flex items-center gap-2">
                 <StatusBadge status={order.status} />
+                {order.status !== OrderStatus.PICKED && getRollbackTargets(order.status).length > 0 && (
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRollbackDropdownOpen(!rollbackDropdownOpen);
+                        setStatusDropdownOpen(false);
+                      }}
+                      className="flex items-center gap-1"
+                    >
+                      Rollback
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    {rollbackDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                        {getRollbackTargets(order.status).map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => {
+                              onRollbackStatus(status);
+                              setRollbackDropdownOpen(false);
+                            }}
+                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                          >
+                            {OrderStatusDisplayNames[status]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {order.status === OrderStatus.ISSUE && (
                   <div className="relative">
                     <Button

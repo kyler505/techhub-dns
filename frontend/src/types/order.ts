@@ -133,6 +133,12 @@ export interface OrderStatusUpdate {
   expected_updated_at?: string;
 }
 
+export interface OrderRollbackUpdate {
+  status: OrderStatus;
+  reason?: string;
+  expected_updated_at?: string;
+}
+
 export interface OrderMutationPayload {
   expected_updated_at?: string;
 }
