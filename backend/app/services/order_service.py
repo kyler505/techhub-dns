@@ -1747,6 +1747,7 @@ class OrderService:
 
             pdf_bytes = None
             order_details_path = None
+            pdf_content = None
 
             # Step 1: Check SharePoint first for existing PDF
             if not force_regenerate_pdf:
@@ -1779,24 +1780,27 @@ class OrderService:
                 logger.info(f"Generating Order Details PDF for order {order_number}")
                 pdf_bytes = pdf_service.generate_order_details_pdf(pdf_source_data)
 
-                # Save locally first
-                # Upload generated PDF directly to SharePoint — no local storage
-                try:
-                    from app.services.sharepoint_service import get_sharepoint_service
-                    sp_service = get_sharepoint_service()
-                    if not sp_service.is_enabled:
-                        raise RuntimeError("SharePoint storage is not enabled")
-                    
-                    # Save Order Details PDF locally
-                    od_dir = self._local_doc_path("orders", pdf_filename).parent
-                    od_dir.mkdir(parents=True, exist_ok=True)
-                    od_path = self._local_doc_path("orders", pdf_filename)
-                    od_path.write_bytes(pdf_bytes.getvalue())
-                    logger.info(f"Order Details PDF saved locally: {od_path}")
-                    order_details_path = str(od_path)
-                except Exception as e:
-                    logger.error(f"SharePoint upload failed for Order Details: {e}")
-                    raise  # No local fallback
+            # Normalize PDF content to raw bytes for storage/email.
+            pdf_content = pdf_bytes.getvalue() if hasattr(pdf_bytes, "getvalue") else pdf_bytes
+
+            # Save Order Details PDF locally
+            # Upload generated PDF directly to SharePoint — no local storage
+            try:
+                from app.services.sharepoint_service import get_sharepoint_service
+
+                sp_service = get_sharepoint_service()
+                if not sp_service.is_enabled:
+                    raise RuntimeError("SharePoint storage is not enabled")
+
+                od_dir = self._local_doc_path("orders", pdf_filename).parent
+                od_dir.mkdir(parents=True, exist_ok=True)
+                od_path = self._local_doc_path("orders", pdf_filename)
+                od_path.write_bytes(pdf_content)
+                logger.info(f"Order Details PDF saved locally: {od_path}")
+                order_details_path = str(od_path)
+            except Exception as e:
+                logger.error(f"SharePoint upload failed for Order Details: {e}")
+                raise  # No local fallback
 
             # Update order with Order Details path
             order.order_details_path = order_details_path
@@ -1823,7 +1827,7 @@ class OrderService:
                 to_address=recipient_email,
                 order_number=order_number,
                 customer_name=customer_name,
-                pdf_content=pdf_bytes,
+                pdf_content=pdf_content,
             )
 
             if success:

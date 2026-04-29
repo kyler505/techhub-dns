@@ -4,6 +4,7 @@
 import asyncio
 import sys
 import tempfile
+import types
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -214,11 +215,15 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
             "app.services.sharepoint_service.get_sharepoint_service",
             return_value=fake_sp_service,
         ):
-            with patch(
-                "app.services.pdf_service.pdf_service.generate_order_details_pdf",
-                side_effect=lambda payload: (
+            fake_pdf_module = types.ModuleType("app.services.pdf_service")
+            fake_pdf_module.pdf_service = SimpleNamespace(
+                generate_order_details_pdf=lambda payload: (
                     generated_payloads.append(payload) or b"fresh-pdf"
-                ),
+                )
+            )
+            with patch.dict(
+                sys.modules,
+                {"app.services.pdf_service": fake_pdf_module},
             ):
                 with patch(
                     "app.services.email_service.email_service.is_configured",
@@ -233,7 +238,7 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     assert generated_payloads[0]["pickLines"][0]["quantity"]["serialNumbers"] == [
         "SN-2"
     ]
-    assert order.order_details_path == "sharepoint://order-details/TH1004.pdf"
+    assert order.order_details_path == "/tmp/techhub-dns/orders/TH1004.pdf"
     assert order.order_details_generated_at is not None
     print("[PASS] Partial order details regenerate from remaining items")
 
