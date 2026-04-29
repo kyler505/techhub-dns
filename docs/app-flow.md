@@ -113,7 +113,7 @@ Picked → QA → Pre-Delivery → Shipping → Delivered
 #### 6.2.3 QA Checklist
 
 - In-app checklist replacing Google Form
-- Items: Order verification, asset tags, packaging, documentation, labeling
+- Items: Order verification, asset tags, packaging, combined order-details / electronic documentation check, labeling
 - Includes **delivery method selection** (Delivery vs Shipping)
 - Records: Responses, technician, timestamp, method
 - **Blocking requirement:** QA must be completed to proceed

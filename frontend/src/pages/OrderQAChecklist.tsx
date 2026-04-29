@@ -21,7 +21,7 @@ type SavedQAChecklist = {
     };
 };
 
-const storageKey = (orderId: string) => `order-qa-checklist-v2:${orderId}`;
+const storageKey = (orderId: string) => `order-qa-checklist-v3:${orderId}`;
 
 export default function OrderQAChecklist() {
     const navigate = useNavigate();
@@ -202,10 +202,9 @@ type SavedQAChecklist = {
     orderNumber: string;
     technician: string;
     verifyAssetTagSerialMatch: boolean;
-    verifyOrderDetailsTemplateSent: boolean;
+    verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved: boolean;
     verifyPackagedProperly: boolean;
     verifyPackingSlipSerialsMatch: boolean;
-    verifyElectronicPackingSlipSaved: boolean;
     verifyBoxesLabeledCorrectly: boolean;
     qaSignature: string;
     method: "Delivery" | "Shipping";

@@ -203,10 +203,9 @@ In-app quality assurance replacing Google Forms with workflow routing.
 |------|-------------|
 | Order Verification | Confirm order details match Inflow |
 | Asset Tag Check | Verify asset tags match serial numbers |
-| Template Notifications | Confirm notifications were sent |
+| Order Details / Electronic Docs | Confirm the order details template was sent and electronic packing slip was saved |
 | Packaging Verification | Check proper packaging |
 | Packing Slip | Verify packing slip accuracy |
-| Electronic Documentation | Confirm digital records |
 | Box Labeling | Verify box labels |
 | QA Signature | Technician sign-off |
 | **Delivery Method** | Select "Delivery" or "Shipping" |

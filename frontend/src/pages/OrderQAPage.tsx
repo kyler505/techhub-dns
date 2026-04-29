@@ -16,10 +16,9 @@ type QAFormState = {
     orderNumber: string;
     technician: string;
     verifyAssetTagSerialMatch: boolean;
-    verifyOrderDetailsTemplateSent: boolean;
+    verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved: boolean;
     verifyPackagedProperly: boolean;
     verifyPackingSlipSerialsMatch: boolean;
-    verifyElectronicPackingSlipSaved: boolean;
     verifyBoxesLabeledCorrectly: boolean;
     qaSignature: string;
     method: QAMethod | "";
@@ -36,16 +35,15 @@ const defaultForm = (orderNumber: string): QAFormState => ({
     orderNumber,
     technician: "",
     verifyAssetTagSerialMatch: false,
-    verifyOrderDetailsTemplateSent: false,
+    verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved: false,
     verifyPackagedProperly: false,
     verifyPackingSlipSerialsMatch: false,
-    verifyElectronicPackingSlipSaved: false,
     verifyBoxesLabeledCorrectly: false,
     qaSignature: "",
     method: "",
 });
 
-const storageKey = (orderId: string) => `order-qa-checklist-v2:${orderId}`;
+const storageKey = (orderId: string) => `order-qa-checklist-v3:${orderId}`;
 
 const verificationSteps = [
     {
@@ -54,9 +52,9 @@ const verificationSteps = [
             "3. Confirm the asset tag is applied and the device serial number, sticker, and pick list all match.",
     },
     {
-        id: "verifyOrderDetailsTemplateSent",
+        id: "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
         label:
-            "4. Confirm the order details template was sent to the customer before completing a delivery.",
+            "4. Confirm the order details template was sent to the customer and the electronic packing slip was saved.",
     },
     {
         id: "verifyPackagedProperly",
@@ -67,13 +65,8 @@ const verificationSteps = [
         label: "6. Confirm the packing slip, picked items, and serial numbers all match.",
     },
     {
-        id: "verifyElectronicPackingSlipSaved",
-        label:
-            "7. Confirm an electronic packing slip is saved on the shipping and receiving computer.",
-    },
-    {
         id: "verifyBoxesLabeledCorrectly",
-        label: "8. Confirm boxes are labeled with the correct order details and shipping labels are marked out.",
+        label: "7. Confirm boxes are labeled with the correct order details and shipping labels are marked out.",
     },
 ];
 
@@ -81,10 +74,9 @@ function isFormComplete(form: QAFormState) {
     return (
         form.orderNumber.trim().length > 0 &&
         form.verifyAssetTagSerialMatch &&
-        form.verifyOrderDetailsTemplateSent &&
+        form.verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved &&
         form.verifyPackagedProperly &&
         form.verifyPackingSlipSerialsMatch &&
-        form.verifyElectronicPackingSlipSaved &&
         form.verifyBoxesLabeledCorrectly &&
         (form.method === "Delivery" || form.method === "Shipping")
     );

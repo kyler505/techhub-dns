@@ -495,10 +495,9 @@ class OrderService:
             "qaSignature",
             "method",
             "verifyAssetTagSerialMatch",
-            "verifyOrderDetailsTemplateSent",
+            "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
             "verifyPackagedProperly",
             "verifyPackingSlipSerialsMatch",
-            "verifyElectronicPackingSlipSaved",
             "verifyBoxesLabeledCorrectly",
         ]
 
@@ -520,10 +519,9 @@ class OrderService:
         # Validate boolean fields are boolean
         boolean_fields = [
             "verifyAssetTagSerialMatch",
-            "verifyOrderDetailsTemplateSent",
+            "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
             "verifyPackagedProperly",
             "verifyPackingSlipSerialsMatch",
-            "verifyElectronicPackingSlipSaved",
             "verifyBoxesLabeledCorrectly",
         ]
         for field in boolean_fields:
@@ -2298,8 +2296,8 @@ class OrderService:
                     "Asset tags applied and serial numbers match on device, sticker, and pick list",
                 ),
                 (
-                    "verifyOrderDetailsTemplateSent",
-                    "Order details template sent to customer before delivery",
+                    "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
+                    "Order details template sent and electronic packing slip saved",
                 ),
                 (
                     "verifyPackagedProperly",
@@ -2308,10 +2306,6 @@ class OrderService:
                 (
                     "verifyPackingSlipSerialsMatch",
                     "Packing slip and picked items serial numbers match",
-                ),
-                (
-                    "verifyElectronicPackingSlipSaved",
-                    "Electronic packing slip saved on shipping/receiving computer",
                 ),
                 (
                     "verifyBoxesLabeledCorrectly",

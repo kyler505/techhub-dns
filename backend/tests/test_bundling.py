@@ -33,8 +33,7 @@ def test_qa_pdf_generation():
         "qaSignature": "Test Signature",
         "verifyAssetTagSerialMatch": True,
         "verifyBoxesLabeledCorrectly": True,
-        "verifyElectronicPackingSlipSaved": False,
-        "verifyOrderDetailsTemplateSent": True,
+        "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved": True,
         "verifyPackagedProperly": True,
         "verifyPackingSlipSerialsMatch": True
     }
@@ -68,8 +67,10 @@ def test_qa_pdf_generation():
     checklist_items = [
         ("verifyAssetTagSerialMatch", "Asset tags match serial numbers"),
         ("verifyBoxesLabeledCorrectly", "Boxes labeled correctly"),
-        ("verifyElectronicPackingSlipSaved", "Electronic packing slip saved"),
-        ("verifyOrderDetailsTemplateSent", "Order details template sent"),
+        (
+            "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
+            "Order details template sent and electronic packing slip saved",
+        ),
         ("verifyPackagedProperly", "Packaged properly"),
         ("verifyPackingSlipSerialsMatch", "Packing slip serials match")
     ]
