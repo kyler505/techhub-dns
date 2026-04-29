@@ -49,24 +49,24 @@ const verificationSteps = [
     {
         id: "verifyAssetTagSerialMatch",
         label:
-            "3. Confirm the asset tag is applied and the device serial number, sticker, and pick list all match.",
+            "Confirm the asset tag is applied and the device serial number, sticker, and pick list all match.",
     },
     {
         id: "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
         label:
-            "4. Confirm the order details template was sent to the customer and the electronic packing slip was saved.",
+            "Confirm the order details template was sent to the customer and the electronic packing slip was saved.",
     },
     {
         id: "verifyPackagedProperly",
-        label: "5. Confirm the system and all included materials are packaged properly.",
+        label: "Confirm the system and all included materials are packaged properly.",
     },
     {
         id: "verifyPackingSlipSerialsMatch",
-        label: "6. Confirm the packing slip, picked items, and serial numbers all match.",
+        label: "Confirm the packing slip, picked items, and serial numbers all match.",
     },
     {
         id: "verifyBoxesLabeledCorrectly",
-        label: "7. Confirm boxes are labeled with the correct order details and shipping labels are marked out.",
+        label: "Confirm boxes are labeled with the correct order details and shipping labels are marked out.",
     },
 ];
 
@@ -227,7 +227,7 @@ export default function OrderQAPage() {
                     <div className="space-y-6 p-6">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-foreground">
-                                1. Order Number <span className="text-red-600">*</span>
+                                Order Number <span className="text-red-600">*</span>
                             </label>
                             <input
                                 id="qa-order-number"
@@ -275,7 +275,7 @@ export default function OrderQAPage() {
 
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-muted-foreground">
-                                9. QA Signature <span className="text-red-600">*</span>
+                                QA Signature <span className="text-red-600">*</span>
                             </label>
                             <div className="rounded-xl border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
                                 {currentUserName}
@@ -285,7 +285,7 @@ export default function OrderQAPage() {
 
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-muted-foreground">
-                                10. Method <span className="text-red-600">*</span>
+                                Method <span className="text-red-600">*</span>
                             </label>
                             <div className="grid grid-cols-2 gap-3">
                                 {(["Delivery", "Shipping"] as QAMethod[]).map((method) => (
