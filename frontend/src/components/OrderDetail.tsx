@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import StatusBadge from "./StatusBadge";
@@ -207,66 +207,6 @@ export default function OrderDetail({
               <p className="text-sm font-medium text-muted-foreground">Status</p>
               <div className="mt-1 flex items-center gap-2">
                 <StatusBadge status={order.status} />
-                {order.status !== OrderStatus.PICKED && getRollbackTargets(order.status).length > 0 && (
-                  <div className="relative">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setRollbackDropdownOpen(!rollbackDropdownOpen);
-                        setStatusDropdownOpen(false);
-                      }}
-                      className="flex items-center gap-1"
-                    >
-                      Rollback
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                    {rollbackDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
-                        {getRollbackTargets(order.status).map((status) => (
-                          <button
-                            key={status}
-                            onClick={() => {
-                              onRollbackStatus(status);
-                              setRollbackDropdownOpen(false);
-                            }}
-                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
-                          >
-                            {OrderStatusDisplayNames[status]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {order.status === OrderStatus.ISSUE && (
-                  <div className="relative">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                      className="flex items-center gap-1"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                    {statusDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[120px] rounded-md border bg-popover p-1 shadow-md">
-                        {allowedTransitionsFromIssue.map((status) => (
-                          <button
-                            key={status}
-                            onClick={() => {
-                              onStatusChange(status);
-                              setStatusDropdownOpen(false);
-                            }}
-                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
-                          >
-                            {OrderStatusDisplayNames[status]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
             <div>
@@ -380,6 +320,80 @@ export default function OrderDetail({
 
       <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
         <div className="space-y-4">
+
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold tracking-tight">Workflow Actions</h3>
+          <div className="flex flex-wrap gap-2">
+            {/* Rollback */}
+            {order.status !== OrderStatus.PICKED && getRollbackTargets(order.status).length > 0 && (
+              <div className="relative">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setRollbackDropdownOpen(!rollbackDropdownOpen);
+                    setStatusDropdownOpen(false);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Rollback
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                {rollbackDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                    {getRollbackTargets(order.status).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => {
+                          onRollbackStatus(status);
+                          setRollbackDropdownOpen(false);
+                        }}
+                        className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                      >
+                        {OrderStatusDisplayNames[status]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Issue Recovery */}
+            {order.status === OrderStatus.ISSUE && (
+              <div className="relative">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                  className="flex items-center gap-2"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                  Recover
+                </Button>
+                {statusDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                    {allowedTransitionsFromIssue.map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => {
+                          onStatusChange(status);
+                          setStatusDropdownOpen(false);
+                        }}
+                        className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                      >
+                        {OrderStatusDisplayNames[status]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
           <h3 className="text-lg font-semibold tracking-tight">Preparation Checklist</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
