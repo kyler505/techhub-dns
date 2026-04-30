@@ -2,6 +2,7 @@
 """Focused tests for multi-leg partial-order behavior."""
 
 import asyncio
+import os
 import sys
 import tempfile
 import types
@@ -10,12 +11,20 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
+os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 
 backend_path = Path(__file__).parent.parent
 sys.path.append(str(backend_path))
 
+from app.database import Base
+from app.models.order import Order, OrderStatus
 from app.services.inflow_service import InflowService
-from app.services.order_service import OrderService
+from app.services.order_splitting import OrderSplittingService
 
 
 def test_fulfill_sales_order_appends_new_partial_shipment_lines():
@@ -206,6 +215,8 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     )
 
     db = SimpleNamespace(commit=lambda: None, refresh=lambda _order: None)
+    from app.services.order_service import OrderService
+
     service = OrderService(db=cast(Any, db))
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -243,6 +254,100 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     print("[PASS] Partial order details regenerate from remaining items")
 
 
+def _make_sqlite_session():
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    return session_factory(), engine
+
+
+def test_partial_order_remainder_creation_links_parent_and_child():
+    """Partial picks should create a linked remainder order with only missing items."""
+
+    session, engine = _make_sqlite_session()
+    original_order = Order(
+        id="order-parent-1",
+        inflow_order_id="TH2001",
+        inflow_sales_order_id="sales-order-2001",
+        recipient_name="User One",
+        recipient_contact="user.one@example.com",
+        delivery_location="Building 101",
+        po_number="PO-2001",
+        status=OrderStatus.PICKED.value,
+        inflow_data={
+            "orderNumber": "TH2001",
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "2"},
+                },
+                {
+                    "productId": "prod-2",
+                    "description": "Dock",
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "packLines": [
+                {
+                    "productId": "prod-1",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "shipLines": [
+                {
+                    "containers": ["DELIVERY-TH2001-1"],
+                }
+            ],
+        },
+    )
+    session.add(original_order)
+    session.commit()
+
+    try:
+        service = OrderSplittingService(session)
+
+        remainder_order = service.create_remainder_order(original_order, user_id="tech-1")
+
+        assert remainder_order is not None
+        assert remainder_order.inflow_order_id == "TH2001-R"
+        assert remainder_order.inflow_sales_order_id == original_order.inflow_sales_order_id
+        assert remainder_order.parent_order_id == original_order.id
+        assert remainder_order.inflow_data["lines"] == [
+            {
+                "productId": "prod-1",
+                "description": "Laptop",
+                "quantity": {"standardQuantity": 1.0},
+            },
+            {
+                "productId": "prod-2",
+                "description": "Dock",
+                "quantity": {"standardQuantity": 1.0},
+            },
+        ]
+        assert remainder_order.inflow_data["pickLines"] == []
+        assert remainder_order.inflow_data["packLines"] == []
+        assert remainder_order.inflow_data["shipLines"] == []
+
+        assert original_order.has_remainder == "Y"
+        assert original_order.remainder_order_id == remainder_order.id
+        assert session.query(Order).filter(Order.inflow_order_id == "TH2001-R").count() == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_order_details_generated_pdf_is_uploaded_to_sharepoint():
     """Generated order-details PDFs should be uploaded and store the SharePoint URL."""
 
@@ -272,6 +377,8 @@ def test_order_details_generated_pdf_is_uploaded_to_sharepoint():
     )
 
     db = SimpleNamespace(commit=lambda: None, refresh=lambda _order: None)
+    from app.services.order_service import OrderService
+
     service = OrderService(db=cast(Any, db))
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -308,6 +415,7 @@ if __name__ == "__main__":
 
     test_fulfill_sales_order_appends_new_partial_shipment_lines()
     test_asset_tag_serials_only_include_unshipped_remaining_items()
+    test_partial_order_remainder_creation_links_parent_and_child()
     test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf()
     test_order_details_generated_pdf_is_uploaded_to_sharepoint()
 

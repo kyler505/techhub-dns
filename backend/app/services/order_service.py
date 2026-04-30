@@ -36,6 +36,7 @@ from app.utils.exceptions import (
 from app.utils.timezone import to_utc_iso_z
 from app.config import settings
 from app.services.print_job_service import PrintJobService, emit_print_job_available
+from app.services.order_splitting import OrderSplittingService
 from app.services.system_setting_service import (
     SETTING_PICKLIST_AUTO_PRINT_ENABLED,
     SystemSettingService,
@@ -317,6 +318,7 @@ class OrderService:
         order_id: Union[UUID, str],
         generated_by: Optional[str] = None,
         expected_updated_at: Optional[datetime] = None,
+        create_partial_leg: bool = False,
     ) -> Order:
         order_id_str = str(order_id).strip()
         # Try UUID (internal id) first, fall back to inflow order number
@@ -338,13 +340,39 @@ class OrderService:
 
         self.assert_not_stale(order, expected_updated_at)
 
-        if self._requires_asset_tags(order) and not order.tagged_at:
-            raise ValidationError(
-                "Asset tagging must be completed before generating a picklist"
-            )
-
         if not order.inflow_data:
             raise ValidationError("Order must have inFlow data to generate picklist")
+
+        from app.services.inflow_service import InflowService
+
+        pick_status = None
+        if order.inflow_data:
+            try:
+                pick_status = InflowService().get_pick_status(order.inflow_data)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to compute pick status for order %s before picklist generation: %s",
+                    order.inflow_order_id,
+                    exc,
+                )
+
+        is_partial_order = bool(
+            pick_status
+            and pick_status.get("total_ordered", 0) > 0
+            and pick_status.get("total_picked", 0) > 0
+            and pick_status.get("total_picked", 0) < pick_status.get("total_ordered", 0)
+        )
+
+        if is_partial_order and not create_partial_leg and not order.parent_order_id:
+            raise ValidationError(
+                "This order is partially picked. Confirm creation of the partial leg before generating the picklist.")
+
+        if create_partial_leg and is_partial_order and not order.parent_order_id:
+            partial_leg = OrderSplittingService(self.db).create_partial_picklist_leg(
+                order, generated_by
+            )
+            if partial_leg is not None:
+                order = partial_leg
 
         # Enforce that the user generating the picklist is the same user who tagged the assets,
         # unless one of them is missing (legacy data)

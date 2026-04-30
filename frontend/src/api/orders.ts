@@ -66,7 +66,15 @@ export const ordersApi = {
     return response.data;
   },
 
-  generatePicklist: async (orderId: string, payload?: { generated_by?: string; expected_updated_at?: string }) => {
+  generatePicklist: async (
+    orderId: string,
+    payload?: {
+      generated_by?: string;
+      expected_updated_at?: string;
+      create_partial_leg?: boolean;
+      confirm_create_partial_leg?: boolean;
+    }
+  ) => {
     const response = await apiClient.post<Order>(
       `/orders/${orderId}/picklist`,
       normalizeExpectedUpdatedAt(payload || {}),

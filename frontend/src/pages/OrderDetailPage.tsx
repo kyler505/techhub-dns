@@ -204,7 +204,7 @@ export default function OrderDetailPage() {
     });
 
     const generatePicklistMutation = useMutation({
-        mutationFn: () => {
+        mutationFn: ({ createPartialLeg }: { createPartialLeg?: boolean } = {}) => {
             if (!orderId || !order) {
                 throw new Error("Order is unavailable");
             }
@@ -212,6 +212,8 @@ export default function OrderDetailPage() {
             return ordersApi.generatePicklist(orderId, {
                 generated_by: getUserName(),
                 expected_updated_at: order.updated_at,
+                create_partial_leg: createPartialLeg,
+                confirm_create_partial_leg: createPartialLeg,
             });
         },
         onSuccess: async () => {
@@ -327,10 +329,10 @@ export default function OrderDetailPage() {
         }
     };
 
-    const handleGeneratePicklist = async () => {
+    const handleGeneratePicklist = async (options?: { createPartialLeg?: boolean }) => {
         if (!order) return;
         try {
-            await generatePicklistMutation.mutateAsync();
+            await generatePicklistMutation.mutateAsync(options ?? {});
         } catch {
             // Handled by mutation callbacks.
         }

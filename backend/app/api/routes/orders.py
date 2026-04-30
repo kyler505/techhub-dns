@@ -389,8 +389,35 @@ def get_order(order_id):
             response_data["asset_tag_serials"] = inflow_service.get_asset_tag_serials(
                 order.inflow_data
             )
+            try:
+                response_data["pick_status"] = inflow_service.get_pick_status(order.inflow_data)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to compute pick_status for order detail %s: %s",
+                    order.inflow_order_id,
+                    exc,
+                )
 
         return jsonify(response_data)
+
+
+@bp.route("/<order_id>/picklist", methods=["POST"])
+@require_auth
+def generate_picklist(order_id):
+    """Generate a picklist PDF for an order."""
+    data = request.get_json(silent=True) or {}
+    request_payload = PicklistGenerationRequest(**data)
+    generated_by = request_payload.generated_by or _get_current_user_display_name()
+
+    with get_db() as db:
+        service = OrderService(db)
+        order = service.generate_picklist(
+            order_id=order_id,
+            generated_by=generated_by,
+            expected_updated_at=request_payload.expected_updated_at,
+            create_partial_leg=bool(request_payload.create_partial_leg and request_payload.confirm_create_partial_leg),
+        )
+        return jsonify(_order_response_json(order, db))
 
 
 @bp.route("/<order_id>", methods=["PATCH"])

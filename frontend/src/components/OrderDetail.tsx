@@ -105,6 +105,9 @@ export default function OrderDetail({
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
+  const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
+  const [tagConfirming, setTagConfirming] = useState(false);
+  const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [tagConfirming, setTagConfirming] = useState(false);
   const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
