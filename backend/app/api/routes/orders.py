@@ -588,8 +588,6 @@ def tag_order(order_id):
         return jsonify(_order_response_json(order, db))
 
 
-@bp.route("/<order_id>/picklist", methods=["POST"])
-@require_auth
 @bp.route("/<order_id>/qa", methods=["POST"])
 @require_auth
 def submit_qa(order_id):
