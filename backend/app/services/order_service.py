@@ -905,34 +905,14 @@ class OrderService:
 
     def _rollback_targets_for_status(self, current_status: str) -> set[str]:
         """Return the statuses an order can be rolled back to from the current status."""
-        allowed_targets = {
-            OrderStatus.QA.value: {OrderStatus.PICKED.value},
-            OrderStatus.PRE_DELIVERY.value: {
-                OrderStatus.PICKED.value,
-                OrderStatus.QA.value,
-            },
-            OrderStatus.IN_DELIVERY.value: {
+        # Rollback is only permitted from ISSUE status (quarantine-first workflow)
+        if current_status == OrderStatus.ISSUE.value:
+            return {
                 OrderStatus.PICKED.value,
                 OrderStatus.QA.value,
                 OrderStatus.PRE_DELIVERY.value,
-            },
-            OrderStatus.SHIPPING.value: {
-                OrderStatus.PICKED.value,
-                OrderStatus.QA.value,
-                OrderStatus.PRE_DELIVERY.value,
-            },
-            OrderStatus.DELIVERED.value: {
-                OrderStatus.PICKED.value,
-                OrderStatus.QA.value,
-                OrderStatus.PRE_DELIVERY.value,
-            },
-            OrderStatus.ISSUE.value: {
-                OrderStatus.PICKED.value,
-                OrderStatus.QA.value,
-                OrderStatus.PRE_DELIVERY.value,
-            },
-        }
-        return allowed_targets.get(current_status, set())
+            }
+        return set()
 
     def rollback_status(
         self,

@@ -87,7 +87,8 @@ def build_order(status: OrderStatus):
 
 
 def test_rollback_to_pre_delivery_clears_delivery_and_shipping_state():
-    order = build_order(OrderStatus.DELIVERED)
+    # Rollback now only allowed from ISSUE status (quarantine-first workflow)
+    order = build_order(OrderStatus.ISSUE)
     db = FakeDb(order)
     service = OrderService(db)
 
@@ -124,7 +125,8 @@ def test_rollback_to_pre_delivery_clears_delivery_and_shipping_state():
 
 
 def test_rollback_to_qa_clears_qa_state():
-    order = build_order(OrderStatus.SHIPPING)
+    # Rollback now only allowed from ISSUE status (quarantine-first workflow)
+    order = build_order(OrderStatus.ISSUE)
     db = FakeDb(order)
     service = OrderService(db)
 

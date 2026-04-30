@@ -138,19 +138,11 @@ export default function OrderDetail({
   ];
 
   const getRollbackTargets = (status: OrderStatus): OrderStatus[] => {
-    switch (status) {
-      case OrderStatus.QA:
-        return [OrderStatus.PICKED];
-      case OrderStatus.PRE_DELIVERY:
-        return [OrderStatus.PICKED, OrderStatus.QA];
-      case OrderStatus.IN_DELIVERY:
-      case OrderStatus.SHIPPING:
-      case OrderStatus.DELIVERED:
-      case OrderStatus.ISSUE:
-        return [OrderStatus.PICKED, OrderStatus.QA, OrderStatus.PRE_DELIVERY];
-      default:
-        return [];
+    // Rollback is only allowed from ISSUE status (quarantine-first workflow)
+    if (status === OrderStatus.ISSUE) {
+      return [OrderStatus.PICKED, OrderStatus.QA, OrderStatus.PRE_DELIVERY];
     }
+    return [];
   };
 
   const handleRequestTags = async (): Promise<boolean> => {
