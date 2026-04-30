@@ -79,6 +79,8 @@ const fetchOrdersList = async (filters: OrdersListFilters): Promise<{ items: Ord
         ordersApi.getOrders({
           status,
           search,
+          skip: filters.skip,
+          limit: filters.limit,
         })
       )
     );
@@ -92,6 +94,8 @@ const fetchOrdersList = async (filters: OrdersListFilters): Promise<{ items: Ord
   return ordersApi.getOrders({
     status: normalizedStatuses[0],
     search,
+    skip: filters.skip,
+    limit: filters.limit,
   }).then((r) => ({ items: r.items, total: r.total }));
 };
 
