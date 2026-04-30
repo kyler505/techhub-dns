@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 import StatusBadge from "./StatusBadge";
@@ -111,7 +111,7 @@ export default function OrderDetail({
   const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const [rollbackDropdownOpen, setRollbackDropdownOpen] = useState(false);
+
   const [issueDialogOpen, setIssueDialogOpen] = useState(false);
   const [partialConfirmOpen, setPartialConfirmOpen] = useState(false);
   const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
@@ -132,11 +132,11 @@ export default function OrderDetail({
     !requestSent &&
     Boolean(order.inflow_order_id);
 
-  const allowedTransitionsFromIssue: OrderStatus[] = [
-    OrderStatus.PICKED,
-    OrderStatus.QA,
-    OrderStatus.PRE_DELIVERY,
-  ];
+
+
+
+
+
 
   const getRollbackTargets = (status: OrderStatus): OrderStatus[] => {
     // Rollback is only allowed from ISSUE status (quarantine-first workflow)
@@ -198,89 +198,53 @@ export default function OrderDetail({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
-<div className="mt-1 flex items-center gap-2">
+<div className="mt-1 flex items-center gap-1">
                 <StatusBadge status={order.status} />
 
-                {/* Raise Issue — available on all non-issue orders */}
-                {order.status !== OrderStatus.ISSUE && (
+                {/* Context-aware actions dropdown */}
+                <div className="relative">
                   <Button
-                    variant="destructive"
+                    variant="ghost"
                     size="sm"
-                    onClick={() => setIssueDialogOpen(true)}
-                    className="flex items-center gap-1"
+                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full p-0"
                   >
-                    <AlertTriangle className="h-4 w-4" />
-                    Raise Issue
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   </Button>
-                )}
-
-                {/* Rollback — only from ISSUE status */}
-                {order.status === OrderStatus.ISSUE && getRollbackTargets(order.status).length > 0 && (
-                  <div className="relative">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setRollbackDropdownOpen(!rollbackDropdownOpen);
-                        setStatusDropdownOpen(false);
-                      }}
-                      className="flex items-center gap-1"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      Rollback
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                    {rollbackDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
-                        {getRollbackTargets(order.status).map((status) => (
+                  {statusDropdownOpen && (
+                    <div className="absolute left-0 top-full mt-1 z-10 min-w-[180px] rounded-md border bg-popover p-1 shadow-md">
+                      {/* For non-ISSUE orders: raise issue */}
+                      {order.status !== OrderStatus.ISSUE && (
+                        <button
+                          onClick={() => {
+                            setIssueDialogOpen(true);
+                            setStatusDropdownOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+                        >
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                          <span>Raise Issue</span>
+                        </button>
+                      )}
+                      {/* For ISSUE orders: recovery targets */}
+                      {order.status === OrderStatus.ISSUE &&
+                        getRollbackTargets(order.status).map((status) => (
                           <button
                             key={status}
                             onClick={() => {
                               onRollbackStatus(status);
-                              setRollbackDropdownOpen(false);
-                            }}
-                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
-                          >
-                            {OrderStatusDisplayNames[status]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Issue Recovery — recover from ISSUE back to workflow */}
-                {order.status === OrderStatus.ISSUE && (
-                  <div className="relative">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                      className="flex items-center gap-1"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                      Recover
-                    </Button>
-                    {statusDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
-                        {allowedTransitionsFromIssue.map((status) => (
-                          <button
-                            key={status}
-                            onClick={() => {
-                              onStatusChange(status);
                               setStatusDropdownOpen(false);
                             }}
-                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                            className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
                           >
                             {OrderStatusDisplayNames[status]}
                           </button>
                         ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
 
-                {/* Issue Reason dialog */}
+                {/* Issue Reason Dialog */}
                 <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
                   <DialogContent>
                     <DialogHeader>
