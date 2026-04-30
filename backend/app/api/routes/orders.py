@@ -590,30 +590,6 @@ def tag_order(order_id):
 
 @bp.route("/<order_id>/picklist", methods=["POST"])
 @require_auth
-def generate_picklist(order_id):
-    """Generate a picklist PDF for the order"""
-    data = request.get_json()
-
-    with get_db() as db:
-        service = OrderService(db)
-        gen_request = PicklistGenerationRequest(**data)
-
-        # Auto-assign generator from auth context
-        current_user = get_current_user_email()
-        generated_by = (
-            current_user if current_user != "system" else gen_request.generated_by
-        )
-
-        order = service.generate_picklist(
-            order_id=order_id,
-            generated_by=generated_by,
-            expected_updated_at=gen_request.expected_updated_at,
-        )
-
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-        return jsonify(_order_response_json(order, db))
-
-
 @bp.route("/<order_id>/qa", methods=["POST"])
 @require_auth
 def submit_qa(order_id):
