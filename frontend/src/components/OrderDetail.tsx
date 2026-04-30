@@ -112,6 +112,7 @@ export default function OrderDetail({
   const [requestingTags, setRequestingTags] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [rollbackDropdownOpen, setRollbackDropdownOpen] = useState(false);
+  const [issueDialogOpen, setIssueDialogOpen] = useState(false);
   const [partialConfirmOpen, setPartialConfirmOpen] = useState(false);
   const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
 
@@ -197,8 +198,125 @@ export default function OrderDetail({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
-              <div className="mt-1 flex items-center gap-2">
+<div className="mt-1 flex items-center gap-2">
                 <StatusBadge status={order.status} />
+
+                {/* Raise Issue — available on all non-issue orders */}
+                {order.status !== OrderStatus.ISSUE && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setIssueDialogOpen(true)}
+                    className="flex items-center gap-1"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    Raise Issue
+                  </Button>
+                )}
+
+                {/* Rollback — only from ISSUE status */}
+                {order.status === OrderStatus.ISSUE && getRollbackTargets(order.status).length > 0 && (
+                  <div className="relative">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setRollbackDropdownOpen(!rollbackDropdownOpen);
+                        setStatusDropdownOpen(false);
+                      }}
+                      className="flex items-center gap-1"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Rollback
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    {rollbackDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                        {getRollbackTargets(order.status).map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => {
+                              onRollbackStatus(status);
+                              setRollbackDropdownOpen(false);
+                            }}
+                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                          >
+                            {OrderStatusDisplayNames[status]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Issue Recovery — recover from ISSUE back to workflow */}
+                {order.status === OrderStatus.ISSUE && (
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                      className="flex items-center gap-1"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      Recover
+                    </Button>
+                    {statusDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                        {allowedTransitionsFromIssue.map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => {
+                              onStatusChange(status);
+                              setStatusDropdownOpen(false);
+                            }}
+                            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                          >
+                            {OrderStatusDisplayNames[status]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Issue Reason dialog */}
+                <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Raise Issue</DialogTitle>
+                      <DialogDescription>
+                        Provide a reason for flagging this order as an issue. This will pause the workflow until resolved.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                      <label htmlFor="issue-reason" className="text-sm font-medium text-foreground">
+                        Reason
+                      </label>
+                      <textarea
+                        id="issue-reason"
+                        placeholder="Describe the issue..."
+                        className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        rows={3}
+                      />
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIssueDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          const reason = (document.getElementById("issue-reason") as HTMLTextAreaElement)?.value;
+                          onStatusChange(OrderStatus.ISSUE, reason || "");
+                          setIssueDialogOpen(false);
+                        }}
+                      >
+                        Confirm Issue
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
             <div>
@@ -312,79 +430,6 @@ export default function OrderDetail({
 
       <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
         <div className="space-y-4">
-
-      <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold tracking-tight">Workflow Actions</h3>
-          <div className="flex flex-wrap gap-2">
-            {/* Rollback */}
-            {order.status !== OrderStatus.PICKED && getRollbackTargets(order.status).length > 0 && (
-              <div className="relative">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setRollbackDropdownOpen(!rollbackDropdownOpen);
-                    setStatusDropdownOpen(false);
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Rollback
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-                {rollbackDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
-                    {getRollbackTargets(order.status).map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => {
-                          onRollbackStatus(status);
-                          setRollbackDropdownOpen(false);
-                        }}
-                        className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
-                      >
-                        {OrderStatusDisplayNames[status]}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Issue Recovery */}
-            {order.status === OrderStatus.ISSUE && (
-              <div className="relative">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                  className="flex items-center gap-2"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                  Recover
-                </Button>
-                {statusDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-10 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
-                    {allowedTransitionsFromIssue.map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => {
-                          onStatusChange(status);
-                          setStatusDropdownOpen(false);
-                        }}
-                        className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-accent"
-                      >
-                        {OrderStatusDisplayNames[status]}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
 
           <h3 className="text-lg font-semibold tracking-tight">Preparation Checklist</h3>
           <div className="space-y-4">
