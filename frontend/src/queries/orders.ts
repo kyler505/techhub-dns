@@ -57,6 +57,8 @@ export const ordersQueryKeys = {
       {
         status: normalizeStatuses(filters.status),
         search: normalizeSearch(filters.search),
+        skip: filters.skip ?? 0,
+        limit: filters.limit ?? 100,
       },
     ] as const,
   details: () => [...ordersQueryKeys.all, "detail"] as const,
