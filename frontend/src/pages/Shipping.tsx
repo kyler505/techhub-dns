@@ -26,7 +26,7 @@ export default function Shipping() {
 
     const shipmentQuery = useQuery({
         queryKey: ["orders", "list", { status: OrderStatus.SHIPPING, search: debouncedSearch }],
-        queryFn: () => ordersApi.getOrders({ status: OrderStatus.SHIPPING, search: debouncedSearch }),
+        queryFn: () => ordersApi.getOrders({ status: OrderStatus.SHIPPING, search: debouncedSearch }).then((r) => r.items),
     });
 
     const shipmentOrders = shipmentQuery.data ?? [];

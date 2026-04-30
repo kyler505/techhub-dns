@@ -41,7 +41,7 @@ export default function Audit() {
     })
   );
 
-  const orders: Order[] = ordersQuery.data ?? [];
+  const orders: Order[] = ordersQuery.data?.items ?? [];
   const isLoading = ordersQuery.isPending;
 
   const filteredOrders = useMemo(() => {

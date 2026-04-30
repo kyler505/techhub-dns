@@ -74,7 +74,7 @@ export default function OrderDetailPage() {
     const order = orderQuery.data ?? null;
     const auditLogs = auditQuery.data ?? [];
     const notifications = order?.teams_notifications ?? [];
-    const sidebarOrders = listQuery.data ?? [];
+    const sidebarOrders = listQuery.data?.items ?? [];
     const detailLoading = orderQuery.isPending || auditQuery.isPending;
     const sidebarLoading = listQuery.isPending && sidebarOrders.length === 0;
 

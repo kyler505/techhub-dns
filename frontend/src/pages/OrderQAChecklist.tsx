@@ -58,7 +58,7 @@ export default function OrderQAChecklist() {
                 status: OrderStatus.QA,
                 search: search.trim() ? search.trim() : undefined,
             });
-            setOrders(safeArray<Order>(data));
+            setOrders(safeArray<Order>(data.items));
         } catch (error) {
             console.error("Failed to load orders:", error);
             toast.error("Failed to load orders");

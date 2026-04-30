@@ -7,9 +7,9 @@ function safeArray<T>(value: unknown): T[] {
 }
 
 export const ordersApi = {
-  getOrders: async (params?: { status?: OrderStatus; search?: string }): Promise<Order[]> => {
+  getOrders: async (params?: { status?: OrderStatus; search?: string; skip?: number; limit?: number }): Promise<{ items: Order[]; total: number }> => {
     const response = await apiClient.get<{ items?: Order[]; total?: number; skip?: number; limit?: number }>("/orders", { params });
-    return safeArray<Order>(response.data?.items);
+    return { items: safeArray<Order>(response.data?.items), total: response.data?.total ?? 0 };
   },
 
   getOrder: async (orderId: string): Promise<OrderDetail> => {

@@ -140,8 +140,8 @@ export default function Dispatch() {
     setLoadError(null);
     try {
       const [pre, inDelivery] = await Promise.all([
-        ordersApi.getOrders({ status: OrderStatus.PRE_DELIVERY }),
-        ordersApi.getOrders({ status: OrderStatus.IN_DELIVERY }),
+        ordersApi.getOrders({ status: OrderStatus.PRE_DELIVERY }).then((r) => r.items),
+        ordersApi.getOrders({ status: OrderStatus.IN_DELIVERY }).then((r) => r.items),
       ]);
       setPreDeliveryOrders(pre);
       setInDeliveryOrders(inDelivery);

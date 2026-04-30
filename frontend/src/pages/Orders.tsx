@@ -7,7 +7,7 @@ import OrderTable from "../components/OrderTable";
 import Filters, { StatusFilter } from "../components/Filters";
 import StatusTransition from "../components/StatusTransition";
 import { SkeletonTable } from "../components/Skeleton";
-import { PackageSearch } from "lucide-react";
+import { PackageSearch, ChevronLeft, ChevronRight } from "lucide-react";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
 import { ordersApi } from "../api/orders";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../queries/orders";
 import { toast } from "sonner";
 import { isValidOrderId } from "../utils/orderIds";
+import { Button } from "../components/ui/button";
 
 const PREFETCH_STATUS_FILTERS: StatusFilter[] = [
     null,
@@ -27,10 +28,14 @@ const PREFETCH_STATUS_FILTERS: StatusFilter[] = [
     OrderStatus.ISSUE,
 ];
 
+const PAGE_SIZE = 50;
+
 export default function Orders() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>([OrderStatus.PICKED, OrderStatus.QA]);
     const [search, setSearch] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
+    const [page, setPage] = useState(1);
+    // total comes from queryData below
     const [transitioningOrder, setTransitioningOrder] = useState<{
         orderId: string;
         currentStatus: OrderStatus;
@@ -45,14 +50,20 @@ export default function Orders() {
     const lastWebSocketUpdate = useRef<number>(0);
     const hasPrefetchedStatusTabs = useRef(false);
 
+    const skip = (page - 1) * PAGE_SIZE;
+
     const ordersQuery = useQuery(
         getOrdersListQueryOptions({
             status: statusFilter,
             search: debouncedSearch,
+            skip,
+            limit: PAGE_SIZE,
         })
     );
 
-    const orders = ordersQuery.data ?? [];
+    const queryData = ordersQuery.data ?? { items: [], total: 0 };
+    const orders = queryData.items;
+    const total = queryData.total;
     const loading = ordersQuery.isPending || ordersQuery.isFetching;
     const isInitialLoad = ordersQuery.isPending && orders.length === 0;
 
@@ -106,6 +117,11 @@ export default function Orders() {
         };
     }, [search]);
 
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setPage(1);
+    }, [statusFilter, debouncedSearch]);
+
     useEffect(() => {
         if (hasPrefetchedStatusTabs.current) {
             return;
@@ -132,6 +148,8 @@ export default function Orders() {
             )
         );
     }, [debouncedSearch, ordersQuery.isSuccess, queryClient]);
+
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
         const currentStatus = orders.find((order) => order.id === orderId)?.status;
@@ -224,6 +242,41 @@ export default function Orders() {
                         )}
                     </div>
                 </section>
+
+                {/* Pagination */}
+                {total > PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-1">
+                        <p className="text-sm text-muted-foreground">
+                            Showing {skip + 1}–{Math.min(skip + PAGE_SIZE, total)} of {total}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                disabled={page <= 1 || loading}
+                                className="flex items-center gap-1"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                                Previous
+                            </Button>
+                            <span className="text-xs text-muted-foreground px-2">
+                                Page {page} of {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={page >= totalPages || loading}
+                                className="flex items-center gap-1"
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
                 {transitioningOrder && (
                     <StatusTransition
                         currentStatus={transitioningOrder.currentStatus}
