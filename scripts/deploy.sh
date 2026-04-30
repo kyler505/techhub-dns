@@ -474,6 +474,25 @@ fi
 log "Recent commits:"
 git log --oneline -3
 
+
+# Fix WSGI configuration for dev (ensure it points to dev directory, not prod)
+if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
+    if [[ "$WEBAPP_DOMAIN" == *"dev"* ]]; then
+        expected_wsgi="/home/techhub/techhub-dns-dev/backend/wsgi.py"
+        current_wsgi=$(pa website info --domain "$WEBAPP_DOMAIN" --format wsgi_file 2>/dev/null || echo "")
+        if [ "$current_wsgi" != "$expected_wsgi" ]; then
+            log "WSGI path mismatch for dev: current=$current_wsgi expected=$expected_wsgi"
+            if pa website set --domain "$WEBAPP_DOMAIN" --wsgi "$expected_wsgi"; then
+                log "Updated PA web app WSGI path to $expected_wsgi"
+            else
+                log "WARNING: Failed to update PA web app WSGI path"
+            fi
+        else
+            log "PA web app WSGI path already correct: $expected_wsgi"
+        fi
+    fi
+fi
+
 # Reload web app (prefer PythonAnywhere CLI when available)
     if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
         if pa website reload --domain "$WEBAPP_DOMAIN"; then
