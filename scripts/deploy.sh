@@ -476,10 +476,14 @@ git log --oneline -3
 
 
 # Fix WSGI configuration for dev (ensure it points to dev directory, not prod)
+log "WSGI fix: WEBAPP_DOMAIN=$WEBAPP_DOMAIN"
 if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
+    log "WSGI fix: pa CLI is available"
     if [[ "$WEBAPP_DOMAIN" == *"dev"* ]]; then
+        log "WSGI fix: dev domain detected"
         expected_wsgi="/home/techhub/techhub-dns-dev/backend/wsgi.py"
         current_wsgi=$(pa website info --domain "$WEBAPP_DOMAIN" --format wsgi_file 2>/dev/null || echo "")
+        log "WSGI fix: current_wsgi='$current_wsgi'"
         if [ "$current_wsgi" != "$expected_wsgi" ]; then
             log "WSGI path mismatch for dev: current=$current_wsgi expected=$expected_wsgi"
             if pa website set --domain "$WEBAPP_DOMAIN" --wsgi "$expected_wsgi"; then
@@ -490,7 +494,11 @@ if [ -n "$WEBAPP_DOMAIN" ] && command -v pa >/dev/null 2>&1; then
         else
             log "PA web app WSGI path already correct: $expected_wsgi"
         fi
+    else
+        log "WSGI fix: not a dev domain, skipping"
     fi
+else
+    log "WSGI fix: WEBAPP_DOMAIN empty or pa CLI not available"
 fi
 
 # Reload web app (prefer PythonAnywhere CLI when available)
