@@ -1,5 +1,30 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+
+import StatusBadge from "./StatusBadge";
+import StatusPathViz from "./audit/StatusPathViz";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { formatToCentralTime } from "../utils/timezone";
+import { getPartialOrderInfo } from "../utils/orderPartial";
 import {
   AuditLog,
   OrderDetail as OrderDetailType,
@@ -19,7 +44,7 @@ interface ShippingAddress {
 function getShippingAddress(order: OrderDetailType): ShippingAddress | null {
   if (!order.inflow_data || typeof order.inflow_data !== "object") return null;
   const addr = (order.inflow_data as Record<string, unknown>).shippingAddress;
-  return typeof addr === "object" && addr !== null ? addr as ShippingAddress : null;
+  return typeof addr === "object" && addr !== null ? (addr as ShippingAddress) : null;
 }
 
 function getInflowLines(order: OrderDetailType): unknown[] {
@@ -27,29 +52,6 @@ function getInflowLines(order: OrderDetailType): unknown[] {
   const lines = (order.inflow_data as Record<string, unknown>).lines;
   return Array.isArray(lines) ? lines : [];
 }
-import StatusBadge from "./StatusBadge";
-import { formatToCentralTime } from "../utils/timezone";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./ui/table";
-import { toast } from "sonner";
-import StatusPathViz from "./audit/StatusPathViz";
 
 interface OrderDetailProps {
   order: OrderDetailType;
@@ -59,7 +61,7 @@ interface OrderDetailProps {
   onRollbackStatus: (newStatus: OrderStatus) => void;
   onTagOrder: (tagIds: string[]) => Promise<void>;
   onRequestTags: () => Promise<void>;
-  onGeneratePicklist: () => Promise<void>;
+  onGeneratePicklist: (options?: { createPartialLeg?: boolean }) => Promise<void>;
   generatingPicklist: boolean;
 }
 
@@ -105,15 +107,16 @@ export default function OrderDetail({
 }: OrderDetailProps) {
   const latestNotification = notifications[0];
   const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
-  const [tagPrintedDialogOpen, setTagPrintedDialogOpen] = useState(false);
-  const [tagConfirming, setTagConfirming] = useState(false);
-  const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [tagConfirming, setTagConfirming] = useState(false);
   const [requestTagsConfirmOpen, setRequestTagsConfirmOpen] = useState(false);
   const [requestingTags, setRequestingTags] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [rollbackDropdownOpen, setRollbackDropdownOpen] = useState(false);
+  const [partialConfirmOpen, setPartialConfirmOpen] = useState(false);
+  const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
 
+  const partialOrderInfo = getPartialOrderInfo(order);
+  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial;
   const assetTagRequired = order.asset_tag_required !== false;
 
   const requestSentAt =
@@ -179,6 +182,18 @@ export default function OrderDetail({
       toast.error("Failed to confirm tags printed");
     } finally {
       setTagConfirming(false);
+    }
+  };
+
+  const handleGeneratePicklist = async (options?: { createPartialLeg?: boolean }) => {
+    setPartialConfirmSubmitting(true);
+    try {
+      await onGeneratePicklist(options);
+      setPartialConfirmOpen(false);
+    } catch (error) {
+      toast.error("Failed to generate picklist");
+    } finally {
+      setPartialConfirmSubmitting(false);
     }
   };
 
@@ -295,6 +310,55 @@ export default function OrderDetail({
                 {order.assigned_deliverer || "Unassigned"}
               </p>
             </div>
+            {partialOrderInfo.isPartial || partialOrderInfo.hasRemainder || order.parent_order_id ? (
+              <div className="sm:col-span-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-foreground">Partial order</p>
+                      <Badge variant="warning">
+                        {partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} picked
+                      </Badge>
+                      {partialOrderInfo.hasRemainder ? (
+                        <Badge variant="secondary">Remainder exists</Badge>
+                      ) : null}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      This order is only partially picked. Generating the picklist will create a partial leg/remainder workflow instead of treating it as a fully picked order.
+                    </p>
+                    <div className="grid gap-2 text-sm sm:grid-cols-2">
+                      {partialOrderInfo.parentOrderId ? (
+                        <div>
+                          <span className="font-medium text-foreground">Parent order:</span>{" "}
+                          <span className="text-muted-foreground">{partialOrderInfo.parentOrderId}</span>
+                        </div>
+                      ) : null}
+                      {partialOrderInfo.remainderOrderId ? (
+                        <div>
+                          <span className="font-medium text-foreground">Remainder order:</span>{" "}
+                          <span className="text-muted-foreground">{partialOrderInfo.remainderOrderId}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    {partialOrderInfo.missingItems.length > 0 ? (
+                      <details className="group">
+                        <summary className="cursor-pointer select-none text-sm font-medium text-foreground">
+                          View missing items
+                        </summary>
+                        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                          {partialOrderInfo.missingItems.map((item) => (
+                            <li key={item.product_id}>
+                              {item.product_name}: {item.picked}/{item.ordered}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {order.issue_reason && (
               <div className="sm:col-span-2">
                 <p className="text-sm font-medium text-muted-foreground">Issue Reason</p>
@@ -390,9 +454,16 @@ export default function OrderDetail({
                 )}
               </div>
               <Button
-                onClick={onGeneratePicklist}
+                onClick={() => {
+                  if (shouldConfirmPartialPicklist) {
+                    setPartialConfirmOpen(true);
+                    return;
+                  }
+                  void handleGeneratePicklist();
+                }}
                 disabled={
                   generatingPicklist ||
+                  partialConfirmSubmitting ||
                   (assetTagRequired && !order.tagged_at) ||
                   Boolean(order.picklist_generated_at)
                 }
@@ -400,9 +471,11 @@ export default function OrderDetail({
               >
                 {order.picklist_generated_at
                   ? "Generated"
-                  : generatingPicklist
+                  : generatingPicklist || partialConfirmSubmitting
                     ? "Generating..."
-                    : "Generate & Email"}
+                    : shouldConfirmPartialPicklist
+                      ? "Generate & Review"
+                      : "Generate & Email"}
               </Button>
             </div>
 
@@ -588,18 +661,73 @@ export default function OrderDetail({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={tagPrintedDialogOpen} onOpenChange={setTagPrintedDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={tagPrintedDialogOpen}
+        onOpenChange={(open) => {
+          if (tagConfirming) return;
+          setTagPrintedDialogOpen(open);
+        }}
+      >
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Mark Tagged</DialogTitle>
-            <DialogDescription>Confirm the devices have been tagged for this order.</DialogDescription>
+            <DialogTitle>Confirm tags printed?</DialogTitle>
+            <DialogDescription>
+              Marking tags as printed will update this order so it can continue through the picklist and QA workflow.
+            </DialogDescription>
           </DialogHeader>
+
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setTagPrintedDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setTagPrintedDialogOpen(false)}
+              disabled={tagConfirming}
+            >
               Cancel
             </Button>
-            <Button onClick={handleTagPrintedConfirm} disabled={tagConfirming}>
-              {tagConfirming ? "Confirming..." : "Yes, mark tagged"}
+            <Button onClick={() => void handleTagPrintedConfirm()} disabled={tagConfirming}>
+              {tagConfirming ? "Updating..." : "Mark Tagged"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={partialConfirmOpen}
+        onOpenChange={(open) => {
+          if (partialConfirmSubmitting) return;
+          setPartialConfirmOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Create partial leg?
+            </DialogTitle>
+            <DialogDescription>
+              This order is partially picked ({partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} items). Generating the picklist will confirm the partial leg workflow and create a remainder order for the unpicked items, if the backend supports it.
+            </DialogDescription>
+          </DialogHeader>
+
+          {partialOrderInfo.missingItems.length > 0 ? (
+            <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
+              <p className="text-sm font-medium text-foreground">Missing items</p>
+              <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                {partialOrderInfo.missingItems.map((item) => (
+                  <li key={item.product_id}>
+                    {item.product_name}: {item.picked}/{item.ordered}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPartialConfirmOpen(false)} disabled={partialConfirmSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleGeneratePicklist({ createPartialLeg: true })} disabled={partialConfirmSubmitting} className="bg-amber-500 hover:bg-amber-600">
+              {partialConfirmSubmitting ? "Creating..." : "Create Partial Leg"}
             </Button>
           </DialogFooter>
         </DialogContent>
