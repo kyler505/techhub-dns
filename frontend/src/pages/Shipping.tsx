@@ -122,14 +122,16 @@ export default function Shipping() {
 
                 <section className="overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-none">
                     <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-                        <div className="mb-4">
-                            <Input
-                                placeholder="Search by order ID..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="max-w-sm"
-                            />
-                        </div>
+                        {shipmentOrders.length > 0 && (
+                            <div className="mb-4">
+                                <Input
+                                    placeholder="Search by order ID..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="max-w-sm"
+                                />
+                            </div>
+                        )}
                         {loading && shipmentOrders.length === 0 ? (
                             <div className="transition-opacity duration-150 opacity-100">
                                 <SkeletonTable rows={4} columns={5} />
