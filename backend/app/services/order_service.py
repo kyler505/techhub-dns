@@ -2345,8 +2345,24 @@ class OrderService:
 
                 page_idx = page_num - 1
                 page = reader.pages[page_idx]
-                page_width = float(page.mediabox.width)
-                page_height = float(page.mediabox.height)
+
+                # Use the visible area (CropBox falls back to MediaBox) to match
+                # what PDF.js reports via getViewport(). PDF.js uses CropBox if
+                # present, otherwise MediaBox, and accounts for rotation.
+                visible = page.cropbox  # pypdf: CropBox if set, else MediaBox
+                page_width = float(visible.width)
+                page_height = float(visible.height)
+                # If the visible area doesn't start at (0,0), the frontend's
+                # coordinates are relative to the visible origin, so we offset.
+                origin_x = float(visible.left)
+                origin_y = float(visible.bottom)
+
+                # Handle page rotation: for 90°/270° rotations PDF.js swaps
+                # width/height in getViewport().  pypdf gives us the raw
+                # unrotated dimensions, so we account for rotation here.
+                rotation = page.get("/Rotate", 0) or 0
+                if rotation in (90, 270):
+                    page_width, page_height = page_height, page_width
 
                 with tempfile.NamedTemporaryFile(
                     suffix=".pdf", delete=False
@@ -2361,8 +2377,8 @@ class OrderService:
                     if placement.get("legacy_full_page"):
                         c.drawImage(
                             ImageReader(signature_image),
-                            0,
-                            0,
+                            0 + origin_x,
+                            0 + origin_y,
                             width=page_width,
                             height=page_height,
                             mask="auto",
@@ -2379,8 +2395,8 @@ class OrderService:
                         # Design doc implies w/h are explicit.
                         c.drawImage(
                             ImageReader(signature_image),
-                            x,
-                            y,
+                            x + origin_x,
+                            y + origin_y,
                             width=w,
                             height=h,
                             mask="auto",
