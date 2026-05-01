@@ -317,6 +317,7 @@ class OrderService:
         self,
         order_id: Union[UUID, str],
         generated_by: Optional[str] = None,
+        generated_by_display: Optional[str] = None,
         expected_updated_at: Optional[datetime] = None,
         create_partial_leg: bool = False,
     ) -> Order:
@@ -375,12 +376,24 @@ class OrderService:
                 order = partial_leg
 
         # Enforce that the user generating the picklist is the same user who tagged the assets,
-        # unless one of them is missing (legacy data)
+        # unless one of them is missing (legacy data).
+        # tagged_by is stored as email; generated_by is now also email, but we also check
+        # generated_by_display as a fallback for callers that pass a display name.
         if order.tagged_by and generated_by and order.tagged_by != generated_by:
-            raise ValidationError(
-                f"Asset tagging and picklist generation must be performed by the same user. "
-                f"Tagged by: {order.tagged_by}, current user: {generated_by}"
-            )
+            same_user = False
+            if generated_by_display:
+                if order.tagged_by == generated_by_display:
+                    same_user = True
+                # Strip email domain and compare local parts
+                def _local_part(val: str) -> str:
+                    return val.strip().lower().split('@')[0] if '@' in val else val.strip().lower()
+                if _local_part(order.tagged_by) == _local_part(generated_by_display):
+                    same_user = True
+            if not same_user:
+                raise ValidationError(
+                    f"Asset tagging and picklist generation must be performed by the same user. "
+                    f"Tagged by: {order.tagged_by}, current user: {generated_by_display or generated_by}"
+                )
 
         is_first_picklist = order.picklist_generated_at is None
 

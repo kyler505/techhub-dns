@@ -407,13 +407,19 @@ def generate_picklist(order_id):
     """Generate a picklist PDF for an order."""
     data = request.get_json(silent=True) or {}
     request_payload = PicklistGenerationRequest(**data)
-    generated_by = request_payload.generated_by or _get_current_user_display_name()
+
+    # Use email for same-user comparison (tagged_by stores email),
+    # display name for human-readable storage and audit logs.
+    current_user_email = get_current_user_email()
+    current_user_display = _get_current_user_display_name()
+    generated_by = request_payload.generated_by or current_user_email
 
     with get_db() as db:
         service = OrderService(db)
         order = service.generate_picklist(
             order_id=order_id,
             generated_by=generated_by,
+            generated_by_display=current_user_display,
             expected_updated_at=request_payload.expected_updated_at,
             create_partial_leg=bool(request_payload.create_partial_leg and request_payload.confirm_create_partial_leg),
         )
