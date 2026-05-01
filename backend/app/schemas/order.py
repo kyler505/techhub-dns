@@ -97,6 +97,8 @@ class SignatureData(BaseModel):
     signature_image: str  # Base64 encoded PNG
     placements: List[SignaturePlacement] = Field(default_factory=list)
     expected_updated_at: Optional[datetime] = None
+    page_width: Optional[float] = None  # Frontend PDF.js viewport width — used for overlay sizing
+    page_height: Optional[float] = None  # Frontend PDF.js viewport height
     # Backward compatibility (optional)
     page_number: Optional[int] = None
     position: Optional[Dict[str, float]] = None

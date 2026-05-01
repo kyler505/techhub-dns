@@ -2360,23 +2360,25 @@ class OrderService:
                 page_idx = page_num - 1
                 page = reader.pages[page_idx]
 
-                # Use the visible area (CropBox falls back to MediaBox) to match
-                # what PDF.js reports via getViewport(). PDF.js uses CropBox if
-                # present, otherwise MediaBox, and accounts for rotation.
-                visible = page.cropbox  # pypdf: CropBox if set, else MediaBox
-                page_width = float(visible.width)
-                page_height = float(visible.height)
-                # If the visible area doesn't start at (0,0), the frontend's
-                # coordinates are relative to the visible origin, so we offset.
-                origin_x = float(visible.left)
-                origin_y = float(visible.bottom)
-
-                # Handle page rotation: for 90°/270° rotations PDF.js swaps
-                # width/height in getViewport().  pypdf gives us the raw
-                # unrotated dimensions, so we account for rotation here.
-                rotation = page.get("/Rotate", 0) or 0
-                if rotation in (90, 270):
-                    page_width, page_height = page_height, page_width
+                # Use frontend-provided page dimensions when available.
+                # This eliminates coordinate mismatches between PDF.js (which
+                # may use CropBox, rotation, etc.) and pypdf/Reportlab.
+                from_frontend_w = signature_data.get("page_width")
+                from_frontend_h = signature_data.get("page_height")
+                if from_frontend_w and from_frontend_h:
+                    page_width = float(from_frontend_w)
+                    page_height = float(from_frontend_h)
+                    origin_x = 0.0
+                    origin_y = 0.0
+                else:
+                    visible = page.cropbox
+                    page_width = float(visible.width)
+                    page_height = float(visible.height)
+                    origin_x = float(visible.left)
+                    origin_y = float(visible.bottom)
+                    rotation = page.get("/Rotate", 0) or 0
+                    if rotation in (90, 270):
+                        page_width, page_height = page_height, page_width
 
                 with tempfile.NamedTemporaryFile(
                     suffix=".pdf", delete=False

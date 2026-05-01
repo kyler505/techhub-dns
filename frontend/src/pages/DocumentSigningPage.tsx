@@ -373,6 +373,8 @@ function DocumentSigningPage() {
 
             const payload = {
                 signature_image: mainSig, // Required by schema base
+                page_width: pageViewport?.width || 612,
+                page_height: pageViewport?.height || 792,
                 placements: placements.map(p => ({
                     page_number: p.pageIndex + 1, // 1-based for Backend
                     x: p.x,
