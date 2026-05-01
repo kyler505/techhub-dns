@@ -2201,6 +2201,8 @@ class OrderService:
             local_picklist_path = order.picklist_path
 
         # Apply signature to get signed picklist (returns temp file path)
+        logger.info("SIG_BUNDLE calling _apply_signature_to_pdf with page_width=%s page_height=%s",
+                     signature_data.get("page_width"), signature_data.get("page_height"))
         signed_temp = self._apply_signature_to_pdf(local_picklist_path, signature_data)
 
         # Generate QA PDF (returns temp file path)

@@ -706,6 +706,12 @@ def sign_order(order_id):
     """Complete order signing, generate bundled documents, and transition to Delivered status"""
     data = request.get_json()
     signature_data = SignatureData(**data)
+    import logging
+    logging.getLogger(__name__).info(
+        "SIG_ROUTE order_id=%s page_width=%s page_height=%s placements=%s",
+        order_id, signature_data.page_width, signature_data.page_height,
+        [{"p": p.page_number, "x": p.x, "y": p.y, "w": p.width, "h": p.height} for p in signature_data.placements]
+    )
 
     # Phase 1: generate documents BEFORE locking the order row (no DB lock held during PDF I/O)
     with get_db() as db:
