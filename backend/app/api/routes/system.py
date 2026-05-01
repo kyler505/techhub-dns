@@ -1633,9 +1633,9 @@ def upload_canopy_orders():
             return jsonify({"error": "Order number cannot be empty"}), 400
 
         digits = compact[2:] if compact.startswith("TH") else compact
-        if len(digits) not in (3, 4) or not digits.isdigit():
+        if len(digits) < 1 or not digits.isdigit():
             return jsonify(
-                {"error": "Order number must be 3 or 4 digits (e.g., 123 or TH1234)"}
+                {"error": "Order number must be at least 1 digit after TH (e.g., TH1, TH123, TH12345)"}
             ), 400
 
         normalized = f"TH{digits}"
@@ -1786,20 +1786,19 @@ def upload_canopy_orders():
 def _normalize_canopyorders_bypass_value(raw_value: str) -> str:
     trimmed = raw_value.strip()
     compact = "".join(trimmed.upper().split())
-    if len(compact) in (3, 4) and compact.isdigit():
+    if len(compact) >= 1 and compact.isdigit():
         return f"TH{compact}"
-    if compact.startswith("TH") and len(compact) in (5, 6) and compact[2:].isdigit():
+    if compact.startswith("TH") and len(compact) >= 3 and compact[2:].isdigit():
         return f"TH{compact[2:]}"
     return trimmed
 
 
 def _is_exact_th_order(value: str) -> bool:
-    # Accept TH followed by 3 or 4 digits (TH123 or TH1234)
-    if len(value) not in (5, 6):
-        return False
+    # Accept TH followed by any number of digits (e.g., TH1, TH123, TH12345)
     if not value.startswith("TH"):
         return False
-    return value[2:].isdigit()
+    stripped = value[2:]
+    return len(stripped) >= 1 and stripped.isdigit()
 
 
 @bp.route("/canopyorders/upload-bypass", methods=["POST"])
