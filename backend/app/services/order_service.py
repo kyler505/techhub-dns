@@ -876,6 +876,8 @@ class OrderService:
 
         if new_status == OrderStatus.ISSUE:
             order.issue_reason = reason
+            # Detach from any delivery run when raising an issue
+            order.delivery_run_id = None
 
         # Create audit log
         audit_log = AuditLog(
