@@ -408,11 +408,13 @@ def generate_picklist(order_id):
     data = request.get_json(silent=True) or {}
     request_payload = PicklistGenerationRequest(**data)
 
-    # Use email for same-user comparison (tagged_by stores email),
-    # display name for human-readable storage and audit logs.
+    # Use auth context for identity — the frontend may send a display name
+    # in generated_by, but tagged_by stores email, so we compare against email.
     current_user_email = get_current_user_email()
     current_user_display = _get_current_user_display_name()
-    generated_by = request_payload.generated_by or current_user_email
+    # generated_by is the primary identifier (used for same-user comparison
+    # against tagged_by which stores email). Override the frontend's value.
+    generated_by = current_user_email
 
     with get_db() as db:
         service = OrderService(db)

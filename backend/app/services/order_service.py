@@ -433,7 +433,7 @@ class OrderService:
                 raise  # Fail fast — SharePoint is source of truth
 
             order.picklist_generated_at = datetime.utcnow()
-            order.picklist_generated_by = generated_by
+            order.picklist_generated_by = generated_by_display or generated_by
             order.picklist_path = sp_url  # Store SharePoint URL (source of truth)
             order.updated_at = datetime.utcnow()
         finally:
@@ -450,7 +450,7 @@ class OrderService:
             queued_print_job = PrintJobService(self.db).enqueue_picklist_print(
                 order,
                 trigger_source="automatic",
-                requested_by=generated_by,
+                requested_by=generated_by_display or generated_by,
             )
 
         self.db.commit()
@@ -459,15 +459,16 @@ class OrderService:
             emit_print_job_available(queued_print_job)
 
         # Audit logging for picklist generation
+        display_name = generated_by_display or generated_by
         audit_service = AuditService(self.db)
         audit_service.log_order_action(
             order_id=str(order_id),
             action="picklist_generated",
-            user_id=generated_by or "unknown",
+            user_id=display_name,
             description=f"Picklist PDF generated",
             audit_metadata={
                 "filename": filename,
-                "generated_by": generated_by,
+                "generated_by": display_name,
                 "sharepoint_url": sp_url,
             },
         )
