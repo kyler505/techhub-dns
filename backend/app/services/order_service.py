@@ -311,6 +311,23 @@ class OrderService:
             audit_metadata={"tag_ids": tag_ids, "tagged_by": technician},
         )
 
+        # If this order requires asset tags and is a partial pick,
+        # create the partial leg now so picklist generation can proceed
+        # without requiring a separate confirmation step.
+        if self._requires_asset_tags(order):
+            from app.services.inflow_service import InflowService
+            pick_status = InflowService().get_pick_status(order.inflow_data)
+            is_partial = bool(
+                pick_status
+                and pick_status.get("total_ordered", 0) > 0
+                and pick_status.get("total_picked", 0) > 0
+                and pick_status.get("total_picked", 0) < pick_status.get("total_ordered", 0)
+            )
+            if is_partial:
+                from app.services.order_splitting import OrderSplittingService
+                splitting_service = OrderSplittingService(self.db)
+                splitting_service.create_partial_picklist_leg(order, technician)
+
         return order
 
     def generate_picklist(
@@ -363,16 +380,26 @@ class OrderService:
             and pick_status.get("total_picked", 0) < pick_status.get("total_ordered", 0)
         )
 
-        if is_partial_order and not create_partial_leg and not order.parent_order_id:
-            raise ValidationError(
-                "This order is partially picked. Confirm creation of the partial leg before generating the picklist.")
+        if is_partial_order and not order.parent_order_id:
+            # Check if the partial leg was already created at tagging time
+            # (for asset-tagged orders with a remainder)
+            already_split = bool(order.remainder_order_id) and self._requires_asset_tags(order)
 
-        if create_partial_leg and is_partial_order and not order.parent_order_id:
-            partial_leg = OrderSplittingService(self.db).create_partial_picklist_leg(
-                order, generated_by
-            )
-            if partial_leg is not None:
-                order = partial_leg
+            if already_split:
+                # Partial leg already exists — use the child order directly
+                if order.remainder_order_id:
+                    child = self.db.query(Order).filter(Order.id == order.remainder_order_id).first()
+                    if child:
+                        order = child
+            elif not create_partial_leg:
+                raise ValidationError(
+                    "This order is partially picked. Confirm creation of the partial leg before generating the picklist.")
+            else:
+                partial_leg = OrderSplittingService(self.db).create_partial_picklist_leg(
+                    order, generated_by
+                )
+                if partial_leg is not None:
+                    order = partial_leg
 
         # Enforce that the user generating the picklist is the same user who tagged the assets,
         # unless one of them is missing (legacy data)
