@@ -2439,7 +2439,9 @@ class OrderService:
                 if i in overlay_map:
                     overlay_reader = PdfReader(overlay_map[i])
                     overlay_page = overlay_reader.pages[0]
-                    page.merge_page(overlay_page)
+                    # Use merge_transformed_page with identity transform to avoid
+                    # any implicit coordinate transformations that merge_page may apply
+                    page.merge_transformed_page(overlay_page, (1, 0, 0, 1, 0, 0), over=True, expand=False)
                 writer.add_page(page)
 
             # Save signed PDF
