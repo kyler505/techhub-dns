@@ -103,12 +103,15 @@ function SignaturePlacementItem({
       if (interaction.mode === "drag") {
         const newX = interaction.initialPlacement.x + deltaXPt;
         const newY = interaction.initialPlacement.y + deltaYPt;
-        console.log('DRAG update:', {id: interaction.id, deltaXPt, deltaYPt, newX, newY, scale});
-        onUpdatePlacement(interaction.id, (current) => ({
-          ...current,
-          x: newX,
-          y: newY,
-        }));
+        console.log('[SIG_DRAG]', {id: interaction.id, mode: 'drag', startX: interaction.startClientX, startY: interaction.startClientY, clientX, clientY, deltaXPt, deltaYPt, newX, newY, scale});
+        onUpdatePlacement(interaction.id, (current) => {
+          console.log('[SIG_DRAG_UPDATER]', {id: interaction.id, currentX: current.x, currentY: current.y, newX, newY, changed: current.x !== newX || current.y !== newY});
+          return {
+            ...current,
+            x: newX,
+            y: newY,
+          };
+        });
         return;
       }
 
