@@ -2363,8 +2363,13 @@ class OrderService:
                 # Use frontend-provided page dimensions when available.
                 # This eliminates coordinate mismatches between PDF.js (which
                 # may use CropBox, rotation, etc.) and pypdf/Reportlab.
+                import logging as _l
+                _logger = _l.getLogger(__name__)
                 from_frontend_w = signature_data.get("page_width")
                 from_frontend_h = signature_data.get("page_height")
+                _logger.info("SIG_BACKEND page_width=%s page_height=%s from_frontend_w=%s from_frontend_h=%s",
+                             signature_data.get("page_width"), signature_data.get("page_height"),
+                             from_frontend_w, from_frontend_h)
                 if from_frontend_w and from_frontend_h:
                     page_width = float(from_frontend_w)
                     page_height = float(from_frontend_h)
@@ -2388,6 +2393,9 @@ class OrderService:
 
                 c = canvas.Canvas(overlay_path, pagesize=(page_width, page_height))
 
+                _logger.info("SIG_BACKEND overlay pagesize=%sx%s origin=%s,%s",
+                             page_width, page_height, origin_x, origin_y)
+
                 for placement in page_placements:
                     # Check for legacy full page flag
                     if placement.get("legacy_full_page"):
@@ -2405,6 +2413,9 @@ class OrderService:
                         y = placement.get("y", 0)
                         w = placement.get("width", 100)
                         h = placement.get("height", 50)
+
+                        _logger.info("SIG_BACKEND draw placement placement_x=%s placement_y=%s w=%s h=%s origin=%s,%s draw_x=%s draw_y=%s",
+                                     x, y, w, h, origin_x, origin_y, x + origin_x, y + origin_y)
 
                         # Inverting Y is handled by frontend (sending PDF coords).
                         # We just draw at (x, y). Use preserveAspectRatio=True?
