@@ -52,7 +52,6 @@ function DocumentSigningPage() {
     const [loadingOrder, setLoadingOrder] = useState(true);
     const [orderError, setOrderError] = useState<string | null>(null);
     const [pageViewport, setPageViewport] = useState<{ width: number; height: number } | null>(null);
-    const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
     const [containerWidth, setContainerWidth] = useState<number | null>(null);
 
     // Signing State
@@ -167,21 +166,13 @@ function DocumentSigningPage() {
         return () => observer.disconnect();
     }, []);
 
-    useEffect(() => {
-        if (!pageViewport || !containerWidth) return;
-        const nextScale = containerWidth / pageViewport.width;
-        setRenderSize({
-            width: pageViewport.width * nextScale,
-            height: pageViewport.height * nextScale,
-        });
-    }, [containerWidth, pageViewport]);
-
     const scale = useMemo(() => {
         if (!pageViewport) return 1;
-        const fallbackWidth = viewerRef.current?.clientWidth || pageViewport.width;
-        const targetWidth = renderSize?.width || containerWidth || fallbackWidth;
-        return targetWidth / pageViewport.width;
-    }, [pageViewport, renderSize, containerWidth]);
+        // react-pdf v10 renders the canvas at its native CSS dimensions (e.g. 612x792 for Letter)
+        // regardless of the width prop. The width prop only affects the canvas pixel buffer.
+        // So placement coordinates (in PDF points) map 1:1 to displayed CSS pixels.
+        return 1;
+    }, [pageViewport]);
 
     const handlePageLoad = useCallback((page: PDFPageProxy) => {
         const viewport = page.getViewport({ scale: 1 });
