@@ -212,10 +212,12 @@ function DocumentSigningPage() {
         // Center on page
         // PDF coords (bottom-left origin) vs Viewport (top-left origin for width calc is same)
         // Center X = (PageW - SigW) / 2
-        // Center Y (from bottom) = (PageH - SigH) / 2
 
         const x = (pageViewport.width - targetWidthPt) / 2;
-        const y = (pageViewport.height - targetHeightPt) / 2;
+        // Place signature near the bottom of the page (close to the signature line)
+        // PDF bottom-left coordinate system: y=0 is bottom, y=792 is top
+        // The "Customer Signature:" label is typically at y≈70, underline at y≈60
+        const y = 50;
 
         const newPlacement: Placement = {
             id: Math.random().toString(36).substr(2, 9),
