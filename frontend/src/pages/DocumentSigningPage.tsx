@@ -229,6 +229,15 @@ function DocumentSigningPage() {
             dataUrl
         };
 
+        console.log('[SIG_PLACEMENT]', {
+            id: newPlacement.id,
+            x, y, w: targetWidthPt, h: targetHeightPt,
+            imgW, imgH, aspectRatio,
+            pageW: pageViewport.width, pageH: pageViewport.height,
+            scale,
+            placementsLen: placements.length + 1,
+        });
+
         setError(null);
         setPlacements(prev => [...prev.filter(p => p.id !== 'temp'), newPlacement]);
         setSelectedPlacementId(newPlacement.id);

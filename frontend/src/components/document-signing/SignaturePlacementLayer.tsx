@@ -283,6 +283,7 @@ export function SignaturePlacementLayer({
     return null;
   }
 
+  console.log('[SIG_LAYER] rendering', placements.length, 'placements at scale', scale);
   return (
     <>
       {placements.map((placement) => (
