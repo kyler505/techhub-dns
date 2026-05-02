@@ -1679,17 +1679,6 @@ def upload_canopy_orders():
                 ineligible_orders.append({"order": th, "reason": "already tagged"})
                 continue
 
-            raw_tag_data = getattr(order, "tag_data", None) or {}
-            tag_data = raw_tag_data if isinstance(raw_tag_data, dict) else {}
-            already_requested = (
-                bool(tag_data.get("canopyorders_request_sent_at"))
-                or bool(tag_data.get("tag_request_sent_at"))
-                or tag_data.get("tag_request_status") == "sent"
-            )
-            if already_requested:
-                ineligible_orders.append({"order": th, "reason": "already requested"})
-                continue
-
             inflow_data = getattr(order, "inflow_data", None)
             if not inflow_data or not inflow_service.requires_asset_tags(inflow_data):
                 ineligible_orders.append(

@@ -349,13 +349,6 @@ def get_tag_request_candidates():
 
         needing_request: list[dict] = []
         for order in candidates:
-            tag_data = order.tag_data or {}
-            sent_at = tag_data.get("canopyorders_request_sent_at") or tag_data.get(
-                "tag_request_sent_at"
-            )
-            if sent_at or tag_data.get("tag_request_status") == "sent":
-                continue
-
             if not order.inflow_data:
                 continue
             if not inflow_service.requires_asset_tags_cached(

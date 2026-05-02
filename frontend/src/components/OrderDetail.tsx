@@ -129,7 +129,6 @@ export default function OrderDetail({
     assetTagRequired &&
     order.status === OrderStatus.PICKED &&
     !order.tagged_at &&
-    !requestSent &&
     Boolean(order.inflow_order_id);
 
 
@@ -416,20 +415,15 @@ export default function OrderDetail({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {assetTagRequired &&
-                  (requestSent ? (
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/tag-request">Open Tag Request</Link>
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => setRequestTagsConfirmOpen(true)}
-                      disabled={!canRequestTags || requestingTags}
-                      size="sm"
-                    >
-                      Request Tags
-                    </Button>
-                  ))}
+                {assetTagRequired && !order.tagged_at && order.status === OrderStatus.PICKED && (
+                  <Button
+                    onClick={() => setRequestTagsConfirmOpen(true)}
+                    disabled={!canRequestTags || requestingTags}
+                    size="sm"
+                  >
+                    {requestingTags ? "Requesting..." : "Request Tags"}
+                  </Button>
+                )}
                 {assetTagRequired && !order.tagged_at && requestSent && (
                   <Button
                     onClick={() => setTagPrintedDialogOpen(true)}
