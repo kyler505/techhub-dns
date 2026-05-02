@@ -117,7 +117,7 @@ export default function OrderDetail({
   const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
 
   const partialOrderInfo = getPartialOrderInfo(order);
-  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial;
+  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
   const assetTagRequired = order.asset_tag_required !== false;
 
   const requestSentAt =
