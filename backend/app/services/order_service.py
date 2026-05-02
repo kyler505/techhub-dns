@@ -159,6 +159,24 @@ class OrderService:
         base = Path(getattr(settings, 'local_document_storage', '/tmp/techhub-dns'))
         return base / category / filename
 
+    def _resolve_order(
+        self, order_id: str, lock: bool = False
+    ) -> Optional[Order]:
+        """Resolve an order by UUID, inflow_sales_order_id, or inflow_order_id (in that order).
+
+        Returns the first match or None.
+        """
+        query = self.db.query(Order)
+        if lock:
+            query = query.with_for_update()
+
+        order = query.filter(Order.id == order_id).first()
+        if not order:
+            order = query.filter(Order.inflow_sales_order_id == order_id).first()
+        if not order:
+            order = query.filter(Order.inflow_order_id == order_id).first()
+        return order
+
     def _cleanup_order_documents(self, order: Order) -> None:
         """Delete local document files for an order after delivery completion."""
         paths = [
@@ -244,20 +262,7 @@ class OrderService:
         generated_by: Optional[str] = None,
     ) -> bool:
         order_id_str = str(order_id)
-        # Try UUID first, fall back to inflow_order_id (TH-number)
-        order = (
-            self.db.query(Order)
-            .filter(Order.id == order_id_str)
-            .with_for_update()
-            .first()
-        )
-        if order is None:
-            order = (
-                self.db.query(Order)
-                .filter(Order.inflow_order_id == order_id_str)
-                .with_for_update()
-                .first()
-            )
+        order = self._resolve_order(order_id_str, lock=True)
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -271,20 +276,7 @@ class OrderService:
         expected_updated_at: Optional[datetime] = None,
     ) -> Order:
         order_id_str = str(order_id)
-        # Try UUID first, fall back to inflow_order_id (TH-number)
-        order = (
-            self.db.query(Order)
-            .filter(Order.id == order_id_str)
-            .with_for_update()
-            .first()
-        )
-        if order is None:
-            order = (
-                self.db.query(Order)
-                .filter(Order.inflow_order_id == order_id_str)
-                .with_for_update()
-                .first()
-            )
+        order = self._resolve_order(order_id_str, lock=True)
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -339,20 +331,7 @@ class OrderService:
         create_partial_leg: bool = False,
     ) -> Order:
         order_id_str = str(order_id).strip()
-        # Try UUID (internal id) first, fall back to inflow order number
-        order = (
-            self.db.query(Order)
-            .filter(Order.id == order_id_str)
-            .with_for_update()
-            .first()
-        )
-        if order is None:
-            order = (
-                self.db.query(Order)
-                .filter(Order.inflow_order_id == order_id_str)
-                .with_for_update()
-                .first()
-            )
+        order = self._resolve_order(order_id_str, lock=True)
         if not order:
             raise NotFoundError("Order", str(order_id))
 
@@ -1779,10 +1758,17 @@ class OrderService:
                 f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'"
             )
 
-        # Check if order exists
-        existing = (
-            self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
-        )
+        # Check if order exists — prefer sales_order_id (stable) over order_number (may change)
+        sales_order_id = inflow_data.get("salesOrderId")
+        existing = None
+        if sales_order_id:
+            existing = (
+                self.db.query(Order).filter(Order.inflow_sales_order_id == sales_order_id).first()
+            )
+        if not existing:
+            existing = (
+                self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+            )
 
         if existing:
             # Update existing order - only update timestamp if data actually changed

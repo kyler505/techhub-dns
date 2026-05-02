@@ -430,13 +430,7 @@ def update_order(order_id):
     with get_db() as db:
         service = OrderService(db)
         order_id_str = str(order_id)
-        order = (
-            db.query(Order).filter(Order.id == order_id_str).with_for_update().first()
-        )
-        if order is None:
-            order = (
-                db.query(Order).filter(Order.inflow_order_id == order_id_str).with_for_update().first()
-            )
+        order = service._resolve_order(order_id_str, lock=True)
         if not order:
             abort(404, description="Order not found")
 
