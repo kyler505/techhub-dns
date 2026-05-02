@@ -195,7 +195,7 @@ function SignaturePlacementItem({
       role="button"
       tabIndex={0}
       aria-label="Signature placement"
-      className={`group z-20 cursor-move select-none pointer-events-auto focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""}`}
+      className={`group z-20 cursor-move select-none pointer-events-auto outline outline-2 outline-red-500 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""}`}
       style={{
         ...getPlacementStyle(placement, pageViewport, scale),
         touchAction: "none",
