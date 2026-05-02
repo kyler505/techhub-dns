@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useRef, type KeyboardEvent, type PointerEvent } from "react";
 
 import { Button } from "../ui/button";
 import { X } from "lucide-react";
@@ -87,16 +87,6 @@ function SignaturePlacementItem({
 }) {
   const interactionRef = useRef<InteractionState | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-
-  // Debug: log computed style of placement element
-  useEffect(() => {
-    if (rootRef.current) {
-      const cs = getComputedStyle(rootRef.current);
-      console.log('[SIG_ITEM] element exists:', rootRef.current.tagName, 'position:', cs.position, 'display:', cs.display, 'visibility:', cs.visibility, 'opacity:', cs.opacity, 'zIndex:', cs.zIndex, 'width:', cs.width, 'height:', cs.height, 'transform:', cs.transform, 'clip:', cs.clip, 'overflow:', cs.overflow);
-    } else {
-      console.log('[SIG_ITEM] rootRef is null after mount');
-    }
-  }, []);
 
   const clearInteraction = useCallback(() => {
     interactionRef.current = null;
@@ -205,7 +195,7 @@ function SignaturePlacementItem({
       role="button"
       tabIndex={0}
       aria-label="Signature placement"
-      className={`group z-20 cursor-move select-none pointer-events-auto outline outline-2 outline-red-500 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""}`}
+      className={`group z-20 cursor-move select-none pointer-events-auto focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring focus-visible:outline-offset-2 ${isSelected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : ""}`}
       style={{
         ...getPlacementStyle(placement, pageViewport, scale),
         touchAction: "none",
@@ -293,13 +283,6 @@ export function SignaturePlacementLayer({
     return null;
   }
 
-  console.log('[SIG_LAYER] rendering', placements.length, 'placements at scale', scale);
-  console.log('[SIG_LAYER_PARENT] checking parent offsetParent:', document.querySelector('[class*="shadow-premium"]')?.tagName);
-  const container = document.querySelector('[class*="shadow-premium"]');
-  if (container) {
-    const cs = getComputedStyle(container);
-    console.log('[SIG_LAYER_PARENT] position:', cs.position, 'overflow:', cs.overflow, 'height:', cs.height, 'width:', cs.width);
-  }
   return (
     <>
       {placements.map((placement) => (
