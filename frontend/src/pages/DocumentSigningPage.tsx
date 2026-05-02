@@ -238,6 +238,27 @@ function DocumentSigningPage() {
             placementsLen: placements.length + 1,
         });
 
+        // Debug: check actual canvas dimensions
+        setTimeout(() => {
+            const canvas = document.querySelector('.react-pdf__Page canvas');
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                console.log('[SIG_CANVAS] css:', {w: rect.width, h: rect.height}, 'attr:', {w: canvas.getAttribute('width'), h: canvas.getAttribute('height')});
+            }
+            const pageDiv = document.querySelector('.react-pdf__Page');
+            if (pageDiv) {
+                const cs = getComputedStyle(pageDiv);
+                console.log('[SIG_PAGE_DIV] css height:', cs.height, 'width:', cs.width, 'overflow:', cs.overflow);
+            }
+            // Check the flex container (overflow hidden parent)
+            const flexContainer = document.querySelector('[class*="min-h-"][class*="overflow-hidden"]');
+            if (flexContainer) {
+                const rect = flexContainer.getBoundingClientRect();
+                const cs = getComputedStyle(flexContainer);
+                console.log('[SIG_FLEX] rect:', {w: rect.width, h: rect.height}, 'cs height:', cs.height, 'cs overflow:', cs.overflow);
+            }
+        }, 0);
+
         setError(null);
         setPlacements(prev => [...prev.filter(p => p.id !== 'temp'), newPlacement]);
         setSelectedPlacementId(newPlacement.id);
