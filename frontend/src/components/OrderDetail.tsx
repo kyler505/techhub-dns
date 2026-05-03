@@ -461,6 +461,19 @@ export default function OrderDetail({
                     Download picklist
                   </a>
                 )}
+                {order.signed_picklist_path && (
+                  <>
+                    <br />
+                    <a
+                      className="text-sm text-primary underline-offset-4 hover:underline"
+                      href={`/api/orders/${order.id}/signed-picklist`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Download signed picklist
+                    </a>
+                  </>
+                )}
               </div>
               <Button
                 onClick={() => {

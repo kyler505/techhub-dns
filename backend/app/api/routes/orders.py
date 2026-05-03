@@ -668,6 +668,60 @@ def get_picklist(order_id):
             )
 
 
+@bp.route("/<order_id>/signed-picklist", methods=["GET"])
+@require_auth
+def get_signed_picklist(order_id):
+    """Download signed picklist PDF (from SharePoint or local storage)"""
+    from io import BytesIO
+
+    with get_db() as db:
+        service = OrderService(db)
+        order = service.get_order_detail(order_id)
+        if not order:
+            abort(404, description="Order not found")
+        if not order.signed_picklist_path:
+            abort(404, description="Signed picklist not found — order may not be signed yet")
+
+        signed_path = order.signed_picklist_path
+
+        # Check if this is a SharePoint URL
+        if signed_path.startswith("http"):
+            try:
+                from app.services.sharepoint_service import get_sharepoint_service
+
+                sp_service = get_sharepoint_service()
+
+                filename = f"{order.inflow_order_id}_signed.pdf"
+
+                pdf_bytes = sp_service.download_file("signed", filename)
+                if not pdf_bytes:
+                    abort(404, description="Signed picklist file not found in SharePoint")
+
+                pdf_stream = BytesIO(pdf_bytes)
+                pdf_stream.seek(0)
+
+                return send_file(
+                    pdf_stream,
+                    mimetype="application/pdf",
+                    as_attachment=False,
+                    download_name=filename,
+                )
+            except Exception as e:
+                import logging
+
+                logging.error(f"Failed to download signed picklist from SharePoint: {e}")
+                abort(500, description="Failed to download signed picklist")
+        else:
+            # Local file path
+            path = Path(signed_path)
+            if not path.exists():
+                abort(404, description="Signed picklist file missing")
+
+            return send_file(
+                path.resolve(), mimetype="application/pdf", download_name=path.name
+            )
+
+
 @bp.route("/<order_id>/fulfill", methods=["POST"])
 @require_admin
 def fulfill_order(order_id):
