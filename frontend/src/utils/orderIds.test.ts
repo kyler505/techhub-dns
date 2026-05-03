@@ -15,7 +15,7 @@ describe("isValidOrderId", () => {
     expect(isValidOrderId(undefined)).toBe(false);
   });
 
-  it("rejects non-UUID strings", () => {
-    expect(isValidOrderId("TH3270")).toBe(false);
+  it("accepts TH order numbers", () => {
+    expect(isValidOrderId("TH3270")).toBe(true);
   });
 });

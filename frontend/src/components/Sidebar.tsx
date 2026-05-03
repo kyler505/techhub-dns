@@ -36,7 +36,8 @@ const navItems: LeafNavItem[] = [
 ];
 
 const adminItems = [
-  { path: "/admin", label: "Admin", icon: Settings },
+  { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/admin", label: "Admin Tools", icon: Settings },
   { path: "/sessions", label: "Sessions", icon: Users },
 ];
 
