@@ -115,8 +115,6 @@ export default function OrderDetail({
   const [issueDialogOpen, setIssueDialogOpen] = useState(false);
   const [partialConfirmOpen, setPartialConfirmOpen] = useState(false);
   const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
-  const [previewPicklist, setPreviewPicklist] = useState(false);
-  const [previewSignedPicklist, setPreviewSignedPicklist] = useState(false);
 
   const partialOrderInfo = getPartialOrderInfo(order);
   const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
@@ -455,13 +453,15 @@ export default function OrderDetail({
                 )}
                 {order.picklist_path && (
                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <button
-                      onClick={() => setPreviewPicklist(!previewPicklist)}
+                    <a
                       className="inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline"
+                      href={`/api/orders/${order.id}/picklist`}
+                      target="_blank"
+                      rel="noreferrer"
                     >
                       <Eye className="h-3.5 w-3.5" />
-                      {previewPicklist ? "Close preview" : "Preview picklist"}
-                    </button>
+                      Preview picklist
+                    </a>
                     <a
                       className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline hover:text-foreground"
                       href={`/api/orders/${order.id}/picklist`}
@@ -471,15 +471,6 @@ export default function OrderDetail({
                       <FileDown className="h-3.5 w-3.5" />
                       Download
                     </a>
-                  </div>
-                )}
-                {previewPicklist && order.picklist_path && (
-                  <div className="mt-2 rounded-lg border border-border/60 overflow-hidden">
-                    <iframe
-                      src={`/api/orders/${order.id}/picklist`}
-                      className="w-full h-[500px] bg-background"
-                      title="Picklist preview"
-                    />
                   </div>
                 )}
               </div>
@@ -519,13 +510,15 @@ export default function OrderDetail({
                     Signed PDF with customer signature
                   </p>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <button
-                      onClick={() => setPreviewSignedPicklist(!previewSignedPicklist)}
+                    <a
                       className="inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline"
+                      href={`/api/orders/${order.id}/signed-picklist`}
+                      target="_blank"
+                      rel="noreferrer"
                     >
                       <Eye className="h-3.5 w-3.5" />
-                      {previewSignedPicklist ? "Close preview" : "Preview signed picklist"}
-                    </button>
+                      Preview signed picklist
+                    </a>
                     <a
                       className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline hover:text-foreground"
                       href={`/api/orders/${order.id}/signed-picklist`}
@@ -539,15 +532,7 @@ export default function OrderDetail({
                 </div>
               </div>
             )}
-            {previewSignedPicklist && order.signed_picklist_path && (
-              <div className="mt-2 rounded-lg border border-border/60 overflow-hidden">
-                <iframe
-                  src={`/api/orders/${order.id}/signed-picklist`}
-                  className="w-full h-[500px] bg-background"
-                  title="Signed picklist preview"
-                />
-              </div>
-            )}
+
 
             <div className="flex items-center justify-between gap-4">
               <div>
