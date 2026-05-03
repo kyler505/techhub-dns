@@ -47,6 +47,7 @@ from app.services.system_setting_service import (
     SETTING_EMAIL_ENABLED,
     SETTING_TEAMS_RECIPIENT_ENABLED,
     SETTING_ADMIN_EMAILS,
+    SETTING_PICKLIST_PRINT_CLAIM_TIMEOUT_SECONDS,
 )
 
 
@@ -74,6 +75,23 @@ _VETTING_EDITOR_DOWNLOAD_HEADERS = {
 }
 
 PRINT_AGENT_CLAIM_TIMEOUT_SECONDS = 300
+
+
+def _get_print_agent_claim_timeout_seconds() -> int:
+    db = get_db_session()
+    try:
+        raw_value = SystemSettingService.get_setting(
+            db, SETTING_PICKLIST_PRINT_CLAIM_TIMEOUT_SECONDS
+        )
+    finally:
+        db.close()
+
+    try:
+        timeout = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
+
+    return timeout if timeout > 0 else PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
 
 
 def _require_print_agent() -> None:
@@ -846,6 +864,31 @@ def get_system_settings():
     return jsonify(result)
 
 
+@bp.route("/settings/<key>", methods=["GET"])
+@require_admin
+def get_system_setting(key: str):
+    """Get a single system setting."""
+    if key not in DEFAULT_SETTINGS:
+        return jsonify({"error": f"Unknown setting: {key}"}), 400
+
+    db = get_db_session()
+    try:
+        setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+        defaults = DEFAULT_SETTINGS[key]
+        return jsonify(
+            {
+                "key": key,
+                "value": setting.value if setting else defaults["value"],
+                "type": defaults.get("type"),
+                "description": defaults.get("description"),
+                "updated_at": _to_utc_iso_z(setting.updated_at) if setting else None,
+                "updated_by": setting.updated_by if setting else None,
+            }
+        )
+    finally:
+        db.close()
+
+
 @bp.route("/settings/<key>", methods=["PUT"])
 @require_admin
 def update_system_setting(key: str):
@@ -866,11 +909,14 @@ def update_system_setting(key: str):
 
     # SystemSettingService handles its own DB session
     setting = SystemSettingService.set_setting(key, str(data["value"]), updated_by)
+    defaults = DEFAULT_SETTINGS[key]
 
     return jsonify(
         {
             "key": setting.key,
             "value": setting.value,
+            "type": defaults.get("type"),
+            "description": defaults.get("description"),
             "updated_at": _to_utc_iso_z(setting.updated_at),
             "updated_by": setting.updated_by,
         }
@@ -1097,7 +1143,7 @@ def claim_next_print_job():
     try:
         service = PrintJobService(db)
         job = service.claim_next_pending_job(
-            claim_timeout_seconds=PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
+            claim_timeout_seconds=_get_print_agent_claim_timeout_seconds()
         )
         if not job:
             db.commit()

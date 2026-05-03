@@ -1,115 +1,155 @@
-import { lazy, Suspense, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 
-import { settingsApi, type SystemSettingValue, type SystemSettings } from "../api/settings";
+import { inflowApi } from "../api/inflow";
+import { settingsApi } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
-import { SectionErrorBoundary } from "../components/error-boundaries/AppErrorBoundaries";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import { extractApiErrorMessage } from "../utils/apiErrors";
 import { getUserDisplayName } from "../utils/userDisplay";
 
-const settingsQueryKeys = {
-    all: ["settings"] as const,
-    systemSettings: () => [...settingsQueryKeys.all, "system-settings"] as const,
-};
-
-const AdminsTab = lazy(() => import("../components/admin/AdminsTab"));
-
-const SETTINGS: Array<{
-    key: keyof SystemSettings;
-    title: string;
-    description: string;
-}> = [
+const overrideActions = [
     {
-        key: "email_notifications_enabled",
-        title: "Email Notifications",
-        description: "Enable or disable outbound email notifications.",
+        title: "Bypass signing for next order",
+        description: "Temporarily skip the signing gate for a single recovery case.",
+        label: "Not connected",
     },
     {
-        key: "teams_recipient_notifications_enabled",
-        title: "Teams Recipient Notifications",
-        description: "Enable or disable recipient-specific Teams notifications.",
+        title: "Force order reopen",
+        description: "Re-open a closed workflow so an operator can correct data or retry a step.",
+        label: "Not connected",
     },
     {
-        key: "picklist_auto_print_enabled",
-        title: "Picklist Auto-Print",
-        description: "Control whether the picklist print workflow runs automatically.",
+        title: "Override queue ownership",
+        description: "Move a job back to the operator queue when the durable queue is blocked.",
+        label: "Not connected",
     },
 ];
 
-const DEFAULT_SETTING: SystemSettingValue = {
-    value: "false",
-    description: "Loading...",
-    updated_at: null,
-    updated_by: null,
-};
-
-const getSetting = (settings: SystemSettings | null, key: keyof SystemSettings) => settings?.[key] ?? DEFAULT_SETTING;
-
 export default function Settings() {
-    const { user, isAdmin, isLoading: authLoading } = useAuth();
-    const queryClient = useQueryClient();
-    const [togglingKey, setTogglingKey] = useState<keyof SystemSettings | null>(null);
-
+    const { user, isLoading: authLoading } = useAuth();
     const currentUserLabel = getUserDisplayName(user, "you");
+    const [recipientEmail, setRecipientEmail] = useState("");
+    const [picklistOrderId, setPicklistOrderId] = useState("");
+    const [runningAction, setRunningAction] = useState<string | null>(null);
 
-    const systemSettingsQuery = useQuery({
-        queryKey: settingsQueryKeys.systemSettings(),
-        enabled: isAdmin && !authLoading,
-        queryFn: () => settingsApi.getSettings(),
+    const testEmailMutation = useMutation({
+        mutationFn: async (email: string) => settingsApi.testEmail(email),
+    });
+    const testTeamsMutation = useMutation({
+        mutationFn: async (email: string) => settingsApi.testTeamsRecipient(email),
+    });
+    const testInflowMutation = useMutation({
+        mutationFn: async () => settingsApi.testInflow(),
+    });
+    const testSharePointMutation = useMutation({
+        mutationFn: async () => settingsApi.testSharePoint(),
+    });
+    const testWebhookMutation = useMutation({
+        mutationFn: async () => inflowApi.testWebhook(),
+    });
+    const syncMutation = useMutation({
+        mutationFn: async () => inflowApi.sync(),
+    });
+    const retryPicklistMutation = useMutation({
+        mutationFn: async (orderId: string) => settingsApi.retryPicklistPrint(orderId),
+    });
+    const syncHealthQuery = useQuery({
+        queryKey: ["settings", "sync-health"],
+        queryFn: async () => settingsApi.getSyncHealth(),
+        refetchInterval: 60_000,
     });
 
-    const updateSettingMutation = useMutation({
-        mutationFn: async ({ key, value }: { key: keyof SystemSettings; value: string }) =>
-            settingsApi.updateSetting(key, value, user?.email),
-        onMutate: ({ key }) => {
-            setTogglingKey(key);
-        },
-        onSuccess: (_result, variables) => {
-            queryClient.setQueryData<SystemSettings | undefined>(settingsQueryKeys.systemSettings(), (current) => {
-                if (!current) return current;
-                return {
-                    ...current,
-                    [variables.key]: {
-                        ...current[variables.key],
-                        value: variables.value,
-                        updated_at: new Date().toISOString(),
-                        updated_by: user?.email ?? null,
-                    },
-                };
-            });
-            toast.success("Setting updated", { description: `${variables.key} = ${variables.value}` });
-        },
-        onError: (error: unknown) => {
-            toast.error("Failed to update setting", { description: extractApiErrorMessage(error, "Please try again.") });
-        },
-        onSettled: () => {
-            setTogglingKey(null);
-        },
-    });
+    const busy =
+        testEmailMutation.isPending ||
+        testTeamsMutation.isPending ||
+        testInflowMutation.isPending ||
+        testSharePointMutation.isPending ||
+        testWebhookMutation.isPending ||
+        syncMutation.isPending ||
+        retryPicklistMutation.isPending;
 
-    const systemSettings = systemSettingsQuery.data ?? null;
-    const loading = systemSettingsQuery.isPending && isAdmin && !authLoading;
+    const handleRecipientActions = async (kind: "email" | "teams") => {
+        if (!recipientEmail.trim()) {
+            toast.error("Enter an email address to test");
+            return;
+        }
 
-    const toggleSetting = async (key: keyof SystemSettings, currentValue: string) => {
         try {
-            const nextValue = currentValue === "true" ? "false" : "true";
-            await updateSettingMutation.mutateAsync({ key, value: nextValue });
-        } catch {
-            // handled by mutation callbacks
+            setRunningAction(kind);
+            if (kind === "email") {
+                const result = await testEmailMutation.mutateAsync(recipientEmail.trim());
+                if (result.success) toast.success("Test email queued", { description: result.message || undefined });
+                else toast.error("Test email failed", { description: result.error || result.message || undefined });
+            } else {
+                const result = await testTeamsMutation.mutateAsync(recipientEmail.trim());
+                if (result.success) toast.success("Test Teams message queued", { description: result.message || undefined });
+                else toast.error("Test Teams message failed", { description: result.error || result.message || undefined });
+            }
+        } catch (error: unknown) {
+            toast.error(kind === "email" ? "Test email failed" : "Test Teams message failed", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
         }
     };
 
-    if (authLoading || loading) {
+    const handleSimpleAction = async (kind: "inflow" | "sharepoint" | "webhook" | "sync") => {
+        try {
+            setRunningAction(kind);
+            if (kind === "inflow") {
+                const result = await testInflowMutation.mutateAsync();
+                if (result.success) toast.success("Inflow connection OK", { description: result.message || undefined });
+                else toast.error("Inflow connection failed", { description: result.error || result.message || undefined });
+            } else if (kind === "sharepoint") {
+                const result = await testSharePointMutation.mutateAsync();
+                if (result.success) toast.success("SharePoint connection OK", { description: result.message || undefined });
+                else toast.error("SharePoint connection failed", { description: result.error || result.message || undefined });
+            } else if (kind === "webhook") {
+                const result = await testWebhookMutation.mutateAsync();
+                toast.success("Webhook test queued", { description: result?.message || undefined });
+            } else {
+                const result = await syncMutation.mutateAsync();
+                toast.success("Recovery sync completed", { description: result?.message || undefined });
+            }
+        } catch (error: unknown) {
+            toast.error(kind === "sharepoint" ? "SharePoint connection failed" : kind === "inflow" ? "Inflow connection failed" : kind === "webhook" ? "Webhook test failed" : "Recovery sync failed", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
+    const handleRetryPicklist = async () => {
+        if (!picklistOrderId.trim()) {
+            toast.error("Enter an order id to requeue");
+            return;
+        }
+
+        try {
+            setRunningAction("retry");
+            const result = await retryPicklistMutation.mutateAsync(picklistOrderId.trim());
+            toast.success("Picklist reprint queued", { description: result.job?.order_id ? `Order ${result.job.order_id}` : undefined });
+        } catch (error: unknown) {
+            toast.error("Failed to queue picklist reprint", { description: extractApiErrorMessage(error, "Please try again.") });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
+    if (authLoading) {
         return (
             <div className="container mx-auto py-6 space-y-4">
                 <div className="space-y-1">
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-                    <p className="text-sm text-muted-foreground">Loading persistent configuration.</p>
+                    <p className="text-sm text-muted-foreground">Loading operator actions.</p>
                 </div>
                 <Card>
                     <CardContent className="p-6">
@@ -123,99 +163,237 @@ export default function Settings() {
         );
     }
 
-    if (!isAdmin) {
-        return (
-            <div className="container mx-auto py-6 space-y-4">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-                    <p className="text-sm text-muted-foreground">Persistent configuration for notifications and admin access.</p>
-                </div>
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Access denied</CardTitle>
-                        <CardDescription>Admin access is required to view this page.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">{currentUserLabel ? `Signed in as ${currentUserLabel}.` : "You are not signed in."}</CardContent>
-                </Card>
-            </div>
-        );
-    }
-
     return (
-        <div className="container mx-auto py-6 space-y-4">
+        <div className="container mx-auto py-6 space-y-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-                    <p className="text-sm text-muted-foreground">Persistent configuration only: notifications, auto-print, and admin allowlist.</p>
+                    <p className="text-sm text-muted-foreground">Operator actions, overrides, and recovery tools. Nothing on this page persists configuration.</p>
                 </div>
                 {currentUserLabel ? <span className="text-xs text-muted-foreground">Signed in as {currentUserLabel}</span> : null}
             </div>
 
-            <Card>
+            <Card className="border-border/70 bg-card/80">
                 <CardHeader>
-                    <CardTitle className="text-base">Persistent Configuration</CardTitle>
-                    <CardDescription>These values are stored in the system settings table and survive restarts.</CardDescription>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-base">Operator surface</CardTitle>
+                        <Badge variant="secondary">Actions only</Badge>
+                    </div>
+                    <CardDescription>
+                        Use this page to test integrations, recover queues, and stage one-off overrides while the durable rules stay on /admin.
+                    </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                    {SETTINGS.map(({ key, title, description }) => {
-                        const current = getSetting(systemSettings, key);
-                        const enabled = current.value === "true";
-                        const busy = togglingKey === key;
-
-                        return (
-                            <div key={key} className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-sm font-medium text-foreground">{title}</p>
-                                        <Badge variant={enabled ? "success" : "secondary"}>{enabled ? "Enabled" : "Disabled"}</Badge>
-                                    </div>
-                                    <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Updated {current.updated_at ? new Date(current.updated_at).toLocaleString() : "never"}
-                                        {current.updated_by ? ` by ${current.updated_by}` : ""}
-                                    </p>
-                                </div>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={enabled ? "outline" : "default"}
-                                    disabled={busy}
-                                    onClick={() => void toggleSetting(key, current.value)}
-                                    className="btn-lift"
-                                >
-                                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                    {enabled ? "Disable" : "Enable"}
-                                </Button>
-                            </div>
-                        );
-                    })}
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Smoke tests</div>
+                        <p className="mt-2 text-sm text-foreground">Email, Teams, Inflow, SharePoint, and webhook checks live here.</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recovery</div>
+                        <p className="mt-2 text-sm text-foreground">Manual sync and picklist requeue actions are available for incident recovery.</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Overrides</div>
+                        <p className="mt-2 text-sm text-foreground">Temporary operator overrides remain clearly marked until they are wired to backend controls.</p>
+                    </div>
                 </CardContent>
             </Card>
 
-            <SectionErrorBoundary title="Admin allowlist failed" message="Try reloading the admin allowlist panel.">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Admin Allowlist</CardTitle>
-                        <CardDescription>Manage which users can access admin capabilities.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Suspense
-                            fallback={
-                                <Card>
-                                    <CardContent className="p-6">
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            Loading admin allowlist...
-                                        </div>
-                                    </CardContent>
-                                </Card>
+            <Card className="border-border/70 bg-card/80">
+                <CardHeader>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-base">Sync health snapshot</CardTitle>
+                        <Badge
+                            variant={
+                                syncHealthQuery.data?.inflow.webhook_failed
+                                    ? "destructive"
+                                    : syncHealthQuery.data?.inflow.webhook_enabled
+                                        ? "success"
+                                        : "secondary"
                             }
                         >
-                            <AdminsTab />
-                        </Suspense>
-                    </CardContent>
-                </Card>
-            </SectionErrorBoundary>
+                            {syncHealthQuery.data?.inflow.webhook_failed
+                                ? "Attention"
+                                : syncHealthQuery.data?.inflow.webhook_enabled
+                                    ? "Webhook on"
+                                    : "Webhook off"}
+                        </Badge>
+                    </div>
+                    <CardDescription>Quick read-only signals before using recovery actions.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Server time</div>
+                        <p className="mt-2 text-sm text-foreground">{syncHealthQuery.data?.server_time ?? "-"}</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Last webhook</div>
+                        <p className="mt-2 text-sm text-foreground">{syncHealthQuery.data?.inflow.last_webhook_received_at ?? "Never"}</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Webhook state</div>
+                        <p className="mt-2 text-sm text-foreground">
+                            {syncHealthQuery.data?.inflow.webhook_enabled ? "Enabled" : "Disabled"}
+                            {syncHealthQuery.data?.inflow.webhook_failed ? " · last attempt failed" : ""}
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                    <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-base font-semibold tracking-tight">Test & verify</h2>
+                            <Badge variant="secondary">Operator</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Run smoke tests before escalating to recovery or overrides.</p>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">Recipient email</label>
+                            <Input
+                                type="email"
+                                placeholder="recipient@tamu.edu"
+                                value={recipientEmail}
+                                onChange={(event) => setRecipientEmail(event.target.value)}
+                                disabled={busy}
+                            />
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Button onClick={() => void handleRecipientActions("email")} disabled={busy} className="btn-lift">
+                                    {runningAction === "email" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+                                    Test Email
+                                </Button>
+                                <Button variant="secondary" onClick={() => void handleRecipientActions("teams")} disabled={busy} className="btn-lift">
+                                    {runningAction === "teams" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+                                    Test Teams
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                            <div>
+                                <div className="text-sm font-medium text-foreground">Connection smoke checks</div>
+                                <p className="text-xs text-muted-foreground">Validate the integration endpoints before retrying work items.</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Button variant="outline" onClick={() => void handleSimpleAction("inflow")} disabled={busy} className="btn-lift">
+                                    {runningAction === "inflow" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    {runningAction === "inflow" ? "Testing..." : "Test Inflow"}
+                                </Button>
+                                <Button variant="outline" onClick={() => void handleSimpleAction("sharepoint")} disabled={busy} className="btn-lift">
+                                    {runningAction === "sharepoint" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    {runningAction === "sharepoint" ? "Testing..." : "Test SharePoint"}
+                                </Button>
+                                <Button variant="outline" onClick={() => void handleSimpleAction("webhook")} disabled={busy} className="btn-lift">
+                                    {runningAction === "webhook" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                    Webhook test
+                                </Button>
+                                <Button variant="outline" onClick={() => void handleSimpleAction("sync")} disabled={busy} className="btn-lift">
+                                    {runningAction === "sync" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                    Recovery sync
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                    <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-base font-semibold tracking-tight">Recovery queue controls</h2>
+                            <Badge variant="secondary">Requeue</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Requeue picklists and refresh the operator recovery view when a job is blocked or missing.</p>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">Order id</label>
+                            <Input
+                                placeholder="order id or inflow order id"
+                                value={picklistOrderId}
+                                onChange={(event) => setPicklistOrderId(event.target.value)}
+                                disabled={busy}
+                            />
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <Button onClick={() => void handleRetryPicklist()} disabled={busy} className="btn-lift">
+                                {runningAction === "retry" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                Requeue picklist
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setPicklistOrderId("");
+                                    toast.message("Cleared recovery form");
+                                }}
+                                disabled={busy}
+                                className="btn-lift"
+                            >
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Clear form
+                            </Button>
+                        </div>
+                        <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                            Queue controls are intentionally narrow: operators can recover or retry jobs here, while durable queue policy lives on /admin.
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold tracking-tight">Overrides</h2>
+                        <Badge variant="warning">Not connected</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">These actions are intentionally shown as operator UI only until backend override endpoints are wired.</p>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    {overrideActions.map((action) => (
+                        <Card key={action.title} className="shadow-none">
+                            <CardHeader className="p-4 pb-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <CardTitle className="text-sm">{action.title}</CardTitle>
+                                        <CardDescription className="mt-1">{action.description}</CardDescription>
+                                    </div>
+                                    <Badge variant="secondary">{action.label}</Badge>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0">
+                                <Button variant="outline" className="w-full btn-lift" disabled>
+                                    Not yet connected
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            </section>
+
+            <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold tracking-tight">Recovery checklist</h2>
+                        <Badge variant="secondary">Guidance</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Use these steps before escalating an incident.</p>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground"><Clock className="h-4 w-4" />Confirm freshness</div>
+                        <p className="mt-2 text-sm text-muted-foreground">Check whether the queue and the operator actions page were updated recently.</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground"><CheckCircle2 className="h-4 w-4" />Retry safely</div>
+                        <p className="mt-2 text-sm text-muted-foreground">Requeue picklists only after the smoke tests and recovery sync have succeeded.</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground"><AlertTriangle className="h-4 w-4" />Escalate clearly</div>
+                        <p className="mt-2 text-sm text-muted-foreground">If an override is needed, keep it temporary and document the reason for audit follow-up.</p>
+                    </div>
+                </div>
+            </section>
         </div>
     );
 }

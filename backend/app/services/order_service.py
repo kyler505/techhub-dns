@@ -39,6 +39,9 @@ from app.services.print_job_service import PrintJobService, emit_print_job_avail
 from app.services.order_splitting import OrderSplittingService
 from app.services.system_setting_service import (
     SETTING_PICKLIST_AUTO_PRINT_ENABLED,
+    SETTING_REQUIRE_ASSET_TAGS_BEFORE_PICKLIST,
+    SETTING_REQUIRE_PARTIAL_PICKLIST_CONFIRMATION,
+    SETTING_REQUIRE_SAME_USER_FOR_TAGGING_AND_PICKLIST,
     SystemSettingService,
 )
 
@@ -54,6 +57,11 @@ class OrderService:
         return value if isinstance(value, dict) else {}
 
     def _requires_asset_tags(self, order: Order) -> bool:
+        if not SystemSettingService.is_setting_enabled(
+            SETTING_REQUIRE_ASSET_TAGS_BEFORE_PICKLIST
+        ):
+            return False
+
         if not order.inflow_data:
             return True
 
@@ -371,7 +379,12 @@ class OrderService:
                     child = self.db.query(Order).filter(Order.id == order.remainder_order_id).first()
                     if child:
                         order = child
-            elif not create_partial_leg:
+            elif not (
+                create_partial_leg
+                or not SystemSettingService.is_setting_enabled(
+                    SETTING_REQUIRE_PARTIAL_PICKLIST_CONFIRMATION
+                )
+            ):
                 raise ValidationError(
                     "This order is partially picked. Confirm creation of the partial leg before generating the picklist.")
             else:
@@ -385,7 +398,14 @@ class OrderService:
         # unless one of them is missing (legacy data).
         # tagged_by is stored as email; generated_by is now also email, but we also check
         # generated_by_display as a fallback for callers that pass a display name.
-        if order.tagged_by and generated_by and order.tagged_by != generated_by:
+        if (
+            SystemSettingService.is_setting_enabled(
+                SETTING_REQUIRE_SAME_USER_FOR_TAGGING_AND_PICKLIST
+            )
+            and order.tagged_by
+            and generated_by
+            and order.tagged_by != generated_by
+        ):
             same_user = False
             if generated_by_display:
                 if order.tagged_by == generated_by_display:
