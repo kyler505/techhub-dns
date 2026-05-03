@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ChevronDown, Eye, FileDown } from "lucide-react";
+import { AlertTriangle, ChevronDown, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import StatusBadge from "./StatusBadge";
@@ -462,15 +462,6 @@ export default function OrderDetail({
                       <Eye className="h-3.5 w-3.5" />
                       Preview picklist
                     </a>
-                    <a
-                      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline hover:text-foreground"
-                      href={`/api/orders/${order.id}/picklist`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      Download
-                    </a>
                   </div>
                 )}
               </div>
@@ -518,15 +509,6 @@ export default function OrderDetail({
                     >
                       <Eye className="h-3.5 w-3.5" />
                       Preview signed picklist
-                    </a>
-                    <a
-                      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline hover:text-foreground"
-                      href={`/api/orders/${order.id}/signed-picklist`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      Download
                     </a>
                   </div>
                 </div>
