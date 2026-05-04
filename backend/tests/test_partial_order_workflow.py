@@ -488,6 +488,135 @@ def test_partial_order_remainder_creation_links_parent_and_child():
         engine.dispose()
 
 
+def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists():
+    """Generating a partial picklist should not switch the active order to the child leg."""
+
+    session, engine = _make_sqlite_session()
+    session.execute(text("PRAGMA foreign_keys=ON"))
+
+    parent_order = Order(
+        id="order-parent-3",
+        inflow_order_id="TH3001",
+        inflow_sales_order_id="sales-order-3001",
+        recipient_name="User Three",
+        recipient_contact="user.three@example.com",
+        delivery_location="Building 303",
+        po_number="PO-3001",
+        status=OrderStatus.PICKED.value,
+        tagged_by="tech@example.com",
+        inflow_data={
+            "orderNumber": "TH3001",
+            "contactName": "User Three",
+            "email": "user.three@example.com",
+            "shippingAddress": {"address1": "303 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "2"},
+                },
+                {
+                    "productId": "prod-2",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    partial_leg = Order(
+        id="order-child-3",
+        inflow_order_id="TH3001-P",
+        inflow_sales_order_id="sales-order-3001",
+        recipient_name="User Three",
+        recipient_contact="user.three@example.com",
+        delivery_location="Building 303",
+        po_number="PO-3001",
+        status=OrderStatus.PICKED.value,
+        parent_order_id=parent_order.id,
+        inflow_data={
+            "orderNumber": "TH3001-P",
+            "contactName": "User Three",
+            "email": "user.three@example.com",
+            "shippingAddress": {"address1": "303 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+
+    session.add(partial_leg)
+    session.commit()
+
+    parent_order.has_remainder = "Y"
+    parent_order.remainder_order_id = partial_leg.id
+    session.commit()
+
+    from app.services.order_service import OrderService
+
+    service = OrderService(session)
+
+    class FakeSharePointService:
+        is_enabled = True
+
+        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+    def fake_generate_picklist_pdf(self, inflow_data, output_path):
+        Path(output_path).write_bytes(b"%PDF-1.4 fake picklist\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
+
+        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
+            with patch(
+                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
+                new=fake_generate_picklist_pdf,
+            ):
+                with patch(
+                    "app.services.order_service.SystemSettingService.is_setting_enabled",
+                    return_value=False,
+                ):
+                    with patch(
+                        "app.services.order_service.SystemSettingService.get_setting",
+                        return_value="false",
+                    ):
+                        with patch.object(service, "_send_order_details_email", return_value=True):
+                            result = service.generate_picklist(
+                                parent_order.id,
+                                generated_by="tech@example.com",
+                                generated_by_display="tech@example.com",
+                                create_partial_leg=True,
+                            )
+
+    assert result.id == parent_order.id
+    assert result.inflow_order_id == "TH3001"
+    assert parent_order.picklist_path is not None
+    assert partial_leg.picklist_path is None
+
+    session.close()
+    engine.dispose()
+
+
 def test_generate_picklist_raises_when_sharepoint_upload_fails():
     """Picklist generation should fail if SharePoint upload is unavailable."""
 

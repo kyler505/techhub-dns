@@ -204,7 +204,12 @@ class OrderSplittingService:
                 .first()
             )
             if existing:
-                return existing
+                logger.info(
+                    "Partial leg already exists for %s; keeping parent %s active",
+                    original_order.inflow_order_id,
+                    original_order.id,
+                )
+                return original_order
 
         pick_status = self.inflow_service.get_pick_status(original_order.inflow_data)
         if pick_status.get("is_fully_picked", True):
