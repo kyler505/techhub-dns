@@ -933,18 +933,20 @@ def get_admins():
     env_admins = _normalize_admin_emails(settings.get_admin_emails())
     db_admins = _get_db_admin_allowlist()
 
-    if env_admins:
+    # Merge: env entries are pinned, DB entries are app-managed.
+    merged = sorted(set(env_admins) | set(db_admins))
+
+    if env_admins and db_admins:
+        source = "mixed"
+    elif env_admins:
         source = "env"
-        admins = env_admins
     elif db_admins:
         source = "db"
-        admins = db_admins
     else:
         source = "default"
-        admins = []
 
     response: dict[str, Any] = {
-        "admins": admins,
+        "admins": merged,
         "source": source,
         "env_admins": env_admins,
         "db_admins": db_admins,
@@ -955,17 +957,7 @@ def get_admins():
 @bp.route("/admins", methods=["PUT"])
 @require_admin
 def update_admins():
-    """Update the DB-backed admin allowlist (unless ADMIN_EMAILS override active)."""
-    if _is_env_admin_override_active():
-        return (
-            jsonify(
-                {
-                    "error": "ADMIN_EMAILS env override is active; admin allowlist is read-only and must be updated via environment variables.",
-                }
-            ),
-            409,
-        )
-
+    """Update the DB-backed admin allowlist. Env entries are pinned and auto-merged on reads."""
     data = request.get_json(silent=True) or {}
     admins_payload = data.get("admins")
     if not isinstance(admins_payload, list):
@@ -993,6 +985,7 @@ def update_admins():
 
     caller_email = _get_request_user_email_normalized()
     caller_looks_like_email = bool(caller_email and EMAIL_RE.match(caller_email))
+    caller_in_env = caller_looks_like_email and caller_email in _normalize_admin_emails(settings.get_admin_emails())
 
     if not settings.is_dev():
         if not normalized:
@@ -1004,7 +997,7 @@ def update_admins():
                 ),
                 400,
             )
-        if caller_looks_like_email and caller_email not in normalized:
+        if caller_looks_like_email and caller_email not in normalized and not caller_in_env:
             return (
                 jsonify(
                     {
@@ -1055,10 +1048,17 @@ def update_admins():
 
         db.commit()
 
+        # Merge env admins into the response so the caller sees the full picture.
+        env_admins = _normalize_admin_emails(settings.get_admin_emails())
+        merged = sorted(set(env_admins) | set(normalized))
+        source = "mixed" if env_admins else "db"
+
         return jsonify(
             {
-                "admins": normalized,
-                "source": "db",
+                "admins": merged,
+                "db_admins": normalized,
+                "env_admins": env_admins,
+                "source": source,
                 "updated_by": updated_by,
             }
         )

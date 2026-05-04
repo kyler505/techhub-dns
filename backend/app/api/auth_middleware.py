@@ -279,15 +279,15 @@ def is_current_user_admin() -> bool:
         return False
 
     env_allowlist = settings.get_admin_emails()
-    if env_allowlist:
-        return email in env_allowlist
 
-    # No env override: consult DB allowlist (if configured).
     with get_db() as db:
         raw = SystemSettingService.get_setting(db, SETTING_ADMIN_EMAILS)
         db_allowlist = settings._parse_admin_emails(raw)
-        if db_allowlist:
-            return email in db_allowlist
+
+    # Merge env + DB (env entries are immutable; DB entries are app-managed).
+    merged = set(env_allowlist or []) | set(db_allowlist or [])
+    if merged:
+        return email in merged
 
     # Default behavior when no allowlist is configured.
     if settings.is_dev():
