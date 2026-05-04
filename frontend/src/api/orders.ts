@@ -44,6 +44,21 @@ export const ordersApi = {
     return response.data;
   },
 
+  updateOrder: async (
+    orderId: string,
+    update: {
+      recipient_name?: string;
+      recipient_contact?: string;
+      delivery_location?: string;
+      assigned_deliverer?: string;
+      issue_reason?: string;
+      expected_updated_at?: string;
+    },
+  ): Promise<Order> => {
+    const response = await apiClient.patch<Order>(`/orders/${orderId}`, normalizeExpectedUpdatedAt(update));
+    return response.data;
+  },
+
   bulkUpdateStatus: async (payload: BulkStatusUpdate): Promise<Order[]> => {
     const response = await apiClient.post<Order[]>("/orders/bulk-transition", payload);
     return response.data;

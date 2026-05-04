@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Zap } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { inflowApi } from "../api/inflow";
+import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
+import { OrderStatus } from "../types/order";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -13,51 +15,56 @@ import { Input } from "../components/ui/input";
 import { extractApiErrorMessage } from "../utils/apiErrors";
 import { getUserDisplayName } from "../utils/userDisplay";
 
-const overrideActions = [
-    {
-        title: "Bypass signing for next order",
-        description: "Temporarily skip the signing gate for a single recovery case.",
-        label: "Not connected",
-    },
-    {
-        title: "Force order reopen",
-        description: "Re-open a closed workflow so an operator can correct data or retry a step.",
-        label: "Not connected",
-    },
-    {
-        title: "Override queue ownership",
-        description: "Move a job back to the operator queue when the durable queue is blocked.",
-        label: "Not connected",
-    },
-];
+const TRANSPARENT_SIGNATURE_IMAGE =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Yl8X7kAAAAASUVORK5CYII=";
+
+const reopenTargets = [OrderStatus.PICKED, OrderStatus.QA, OrderStatus.PRE_DELIVERY] as const;
+
+const makeBypassSignatureData = () => ({
+    signature_image: TRANSPARENT_SIGNATURE_IMAGE,
+    placements: [
+        {
+            page_number: 1,
+            x: 48,
+            y: 48,
+            width: 1,
+            height: 1,
+        },
+    ],
+});
 
 export default function Settings() {
     const { user, isLoading: authLoading } = useAuth();
     const currentUserLabel = getUserDisplayName(user, "you");
+    const currentUserIdentifier = user?.email ?? currentUserLabel ?? "system";
+
     const [recipientEmail, setRecipientEmail] = useState("");
     const [picklistOrderId, setPicklistOrderId] = useState("");
+    const [signingOrderId, setSigningOrderId] = useState("");
+    const [reopenOrderId, setReopenOrderId] = useState("");
+    const [reopenTarget, setReopenTarget] = useState<OrderStatus>(OrderStatus.PICKED);
+    const [reopenReason, setReopenReason] = useState("");
+    const [ownershipOrderId, setOwnershipOrderId] = useState("");
+    const [ownershipDeliverer, setOwnershipDeliverer] = useState("");
     const [runningAction, setRunningAction] = useState<string | null>(null);
 
-    const testEmailMutation = useMutation({
-        mutationFn: async (email: string) => settingsApi.testEmail(email),
+    const testEmailMutation = useMutation({ mutationFn: async (email: string) => settingsApi.testEmail(email) });
+    const testTeamsMutation = useMutation({ mutationFn: async (email: string) => settingsApi.testTeamsRecipient(email) });
+    const testInflowMutation = useMutation({ mutationFn: async () => settingsApi.testInflow() });
+    const testSharePointMutation = useMutation({ mutationFn: async () => settingsApi.testSharePoint() });
+    const testWebhookMutation = useMutation({ mutationFn: async () => inflowApi.testWebhook() });
+    const syncMutation = useMutation({ mutationFn: async () => inflowApi.sync() });
+    const retryPicklistMutation = useMutation({ mutationFn: async (orderId: string) => settingsApi.retryPicklistPrint(orderId) });
+    const bypassSigningMutation = useMutation({
+        mutationFn: async ({ orderId }: { orderId: string }) => ordersApi.signOrder(orderId, makeBypassSignatureData()),
     });
-    const testTeamsMutation = useMutation({
-        mutationFn: async (email: string) => settingsApi.testTeamsRecipient(email),
+    const reopenOrderMutation = useMutation({
+        mutationFn: async ({ orderId, target, reason }: { orderId: string; target: OrderStatus; reason?: string }) =>
+            ordersApi.rollbackOrderStatus(orderId, { status: target, reason }, currentUserIdentifier),
     });
-    const testInflowMutation = useMutation({
-        mutationFn: async () => settingsApi.testInflow(),
-    });
-    const testSharePointMutation = useMutation({
-        mutationFn: async () => settingsApi.testSharePoint(),
-    });
-    const testWebhookMutation = useMutation({
-        mutationFn: async () => inflowApi.testWebhook(),
-    });
-    const syncMutation = useMutation({
-        mutationFn: async () => inflowApi.sync(),
-    });
-    const retryPicklistMutation = useMutation({
-        mutationFn: async (orderId: string) => settingsApi.retryPicklistPrint(orderId),
+    const overrideOwnershipMutation = useMutation({
+        mutationFn: async ({ orderId, owner }: { orderId: string; owner: string }) =>
+            ordersApi.updateOrder(orderId, { assigned_deliverer: owner }),
     });
     const syncHealthQuery = useQuery({
         queryKey: ["settings", "sync-health"],
@@ -72,7 +79,10 @@ export default function Settings() {
         testSharePointMutation.isPending ||
         testWebhookMutation.isPending ||
         syncMutation.isPending ||
-        retryPicklistMutation.isPending;
+        retryPicklistMutation.isPending ||
+        bypassSigningMutation.isPending ||
+        reopenOrderMutation.isPending ||
+        overrideOwnershipMutation.isPending;
 
     const handleRecipientActions = async (kind: "email" | "teams") => {
         if (!recipientEmail.trim()) {
@@ -144,6 +154,89 @@ export default function Settings() {
         }
     };
 
+    const handleBypassSigning = async () => {
+        if (!signingOrderId.trim()) {
+            toast.error("Enter an order id to sign");
+            return;
+        }
+
+        try {
+            setRunningAction("bypass-signing");
+            const result = await bypassSigningMutation.mutateAsync({ orderId: signingOrderId.trim() });
+            toast.success("Signing bypass completed", {
+                description: result.message || `Order ${signingOrderId.trim()} moved to delivered`,
+            });
+        } catch (error: unknown) {
+            toast.error("Failed to bypass signing", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
+    const handleReopenOrder = async () => {
+        if (!reopenOrderId.trim()) {
+            toast.error("Enter an order id to reopen");
+            return;
+        }
+
+        try {
+            setRunningAction("reopen-order");
+            const result = await reopenOrderMutation.mutateAsync({
+                orderId: reopenOrderId.trim(),
+                target: reopenTarget,
+                reason: reopenReason.trim() || undefined,
+            });
+            toast.success("Order reopened", {
+                description: `${result.inflow_order_id} -> ${result.status}`,
+            });
+        } catch (error: unknown) {
+            toast.error("Failed to reopen order", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
+    const handleOverrideOwnership = async () => {
+        if (!ownershipOrderId.trim()) {
+            toast.error("Enter an order id to reassign");
+            return;
+        }
+        if (!ownershipDeliverer.trim()) {
+            toast.error("Enter the new deliverer/owner");
+            return;
+        }
+
+        try {
+            setRunningAction("override-ownership");
+            const result = await overrideOwnershipMutation.mutateAsync({
+                orderId: ownershipOrderId.trim(),
+                owner: ownershipDeliverer.trim(),
+            });
+            toast.success("Queue ownership updated", {
+                description: `${result.inflow_order_id} assigned to ${result.assigned_deliverer || ownershipDeliverer.trim()}`,
+            });
+        } catch (error: unknown) {
+            toast.error("Failed to override queue ownership", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
+    const reopenTargetOptions = useMemo(
+        () =>
+            reopenTargets.map((status) => ({
+                value: status,
+                label: status.replace("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+            })),
+        [],
+    );
+
     if (authLoading) {
         return (
             <div className="container mx-auto py-6 space-y-4">
@@ -168,7 +261,7 @@ export default function Settings() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-                    <p className="text-sm text-muted-foreground">Operator actions, overrides, and recovery tools. Nothing on this page persists configuration.</p>
+                    <p className="text-sm text-muted-foreground">Operator actions, overrides, and recovery tools. Nothing on this page persists workflow policy.</p>
                 </div>
                 {currentUserLabel ? <span className="text-xs text-muted-foreground">Signed in as {currentUserLabel}</span> : null}
             </div>
@@ -180,7 +273,7 @@ export default function Settings() {
                         <Badge variant="secondary">Actions only</Badge>
                     </div>
                     <CardDescription>
-                        Use this page to test integrations, recover queues, and stage one-off overrides while the durable rules stay on /admin.
+                        Use this page to test integrations, recover queues, and run one-off overrides while durable rules stay on /admin.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-3">
@@ -190,11 +283,11 @@ export default function Settings() {
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-4">
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recovery</div>
-                        <p className="mt-2 text-sm text-foreground">Manual sync and picklist requeue actions are available for incident recovery.</p>
+                        <p className="mt-2 text-sm text-foreground">Manual sync, requeue, reopen, and reassignment actions are available for incidents.</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-4">
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Overrides</div>
-                        <p className="mt-2 text-sm text-foreground">Temporary operator overrides remain clearly marked until they are wired to backend controls.</p>
+                        <p className="mt-2 text-sm text-foreground">One-off bypass and queue ownership actions are surfaced here for operator use.</p>
                     </div>
                 </CardContent>
             </Card>
@@ -344,30 +437,110 @@ export default function Settings() {
             <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
                 <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-base font-semibold tracking-tight">Overrides</h2>
-                        <Badge variant="warning">Not connected</Badge>
+                        <h2 className="text-base font-semibold tracking-tight">Override actions</h2>
+                        <Badge variant="warning">Operator</Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">These actions are intentionally shown as operator UI only until backend override endpoints are wired.</p>
+                    <p className="text-sm text-muted-foreground">These are the remaining one-off operator controls: bypass signing, reopen a workflow, and reassign queue ownership.</p>
                 </div>
-                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    {overrideActions.map((action) => (
-                        <Card key={action.title} className="shadow-none">
-                            <CardHeader className="p-4 pb-3">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <CardTitle className="text-sm">{action.title}</CardTitle>
-                                        <CardDescription className="mt-1">{action.description}</CardDescription>
-                                    </div>
-                                    <Badge variant="secondary">{action.label}</Badge>
+
+                <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+                    <Card className="shadow-none">
+                        <CardHeader className="p-4 pb-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle className="text-sm">Bypass signing for one order</CardTitle>
+                                    <CardDescription className="mt-1">
+                                        Completes signing with a transparent placeholder signature so the order can be recovered to Delivered.
+                                    </CardDescription>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0">
-                                <Button variant="outline" className="w-full btn-lift" disabled>
-                                    Not yet connected
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ))}
+                                <Badge variant="secondary">Recovery</Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 p-4 pt-0">
+                            <Input
+                                placeholder="order id or inflow order id"
+                                value={signingOrderId}
+                                onChange={(event) => setSigningOrderId(event.target.value)}
+                                disabled={busy}
+                            />
+                            <Button variant="outline" className="w-full btn-lift" onClick={() => void handleBypassSigning()} disabled={busy}>
+                                {runningAction === "bypass-signing" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldAlert className="mr-2 h-4 w-4" />}
+                                {runningAction === "bypass-signing" ? "Bypassing..." : "Bypass signing"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="shadow-none">
+                        <CardHeader className="p-4 pb-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle className="text-sm">Force order reopen</CardTitle>
+                                    <CardDescription className="mt-1">Rollback a stuck order to Picked, QA, or Pre-Delivery with a reason for audit follow-up.</CardDescription>
+                                </div>
+                                <Badge variant="secondary">Rollback</Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 p-4 pt-0">
+                            <Input
+                                placeholder="order id or inflow order id"
+                                value={reopenOrderId}
+                                onChange={(event) => setReopenOrderId(event.target.value)}
+                                disabled={busy}
+                            />
+                            <select
+                                value={reopenTarget}
+                                onChange={(event) => setReopenTarget(event.target.value as OrderStatus)}
+                                disabled={busy}
+                                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {reopenTargetOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <Input
+                                placeholder="reason for reopening"
+                                value={reopenReason}
+                                onChange={(event) => setReopenReason(event.target.value)}
+                                disabled={busy}
+                            />
+                            <Button variant="outline" className="w-full btn-lift" onClick={() => void handleReopenOrder()} disabled={busy}>
+                                {runningAction === "reopen-order" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                {runningAction === "reopen-order" ? "Reopening..." : "Reopen order"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="shadow-none">
+                        <CardHeader className="p-4 pb-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <CardTitle className="text-sm">Override queue ownership</CardTitle>
+                                    <CardDescription className="mt-1">Reassign the current owner/deliverer for an order when manual intervention is needed.</CardDescription>
+                                </div>
+                                <Badge variant="secondary">Ownership</Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 p-4 pt-0">
+                            <Input
+                                placeholder="order id or inflow order id"
+                                value={ownershipOrderId}
+                                onChange={(event) => setOwnershipOrderId(event.target.value)}
+                                disabled={busy}
+                            />
+                            <Input
+                                placeholder="new owner / deliverer"
+                                value={ownershipDeliverer}
+                                onChange={(event) => setOwnershipDeliverer(event.target.value)}
+                                disabled={busy}
+                            />
+                            <Button variant="outline" className="w-full btn-lift" onClick={() => void handleOverrideOwnership()} disabled={busy}>
+                                {runningAction === "override-ownership" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                {runningAction === "override-ownership" ? "Saving..." : "Update ownership"}
+                            </Button>
+                        </CardContent>
+                    </Card>
                 </div>
             </section>
 
