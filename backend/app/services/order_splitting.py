@@ -242,6 +242,7 @@ class OrderSplittingService:
             updated_at=datetime.utcnow(),
         )
         self.db.add(child_order)
+        self.db.flush()
 
         child_audit = AuditLog(
             order_id=child_order.id,
@@ -350,6 +351,7 @@ class OrderSplittingService:
         )
 
         self.db.add(remainder_order)
+        self.db.flush()
 
         # Create AuditLog entry for initial 'picked' status in timeline
         audit_log = AuditLog(

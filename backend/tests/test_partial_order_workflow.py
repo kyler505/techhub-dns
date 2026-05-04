@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -335,6 +335,74 @@ def _make_sqlite_session():
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     return session_factory(), engine
+
+
+def test_partial_picklist_leg_creation_links_parent_and_child():
+    """Partial picklist splits should persist parent/child linkage without FK issues."""
+
+    session, engine = _make_sqlite_session()
+    session.execute(text("PRAGMA foreign_keys=ON"))
+
+    original_order = Order(
+        id="order-parent-2",
+        inflow_order_id="TH2002",
+        inflow_sales_order_id="sales-order-2002",
+        recipient_name="User Two",
+        recipient_contact="user.two@example.com",
+        delivery_location="Building 202",
+        po_number="PO-2002",
+        status=OrderStatus.PICKED.value,
+        inflow_data={
+            "orderNumber": "TH2002",
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "2"},
+                },
+                {
+                    "productId": "prod-2",
+                    "description": "Dock",
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "packLines": [
+                {
+                    "productId": "prod-1",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "shipLines": [
+                {
+                    "containers": ["DELIVERY-TH2002-1"],
+                }
+            ],
+        },
+    )
+    session.add(original_order)
+    session.commit()
+
+    try:
+        service = OrderSplittingService(session)
+
+        child_order = service.create_partial_picklist_leg(original_order, user_id="tech-2")
+
+        assert child_order is not None
+        assert child_order.inflow_order_id == "TH2002-P"
+        assert child_order.parent_order_id == original_order.id
+        assert original_order.has_remainder == "Y"
+        assert original_order.remainder_order_id == child_order.id
+        assert session.query(Order).filter(Order.inflow_order_id == "TH2002-P").count() == 1
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def test_partial_order_remainder_creation_links_parent_and_child():
