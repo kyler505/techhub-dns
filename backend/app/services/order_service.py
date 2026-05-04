@@ -565,6 +565,11 @@ class OrderService:
                 "Picklist must be generated before QA can be completed"
             )
 
+        if order.remainder_order_id and not order.parent_order_id:
+            raise ValidationError(
+                "Parent legs cannot be submitted for QA until the partial child leg is picked."
+            )
+
         # Inject authenticated technician into QA data if provided
         # This ensures consistency between the audit log and the stored form data
         if technician:
