@@ -25,6 +25,20 @@ export interface PartialOrderInfo {
   shortfall: number;
 }
 
+export interface OrderProductRow {
+  productId: string;
+  productName: string;
+  quantity: number;
+  serials: string[];
+}
+
+export interface OrderProductTableView {
+  title: string;
+  description: string;
+  rows: OrderProductRow[];
+  emptyState: string;
+}
+
 const isTruthyFlag = (value: unknown): boolean => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -161,6 +175,35 @@ const derivePickStatusFromInflow = (inflowData: unknown): PickStatus | null => {
   };
 };
 
+const buildOrderProductRows = (lines: unknown[]): OrderProductRow[] => {
+  const rows: OrderProductRow[] = [];
+
+  for (const rawLine of lines) {
+    if (!rawLine || typeof rawLine !== "object") continue;
+    const line = rawLine as Record<string, unknown>;
+    const productId = getLineProductId(line);
+    const quantity = getLineQuantity(line);
+    if (!productId || quantity <= 0) continue;
+
+    const quantityValue = line.quantity;
+    const serials =
+      quantityValue && typeof quantityValue === "object"
+        ? Array.isArray((quantityValue as Record<string, unknown>).serialNumbers)
+          ? ((quantityValue as Record<string, unknown>).serialNumbers as Array<string | number>).map((serial) => String(serial))
+          : []
+        : [];
+
+    rows.push({
+      productId,
+      productName: getLineProductName(line, productId),
+      quantity,
+      serials,
+    });
+  }
+
+  return rows;
+};
+
 export const getPartialOrderInfo = (order: PartialOrderSource): PartialOrderInfo => {
   const pickStatus = normalizePickStatus(order.pick_status) ?? derivePickStatusFromInflow(order.inflow_data);
   const totalOrdered = pickStatus?.total_ordered ?? 0;
@@ -182,6 +225,42 @@ export const getPartialOrderInfo = (order: PartialOrderSource): PartialOrderInfo
     parentOrderId: order.parent_order_id ?? undefined,
     parentInflowOrderId: order.parent_inflow_order_id ?? undefined,
     shortfall: Math.max(totalOrdered - totalPicked, 0),
+  };
+};
+
+export const getOrderProductTableView = (order: PartialOrderSource): OrderProductTableView => {
+  const partialInfo = getPartialOrderInfo(order);
+  const inflowData = order.inflow_data && typeof order.inflow_data === "object" ? (order.inflow_data as Record<string, unknown>) : {};
+  const lines = Array.isArray(inflowData.lines) ? inflowData.lines : [];
+
+  if (partialInfo.isPartialLeg) {
+    return {
+      title: "Child leg items",
+      description: "Items included in this generated child leg only.",
+      rows: buildOrderProductRows(lines),
+      emptyState: "No items found on this child leg.",
+    };
+  }
+
+  if (partialInfo.hasRemainder) {
+    return {
+      title: "Items left to pick",
+      description: "Items that remain on the parent leg after the partial leg was split out.",
+      rows: partialInfo.missingItems.map((item) => ({
+        productId: item.product_id,
+        productName: item.product_name,
+        quantity: Math.max(item.ordered - item.picked, 0),
+        serials: [],
+      })),
+      emptyState: "No items remain on the parent leg.",
+    };
+  }
+
+  return {
+    title: "Product table",
+    description: "All items on this order.",
+    rows: buildOrderProductRows(lines),
+    emptyState: "No items found on this order.",
   };
 };
 

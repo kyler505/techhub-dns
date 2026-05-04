@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "./ui/table";
 import { formatToCentralTime } from "../utils/timezone";
-import { getPartialOrderInfo } from "../utils/orderPartial";
+import { getOrderProductTableView, getPartialOrderInfo } from "../utils/orderPartial";
 import {
   AuditLog,
   OrderDetail as OrderDetailType,
@@ -47,12 +47,6 @@ function getShippingAddress(order: OrderDetailType): ShippingAddress | null {
   return typeof addr === "object" && addr !== null ? (addr as ShippingAddress) : null;
 }
 
-function getInflowLines(order: OrderDetailType): unknown[] {
-  if (!order.inflow_data || typeof order.inflow_data !== "object") return [];
-  const lines = (order.inflow_data as Record<string, unknown>).lines;
-  return Array.isArray(lines) ? lines : [];
-}
-
 interface OrderDetailProps {
   order: OrderDetailType;
   auditLogs: AuditLog[];
@@ -65,35 +59,6 @@ interface OrderDetailProps {
   generatingPicklist: boolean;
 }
 
-type OrderItemLine = {
-  productId?: string;
-  productName?: string;
-  description?: string;
-  product?: {
-    name?: string;
-  };
-  quantity?: {
-    standardQuantity?: number | string;
-    serialNumbers?: Array<string | number>;
-  } | number | string;
-};
-
-const getLineQuantity = (line: OrderItemLine): number => {
-  const rawQuantity =
-    typeof line.quantity === "object" && line.quantity !== null
-      ? line.quantity.standardQuantity
-      : line.quantity;
-
-  return Math.floor(Number(rawQuantity ?? 0));
-};
-
-const getLineSerials = (line: OrderItemLine): string[] => {
-  if (typeof line.quantity !== "object" || line.quantity === null) {
-    return [];
-  }
-
-  return (line.quantity.serialNumbers ?? []).map((serial) => String(serial));
-};
 export default function OrderDetail({
   order,
   auditLogs,
@@ -117,6 +82,7 @@ export default function OrderDetail({
   const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
 
   const partialOrderInfo = getPartialOrderInfo(order);
+  const productTableView = getOrderProductTableView(order);
   const isPartialLeg = partialOrderInfo.isPartialLeg;
   const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
   const assetTagRequired = order.asset_tag_required !== false;
@@ -551,19 +517,11 @@ export default function OrderDetail({
         </div>
       </section>
 
-      {getInflowLines(order).length > 0 && (
+      {order.inflow_data && (
         <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
           <div className="space-y-1">
-            <h3 className="text-lg font-semibold tracking-tight">
-              {isPartialLeg ? "Partial leg items" : partialOrderInfo.hasRemainder ? "Items on this leg" : "Order Items"}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {isPartialLeg
-                ? "These are the items carried by the partial leg only."
-                : partialOrderInfo.hasRemainder
-                  ? "These are the items currently on the parent leg."
-                  : "All items on the order."}
-            </p>
+            <h3 className="text-lg font-semibold tracking-tight">{productTableView.title}</h3>
+            <p className="text-sm text-muted-foreground">{productTableView.description}</p>
           </div>
           <div className="mt-4 rounded-lg border border-border">
             <Table>
@@ -576,72 +534,24 @@ export default function OrderDetail({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {getInflowLines(order).map((rawLine: unknown, index: number) => {
-                  const line = (rawLine ?? {}) as OrderItemLine;
-                  const serials = getLineSerials(line);
-
-                  return (
-                    <TableRow key={line.productId || index}>
-                      <TableCell className="text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {line.productName ||
-                          line.product?.name ||
-                          line.description ||
-                          line.productId ||
-                          "Unknown Product"}
-                      </TableCell>
+                {productTableView.rows.length > 0 ? (
+                  productTableView.rows.map((row: { productId: string; productName: string; quantity: number; serials: string[] }, index: number) => (
+                    <TableRow key={row.productId}>
+                      <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                      <TableCell className="font-medium">{row.productName}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {serials.length > 0 ? serials.join(", ") : "-"}
+                        {row.serials.length > 0 ? row.serials.join(", ") : "-"}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {getLineQuantity(line)}
-                      </TableCell>
+                      <TableCell className="text-right">{row.quantity}</TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
-      )}
-
-      {partialOrderInfo.hasRemainder && partialOrderInfo.missingItems.length > 0 && (
-        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold tracking-tight">Remainder items</h3>
-            <p className="text-sm text-muted-foreground">
-              Items not included on this leg yet.
-            </p>
-          </div>
-          <div className="mt-4 rounded-lg border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[60px]">#</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Picked</TableHead>
-                  <TableHead className="text-right">Ordered</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {partialOrderInfo.missingItems.map((item, index) => (
-                  <TableRow key={item.product_id}>
-                    <TableCell className="text-muted-foreground">
-                      {index + 1}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {item.product_name}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {item.picked}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.ordered}
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell className="text-muted-foreground" colSpan={4}>
+                      {productTableView.emptyState}
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </div>
