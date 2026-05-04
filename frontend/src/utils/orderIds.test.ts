@@ -18,4 +18,9 @@ describe("isValidOrderId", () => {
   it("accepts TH order numbers", () => {
     expect(isValidOrderId("TH3270")).toBe(true);
   });
+
+  it("accepts partial leg order numbers", () => {
+    expect(isValidOrderId("TH000140-P")).toBe(true);
+    expect(isValidOrderId("TH000140-R")).toBe(true);
+  });
 });
