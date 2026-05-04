@@ -421,6 +421,11 @@ class OrderService:
         is_first_picklist = order.picklist_generated_at is None
 
         filename = f"{order.inflow_order_id or order.id}.pdf"
+        document_inflow_data = order.inflow_data
+        if getattr(order, "remainder_order_id", None) and not getattr(order, "parent_order_id", None):
+            remainder_view = OrderSplittingService(self.db).build_parent_remainder_document_view(order)
+            if remainder_view is not None:
+                document_inflow_data = remainder_view
 
         # Generate picklist to a temporary file, upload immediately, store SharePoint URL
         import tempfile
@@ -434,7 +439,7 @@ class OrderService:
             # Generate the actual picklist PDF from inFlow data using PicklistService
             from app.services.picklist_service import PicklistService
             picklist_svc = PicklistService()
-            picklist_svc.generate_picklist_pdf(order.inflow_data, temp_path)
+            picklist_svc.generate_picklist_pdf(document_inflow_data, temp_path)
 
             # Save picklist to local storage
             local_dir = self._local_doc_path("picklists", filename).parent
@@ -1960,13 +1965,19 @@ class OrderService:
             order_details_data = inflow_service.build_remaining_order_view(
                 order.inflow_data
             )
+            remainder_mode = bool(
+                getattr(order, "remainder_order_id", None) and not getattr(order, "parent_order_id", None)
+            )
+            force_regenerate_pdf = remainder_mode
+            if remainder_mode:
+                remainder_view = OrderSplittingService(self.db).build_parent_remainder_document_view(order)
+                if remainder_view is not None:
+                    order_details_data = remainder_view
             has_partial_remaining = bool(order_details_data.get("lines")) and (
                 order_details_data.get("lines") != order.inflow_data.get("lines", [])
             )
-            pdf_source_data = (
-                order_details_data if has_partial_remaining else order.inflow_data
-            )
-            force_regenerate_pdf = has_partial_remaining
+            force_regenerate_pdf = force_regenerate_pdf or has_partial_remaining
+            pdf_source_data = order_details_data if (has_partial_remaining or force_regenerate_pdf) else order.inflow_data
 
             pdf_bytes = None
             order_details_path = None

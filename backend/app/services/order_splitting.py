@@ -4,8 +4,8 @@ Order Splitting Service for handling partial pick remainder orders.
 When a partial pick order is delivered, this service creates a local remainder
 order to track the unpicked items, linking back to the same InFlow sales order.
 """
-import uuid
 import logging
+import uuid
 from copy import deepcopy
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
@@ -167,6 +167,51 @@ class OrderSplittingService:
         order_view["subtotal"] = subtotal
         order_view["total"] = subtotal
         return order_view
+
+    def _get_partial_remainder_source(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build a synthetic pick-status source for the parent remainder leg."""
+        if not original_order.inflow_data:
+            return None
+        if original_order.parent_order_id or not original_order.remainder_order_id:
+            return None
+
+        child_order = (
+            self.db.query(Order)
+            .filter(Order.id == original_order.remainder_order_id)
+            .first()
+        )
+        if not child_order or not child_order.inflow_data:
+            return None
+
+        source = deepcopy(original_order.inflow_data)
+        child_pick_lines = child_order.inflow_data.get("pickLines") or child_order.inflow_data.get("lines") or []
+        source["pickLines"] = deepcopy(child_pick_lines)
+        return source
+
+    def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the remainder-only document snapshot for a parent partial leg."""
+        remainder_source = self._get_partial_remainder_source(original_order)
+        if not remainder_source:
+            return None
+
+        remaining_lines, _ = self.get_remainder_items(remainder_source)
+        document_view = deepcopy(original_order.inflow_data or {})
+        document_view["lines"] = remaining_lines
+        document_view["pickLines"] = deepcopy(remaining_lines)
+        document_view["packLines"] = []
+        document_view["shipLines"] = []
+        document_view["subtotal"] = sum(
+            (float(line.get("unitPrice") or 0) if isinstance(line, dict) else 0.0)
+            * self._parse_standard_quantity(line.get("quantity") if isinstance(line, dict) else 0)
+            for line in remaining_lines
+            if isinstance(line, dict)
+        )
+        document_view["total"] = document_view["subtotal"]
+        return document_view
+
+    def build_parent_remainder_pick_status_source(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the pick-status snapshot for a parent partial leg."""
+        return self._get_partial_remainder_source(original_order)
 
     def should_create_remainder(self, order: Order) -> bool:
         """

@@ -10,6 +10,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.services.order_service import OrderService
+from app.services.order_splitting import OrderSplittingService
 from app.services.inflow_service import InflowService
 from app.utils.broadcast_dedup import broadcast_dedup
 
@@ -278,7 +279,12 @@ def get_orders():
             # Compute pick_status from inflow_data if available
             if include_pick_status and o.inflow_data:
                 try:
-                    pick_status_data = inflow_service.get_pick_status(o.inflow_data)
+                    pick_status_source = o.inflow_data
+                    if o.remainder_order_id and not o.parent_order_id:
+                        remainder_pick_source = OrderSplittingService(db).build_parent_remainder_pick_status_source(o)
+                        if remainder_pick_source is not None:
+                            pick_status_source = remainder_pick_source
+                    pick_status_data = inflow_service.get_pick_status(pick_status_source)
                 except Exception as exc:
                     logger.warning(
                         "Failed to compute pick_status for order %s: %s",
@@ -388,14 +394,25 @@ def get_order(order_id):
         response_data = _order_detail_response_json(order, db)
         if order.inflow_data:
             inflow_service = InflowService()
+            order_view = order.inflow_data
+            pick_status_source = order.inflow_data
+            if order.remainder_order_id and not order.parent_order_id:
+                splitting_service = OrderSplittingService(db)
+                remainder_view = splitting_service.build_parent_remainder_document_view(order)
+                remainder_pick_source = splitting_service.build_parent_remainder_pick_status_source(order)
+                if remainder_view is not None:
+                    order_view = remainder_view
+                if remainder_pick_source is not None:
+                    pick_status_source = remainder_pick_source
+            response_data["inflow_data"] = order_view
             response_data["asset_tag_required"] = inflow_service.requires_asset_tags(
-                order.inflow_data
+                order_view
             )
             response_data["asset_tag_serials"] = inflow_service.get_asset_tag_serials(
-                order.inflow_data
+                order_view
             )
             try:
-                response_data["pick_status"] = inflow_service.get_pick_status(order.inflow_data)
+                response_data["pick_status"] = inflow_service.get_pick_status(pick_status_source)
             except Exception as exc:
                 logger.warning(
                     "Failed to compute pick_status for order detail %s: %s",

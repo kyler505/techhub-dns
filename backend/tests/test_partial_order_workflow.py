@@ -633,6 +633,160 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
     engine.dispose()
 
 
+def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
+    """Parent remainder docs should print only the remaining lines, not the original sales order."""
+
+    session, engine = _make_sqlite_session()
+    parent_order = Order(
+        id="order-parent-4",
+        inflow_order_id="TH3002",
+        inflow_sales_order_id="sales-order-3002",
+        recipient_name="User Four",
+        recipient_contact="user.four@example.com",
+        delivery_location="Building 404",
+        po_number="PO-3002",
+        status=OrderStatus.PICKED.value,
+        tagged_by="tech@example.com",
+        inflow_data={
+            "orderNumber": "TH3002",
+            "contactName": "User Four",
+            "email": "user.four@example.com",
+            "shippingAddress": {"address1": "404 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "2"},
+                },
+                {
+                    "productId": "prod-2",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+        },
+    )
+    child_order = Order(
+        id="order-child-4",
+        inflow_order_id="TH3002-P",
+        inflow_sales_order_id="sales-order-3002",
+        recipient_name="User Four",
+        recipient_contact="user.four@example.com",
+        delivery_location="Building 404",
+        po_number="PO-3002",
+        status=OrderStatus.PICKED.value,
+        parent_order_id=parent_order.id,
+        inflow_data={
+            "orderNumber": "TH3002-P",
+            "contactName": "User Four",
+            "email": "user.four@example.com",
+            "shippingAddress": {"address1": "404 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+    session.add(child_order)
+    session.commit()
+    parent_order.has_remainder = "Y"
+    parent_order.remainder_order_id = child_order.id
+    session.commit()
+
+    from app.services.order_service import OrderService
+
+    service = OrderService(session)
+    captured_picklist_payloads: list[dict[str, Any]] = []
+    captured_order_details_payloads: list[dict[str, Any]] = []
+
+    class FakeSharePointService:
+        is_enabled = True
+
+        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+        def upload_file(self, pdf_content, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+    def fake_generate_picklist_pdf(self, inflow_data, output_path):
+        captured_picklist_payloads.append(inflow_data)
+        Path(output_path).write_bytes(b"%PDF-1.4 fake picklist\n")
+
+    def fake_generate_order_details_pdf(inflow_data):
+        captured_order_details_payloads.append(inflow_data)
+        return b"%PDF-1.4 fake order details\n"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
+
+        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
+            with patch(
+                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
+                new=fake_generate_picklist_pdf,
+            ):
+                fake_pdf_module = SimpleNamespace(
+                    pdf_service=SimpleNamespace(generate_order_details_pdf=fake_generate_order_details_pdf)
+                )
+                fake_email_module = SimpleNamespace(
+                    email_service=SimpleNamespace(
+                        is_configured=lambda: True,
+                        send_order_details_email=lambda **kwargs: True,
+                    )
+                )
+                with patch.dict(
+                    sys.modules,
+                    {
+                        "app.services.pdf_service": fake_pdf_module,
+                        "app.services.email_service": fake_email_module,
+                    },
+                ):
+                    with patch(
+                        "app.services.order_service.SystemSettingService.is_setting_enabled",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "app.services.order_service.SystemSettingService.get_setting",
+                            return_value="false",
+                        ):
+                            result = service.generate_picklist(
+                                parent_order.id,
+                                generated_by="tech@example.com",
+                                generated_by_display="tech@example.com",
+                                create_partial_leg=False,
+                            )
+
+    assert result.id == parent_order.id
+    assert captured_picklist_payloads[0]["lines"] == [
+        {
+            "productId": "prod-1",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+        {
+            "productId": "prod-2",
+            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
+    assert captured_picklist_payloads[0]["pickLines"] == captured_picklist_payloads[0]["lines"]
+    assert captured_order_details_payloads[0]["lines"] == captured_picklist_payloads[0]["lines"]
+
+    session.close()
+    engine.dispose()
+
+
 def test_generate_picklist_raises_when_sharepoint_upload_fails():
     """Picklist generation should fail if SharePoint upload is unavailable."""
 
