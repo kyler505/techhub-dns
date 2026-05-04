@@ -254,6 +254,74 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     print("[PASS] Partial order details regenerate from remaining items")
 
 
+def test_partial_order_details_falls_back_to_local_copy_when_sharepoint_fails():
+    """Order details generation should not fail hard if SharePoint upload is unavailable."""
+
+    class FailingSharePointService:
+        is_enabled = True
+
+        def upload_file(self, content: bytes, subfolder: str, filename: str) -> str:
+            raise RuntimeError("sharepoint unavailable")
+
+    fake_sp_service = FailingSharePointService()
+    generated_payloads: list[dict[str, Any]] = []
+
+    order = SimpleNamespace(
+        id="order-4b",
+        inflow_order_id="TH1004-P",
+        recipient_contact="user@example.com",
+        recipient_name="User",
+        inflow_sales_order_id="sales-order-1004",
+        inflow_data={
+            "orderNumber": "TH1004-P",
+            "lines": [],
+            "pickLines": [],
+            "packLines": [],
+            "orderRemarks": "",
+        },
+        order_details_path=None,
+        order_details_generated_at=None,
+    )
+
+    db = SimpleNamespace(commit=lambda: None, refresh=lambda _order: None)
+    from app.services.order_service import OrderService
+
+    service = OrderService(db=cast(Any, db))
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._storage_path = lambda *parts: Path(tmpdir).joinpath(*parts)  # type: ignore[method-assign]
+
+        with patch(
+            "app.services.sharepoint_service.get_sharepoint_service",
+            return_value=fake_sp_service,
+        ):
+            fake_pdf_module = types.ModuleType("app.services.pdf_service")
+            fake_pdf_module.pdf_service = SimpleNamespace(
+                generate_order_details_pdf=lambda payload: (
+                    generated_payloads.append(payload) or b"fresh-pdf"
+                )
+            )
+            with patch.dict(
+                sys.modules,
+                {"app.services.pdf_service": fake_pdf_module},
+            ):
+                with patch(
+                    "app.services.email_service.email_service.is_configured",
+                    return_value=False,
+                ):
+                    success = service._send_order_details_email(order)
+                    local_order_details_path = order.order_details_path
+                    assert local_order_details_path is not None
+                    assert Path(local_order_details_path).exists()
+
+    assert success is False
+    assert len(generated_payloads) == 1
+    assert order.order_details_path is not None
+    assert order.order_details_path.endswith("TH1004-P.pdf")
+    assert order.order_details_generated_at is not None
+    print("[PASS] Partial order details fall back to local copy when SharePoint fails")
+
+
 def _make_sqlite_session():
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
