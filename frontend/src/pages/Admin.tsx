@@ -11,7 +11,6 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { extractApiErrorMessage } from "../utils/apiErrors";
-import { getUserDisplayName } from "../utils/userDisplay";
 
 const AdminsTab = lazy(() => import("../components/admin/AdminsTab"));
 
@@ -40,54 +39,14 @@ const adminQueryKeys = {
 };
 
 const RULES: RuleMeta[] = [
-    {
-        key: "document_signing_enabled",
-        title: "Document signing",
-        description: "Controls whether the signing workflow is available for completed orders.",
-        kind: "boolean",
-    },
-    {
-        key: "email_notifications_enabled",
-        title: "Email notifications",
-        description: "Controls outbound email notifications for durable workflow events.",
-        kind: "boolean",
-    },
-    {
-        key: "teams_recipient_notifications_enabled",
-        title: "Teams recipient notifications",
-        description: "Controls recipient-specific Teams notifications in the durable notification pipeline.",
-        kind: "boolean",
-    },
-    {
-        key: "picklist_auto_print_enabled",
-        title: "Picklist auto-print",
-        description: "Controls whether generated picklists are pushed into the durable print queue automatically.",
-        kind: "boolean",
-    },
-    {
-        key: "require_asset_tags_before_picklist",
-        title: "Require asset tags before picklist",
-        description: "Keeps picklist generation gated until the workflow has been tagged.",
-        kind: "boolean",
-    },
-    {
-        key: "require_same_user_for_tagging_and_picklist",
-        title: "Same user for tagging + picklist",
-        description: "Requires the same operator to perform tagging and picklist generation.",
-        kind: "boolean",
-    },
-    {
-        key: "require_partial_picklist_confirmation",
-        title: "Confirm partial picklists",
-        description: "Requires a manual confirmation before creating a partial-leg picklist.",
-        kind: "boolean",
-    },
-    {
-        key: "picklist_print_claim_timeout_seconds",
-        title: "Picklist claim timeout",
-        description: "Seconds a claimed picklist print job remains reserved before it can be reclaimed.",
-        kind: "integer",
-    },
+    { key: "document_signing_enabled", title: "Document signing", description: "Require signing to complete delivery.", kind: "boolean" },
+    { key: "email_notifications_enabled", title: "Email notifications", description: "Send email on workflow events.", kind: "boolean" },
+    { key: "teams_recipient_notifications_enabled", title: "Teams notifications", description: "Send Teams messages to recipients.", kind: "boolean" },
+    { key: "picklist_auto_print_enabled", title: "Picklist auto-print", description: "Push generated picklists to the print queue.", kind: "boolean" },
+    { key: "require_asset_tags_before_picklist", title: "Asset tags before picklist", description: "Gate picklist generation on completed tagging.", kind: "boolean" },
+    { key: "require_same_user_for_tagging_and_picklist", title: "Same user tag + picklist", description: "Require the same operator for both steps.", kind: "boolean" },
+    { key: "require_partial_picklist_confirmation", title: "Confirm partial picklists", description: "Prompt before creating a partial-leg picklist.", kind: "boolean" },
+    { key: "picklist_print_claim_timeout_seconds", title: "Picklist claim timeout", description: "Seconds before a claimed print job can be reclaimed.", kind: "integer" },
 ];
 
 const parseBoolean = (value: string | undefined | null) => (value || "false").toLowerCase() === "true";
@@ -105,7 +64,6 @@ export default function Admin() {
     const [timeoutDraft, setTimeoutDraft] = useState("");
     const [savingTimeout, setSavingTimeout] = useState(false);
 
-    const currentUserLabel = getUserDisplayName(user, "you");
     const adminQueriesEnabled = isAdmin && !authLoading;
 
     const settingsQuery = useQuery({
@@ -157,13 +115,11 @@ export default function Admin() {
             toast.error("Enter a timeout in seconds");
             return;
         }
-
         const timeout = Number(normalized);
         if (!Number.isFinite(timeout) || timeout <= 0 || !Number.isInteger(timeout)) {
             toast.error("Timeout must be a positive whole number");
             return;
         }
-
         try {
             setSavingTimeout(true);
             await ruleMutation.mutateAsync({ key: "picklist_print_claim_timeout_seconds", value: String(timeout) });
@@ -174,67 +130,27 @@ export default function Admin() {
 
     if (authLoading) {
         return (
-            <div className="container mx-auto py-6 space-y-4">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin Tools</h1>
-                    <p className="text-sm text-muted-foreground">Loading durable workflow rules.</p>
+            <div className="container mx-auto py-6">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
                 </div>
-                <Card>
-                    <CardContent className="p-6">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading...
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
         );
     }
 
     return (
         <div className="container mx-auto py-6 space-y-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin Tools</h1>
-                    <p className="text-sm text-muted-foreground">Durable workflow rules live here. Operator recovery and smoke actions live on /settings.</p>
-                </div>
-                {currentUserLabel ? <span className="text-xs text-muted-foreground">Signed in as {currentUserLabel}</span> : null}
+            <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight">Admin Tools</h1>
+                <p className="text-sm text-muted-foreground">Durable workflow defaults. Operator actions live on /settings.</p>
             </div>
-
-            <Card className="border-border/70 bg-card/80">
-                <CardHeader>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="text-base">Workflow policy surface</CardTitle>
-                        <Badge variant="secondary">Durable</Badge>
-                    </div>
-                    <CardDescription>
-                        Use this page to define how the system behaves by default. If the operator needs a one-off action, use /settings.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Signing & picklists</div>
-                        <p className="mt-2 text-sm text-foreground">Defaults for signing availability, asset-tag gating, partial-order confirmation, and queue policy.</p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Notifications</div>
-                        <p className="mt-2 text-sm text-foreground">Persistent outbound notification policy for email and Teams recipients.</p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Identity & rules</div>
-                        <p className="mt-2 text-sm text-foreground">Canonical workflow rules, allowlists, and queue reservation timing stay documented here.</p>
-                    </div>
-                </CardContent>
-            </Card>
 
             <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <Card className="border-border/70 bg-card/80 shadow-none">
                     <CardHeader>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <CardTitle className="text-base">Workflow rules</CardTitle>
-                            <Badge variant="secondary">Policy</Badge>
-                        </div>
-                        <CardDescription>Toggle the durable defaults that shape normal order flow.</CardDescription>
+                        <CardTitle className="text-base">Workflow rules</CardTitle>
+                        <CardDescription>Toggle defaults that shape normal order flow.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {ruleCards.map((rule) => {
@@ -249,7 +165,7 @@ export default function Admin() {
                                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                             <div>
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <h3 className="text-sm font-semibold text-foreground">{rule.title}</h3>
+                                                    <h3 className="text-sm font-semibold">{rule.title}</h3>
                                                     <Badge variant="secondary">{value}</Badge>
                                                 </div>
                                                 <p className="mt-1 text-sm text-muted-foreground">{rule.description}</p>
@@ -271,7 +187,6 @@ export default function Admin() {
                                                 variant="outline"
                                                 onClick={() => void handleSaveTimeout()}
                                                 disabled={isBusy || savingTimeout}
-                                                className="btn-lift"
                                             >
                                                 {isBusy || savingTimeout ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                                 Save timeout
@@ -286,7 +201,7 @@ export default function Admin() {
                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="text-sm font-semibold text-foreground">{rule.title}</h3>
+                                                <h3 className="text-sm font-semibold">{rule.title}</h3>
                                                 <Badge variant={enabled ? "success" : "secondary"}>{enabled ? "Enabled" : "Disabled"}</Badge>
                                             </div>
                                             <p className="mt-1 text-sm text-muted-foreground">{rule.description}</p>
@@ -297,7 +212,6 @@ export default function Admin() {
                                             variant={enabled ? "outline" : "default"}
                                             disabled={isBusy}
                                             onClick={() => void handleToggle(rule.key, current?.value ?? "false")}
-                                            className="btn-lift"
                                         >
                                             {isBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                             {enabled ? "Disable" : "Enable"}
@@ -311,21 +225,18 @@ export default function Admin() {
 
                 <Card className="border-border/70 bg-card/80 shadow-none">
                     <CardHeader>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <CardTitle className="text-base">Admin allowlist</CardTitle>
-                            <Badge variant="secondary">Policy</Badge>
-                        </div>
-                        <CardDescription>Manage which users can access admin capabilities.</CardDescription>
+                        <CardTitle className="text-base">Admin allowlist</CardTitle>
+                        <CardDescription>Users with admin access.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <SectionErrorBoundary title="Admin allowlist failed" message="Try reloading the admin allowlist panel.">
+                        <SectionErrorBoundary title="Admin allowlist failed" message="Try reloading the panel.">
                             <Suspense
                                 fallback={
                                     <Card>
                                         <CardContent className="p-6">
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                                Loading admin allowlist...
+                                                Loading...
                                             </div>
                                         </CardContent>
                                     </Card>
