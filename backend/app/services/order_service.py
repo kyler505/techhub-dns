@@ -446,21 +446,26 @@ class OrderService:
             shutil.copy2(temp_path, local_path)
             logger.info(f"Picklist saved locally: {local_path}")
 
-            # Also upload to SharePoint immediately (synchronous)
+            # Also upload to SharePoint immediately when available, but keep the
+            # locally stored PDF as a fallback so dev / degraded environments still work.
+            sp_url = None
             try:
                 from app.services.sharepoint_service import get_sharepoint_service
+
                 sp_service = get_sharepoint_service()
                 if not sp_service.is_enabled:
                     raise RuntimeError("SharePoint storage is not enabled")
                 sp_url = sp_service.upload_pdf(temp_path, "picklists", filename)
                 logger.info(f"Picklist uploaded to SharePoint: {sp_url}")
             except Exception as e:
-                logger.error(f"SharePoint upload failed for picklist: {e}")
-                raise  # Fail fast — SharePoint is source of truth
+                logger.warning(
+                    "SharePoint upload failed for picklist; using local copy instead: %s",
+                    e,
+                )
 
             order.picklist_generated_at = datetime.utcnow()
             order.picklist_generated_by = generated_by_display or generated_by
-            order.picklist_path = sp_url  # Store SharePoint URL (source of truth)
+            order.picklist_path = sp_url or str(local_path)
             order.updated_at = datetime.utcnow()
         finally:
             # Clean up temporary file

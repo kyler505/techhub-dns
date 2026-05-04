@@ -348,6 +348,92 @@ def test_partial_order_remainder_creation_links_parent_and_child():
         engine.dispose()
 
 
+def test_generate_picklist_falls_back_to_local_when_sharepoint_upload_fails():
+    """Picklist generation should still succeed if SharePoint upload is unavailable."""
+
+    session, engine = _make_sqlite_session()
+    order = Order(
+        id="order-picklist-1",
+        inflow_order_id="TH000140",
+        inflow_sales_order_id="sales-order-140",
+        recipient_name="User One",
+        recipient_contact="user.one@example.com",
+        delivery_location="Building 101",
+        po_number="PO-0140",
+        status=OrderStatus.PICKED.value,
+        tagged_by="tech@example.com",
+        inflow_data={
+            "orderNumber": "TH000140",
+            "contactName": "User One",
+            "email": "user.one@example.com",
+            "shippingAddress": {"address1": "123 Example St"},
+            "customFields": {"custom4": "UIN-1"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(order)
+    session.commit()
+
+    from app.services.order_service import OrderService
+
+    service = OrderService(session)
+
+    class FakeSharePointService:
+        is_enabled = True
+
+        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
+            raise RuntimeError("sharepoint offline")
+
+    def fake_generate_picklist_pdf(self, inflow_data, output_path):
+        Path(output_path).write_bytes(b"%PDF-1.4 fake picklist\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
+
+        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
+            with patch(
+                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
+                new=fake_generate_picklist_pdf,
+            ):
+                with patch(
+                    "app.services.order_service.SystemSettingService.is_setting_enabled",
+                    return_value=False,
+                ):
+                    with patch(
+                        "app.services.order_service.SystemSettingService.get_setting",
+                        return_value="false",
+                    ):
+                        with patch.object(service, "_send_order_details_email", return_value=True):
+                            result = service.generate_picklist(
+                                order.id,
+                                generated_by="tech@example.com",
+                                generated_by_display="tech@example.com",
+                            )
+
+        assert result.picklist_generated_at is not None
+        assert result.picklist_path is not None
+        assert not result.picklist_path.startswith("http")
+        assert Path(result.picklist_path).exists()
+        assert Path(result.picklist_path).read_bytes().startswith(b"%PDF-1.4 fake picklist")
+        assert session.query(Order).filter(Order.id == order.id).first().picklist_path == result.picklist_path
+
+    session.close()
+    engine.dispose()
+
+
 def test_order_details_generated_pdf_is_uploaded_to_sharepoint():
     """Generated order-details PDFs should be uploaded and store the SharePoint URL."""
 
