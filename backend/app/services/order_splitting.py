@@ -259,8 +259,7 @@ class OrderSplittingService:
 
         audit_service = AuditService(self.db)
         audit_service.log_order_action(
-            entity_type="order",
-            entity_id=str(original_order.id),
+            order_id=str(original_order.id),
             action="partial_picklist_child_created",
             user_id=user_id,
             description=f"Created partial picklist child {leg_order_id}",
@@ -271,8 +270,7 @@ class OrderSplittingService:
             },
         )
         audit_service.log_order_action(
-            entity_type="order",
-            entity_id=str(child_order.id),
+            order_id=str(child_order.id),
             action="created_as_partial_picklist_leg",
             user_id=user_id,
             description=f"Created as partial picklist leg for order {original_order.inflow_order_id}",
