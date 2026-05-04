@@ -446,8 +446,7 @@ class OrderService:
             shutil.copy2(temp_path, local_path)
             logger.info(f"Picklist saved locally: {local_path}")
 
-            # Also upload to SharePoint immediately when available, but keep the
-            # locally stored PDF as a fallback so dev / degraded environments still work.
+            # Upload to SharePoint immediately; this is required.
             sp_url = None
             try:
                 from app.services.sharepoint_service import get_sharepoint_service
@@ -458,10 +457,8 @@ class OrderService:
                 sp_url = sp_service.upload_pdf(temp_path, "picklists", filename)
                 logger.info(f"Picklist uploaded to SharePoint: {sp_url}")
             except Exception as e:
-                logger.warning(
-                    "SharePoint upload failed for picklist; using local copy instead: %s",
-                    e,
-                )
+                logger.error("SharePoint upload failed for picklist: %s", e)
+                raise
 
             order.picklist_generated_at = datetime.utcnow()
             order.picklist_generated_by = generated_by_display or generated_by
@@ -2026,10 +2023,8 @@ class OrderService:
                 logger.info(f"Order Details PDF uploaded to SharePoint: {uploaded_url}")
                 order_details_path = uploaded_url
             except Exception as e:
-                logger.warning(
-                    "SharePoint upload failed for Order Details; using local copy instead: %s",
-                    e,
-                )
+                logger.error("SharePoint upload failed for Order Details: %s", e)
+                raise
 
             # Update order with Order Details path
             order.order_details_path = order_details_path
@@ -2091,11 +2086,12 @@ class OrderService:
                 return False
 
         except Exception as e:
-            # Log error but don't fail the picklist generation
+            # Log error and re-raise so required SharePoint/upload/email failures
+            # surface to the caller instead of being masked as success.
             logger.error(
                 f"Error generating/sending Order Details for order {order.inflow_order_id}: {e}"
             )
-            return False
+            raise
 
     def transition_shipping_workflow(
         self,

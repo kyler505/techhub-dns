@@ -220,7 +220,7 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     service = OrderService(db=cast(Any, db))
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        service._storage_path = lambda *parts: Path(tmpdir).joinpath(*parts)  # type: ignore[method-assign]
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
 
         with patch(
             "app.services.sharepoint_service.get_sharepoint_service",
@@ -254,8 +254,8 @@ def test_partial_order_details_regenerate_instead_of_reusing_sharepoint_pdf():
     print("[PASS] Partial order details regenerate from remaining items")
 
 
-def test_partial_order_details_falls_back_to_local_copy_when_sharepoint_fails():
-    """Order details generation should not fail hard if SharePoint upload is unavailable."""
+def test_partial_order_details_raises_when_sharepoint_fails():
+    """Order details generation should fail if required SharePoint upload is unavailable."""
 
     class FailingSharePointService:
         is_enabled = True
@@ -289,7 +289,7 @@ def test_partial_order_details_falls_back_to_local_copy_when_sharepoint_fails():
     service = OrderService(db=cast(Any, db))
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        service._storage_path = lambda *parts: Path(tmpdir).joinpath(*parts)  # type: ignore[method-assign]
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
 
         with patch(
             "app.services.sharepoint_service.get_sharepoint_service",
@@ -309,17 +309,21 @@ def test_partial_order_details_falls_back_to_local_copy_when_sharepoint_fails():
                     "app.services.email_service.email_service.is_configured",
                     return_value=False,
                 ):
-                    success = service._send_order_details_email(order)
-                    local_order_details_path = order.order_details_path
-                    assert local_order_details_path is not None
-                    assert Path(local_order_details_path).exists()
+                    try:
+                        service._send_order_details_email(order)
+                        raised = False
+                    except RuntimeError as exc:
+                        raised = True
+                        assert "sharepoint unavailable" in str(exc)
 
-    assert success is False
+        local_order_details_path = Path(tmpdir) / "orders" / "TH1004-P.pdf"
+        assert local_order_details_path.exists()
+
+    assert raised is True
     assert len(generated_payloads) == 1
-    assert order.order_details_path is not None
-    assert order.order_details_path.endswith("TH1004-P.pdf")
-    assert order.order_details_generated_at is not None
-    print("[PASS] Partial order details fall back to local copy when SharePoint fails")
+    assert order.order_details_path is None
+    assert order.order_details_generated_at is None
+    print("[PASS] Partial order details fail when SharePoint upload fails")
 
 
 def _make_sqlite_session():
@@ -416,8 +420,8 @@ def test_partial_order_remainder_creation_links_parent_and_child():
         engine.dispose()
 
 
-def test_generate_picklist_falls_back_to_local_when_sharepoint_upload_fails():
-    """Picklist generation should still succeed if SharePoint upload is unavailable."""
+def test_generate_picklist_raises_when_sharepoint_upload_fails():
+    """Picklist generation should fail if SharePoint upload is unavailable."""
 
     session, engine = _make_sqlite_session()
     order = Order(
@@ -485,19 +489,22 @@ def test_generate_picklist_falls_back_to_local_when_sharepoint_upload_fails():
                         return_value="false",
                     ):
                         with patch.object(service, "_send_order_details_email", return_value=True):
-                            result = service.generate_picklist(
-                                order.id,
-                                generated_by="tech@example.com",
-                                generated_by_display="tech@example.com",
-                            )
+                            try:
+                                service.generate_picklist(
+                                    order.id,
+                                    generated_by="tech@example.com",
+                                    generated_by_display="tech@example.com",
+                                )
+                                raised = False
+                            except RuntimeError as exc:
+                                raised = True
+                                assert "sharepoint offline" in str(exc)
 
-        assert result.picklist_generated_at is not None
-        assert result.picklist_path is not None
-        assert not result.picklist_path.startswith("http")
-        assert Path(result.picklist_path).exists()
-        assert Path(result.picklist_path).read_bytes().startswith(b"%PDF-1.4 fake picklist")
-        assert session.query(Order).filter(Order.id == order.id).first().picklist_path == result.picklist_path
+        local_path = Path(tmpdir) / "picklists" / "TH000140.pdf"
+        assert local_path.exists()
+        assert local_path.read_bytes().startswith(b"%PDF-1.4 fake picklist")
 
+    assert raised is True
     session.close()
     engine.dispose()
 
