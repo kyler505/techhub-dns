@@ -399,6 +399,22 @@ def test_partial_picklist_leg_creation_links_parent_and_child():
         assert child_order.parent_order_id == original_order.id
         assert original_order.has_remainder == "Y"
         assert original_order.remainder_order_id == child_order.id
+        assert child_order.inflow_data["lines"] == [
+            {
+                "productId": "prod-1",
+                "description": "Laptop",
+                "quantity": {"standardQuantity": "1.0"},
+            }
+        ]
+        assert child_order.inflow_data["pickLines"] == [
+            {
+                "productId": "prod-1",
+                "description": "Laptop",
+                "quantity": {"standardQuantity": "1.0"},
+            }
+        ]
+        assert child_order.inflow_data.get("packLines") == []
+        assert child_order.inflow_data.get("shipLines") == []
         assert session.query(Order).filter(Order.inflow_order_id == "TH2002-P").count() == 1
     finally:
         session.close()

@@ -73,12 +73,6 @@ describe("getOrderProductTableView", () => {
         productId: "B",
         productName: "Bolt",
         quantity: 1,
-        serials: ["S1"],
-      },
-      {
-        productId: "C",
-        productName: "Nut",
-        quantity: 2,
         serials: [],
       },
     ]);

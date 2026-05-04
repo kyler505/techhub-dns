@@ -234,10 +234,13 @@ export const getOrderProductTableView = (order: PartialOrderSource): OrderProduc
   const lines = Array.isArray(inflowData.lines) ? inflowData.lines : [];
 
   if (partialInfo.isPartialLeg) {
+    const pickLines = Array.isArray(inflowData.pickLines) ? inflowData.pickLines : [];
+    const childRows = pickLines.length > 0 ? buildOrderProductRows(pickLines) : buildOrderProductRows(lines);
+
     return {
       title: "Child leg items",
       description: "Items included in this generated child leg only.",
-      rows: buildOrderProductRows(lines),
+      rows: childRows,
       emptyState: "No items found on this child leg.",
     };
   }
