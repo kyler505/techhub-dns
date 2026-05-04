@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { Order, OrderStatus } from "../types/order";
 import StatusBadge from "./StatusBadge";
+import { Badge } from "./ui/badge";
 import { formatToCentralTime } from "../utils/timezone";
 import { formatDeliveryLocation } from "../utils/location";
+import { getPartialOrderInfo } from "../utils/orderPartial";
 import { ArrowUpDown, PackageSearch } from "lucide-react";
 import {
     Table,
@@ -113,6 +115,13 @@ export default function OrderTable({
     const navigateToOrder = (orderId: string) => onViewDetail(orderId);
 
     const getOrderNumber = (order: Order) => order.inflow_order_id || order.id;
+    const getOrderLegLabel = (order: Order) => {
+        const partialInfo = getPartialOrderInfo(order);
+        if (partialInfo.isPartialLeg) return "Partial leg";
+        if (partialInfo.hasRemainder) return "Parent leg";
+        if (partialInfo.isPartial) return "Partial order";
+        return null;
+    };
 
     if (orders.length === 0) {
         if (!showEmptyState) {
@@ -133,12 +142,20 @@ export default function OrderTable({
                 {sortedOrders.map((order, index) => {
                     const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
                     const isExpanded = expandedOrderId === orderId;
+                    const legLabel = getOrderLegLabel(order);
                     return (
-                        <button
+                        <div
                             key={orderId}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => setExpandedOrderId((current) => (current === orderId ? null : orderId))}
-                            className="touch-manipulation block w-full p-4 text-left hover:bg-muted/30"
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setExpandedOrderId((current) => (current === orderId ? null : orderId));
+                                }
+                            }}
+                            className="touch-manipulation block w-full p-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
@@ -146,6 +163,11 @@ export default function OrderTable({
                                         <span className="truncate text-sm font-semibold text-foreground">
                                             {order.inflow_order_id || order.id}
                                         </span>
+                                        {legLabel ? (
+                                          <Badge variant={legLabel === "Parent leg" ? "warning" : "secondary"} className="text-[10px] uppercase tracking-wide">
+                                            {legLabel}
+                                          </Badge>
+                                        ) : null}
                                     </div>
                                     <p className="break-words text-sm text-muted-foreground">
                                         {order.recipient_name || "N/A"}
@@ -165,13 +187,22 @@ export default function OrderTable({
                                     <p className="mt-1 whitespace-nowrap text-foreground">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</p>
                                 </div>
                                 {isExpanded && (
-                                    <div className="col-span-2">
-                                        <p className="uppercase tracking-wide">Open</p>
-                                        <p className="mt-1 text-foreground">Swipe or tap to collapse.</p>
+                                    <div className="col-span-2 mt-1 flex items-center justify-between gap-3">
+                                        <p className="text-foreground">Tap to collapse or open the order detail page.</p>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                navigateToOrder(getOrderNumber(order));
+                                            }}
+                                        >
+                                            Open details
+                                        </Button>
                                     </div>
                                 )}
                             </div>
-                        </button>
+                        </div>
                     );
                 })}
             </div>
@@ -222,17 +253,29 @@ export default function OrderTable({
                         {sortedOrders.map((order, index) => (
                             <TableRow key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`} className="hover:bg-muted/30 transition-colors">
                                 <TableCell className="min-w-0 break-words">
-                                    <Button
-                                        variant="link"
-                                        disabled={loading}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigateToOrder(getOrderNumber(order));
-                                        }}
-                                        className={`h-auto min-h-0 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
-                                    >
-                                        {order.inflow_order_id}
-                                    </Button>
+                                    <div className="space-y-1">
+                                        <Button
+                                            variant="link"
+                                            disabled={loading}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigateToOrder(getOrderNumber(order));
+                                            }}
+                                            className={`h-auto min-h-0 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
+                                        >
+                                            {order.inflow_order_id}
+                                        </Button>
+                                        {getOrderLegLabel(order) ? (
+                                            <div>
+                                                <Badge
+                                                    variant={getOrderLegLabel(order) === "Parent leg" ? "warning" : "secondary"}
+                                                    className="text-[10px] uppercase tracking-wide"
+                                                >
+                                                    {getOrderLegLabel(order)}
+                                                </Badge>
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </TableCell>
                                 <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
                                 <TableCell className="break-words">{formatDeliveryLocation(order)}</TableCell>

@@ -117,6 +117,7 @@ export default function OrderDetail({
   const [partialConfirmSubmitting, setPartialConfirmSubmitting] = useState(false);
 
   const partialOrderInfo = getPartialOrderInfo(order);
+  const isPartialLeg = partialOrderInfo.isPartialLeg;
   const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
   const assetTagRequired = order.asset_tag_required !== false;
 
@@ -323,22 +324,27 @@ export default function OrderDetail({
                 {order.assigned_deliverer || "Unassigned"}
               </p>
             </div>
-            {partialOrderInfo.isPartial || partialOrderInfo.hasRemainder || order.parent_order_id ? (
+            {partialOrderInfo.isPartial || partialOrderInfo.hasRemainder || isPartialLeg ? (
               <div className="sm:col-span-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                 <div className="flex gap-3">
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
                   <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-foreground">Partial order</p>
+                      <p className="font-medium text-foreground">
+                        {isPartialLeg ? "Partial leg" : "Partial order"}
+                      </p>
                       <Badge variant="warning">
                         {partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} picked
                       </Badge>
+                      {isPartialLeg ? <Badge variant="secondary">Child leg</Badge> : null}
                       {partialOrderInfo.hasRemainder ? (
                         <Badge variant="secondary">Remainder exists</Badge>
                       ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      This order is only partially picked. Generating the picklist will create a partial leg/remainder workflow instead of treating it as a fully picked order.
+                      {isPartialLeg
+                        ? "This is the generated partial leg. It only contains the picked items for this portion of the order."
+                        : "This order is only partially picked. Generating the picklist will create a partial leg/remainder workflow instead of treating it as a fully picked order."}
                     </p>
                     <div className="grid gap-2 text-sm sm:grid-cols-2">
                       {partialOrderInfo.parentOrderId ? (
@@ -547,46 +553,98 @@ export default function OrderDetail({
 
       {getInflowLines(order).length > 0 && (
         <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
-          <h3 className="text-lg font-semibold tracking-tight">Order Items</h3>
-            <div className="rounded-lg border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[60px]">#</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Serials</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {getInflowLines(order).map((rawLine: unknown, index: number) => {
-                    const line = (rawLine ?? {}) as OrderItemLine;
-                    const serials = getLineSerials(line);
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold tracking-tight">
+              {isPartialLeg ? "Partial leg items" : partialOrderInfo.hasRemainder ? "Items on this leg" : "Order Items"}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {isPartialLeg
+                ? "These are the items carried by the partial leg only."
+                : partialOrderInfo.hasRemainder
+                  ? "These are the items currently on the parent leg."
+                  : "All items on the order."}
+            </p>
+          </div>
+          <div className="mt-4 rounded-lg border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[60px]">#</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Serials</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getInflowLines(order).map((rawLine: unknown, index: number) => {
+                  const line = (rawLine ?? {}) as OrderItemLine;
+                  const serials = getLineSerials(line);
 
-                    return (
-                      <TableRow key={line.productId || index}>
-                        <TableCell className="text-muted-foreground">
-                          {index + 1}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {line.productName ||
-                            line.product?.name ||
-                            line.description ||
-                            line.productId ||
-                            "Unknown Product"}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {serials.length > 0 ? serials.join(", ") : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {getLineQuantity(line)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                  return (
+                    <TableRow key={line.productId || index}>
+                      <TableCell className="text-muted-foreground">
+                        {index + 1}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {line.productName ||
+                          line.product?.name ||
+                          line.description ||
+                          line.productId ||
+                          "Unknown Product"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {serials.length > 0 ? serials.join(", ") : "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {getLineQuantity(line)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
+
+      {partialOrderInfo.hasRemainder && partialOrderInfo.missingItems.length > 0 && (
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold tracking-tight">Remainder items</h3>
+            <p className="text-sm text-muted-foreground">
+              Items not included on this leg yet.
+            </p>
+          </div>
+          <div className="mt-4 rounded-lg border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[60px]">#</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-right">Picked</TableHead>
+                  <TableHead className="text-right">Ordered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {partialOrderInfo.missingItems.map((item, index) => (
+                  <TableRow key={item.product_id}>
+                    <TableCell className="text-muted-foreground">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {item.product_name}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {item.picked}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.ordered}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </section>
       )}
 

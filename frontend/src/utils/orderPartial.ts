@@ -13,6 +13,7 @@ type PartialOrderSource = Pick<
 
 export interface PartialOrderInfo {
   isPartial: boolean;
+  isPartialLeg: boolean;
   totalOrdered: number;
   totalPicked: number;
   missingItems: PickStatusItem[];
@@ -166,10 +167,12 @@ export const getPartialOrderInfo = (order: PartialOrderSource): PartialOrderInfo
   const totalPicked = pickStatus?.total_picked ?? 0;
   const missingItems = pickStatus?.missing_items ?? [];
   const isPartial = Boolean(pickStatus && totalOrdered > 0 && totalPicked > 0 && totalPicked < totalOrdered);
+  const isPartialLeg = Boolean(order.parent_order_id || order.parent_inflow_order_id);
   const hasRemainder = isTruthyFlag(order.has_remainder) || Boolean(order.remainder_order_id);
 
   return {
     isPartial,
+    isPartialLeg,
     totalOrdered,
     totalPicked,
     missingItems,
