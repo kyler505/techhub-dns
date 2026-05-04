@@ -624,10 +624,10 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
                                 create_partial_leg=True,
                             )
 
-    assert result.id == parent_order.id
-    assert result.inflow_order_id == "TH3001"
-    assert parent_order.picklist_path is not None
-    assert partial_leg.picklist_path is None
+    assert result.id == partial_leg.id
+    assert result.inflow_order_id == "TH3001-P"
+    assert parent_order.picklist_path is None
+    assert partial_leg.picklist_path is not None
 
     session.close()
     engine.dispose()

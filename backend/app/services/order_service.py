@@ -369,9 +369,9 @@ class OrderService:
         )
 
         if is_partial_order and not order.parent_order_id:
-            # For a partially picked parent, keep the parent as the active order.
-            # The generated child leg is a linked companion record, not the primary
-            # order context for subsequent picklist/email actions.
+            # For a partially picked parent, create or resolve the child leg first.
+            # The child leg is the one that should receive the generated picklist,
+            # Order Details email, and downstream QA/status timestamps.
             if not (
                 create_partial_leg
                 or not SystemSettingService.is_setting_enabled(
@@ -381,9 +381,15 @@ class OrderService:
                 raise ValidationError(
                     "This order is partially picked. Confirm creation of the partial leg before generating the picklist.")
             else:
-                OrderSplittingService(self.db).create_partial_picklist_leg(
+                split_order = OrderSplittingService(self.db).create_partial_picklist_leg(
                     order, generated_by
                 )
+                if split_order is not None:
+                    order = split_order
+                    if not order.parent_order_id and order.remainder_order_id:
+                        child_order = self.get_order_by_id(order.remainder_order_id)
+                        if child_order is not None:
+                            order = child_order
 
         # Enforce that the user generating the picklist is the same user who tagged the assets,
         # unless one of them is missing (legacy data).
