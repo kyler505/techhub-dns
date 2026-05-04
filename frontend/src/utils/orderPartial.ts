@@ -2,7 +2,13 @@ import type { Order, PickStatus, PickStatusItem } from "../types/order";
 
 type PartialOrderSource = Pick<
   Order,
-  "pick_status" | "inflow_data" | "has_remainder" | "remainder_order_id" | "parent_order_id"
+  | "pick_status"
+  | "inflow_data"
+  | "has_remainder"
+  | "remainder_order_id"
+  | "remainder_inflow_order_id"
+  | "parent_order_id"
+  | "parent_inflow_order_id"
 >;
 
 export interface PartialOrderInfo {
@@ -12,7 +18,9 @@ export interface PartialOrderInfo {
   missingItems: PickStatusItem[];
   hasRemainder: boolean;
   remainderOrderId?: string;
+  remainderInflowOrderId?: string;
   parentOrderId?: string;
+  parentInflowOrderId?: string;
   shortfall: number;
 }
 
@@ -167,7 +175,9 @@ export const getPartialOrderInfo = (order: PartialOrderSource): PartialOrderInfo
     missingItems,
     hasRemainder,
     remainderOrderId: order.remainder_order_id ?? undefined,
+    remainderInflowOrderId: order.remainder_inflow_order_id ?? undefined,
     parentOrderId: order.parent_order_id ?? undefined,
+    parentInflowOrderId: order.parent_inflow_order_id ?? undefined,
     shortfall: Math.max(totalOrdered - totalPicked, 0),
   };
 };

@@ -344,13 +344,23 @@ export default function OrderDetail({
                       {partialOrderInfo.parentOrderId ? (
                         <div>
                           <span className="font-medium text-foreground">Parent order:</span>{" "}
-                          <span className="text-muted-foreground">{partialOrderInfo.parentOrderId}</span>
+                          <Link
+                            to={`/orders/${partialOrderInfo.parentOrderId}`}
+                            className="text-primary underline-offset-4 hover:underline"
+                          >
+                            {partialOrderInfo.parentInflowOrderId || partialOrderInfo.parentOrderId}
+                          </Link>
                         </div>
                       ) : null}
                       {partialOrderInfo.remainderOrderId ? (
                         <div>
                           <span className="font-medium text-foreground">Remainder order:</span>{" "}
-                          <span className="text-muted-foreground">{partialOrderInfo.remainderOrderId}</span>
+                          <Link
+                            to={`/orders/${partialOrderInfo.remainderOrderId}`}
+                            className="text-primary underline-offset-4 hover:underline"
+                          >
+                            {partialOrderInfo.remainderInflowOrderId || partialOrderInfo.remainderOrderId}
+                          </Link>
                         </div>
                       ) : null}
                     </div>

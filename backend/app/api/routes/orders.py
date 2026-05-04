@@ -83,6 +83,18 @@ def _order_detail_response_json(order, db_session=None) -> dict:
     data = current_app.json.loads(
         OrderDetailResponse.model_validate(order).model_dump_json()
     )
+    if db_session:
+        linked_ids = {
+            "parent_order_id": data.get("parent_order_id"),
+            "remainder_order_id": data.get("remainder_order_id"),
+        }
+        for relation_field, linked_order_id in linked_ids.items():
+            inflow_field = relation_field.replace("_order_id", "_inflow_order_id")
+            if not linked_order_id:
+                data[inflow_field] = None
+                continue
+            linked_order = db_session.query(Order).filter(Order.id == linked_order_id).first()
+            data[inflow_field] = linked_order.inflow_order_id if linked_order else None
     return _resolve_order_user_fields(data, db_session)
 
 

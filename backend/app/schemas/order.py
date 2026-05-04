@@ -178,6 +178,8 @@ class OrderDetailResponse(OrderResponse):
     inflow_data: Optional[Dict[str, Any]] = None
     asset_tag_serials: Optional[List[Dict[str, Any]]] = None
     asset_tag_required: Optional[bool] = None
+    parent_inflow_order_id: Optional[str] = None
+    remainder_inflow_order_id: Optional[str] = None
 
 
 class BulkStatusUpdate(BaseModel):

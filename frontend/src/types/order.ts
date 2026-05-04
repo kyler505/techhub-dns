@@ -94,8 +94,10 @@ export interface Order {
   carrier_name?: string;
   tracking_number?: string;
   parent_order_id?: string;
+  parent_inflow_order_id?: string;
   has_remainder?: string | boolean | null;
   remainder_order_id?: string | null;
+  remainder_inflow_order_id?: string | null;
   inflow_data?: Record<string, unknown>;
   pick_status?: PickStatus;
   latest_picklist_print_job?: PrintJobSummary;
