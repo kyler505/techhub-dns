@@ -308,3 +308,32 @@ Integration guidance:
 - Avoid adding new dependencies unless necessary. If needed, update the relevant lock/config files and explain the reason.
 - Keep generated artifacts, caches, and local virtualenv files out of commits unless the repo already tracks them.
 - If you encounter unexpected worktree changes that conflict with the task, stop and ask before overwriting them.
+
+
+## Partial-Order Workflow
+
+The partial-order workflow handles splitting orders into picked and remainder legs.
+
+### Key Components
+
+- **Backend Services**:
+  - `OrderSplittingService` in `backend/app/services/order_splitting.py`
+  - Creates child `-P` orders for picked items
+  - Creates remainder `-R` orders for unpicked items
+  - Handles document generation for each leg separately
+
+- **Frontend Components**:
+  - `OrderDetail.tsx` - Shows leg-specific product tables
+  - `OrderTable.tsx` - Distinguishes partial legs in the orders list
+  - `OrderQAPage.tsx` - Blocks QA on parent remainder legs
+
+- **Key Behaviors**:
+  - Parent order shows remaining items
+  - Child `-P` order shows picked items and owns generated documents
+  - Remainder `-R` order is created after delivery if items remain unpicked
+  - QA is only allowed on child legs, not parent remainder legs
+
+### Testing
+
+- Backend tests in `backend/tests/test_partial_order_workflow.py`
+- Smoke test in `backend/tests/test_partial_order_smoke.py`
