@@ -203,19 +203,37 @@ class OrderSplittingService:
         if not remainder_source:
             return None
 
-        remaining_lines, _ = self.get_remainder_items(remainder_source)
-        document_view = deepcopy(original_order.inflow_data or {})
-        document_view["lines"] = remaining_lines
-        document_view["pickLines"] = deepcopy(remaining_lines)
+        # Preserve the stored remainder-leg snapshot instead of recalculating the
+        # view from pickLines. Once the remainder leg has been picked, its pickLines
+        # can match its lines exactly, and re-deriving the document from that state
+        # would collapse the item list to empty. The remainder leg should keep
+        # showing the items that belong to that leg.
+        document_view = deepcopy(remainder_source)
+        normalized_lines: List[Dict[str, Any]] = []
+        subtotal = 0.0
+
+        for line in document_view.get("lines", []) if isinstance(document_view, dict) else []:
+            if not isinstance(line, dict):
+                continue
+            copied_line = deepcopy(line)
+            quantity_data = dict(copied_line.get("quantity") or {})
+            quantity_value = self._parse_standard_quantity(quantity_data)
+            quantity_data["standardQuantity"] = quantity_value
+            copied_line["quantity"] = quantity_data
+            raw_price = copied_line.get("unitPrice")
+            try:
+                unit_price = float(raw_price or 0)
+            except (TypeError, ValueError):
+                unit_price = 0.0
+            subtotal += unit_price * quantity_value
+            normalized_lines.append(copied_line)
+
+        document_view["lines"] = normalized_lines
+        document_view["pickLines"] = deepcopy(normalized_lines)
         document_view["packLines"] = []
         document_view["shipLines"] = []
-        document_view["subtotal"] = sum(
-            (float(line.get("unitPrice") or 0) if isinstance(line, dict) else 0.0)
-            * self._parse_standard_quantity(line.get("quantity") if isinstance(line, dict) else 0)
-            for line in remaining_lines
-            if isinstance(line, dict)
-        )
-        document_view["total"] = document_view["subtotal"]
+        document_view["subtotal"] = subtotal
+        document_view["total"] = subtotal
         return document_view
 
     def build_parent_remainder_pick_status_source(self, original_order: Order) -> Optional[Dict[str, Any]]:

@@ -797,6 +797,94 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
     engine.dispose()
 
 
+def test_parent_remainder_document_view_keeps_items_when_fully_picked():
+    """A remainder leg should keep showing its leg items even after all of them are picked."""
+
+    session, engine = _make_sqlite_session()
+    parent_order = Order(
+        id="order-parent-5",
+        inflow_order_id="TH3003",
+        inflow_sales_order_id="sales-order-3003",
+        recipient_name="User Five",
+        recipient_contact="user.five@example.com",
+        delivery_location="Building 505",
+        po_number="PO-3003",
+        status=OrderStatus.PICKED.value,
+        inflow_data={
+            "orderNumber": "TH3003",
+            "contactName": "User Five",
+            "email": "user.five@example.com",
+            "shippingAddress": {"address1": "505 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                },
+                {
+                    "productId": "prod-2",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+
+    from app.services.order_splitting import OrderSplittingService
+
+    service = OrderSplittingService(session)
+    service.create_partial_picklist_leg(parent_order, user_id="tech@example.com")
+    session.refresh(parent_order)
+
+    # Simulate the remainder leg being fully picked later in its own workflow.
+    parent_order.inflow_data = {
+        **parent_order.inflow_data,
+        "pickLines": [
+            {
+                "productId": "prod-1",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+        ],
+    }
+    session.commit()
+
+    document_view = service.build_parent_remainder_document_view(parent_order)
+
+    assert document_view is not None
+    assert document_view["lines"] == [
+        {
+            "productId": "prod-2",
+            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
+    assert document_view["pickLines"] == [
+        {
+            "productId": "prod-2",
+            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
+
+    session.close()
+    engine.dispose()
+
+
 def test_generate_picklist_raises_when_sharepoint_upload_fails():
     """Picklist generation should fail if SharePoint upload is unavailable."""
 
