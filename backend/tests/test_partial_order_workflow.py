@@ -780,11 +780,6 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
     assert result.id == parent_order.id
     assert captured_picklist_payloads[0]["lines"] == [
         {
-            "productId": "prod-1",
-            "product": {"name": "Laptop", "sku": "LAP-1"},
-            "quantity": {"standardQuantity": 1.0},
-        },
-        {
             "productId": "prod-2",
             "product": {"name": "Dock", "sku": "DOCK-1"},
             "quantity": {"standardQuantity": 1.0},
@@ -874,6 +869,104 @@ def test_parent_remainder_document_view_keeps_items_when_fully_picked():
         },
     ]
     assert document_view["pickLines"] == [
+        {
+            "productId": "prod-2",
+            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
+
+    session.close()
+    engine.dispose()
+
+
+def test_parent_remainder_document_view_recovers_split_items_from_full_parent_payload():
+    """If the parent order drifts back to the full original payload, the remainder view should still show only the split remainder."""
+
+    session, engine = _make_sqlite_session()
+    parent_order = Order(
+        id="order-parent-6",
+        inflow_order_id="TH3004",
+        inflow_sales_order_id="sales-order-3004",
+        recipient_name="User Six",
+        recipient_contact="user.six@example.com",
+        delivery_location="Building 606",
+        po_number="PO-3004",
+        status=OrderStatus.PICKED.value,
+        inflow_data={
+            "orderNumber": "TH3004",
+            "contactName": "User Six",
+            "email": "user.six@example.com",
+            "shippingAddress": {"address1": "606 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                },
+                {
+                    "productId": "prod-2",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+
+    from app.services.order_splitting import OrderSplittingService
+
+    service = OrderSplittingService(session)
+    child_order = service.create_partial_picklist_leg(parent_order, user_id="tech@example.com")
+    session.refresh(parent_order)
+
+    assert child_order is not None
+
+    # Simulate the parent order being refreshed from InFlow back to the full original payload.
+    parent_order.inflow_data = {
+        "orderNumber": "TH3004",
+        "contactName": "User Six",
+        "email": "user.six@example.com",
+        "shippingAddress": {"address1": "606 Example St"},
+        "lines": [
+            {
+                "productId": "prod-1",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-1",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+        ],
+    }
+    session.commit()
+
+    document_view = service.build_parent_remainder_document_view(parent_order)
+
+    assert document_view is not None
+    assert document_view["lines"] == [
         {
             "productId": "prod-2",
             "product": {"name": "Dock", "sku": "DOCK-1"},

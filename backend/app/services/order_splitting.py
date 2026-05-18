@@ -197,24 +197,121 @@ class OrderSplittingService:
 
         return deepcopy(original_order.inflow_data)
 
-    def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
-        """Build the remainder-only document snapshot for a parent partial leg."""
+    def _subtract_lines(
+        self,
+        source_lines: List[Dict[str, Any]],
+        subtract_lines: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Subtract one line set from another by product and quantity."""
+        subtract_quantities: Dict[str, float] = {}
+        subtract_serials: Dict[str, List[str]] = {}
+
+        for line in subtract_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+            product_key = str(product_id)
+            subtract_quantities[product_key] = subtract_quantities.get(product_key, 0.0) + self._parse_standard_quantity(
+                line.get("quantity")
+            )
+            serial_numbers = line.get("quantity", {}).get("serialNumbers", []) or []
+            if serial_numbers:
+                subtract_serials.setdefault(product_key, []).extend(
+                    str(serial_number)
+                    for serial_number in serial_numbers
+                    if serial_number is not None
+                )
+
+        remaining_lines: List[Dict[str, Any]] = []
+        remaining_subtract_quantities = dict(subtract_quantities)
+
+        for line in source_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+
+            product_key = str(product_id)
+            copied_line = deepcopy(line)
+            quantity_data = dict(copied_line.get("quantity") or {})
+            line_quantity = self._parse_standard_quantity(quantity_data)
+            serial_numbers = [
+                str(serial_number)
+                for serial_number in (quantity_data.get("serialNumbers", []) or [])
+                if serial_number is not None
+            ]
+
+            if serial_numbers and subtract_serials.get(product_key):
+                remaining_serials = list(serial_numbers)
+                for serial_number in subtract_serials[product_key]:
+                    if serial_number in remaining_serials:
+                        remaining_serials.remove(serial_number)
+                if not remaining_serials:
+                    continue
+                quantity_data["serialNumbers"] = remaining_serials
+                quantity_data["standardQuantity"] = float(len(remaining_serials))
+                copied_line["quantity"] = quantity_data
+                remaining_lines.append(copied_line)
+                continue
+
+            subtract_quantity = remaining_subtract_quantities.get(product_key, 0.0)
+            remaining_quantity = line_quantity - subtract_quantity
+            if remaining_quantity <= 0.0001:
+                remaining_subtract_quantities[product_key] = max(-remaining_quantity, 0.0)
+                continue
+
+            quantity_data["standardQuantity"] = remaining_quantity
+            copied_line["quantity"] = quantity_data
+            remaining_lines.append(copied_line)
+            remaining_subtract_quantities[product_key] = 0.0
+
+        return remaining_lines
+
+    def _build_parent_remainder_assigned_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the remainder-leg item set for a parent order after a partial split."""
         remainder_source = self._get_partial_remainder_source(original_order)
         if not remainder_source:
             return None
 
-        # Preserve the stored remainder-leg snapshot instead of recalculating the
-        # view from pickLines. Once the remainder leg has been picked, its pickLines
-        # can match its lines exactly, and re-deriving the document from that state
-        # would collapse the item list to empty. The remainder leg should keep
-        # showing the items that belong to that leg.
-        document_view = deepcopy(remainder_source)
+        assigned_view = deepcopy(remainder_source)
+        source_lines = [
+            line
+            for line in assigned_view.get("lines", [])
+            if isinstance(line, dict)
+        ]
+        if not source_lines:
+            assigned_view["lines"] = []
+            assigned_view["pickLines"] = []
+            assigned_view["packLines"] = []
+            assigned_view["shipLines"] = []
+            assigned_view["subtotal"] = 0.0
+            assigned_view["total"] = 0.0
+            return assigned_view
+
+        child_order = (
+            self.db.query(Order)
+            .filter(Order.id == original_order.remainder_order_id)
+            .first()
+        )
+        child_lines = []
+        if child_order and isinstance(child_order.inflow_data, dict):
+            child_lines = [
+                line
+                for line in child_order.inflow_data.get("lines", [])
+                if isinstance(line, dict)
+            ]
+
+        derived_lines = self._subtract_lines(source_lines, child_lines) if child_lines else []
+        if derived_lines and derived_lines != source_lines:
+            source_lines = derived_lines
+
         normalized_lines: List[Dict[str, Any]] = []
         subtotal = 0.0
 
-        for line in document_view.get("lines", []) if isinstance(document_view, dict) else []:
-            if not isinstance(line, dict):
-                continue
+        for line in source_lines:
             copied_line = deepcopy(line)
             quantity_data = dict(copied_line.get("quantity") or {})
             quantity_value = self._parse_standard_quantity(quantity_data)
@@ -228,17 +325,21 @@ class OrderSplittingService:
             subtotal += unit_price * quantity_value
             normalized_lines.append(copied_line)
 
-        document_view["lines"] = normalized_lines
-        document_view["pickLines"] = deepcopy(normalized_lines)
-        document_view["packLines"] = []
-        document_view["shipLines"] = []
-        document_view["subtotal"] = subtotal
-        document_view["total"] = subtotal
-        return document_view
+        assigned_view["lines"] = normalized_lines
+        assigned_view["pickLines"] = deepcopy(normalized_lines)
+        assigned_view["packLines"] = []
+        assigned_view["shipLines"] = []
+        assigned_view["subtotal"] = subtotal
+        assigned_view["total"] = subtotal
+        return assigned_view
+
+    def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the remainder-only document snapshot for a parent partial leg."""
+        return self._build_parent_remainder_assigned_view(original_order)
 
     def build_parent_remainder_pick_status_source(self, original_order: Order) -> Optional[Dict[str, Any]]:
         """Build the pick-status snapshot for a parent partial leg."""
-        return self._get_partial_remainder_source(original_order)
+        return self._build_parent_remainder_assigned_view(original_order)
 
     def should_create_remainder(self, order: Order) -> bool:
         """
