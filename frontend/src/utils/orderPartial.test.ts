@@ -38,13 +38,13 @@ describe("getOrderProductTableView", () => {
   it("shows remaining items on the parent leg", () => {
     const view = getOrderProductTableView({
       inflow_data: {
-        lines: [{ productId: "A", product: { name: "Widget" }, quantity: { standardQuantity: 5 } }],
-        pickLines: [{ productId: "A", product: { name: "Widget" }, quantity: { standardQuantity: 2 } }],
+        lines: [{ productId: "A", product: { name: "Widget" }, quantity: { standardQuantity: 3 } }],
+        pickLines: [],
       },
       has_remainder: true,
     } as any);
 
-    expect(view.title).toBe("Items left to pick");
+    expect(view.title).toBe("Remainder leg items");
     expect(view.rows).toEqual([
       {
         productId: "A",
@@ -67,7 +67,7 @@ describe("getOrderProductTableView", () => {
       parent_order_id: "parent-uuid",
     } as any);
 
-    expect(view.title).toBe("Child leg items");
+    expect(view.title).toBe("Picked leg items");
     expect(view.rows).toEqual([
       {
         productId: "B",

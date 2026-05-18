@@ -399,6 +399,21 @@ def test_partial_picklist_leg_creation_links_parent_and_child():
         assert child_order.parent_order_id == original_order.id
         assert original_order.has_remainder == "Y"
         assert original_order.remainder_order_id == child_order.id
+        assert original_order.inflow_data["lines"] == [
+            {
+                "productId": "prod-1",
+                "description": "Laptop",
+                "quantity": {"standardQuantity": 1.0},
+            },
+            {
+                "productId": "prod-2",
+                "description": "Dock",
+                "quantity": {"standardQuantity": 1.0},
+            },
+        ]
+        assert original_order.inflow_data.get("pickLines") == []
+        assert original_order.inflow_data.get("packLines") == []
+        assert original_order.inflow_data.get("shipLines") == []
         assert child_order.inflow_data["lines"] == [
             {
                 "productId": "prod-1",
@@ -529,7 +544,7 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
                 {
                     "productId": "prod-1",
                     "product": {"name": "Laptop", "sku": "LAP-1"},
-                    "quantity": {"standardQuantity": "2"},
+                    "quantity": {"standardQuantity": "1"},
                 },
                 {
                     "productId": "prod-2",
@@ -537,13 +552,7 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
                     "quantity": {"standardQuantity": "1"},
                 },
             ],
-            "pickLines": [
-                {
-                    "productId": "prod-1",
-                    "product": {"name": "Laptop", "sku": "LAP-1"},
-                    "quantity": {"standardQuantity": "1"},
-                }
-            ],
+            "pickLines": [],
         },
     )
     partial_leg = Order(
@@ -624,10 +633,10 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
                                 create_partial_leg=True,
                             )
 
-    assert result.id == partial_leg.id
-    assert result.inflow_order_id == "TH3001-P"
-    assert parent_order.picklist_path is None
-    assert partial_leg.picklist_path is not None
+    assert result.id == parent_order.id
+    assert result.inflow_order_id == "TH3001"
+    assert parent_order.picklist_path is not None
+    assert partial_leg.picklist_path is None
 
     session.close()
     engine.dispose()
@@ -656,7 +665,7 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
                 {
                     "productId": "prod-1",
                     "product": {"name": "Laptop", "sku": "LAP-1"},
-                    "quantity": {"standardQuantity": "2"},
+                    "quantity": {"standardQuantity": "1"},
                 },
                 {
                     "productId": "prod-2",
@@ -664,6 +673,7 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
                     "quantity": {"standardQuantity": "1"},
                 },
             ],
+            "pickLines": [],
         },
     )
     child_order = Order(
