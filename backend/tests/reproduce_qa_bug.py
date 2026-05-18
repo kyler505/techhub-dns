@@ -32,14 +32,15 @@ def test_qa_transition_bug():
     # QA Data
     qa_data = {
         "method": "Delivery",
-        "orderNumber": mock_order.inflow_order_id,
-        "technician": "Hunter",
+        "orderNumber": "TH123",
+        "technician": "Test Tech",
         "qaSignature": "Sig",
         "verifyAssetTagSerialMatch": True,
-        "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved": True,
+        "verifyOrderDetailsTemplateSent": True,
         "verifyPackagedProperly": True,
         "verifyPackingSlipSerialsMatch": True,
-        "verifyBoxesLabeledCorrectly": True,
+        "verifyElectronicPackingSlipSaved": True,
+        "verifyBoxesLabeledCorrectly": True
     }
 
     print(f"Initial Status: {mock_order.status}")

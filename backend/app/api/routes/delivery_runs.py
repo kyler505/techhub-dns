@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify, abort
 from flask_socketio import emit
+from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
+import threading
 
 from app.database import get_db, get_db_session
 from app.api.auth_middleware import require_auth
@@ -14,89 +16,56 @@ from app.schemas.delivery_run import (
     RecallDeliveryRunOrderRequest,
     ReorderDeliveryRunOrdersRequest,
 )
-from app.models.delivery_run import DeliveryRun, VehicleEnum
+from app.models.delivery_run import VehicleEnum
 from app.utils.exceptions import ValidationError
 from app.utils.timezone import to_utc_iso_z
-from app.utils.broadcast_dedup import broadcast_dedup
-from app.utils.display_labels import resolve_runner_display
 from pydantic import ValidationError as PydanticValidationError
 
 bp = Blueprint("delivery_runs", __name__)
 bp.strict_slashes = False
 
 
-def _prepare_runs_payload(runs: list[DeliveryRun], db_session=None) -> list[dict]:
-    payload = []
-    for r in runs:
-        raw_runner = (r.runner or "").strip()
-        runner_label = resolve_runner_display(db_session, raw_runner) if db_session else raw_runner
-        payload.append(
-            {
-                "id": str(r.id),
-                "runner": runner_label,
-                "vehicle": r.vehicle.value
-                if hasattr(r.vehicle, "value")
-                else str(r.vehicle),
-                "status": r.status.value
-                if hasattr(r.status, "value")
-                else str(r.status),
-                "start_time": to_utc_iso_z(r.start_time),
-                "order_ids": [str(o.id) for o in r.orders],
-            }
-        )
-    return payload
-
-
-def _delivery_run_response(run, db_session) -> dict:
-    """Build a DeliveryRunResponse dict with resolved runner display name."""
-    raw_runner = (run.runner or "").strip()
-    runner_label = resolve_runner_display(db_session, raw_runner)
-    return DeliveryRunResponse(
-        id=run.id,
-        name=run.name,
-        runner=runner_label,
-        vehicle=run.vehicle,
-        status=run.status,
-        start_time=run.start_time,
-        end_time=run.end_time,
-        order_ids=[o.id for o in run.orders],
-    ).model_dump(mode="json")
-
-
-def _broadcast_active_runs_sync(db_session=None):
+def _broadcast_active_runs_sync(db_session: Session = None):
     """Send current active runs to all connected clients (sync version)."""
-    if db_session is not None:
-        _do_broadcast_active_runs(db_session)
-        return
+    if db_session is None:
+        db_session = get_db_session()
 
-    from app.database import get_db
-
-    with get_db() as db:
-        _do_broadcast_active_runs(db)
-
-
-def _do_broadcast_active_runs(db_session):
     try:
         service = DeliveryRunService(db_session)
         runs = service.get_active_runs_with_details()
-        payload = _prepare_runs_payload(runs, db_session)
+        payload = []
+        for r in runs:
+            payload.append(
+                {
+                    "id": str(r.id),
+                    "runner": r.runner,
+                    "vehicle": r.vehicle.value
+                    if hasattr(r.vehicle, "value")
+                    else str(r.vehicle),
+                    "status": r.status.value
+                    if hasattr(r.status, "value")
+                    else str(r.status),
+                    "start_time": to_utc_iso_z(r.start_time),
+                    "order_ids": [str(o.id) for o in r.orders],
+                }
+            )
 
+        # Emit via SocketIO to all connected clients
         # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
 
-            # Frontend joins 'delivery-runs' room for active run updates
+            # Dashboard listens to 'active_runs' and joins 'orders' room
             socketio.emit(
-                "active_runs", {"type": "active_runs", "data": payload}, room="delivery-runs"
+                "active_runs", {"type": "active_runs", "data": payload}, room="orders"
             )
         except Exception as e:
             import logging
 
             logging.getLogger(__name__).error(f"Failed to broadcast active runs: {e}")
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("Failed to broadcast active runs")
+    finally:
+        if db_session is not None:
+            db_session.close()
 
 
 @bp.route("", methods=["POST"])
@@ -120,8 +89,8 @@ def create_run():
             )
 
             # Broadcast via SocketIO in background
-            broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
-            broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
+            threading.Thread(target=_broadcast_active_runs_sync).start()
+            threading.Thread(target=broadcast_vehicle_status_update_sync).start()
 
             # Trigger Teams notifications for orders in delivery
             try:
@@ -136,14 +105,22 @@ def create_run():
                     f"Failed to trigger Teams notifications for delivery run: {e}"
                 )
 
-            response = _delivery_run_response(run, db)
-            return jsonify(response)
+            response = DeliveryRunResponse(
+                id=run.id,
+                name=run.name,
+                runner=run.runner,
+                vehicle=run.vehicle,
+                status=run.status,
+                start_time=run.start_time,
+                end_time=run.end_time,
+                order_ids=[o.id for o in run.orders],
+            )
+            return jsonify(response.model_dump(mode="json"))
         except ValueError as e:
             abort(400, description=str(e))
 
 
 @bp.route("", methods=["GET"])
-@require_auth
 def get_runs():
     """Get delivery runs (optionally filtered by status)"""
     status_filter = request.args.getlist("status")
@@ -157,12 +134,22 @@ def get_runs():
 
         result = []
         for r in runs:
-            result.append(_delivery_run_response(r, db))
+            result.append(
+                DeliveryRunResponse(
+                    id=r.id,
+                    name=r.name,
+                    runner=r.runner,
+                    vehicle=r.vehicle,
+                    status=r.status,
+                    start_time=r.start_time,
+                    end_time=r.end_time,
+                    order_ids=[o.id for o in r.orders],
+                ).model_dump(mode="json")
+            )
         return jsonify(result)
 
 
 @bp.route("/active", methods=["GET"])
-@require_auth
 def get_active_runs():
     """Get all active delivery runs"""
     with get_db() as db:
@@ -170,12 +157,22 @@ def get_active_runs():
         runs = service.get_active_runs_with_details()
         result = []
         for r in runs:
-            result.append(_delivery_run_response(r, db))
+            result.append(
+                DeliveryRunResponse(
+                    id=r.id,
+                    name=r.name,
+                    runner=r.runner,
+                    vehicle=r.vehicle,
+                    status=r.status,
+                    start_time=r.start_time,
+                    end_time=r.end_time,
+                    order_ids=[o.id for o in r.orders],
+                ).model_dump(mode="json")
+            )
         return jsonify(result)
 
 
 @bp.route("/vehicles/available", methods=["GET"])
-@require_auth
 def get_available_vehicles():
     """Get available vehicles"""
     with get_db() as db:
@@ -187,7 +184,6 @@ def get_available_vehicles():
 
 
 @bp.route("/<uuid:run_id>", methods=["GET"])
-@require_auth
 def get_run(run_id):
     """Get delivery run details"""
     with get_db() as db:
@@ -198,12 +194,10 @@ def get_run(run_id):
 
         from app.schemas.delivery_run import DeliveryRunDetailResponse, OrderSummary
 
-        raw_runner = (run.runner or "").strip()
-        runner_label = resolve_runner_display(db, raw_runner)
         response = DeliveryRunDetailResponse(
             id=run.id,
             name=run.name,
-            runner=runner_label,
+            runner=run.runner,
             vehicle=run.vehicle,
             status=run.status,
             start_time=run.start_time,
@@ -233,7 +227,6 @@ def get_run(run_id):
 
 
 @bp.route("/<run_id>/finish", methods=["PUT"])
-@require_auth
 def finish_run(run_id):
     """Finish a delivery run, optionally creating remainder orders for partial picks"""
     data = request.get_json() or {}
@@ -255,11 +248,20 @@ def finish_run(run_id):
             )
 
             # Broadcast via SocketIO in background
-            broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
-            broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
+            threading.Thread(target=_broadcast_active_runs_sync).start()
+            threading.Thread(target=broadcast_vehicle_status_update_sync).start()
 
-            response = _delivery_run_response(run, db)
-            return jsonify(response)
+            response = DeliveryRunResponse(
+                id=run.id,
+                name=run.name,
+                runner=run.runner,
+                vehicle=run.vehicle,
+                status=run.status,
+                start_time=run.start_time,
+                end_time=run.end_time,
+                order_ids=[o.id for o in run.orders],
+            )
+            return jsonify(response.model_dump(mode="json"))
         except ValueError as e:
             abort(400, description=str(e))
 
@@ -286,11 +288,20 @@ def recall_run_order(run_id, order_id):
             expected_updated_at=req.expected_updated_at,
         )
 
-        broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
-        broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
+        threading.Thread(target=_broadcast_active_runs_sync).start()
+        threading.Thread(target=broadcast_vehicle_status_update_sync).start()
 
-        response = _delivery_run_response(run, db)
-        return jsonify(response)
+        response = DeliveryRunResponse(
+            id=run.id,
+            name=run.name,
+            runner=run.runner,
+            vehicle=run.vehicle,
+            status=run.status,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            order_ids=[o.id for o in run.orders],
+        )
+        return jsonify(response.model_dump(mode="json"))
 
 
 @bp.route("/<run_id>/orders/reorder", methods=["PUT"])
@@ -314,10 +325,19 @@ def reorder_run_orders(run_id):
             expected_updated_at=req.expected_updated_at,
         )
 
-        broadcast_dedup.request_broadcast(_broadcast_active_runs_sync)
+        threading.Thread(target=_broadcast_active_runs_sync).start()
 
-        response = _delivery_run_response(run, db)
-        return jsonify(response)
+        response = DeliveryRunResponse(
+            id=run.id,
+            name=run.name,
+            runner=run.runner,
+            vehicle=run.vehicle,
+            status=run.status,
+            start_time=run.start_time,
+            end_time=run.end_time,
+            order_ids=[o.id for o in run.orders],
+        )
+        return jsonify(response.model_dump(mode="json"))
 
 
 # SocketIO event handlers will be registered in main.py

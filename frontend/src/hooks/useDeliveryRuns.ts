@@ -4,10 +4,6 @@ import { io, Socket } from "socket.io-client";
 
 import { deliveryRunsQueryKeys, getActiveDeliveryRunsQueryOptions, type ActiveDeliveryRun } from "../queries/deliveryRuns";
 
-function safeArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value : [];
-}
-
 export type DeliveryRun = ActiveDeliveryRun;
 
 export function useDeliveryRuns(socketUrl?: string) {
@@ -37,7 +33,6 @@ export function useDeliveryRuns(socketUrl?: string) {
       });
       socketRef.current = socket;
     } catch (e) {
-      console.error("Socket.IO init failed (delivery runs):", e);
     }
 
     if (!socket) {
@@ -50,38 +45,27 @@ export function useDeliveryRuns(socketUrl?: string) {
       };
     }
 
-    const socketInstance = socket;
-
-    socketInstance.on("connect", () => {
+    socket.on("connect", () => {
       setSocketError(null);
       // Join delivery-runs namespace/room
-      socketInstance.emit("join", { room: "delivery-runs" });
+      socket.emit("join", { room: "delivery-runs" });
     });
 
-    socketInstance.on("active_runs", (payload: { type: string; data: DeliveryRun[] }) => {
+    socket.on("active_runs", (payload: { type: string; data: DeliveryRun[] }) => {
       try {
         if (payload.type === "active_runs") {
-          queryClient.setQueryData(deliveryRunsQueryKeys.active(), safeArray<DeliveryRun>(payload.data));
+          queryClient.setQueryData(deliveryRunsQueryKeys.active(), payload.data || []);
         }
       } catch (e) {
         console.warn("Failed to parse Socket.IO message", e);
       }
     });
 
-    socketInstance.on("disconnect", () => {
-      // Transient disconnects are normal with long-polling fallback.
+    socket.on("disconnect", () => {
     });
 
-    socketInstance.on("connect_error", () => {
-      // Transient errors expected during reconnection cycle.
-    });
-
-    socketInstance.on("reconnect_failed", () => {
-      setSocketError("Socket.IO reconnection failed — using cached data");
-    });
-
-    socketInstance.on("connect", () => {
-      setSocketError(null);
+    socket.on("connect_error", () => {
+      setSocketError("Socket.IO connection failed - using cached data");
     });
 
     return () => {

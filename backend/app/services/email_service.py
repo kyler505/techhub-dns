@@ -21,25 +21,20 @@ class EmailService:
 
     def __init__(self):
         self.from_name = settings.email_from_name
-        self.from_address = settings.smtp_from_address or "techhub@tamu.edu"
+        self.from_address = settings.smtp_from_address
 
     @property
     def is_enabled(self) -> bool:
         """Check if email sending is enabled in system settings."""
-        from app.services.system_setting_service import (
-            SETTING_EMAIL_ENABLED,
-            SystemSettingService,
-        )
-
+        from app.services.system_setting_service import SystemSettingService, SETTING_EMAIL_ENABLED
         return SystemSettingService.is_setting_enabled(SETTING_EMAIL_ENABLED)
 
     def is_configured(self) -> bool:
-        """Check if email is properly configured (Graph API must be configured).
-
-        Note: graph_service.send_email() already falls back to techhub@tamu.edu
-        when smtp_from_address is not set, so we don't gate on from_address here.
-        """
-        return bool(graph_service.is_configured())
+        """Check if email is properly configured (Graph API must be configured)."""
+        return bool(
+            graph_service.is_configured() and
+            self.from_address
+        )
 
     def send_email(
         self,
@@ -50,7 +45,7 @@ class EmailService:
         attachment_name: Optional[str] = None,
         attachment_content: Optional[bytes] = None,
         attachment_type: str = "application/pdf",
-        force: bool = False,
+        force: bool = False
     ) -> bool:
         """
         Send an email via Microsoft Graph API.
@@ -73,9 +68,7 @@ class EmailService:
             return False
 
         if not self.is_configured():
-            logger.warning(
-                "Email not configured. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and SMTP_FROM_ADDRESS in .env"
-            )
+            logger.warning("Email not configured. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and SMTP_FROM_ADDRESS in .env")
             return False
 
         return graph_service.send_email(
@@ -87,7 +80,7 @@ class EmailService:
             from_name=self.from_name,
             attachment_name=attachment_name,
             attachment_content=attachment_content,
-            initiated_by="email_service",
+            initiated_by="email_service"
         )
 
     def send_order_details_email(
@@ -96,7 +89,7 @@ class EmailService:
         order_number: str,
         customer_name: str,
         pdf_content: bytes,
-        force: bool = False,
+        force: bool = False
     ) -> bool:
         """
         Send Order Details PDF email to recipient.
@@ -133,7 +126,7 @@ class EmailService:
         body_text = f"""
 Your TechHub Order Details
 
-Howdy {customer_name},
+Dear {customer_name},
 
 Thank you for your order with TechHub Technology Services.
 
@@ -153,7 +146,7 @@ WCDC - TechHub | 474 Agronomy Rd | College Station, TX 77843
             body_text=body_text,
             attachment_name=f"OrderDetails_{order_number}.pdf",
             attachment_content=pdf_content,
-            force=force,
+            force=force
         )
 
 

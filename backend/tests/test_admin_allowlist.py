@@ -51,7 +51,6 @@ def _make_test_app(user_email: str) -> Flask:
     @app.before_request
     def _attach_fake_user():
         g.user_id = "test-user"
-        g.user_email = user_email
         g.user = type("User", (), {"email": user_email})()
         g._auth_session = None
 
@@ -96,7 +95,7 @@ def _with_temp_settings(admin_emails: Optional[str], flask_env: str, fn: Callabl
         settings.flask_env = prev_flask_env
 
 
-def test_env_override_precedence_and_put_allowed():
+def test_env_override_precedence_and_put_conflict():
     _setup_in_memory_db()
     caller = "env.admin@example.com"
     app = _make_test_app(caller)
@@ -111,16 +110,13 @@ def test_env_override_precedence_and_put_allowed():
         res = client.get("/api/system/admins")
         assert res.status_code == 200
         body = res.get_json() or {}
-        # Source is "mixed" when both env + DB are present.
-        assert body.get("source") == "mixed"
+        assert body.get("source") == "env"
         assert caller in (body.get("admins") or [])
-        assert "db.admin@example.com" in (body.get("admins") or [])
 
-        # PUT now succeeds — env entries are pinned, DB entries are updated.
-        res2 = client.put("/api/system/admins", json={"admins": ["db.admin@example.com", "new.db@example.com"]})
-        assert res2.status_code == 200
-        body2 = res2.get_json() or {}
-        assert caller in (body2.get("admins") or []), "env admin should still appear after PUT"
+        res2 = client.put("/api/system/admins", json={"admins": [caller]})
+        assert res2.status_code == 409
+        err = (res2.get_json() or {}).get("error") or ""
+        assert "ADMIN_EMAILS" in err
 
     _with_temp_settings(admin_emails=caller, flask_env="production", fn=run)
 
@@ -183,8 +179,8 @@ def test_lockout_guard_requires_caller_in_non_dev():
 
 if __name__ == "__main__":
     # Allow running as a script.
-    test_env_override_precedence_and_put_allowed()
-    print("[PASS] env+db merge + PUT allowed")
+    test_env_override_precedence_and_put_conflict()
+    print("[PASS] env override precedence + 409")
     test_db_allowlist_grants_admin_when_env_empty()
     print("[PASS] db allowlist grants admin")
     test_put_admins_forbidden_for_non_admin()

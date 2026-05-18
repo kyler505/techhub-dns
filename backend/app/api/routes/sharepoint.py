@@ -6,7 +6,6 @@ from flask import Blueprint, jsonify, request
 import logging
 
 from app.config import settings
-from app.api.auth_middleware import require_auth, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +13,6 @@ sharepoint_bp = Blueprint("sharepoint", __name__, url_prefix="/api/sharepoint")
 
 
 @sharepoint_bp.route("/status", methods=["GET"])
-@require_auth
 def get_sharepoint_status():
     """Get SharePoint configuration status."""
     from app.services.sharepoint_service import get_sharepoint_service
@@ -32,18 +30,17 @@ def get_sharepoint_status():
             "authenticated": is_authenticated,
         })
     except Exception as e:
-        logger.error("Error getting SharePoint status: %s", e, exc_info=True)
+        logger.error(f"Error getting SharePoint status: {e}")
         return jsonify({
             "enabled": settings.sharepoint_enabled,
             "site_url": settings.sharepoint_site_url,
             "folder_path": settings.sharepoint_folder_path,
             "authenticated": False,
-            "error": "Failed to retrieve SharePoint status"
+            "error": str(e)
         })
 
 
 @sharepoint_bp.route("/authenticate", methods=["POST"])
-@require_admin
 def authenticate_sharepoint():
     """
     Test SharePoint authentication using Service Principal.
@@ -85,15 +82,14 @@ def authenticate_sharepoint():
             "drive_id": drive_id
         })
     except Exception as e:
-        logger.error("SharePoint authentication failed: %s", e, exc_info=True)
+        logger.error(f"SharePoint authentication failed: {e}")
         return jsonify({
             "success": False,
-            "error": "SharePoint authentication failed"
+            "error": str(e)
         }), 500
 
 
 @sharepoint_bp.route("/test-upload", methods=["POST"])
-@require_admin
 def test_sharepoint_upload():
     """Test SharePoint upload by uploading a small test file."""
     from app.services.sharepoint_service import get_sharepoint_service
@@ -125,8 +121,8 @@ def test_sharepoint_upload():
             "filename": test_filename
         })
     except Exception as e:
-        logger.error("SharePoint test upload failed: %s", e, exc_info=True)
+        logger.error(f"SharePoint test upload failed: {e}")
         return jsonify({
             "success": False,
-            "error": "SharePoint test upload failed"
+            "error": str(e)
         }), 500

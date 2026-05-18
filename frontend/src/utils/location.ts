@@ -1,19 +1,5 @@
 import { Order } from "../types/order";
 
-interface ShippingAddress {
-  city?: string;
-  address1?: string;
-  address2?: string;
-  state?: string;
-  postalCode?: string;
-}
-
-function getShippingAddress(order: Order): ShippingAddress | null {
-  if (!order.inflow_data || typeof order.inflow_data !== "object") return null;
-  const addr = (order.inflow_data as Record<string, unknown>).shippingAddress;
-  return typeof addr === "object" && addr !== null ? addr as ShippingAddress : null;
-}
-
 /**
  * Determines if an order is a local delivery (Bryan/College Station) or shipping
  * @param order The order to check
@@ -24,7 +10,7 @@ export function isLocalDelivery(order: Order): boolean {
     return true; // Assume local if no inflow data
   }
 
-  const shippingAddress = getShippingAddress(order);
+  const shippingAddress = order.inflow_data.shippingAddress;
   if (!shippingAddress) {
     return true; // Assume local if no shipping address
   }
@@ -55,9 +41,8 @@ export function formatDeliveryLocation(order: Order): string {
   }
 
   // For non-local orders, extract city from inflow data
-  const addr = getShippingAddress(order);
-  if (addr?.city) {
-    return addr.city.trim();
+  if (order.inflow_data?.shippingAddress?.city) {
+    return order.inflow_data.shippingAddress.city.trim();
   }
 
   // Fallback: if no city in inflow data, return the delivery location as-is

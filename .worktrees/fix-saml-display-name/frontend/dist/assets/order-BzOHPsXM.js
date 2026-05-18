@@ -1,1 +1,0 @@
-var i=(e=>(e.PICKED="picked",e.QA="qa",e.PRE_DELIVERY="pre-delivery",e.IN_DELIVERY="in-delivery",e.SHIPPING="shipping",e.DELIVERED="delivered",e.ISSUE="issue",e))(i||{});const p={picked:"Picked",qa:"QA","pre-delivery":"Pre-Delivery","in-delivery":"In Delivery",shipping:"Shipping",delivered:"Delivered",issue:"Issue"};export{i as O,p as a};

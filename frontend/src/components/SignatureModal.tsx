@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Eraser, PenTool, Check, AlertCircle } from "lucide-react";
@@ -12,9 +12,9 @@ interface SignatureModalProps {
 
 export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const drawingRef = useRef(false);
+    const [isDrawing, setIsDrawing] = useState(false);
     const [hasSignature, setHasSignature] = useState(false);
-    const [requirePenInput, setRequirePenInput] = useState(false);
+    const [requirePenInput, setRequirePenInput] = useState(true);
     const [debugInfo, setDebugInfo] = useState<string>("");
 
     // Reset canvas when opening
@@ -63,48 +63,15 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
-    const getPointerPos = (canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
+    const getPointerPos = (e: React.PointerEvent) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
         return {
-            x: clientX - rect.left,
-            y: clientY - rect.top
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
         };
     };
-
-    const handlePointerMove = useCallback((e: PointerEvent) => {
-        if (!drawingRef.current) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        e.preventDefault();
-        const { x, y } = getPointerPos(canvas, e.clientX, e.clientY);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.lineWidth = e.pressure ? Math.max(1, e.pressure * 4) : 3;
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        setHasSignature(prev => prev ? prev : true);
-    }, []);
-
-    const handlePointerUp = useCallback(() => {
-        if (!drawingRef.current) return;
-        drawingRef.current = false;
-        setDebugInfo("");
-    }, []);
-
-    // Attach/detach document-level listeners for move/up to survive pointer leaving canvas
-    useEffect(() => {
-        if (!open) return;
-        document.addEventListener('pointermove', handlePointerMove);
-        document.addEventListener('pointerup', handlePointerUp);
-        document.addEventListener('pointercancel', handlePointerUp);
-        return () => {
-            document.removeEventListener('pointermove', handlePointerMove);
-            document.removeEventListener('pointerup', handlePointerUp);
-            document.removeEventListener('pointercancel', handlePointerUp);
-        };
-    }, [open, handlePointerMove, handlePointerUp]);
 
     const startDrawing = (e: React.PointerEvent) => {
         if (requirePenInput && e.pointerType !== 'pen') {
@@ -112,12 +79,9 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
             return;
         }
 
-        e.preventDefault();
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const { x, y } = getPointerPos(canvas, e.clientX, e.clientY);
-        const ctx = canvas.getContext('2d');
+        e.preventDefault(); // Prevent scrolling
+        const { x, y } = getPointerPos(e);
+        const ctx = canvasRef.current?.getContext('2d');
         if (!ctx) return;
 
         ctx.beginPath();
@@ -127,8 +91,30 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
         ctx.lineJoin = 'round';
         ctx.strokeStyle = 'black';
 
-        drawingRef.current = true;
+        setIsDrawing(true);
         setDebugInfo("Drawing...");
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    };
+
+    const draw = (e: React.PointerEvent) => {
+        if (!isDrawing) return;
+        e.preventDefault();
+
+        const { x, y } = getPointerPos(e);
+        const ctx = canvasRef.current?.getContext('2d');
+        if (!ctx) return;
+
+        ctx.lineWidth = e.pressure ? Math.max(1, e.pressure * 4) : 3;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        if (!hasSignature) setHasSignature(true);
+    };
+
+    const stopDrawing = (e: React.PointerEvent) => {
+        if (!isDrawing) return;
+        setIsDrawing(false);
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     };
 
     // Cropping Logic
@@ -206,8 +192,8 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         Add Signature
                     </DialogTitle>
                     <DialogDescription>
-                    Sign with mouse, touch, or pen. Use the toggle below to require pen input if needed.
-                    {requirePenInput && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
+                        Sign below using your pencil. Use finger or mouse for the rest of the app.
+                        {requirePenInput && <span className="ml-2 text-xs text-amber-600 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Pen Input Only</span>}
                     </DialogDescription>
                 </DialogHeader>
  
@@ -216,9 +202,13 @@ export function SignatureModal({ open, onOpenChange, onSave }: SignatureModalPro
                         ref={canvasRef}
                         width={600}
                         height={300}
-                        className="h-[300px] w-full touch-none select-none cursor-crosshair rounded-lg bg-background"
-                        style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+                        className="h-[300px] w-full touch-none cursor-crosshair rounded-lg bg-background"
+                        style={{ touchAction: 'none' }}
                         onPointerDown={startDrawing}
+                        onPointerMove={draw}
+                        onPointerUp={stopDrawing}
+                        onPointerCancel={stopDrawing}
+                        onPointerLeave={stopDrawing}
                     />
                     {!hasSignature && (
                         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground/60">

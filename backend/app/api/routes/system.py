@@ -4,7 +4,6 @@ System status API routes.
 Provides endpoints for checking backend feature statuses.
 """
 
-import hmac
 import json
 import os
 import re
@@ -12,7 +11,7 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Blueprint, abort, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file
 from typing import Dict, Any, cast, Optional, Sequence
 from datetime import datetime, timezone
 import requests
@@ -47,7 +46,6 @@ from app.services.system_setting_service import (
     SETTING_EMAIL_ENABLED,
     SETTING_TEAMS_RECIPIENT_ENABLED,
     SETTING_ADMIN_EMAILS,
-    SETTING_PICKLIST_PRINT_CLAIM_TIMEOUT_SECONDS,
 )
 
 
@@ -77,23 +75,6 @@ _VETTING_EDITOR_DOWNLOAD_HEADERS = {
 PRINT_AGENT_CLAIM_TIMEOUT_SECONDS = 300
 
 
-def _get_print_agent_claim_timeout_seconds() -> int:
-    db = get_db_session()
-    try:
-        raw_value = SystemSettingService.get_setting(
-            db, SETTING_PICKLIST_PRINT_CLAIM_TIMEOUT_SECONDS
-        )
-    finally:
-        db.close()
-
-    try:
-        timeout = int(str(raw_value).strip())
-    except (TypeError, ValueError):
-        return PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
-
-    return timeout if timeout > 0 else PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
-
-
 def _require_print_agent() -> None:
     configured_token = (settings.picklist_print_agent_token or "").strip()
     if not configured_token:
@@ -104,7 +85,7 @@ def _require_print_agent() -> None:
         raise PermissionError("Missing bearer token")
 
     provided_token = auth_header.removeprefix("Bearer ").strip()
-    if not hmac.compare_digest(provided_token, configured_token):
+    if provided_token != configured_token:
         raise PermissionError("Invalid bearer token")
 
 
@@ -124,11 +105,6 @@ def _send_picklist_pdf(file_path: str, download_name: str):
             as_attachment=False,
             download_name=download_name,
         )
-
-    storage_root = Path(settings.storage_root).resolve()
-    resolved_path = Path(file_path).resolve()
-    if not resolved_path.is_relative_to(storage_root):
-        abort(403, description="Access denied")
 
     path = Path(file_path)
     if path.exists():
@@ -864,31 +840,6 @@ def get_system_settings():
     return jsonify(result)
 
 
-@bp.route("/settings/<key>", methods=["GET"])
-@require_admin
-def get_system_setting(key: str):
-    """Get a single system setting."""
-    if key not in DEFAULT_SETTINGS:
-        return jsonify({"error": f"Unknown setting: {key}"}), 400
-
-    db = get_db_session()
-    try:
-        setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-        defaults = DEFAULT_SETTINGS[key]
-        return jsonify(
-            {
-                "key": key,
-                "value": setting.value if setting else defaults["value"],
-                "type": defaults.get("type"),
-                "description": defaults.get("description"),
-                "updated_at": _to_utc_iso_z(setting.updated_at) if setting else None,
-                "updated_by": setting.updated_by if setting else None,
-            }
-        )
-    finally:
-        db.close()
-
-
 @bp.route("/settings/<key>", methods=["PUT"])
 @require_admin
 def update_system_setting(key: str):
@@ -909,14 +860,11 @@ def update_system_setting(key: str):
 
     # SystemSettingService handles its own DB session
     setting = SystemSettingService.set_setting(key, str(data["value"]), updated_by)
-    defaults = DEFAULT_SETTINGS[key]
 
     return jsonify(
         {
             "key": setting.key,
             "value": setting.value,
-            "type": defaults.get("type"),
-            "description": defaults.get("description"),
             "updated_at": _to_utc_iso_z(setting.updated_at),
             "updated_by": setting.updated_by,
         }
@@ -933,20 +881,18 @@ def get_admins():
     env_admins = _normalize_admin_emails(settings.get_admin_emails())
     db_admins = _get_db_admin_allowlist()
 
-    # Merge: env entries are pinned, DB entries are app-managed.
-    merged = sorted(set(env_admins) | set(db_admins))
-
-    if env_admins and db_admins:
-        source = "mixed"
-    elif env_admins:
+    if env_admins:
         source = "env"
+        admins = env_admins
     elif db_admins:
         source = "db"
+        admins = db_admins
     else:
         source = "default"
+        admins = []
 
     response: dict[str, Any] = {
-        "admins": merged,
+        "admins": admins,
         "source": source,
         "env_admins": env_admins,
         "db_admins": db_admins,
@@ -957,7 +903,17 @@ def get_admins():
 @bp.route("/admins", methods=["PUT"])
 @require_admin
 def update_admins():
-    """Update the DB-backed admin allowlist. Env entries are pinned and auto-merged on reads."""
+    """Update the DB-backed admin allowlist (unless ADMIN_EMAILS override active)."""
+    if _is_env_admin_override_active():
+        return (
+            jsonify(
+                {
+                    "error": "ADMIN_EMAILS env override is active; admin allowlist is read-only and must be updated via environment variables.",
+                }
+            ),
+            409,
+        )
+
     data = request.get_json(silent=True) or {}
     admins_payload = data.get("admins")
     if not isinstance(admins_payload, list):
@@ -985,7 +941,6 @@ def update_admins():
 
     caller_email = _get_request_user_email_normalized()
     caller_looks_like_email = bool(caller_email and EMAIL_RE.match(caller_email))
-    caller_in_env = caller_looks_like_email and caller_email in _normalize_admin_emails(settings.get_admin_emails())
 
     if not settings.is_dev():
         if not normalized:
@@ -997,7 +952,7 @@ def update_admins():
                 ),
                 400,
             )
-        if caller_looks_like_email and caller_email not in normalized and not caller_in_env:
+        if caller_looks_like_email and caller_email not in normalized:
             return (
                 jsonify(
                     {
@@ -1048,17 +1003,10 @@ def update_admins():
 
         db.commit()
 
-        # Merge env admins into the response so the caller sees the full picture.
-        env_admins = _normalize_admin_emails(settings.get_admin_emails())
-        merged = sorted(set(env_admins) | set(normalized))
-        source = "mixed" if env_admins else "db"
-
         return jsonify(
             {
-                "admins": merged,
-                "db_admins": normalized,
-                "env_admins": env_admins,
-                "source": source,
+                "admins": normalized,
+                "source": "db",
                 "updated_by": updated_by,
             }
         )
@@ -1143,7 +1091,7 @@ def claim_next_print_job():
     try:
         service = PrintJobService(db)
         job = service.claim_next_pending_job(
-            claim_timeout_seconds=_get_print_agent_claim_timeout_seconds()
+            claim_timeout_seconds=PRINT_AGENT_CLAIM_TIMEOUT_SECONDS
         )
         if not job:
             db.commit()
@@ -1479,6 +1427,7 @@ def test_teams_recipient():
             recipient_name=recipient_name,
             order_number="TEST-123",
             delivery_runner="System Administrator",
+            estimated_time="Currently (Test)",
             order_items=["Test Item 1", "Test Item 2"],
             force=True,  # Force send even if disabled in settings
         )
@@ -1679,9 +1628,9 @@ def upload_canopy_orders():
             return jsonify({"error": "Order number cannot be empty"}), 400
 
         digits = compact[2:] if compact.startswith("TH") else compact
-        if len(digits) < 1 or not digits.isdigit():
+        if len(digits) != 4 or not digits.isdigit():
             return jsonify(
-                {"error": "Order number must be at least 1 digit after TH (e.g., TH1, TH123, TH12345)"}
+                {"error": "Order number must be 4 digits (e.g., 1234 or TH1234)"}
             ), 400
 
         normalized = f"TH{digits}"
@@ -1723,6 +1672,17 @@ def upload_canopy_orders():
 
             if getattr(order, "tagged_at", None) is not None:
                 ineligible_orders.append({"order": th, "reason": "already tagged"})
+                continue
+
+            raw_tag_data = getattr(order, "tag_data", None) or {}
+            tag_data = raw_tag_data if isinstance(raw_tag_data, dict) else {}
+            already_requested = (
+                bool(tag_data.get("canopyorders_request_sent_at"))
+                or bool(tag_data.get("tag_request_sent_at"))
+                or tag_data.get("tag_request_status") == "sent"
+            )
+            if already_requested:
+                ineligible_orders.append({"order": th, "reason": "already requested"})
                 continue
 
             inflow_data = getattr(order, "inflow_data", None)
@@ -1821,19 +1781,19 @@ def upload_canopy_orders():
 def _normalize_canopyorders_bypass_value(raw_value: str) -> str:
     trimmed = raw_value.strip()
     compact = "".join(trimmed.upper().split())
-    if len(compact) >= 1 and compact.isdigit():
+    if len(compact) == 4 and compact.isdigit():
         return f"TH{compact}"
-    if compact.startswith("TH") and len(compact) >= 3 and compact[2:].isdigit():
+    if compact.startswith("TH") and len(compact) == 6 and compact[2:].isdigit():
         return f"TH{compact[2:]}"
     return trimmed
 
 
 def _is_exact_th_order(value: str) -> bool:
-    # Accept TH followed by any number of digits (e.g., TH1, TH123, TH12345)
+    if len(value) != 6:
+        return False
     if not value.startswith("TH"):
         return False
-    stripped = value[2:]
-    return len(stripped) >= 1 and stripped.isdigit()
+    return value[2:].isdigit()
 
 
 @bp.route("/canopyorders/upload-bypass", methods=["POST"])

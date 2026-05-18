@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError as PydanticValidationError
 
@@ -15,7 +17,6 @@ from app.schemas.vehicle_checkout import (
 )
 from app.services.vehicle_checkout_service import VehicleCheckoutService
 from app.utils.exceptions import ValidationError
-from app.utils.broadcast_dedup import broadcast_dedup
 
 
 vehicle_checkouts_bp = Blueprint("vehicle_checkouts", __name__, url_prefix="/api/vehicle-checkouts")
@@ -39,7 +40,7 @@ def checkout_vehicle():
             purpose=req.purpose,
             notes=req.notes,
         )
-        broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
+        threading.Thread(target=broadcast_vehicle_status_update_sync).start()
         response = VehicleCheckoutResponse.model_validate(checkout)
         return jsonify(response.model_dump())
 
@@ -56,7 +57,7 @@ def checkin_vehicle():
     with get_db() as db:
         service = VehicleCheckoutService(db)
         checkout = service.checkin(vehicle=req.vehicle, notes=req.notes)
-        broadcast_dedup.request_broadcast(broadcast_vehicle_status_update_sync)
+        threading.Thread(target=broadcast_vehicle_status_update_sync).start()
         response = VehicleCheckoutResponse.model_validate(checkout)
         return jsonify(response.model_dump())
 

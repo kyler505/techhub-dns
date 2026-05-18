@@ -70,7 +70,6 @@ export interface Order {
   status: OrderStatus;
   assigned_deliverer?: string;
   delivery_run_id?: string;
-  delivery_sequence?: number | null;
   issue_reason?: string;
   tagged_at?: string;
   tagged_by?: string;
@@ -80,7 +79,7 @@ export interface Order {
   picklist_path?: string;
   qa_completed_at?: string;
   qa_completed_by?: string;
-  qa_data?: Record<string, unknown>;
+  qa_data?: Record<string, any>;
   qa_path?: string;
   qa_method?: string;
   signature_captured_at?: string;
@@ -93,12 +92,7 @@ export interface Order {
   shipped_to_carrier_by?: string;
   carrier_name?: string;
   tracking_number?: string;
-  parent_order_id?: string;
-  parent_inflow_order_id?: string;
-  has_remainder?: string | boolean | null;
-  remainder_order_id?: string | null;
-  remainder_inflow_order_id?: string | null;
-  inflow_data?: Record<string, unknown>;
+  inflow_data?: Record<string, any>;
   pick_status?: PickStatus;
   latest_picklist_print_job?: PrintJobSummary;
   asset_tag_serials?: AssetTagSerial[];
@@ -119,7 +113,7 @@ export interface TagData {
 }
 
 export interface OrderDetail extends Order {
-  inflow_data?: Record<string, unknown>;
+  inflow_data?: Record<string, any>;
   asset_tag_required?: boolean;
   teams_notifications?: TeamsNotification[];
 }
@@ -133,12 +127,6 @@ export interface AssetTagSerial {
 }
 
 export interface OrderStatusUpdate {
-  status: OrderStatus;
-  reason?: string;
-  expected_updated_at?: string;
-}
-
-export interface OrderRollbackUpdate {
   status: OrderStatus;
   reason?: string;
   expected_updated_at?: string;
@@ -162,7 +150,7 @@ export interface AuditLog {
   to_status: string;
   reason?: string;
   timestamp: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, any>;
 }
 
 export interface TeamsNotification {

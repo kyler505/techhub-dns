@@ -7,9 +7,15 @@ import base64
 import io
 from pathlib import Path
 
-# Add backend to path and provide a lightweight SQLite database URL for imports.
+# Add backend to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-os.environ.setdefault("DATABASE_URL", "sqlite:////tmp/techhub-signature-smoke.db")
+
+# MOCK DATABASE to avoid connection errors or import errors
+import sys
+from unittest.mock import MagicMock
+mock_db = MagicMock()
+sys.modules['app.database'] = mock_db
+sys.modules['app.database'].get_db = MagicMock()
 
 from app.services.order_service import OrderService
 from reportlab.pdfgen import canvas

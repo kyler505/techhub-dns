@@ -42,14 +42,15 @@ def run_test(method, expected_status):
     # QA Data
     qa_data = {
         "method": method,
-        "orderNumber": mock_order.inflow_order_id,
-        "technician": "Hunter",
+        "orderNumber": "TH123",
+        "technician": "Test Tech",
         "qaSignature": "Sig",
         "verifyAssetTagSerialMatch": True,
-        "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved": True,
+        "verifyOrderDetailsTemplateSent": True,
         "verifyPackagedProperly": True,
         "verifyPackingSlipSerialsMatch": True,
-        "verifyBoxesLabeledCorrectly": True,
+        "verifyElectronicPackingSlipSaved": True,
+        "verifyBoxesLabeledCorrectly": True
     }
 
     # Patch internal methods to avoid side effects

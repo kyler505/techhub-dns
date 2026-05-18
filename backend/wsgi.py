@@ -5,7 +5,7 @@ import sys
 import os
 
 # Add project to path
-project_path = os.path.dirname(os.path.abspath(__file__))
+project_path = '/home/techhub/techhub-dns/backend'
 if project_path not in sys.path:
     sys.path.insert(0, project_path)
 
@@ -19,5 +19,4 @@ if os.path.exists(env_path):
     load_dotenv(env_path)
 
 # Import the Flask app
-from app.main import app, socketio
-application = app
+from app.main import app as application

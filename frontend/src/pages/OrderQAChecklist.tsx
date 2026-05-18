@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Order, OrderStatus } from "../types/order";
 import { ordersApi } from "../api/orders";
 import { isValidOrderId } from "../utils/orderIds";
-
-function safeArray<T>(value: unknown): T[] {
-    return Array.isArray(value) ? value : [];
-}
 
 type SavedQAChecklist = {
     orderId: string; // internal id
@@ -21,18 +17,17 @@ type SavedQAChecklist = {
     };
 };
 
-const storageKey = (orderId: string) => `order-qa-checklist-v3:${orderId}`;
+const storageKey = (orderId: string) => `order-qa-checklist-v2:${orderId}`;
 
 export default function OrderQAChecklist() {
     const navigate = useNavigate();
-    const location = useLocation();
 
     const openOrder = (orderId?: string) => {
         if (!isValidOrderId(orderId)) {
             toast.error("Order details are unavailable for this row");
             return;
         }
-        navigate(`/orders/${orderId}`, { state: { fromPath: location.pathname } });
+        navigate(`/orders/${orderId}`);
     };
 
     const openQa = (orderId?: string) => {
@@ -58,7 +53,7 @@ export default function OrderQAChecklist() {
                 status: OrderStatus.QA,
                 search: search.trim() ? search.trim() : undefined,
             });
-            setOrders(safeArray<Order>(data.items));
+            setOrders(data);
         } catch (error) {
             console.error("Failed to load orders:", error);
             toast.error("Failed to load orders");
@@ -69,7 +64,7 @@ export default function OrderQAChecklist() {
 
     const completedMap = useMemo(() => {
         const map = new Map<string, string>(); // orderId -> submittedAt
-        for (const o of safeArray<Order>(orders)) {
+        for (const o of orders) {
             if (o.qa_completed_at) {
                 map.set(o.id, o.qa_completed_at);
             } else {
@@ -86,10 +81,8 @@ export default function OrderQAChecklist() {
         return map;
     }, [orders]);
 
-    const displayOrders = useMemo(() => safeArray<Order>(orders), [orders]);
-
     return (
-        <div className="container mx-auto p-4 sm:p-6">
+        <div className="p-4">
             <header className="mb-4">
                 <h1 className="text-2xl font-bold text-gray-900">QA Checklist Dashboard</h1>
                 <p className="text-sm text-muted-foreground">Monitor orders awaiting QA review.</p>
@@ -131,7 +124,7 @@ export default function OrderQAChecklist() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/70">
-                                {displayOrders
+                                {orders
                                     .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => {
                                         return ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status);
@@ -145,7 +138,7 @@ export default function OrderQAChecklist() {
                                             <td className="px-3 py-2 text-sm text-foreground">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openOrder(o.inflow_order_id || o.id)}
+                                                    onClick={() => openOrder(o.id)}
                                                     disabled={loadingOrders}
                                                     className={`rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${loadingOrders ? "opacity-75 cursor-not-allowed" : ""}`}
                                                 >
@@ -157,7 +150,7 @@ export default function OrderQAChecklist() {
                                             <td className="px-3 py-2 text-sm">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openQa(o.inflow_order_id || o.id)}
+                                                    onClick={() => openQa(o.id)}
                                                     disabled={loadingOrders}
                                                     className={`flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${loadingOrders ? "opacity-75 cursor-not-allowed" : ""}`}
                                                 >
@@ -171,13 +164,13 @@ export default function OrderQAChecklist() {
                                     );
                                 })}
 
-                                {displayOrders
+                                {orders
                                     .filter((o) => !completedMap.has(o.id))
                                     .filter((o) => ![OrderStatus.DELIVERED, OrderStatus.IN_DELIVERY, OrderStatus.SHIPPING].includes(o.status))
                                     .length === 0 && (
                                         <tr>
                                             <td className="px-3 py-6 text-center text-sm text-muted-foreground" colSpan={4}>
-                                                {displayOrders.length === 0
+                                                {orders.length === 0
                                                     ? "No orders need QA at this time."
                                                     : "All eligible orders have completed QA."}
                                             </td>
@@ -202,9 +195,10 @@ type SavedQAChecklist = {
     orderNumber: string;
     technician: string;
     verifyAssetTagSerialMatch: boolean;
-    verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved: boolean;
+    verifyOrderDetailsTemplateSent: boolean;
     verifyPackagedProperly: boolean;
     verifyPackingSlipSerialsMatch: boolean;
+    verifyElectronicPackingSlipSaved: boolean;
     verifyBoxesLabeledCorrectly: boolean;
     qaSignature: string;
     method: "Delivery" | "Shipping";

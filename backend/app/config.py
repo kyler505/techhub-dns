@@ -1,4 +1,3 @@
-import os
 import json
 from typing import Optional, List, Any
 
@@ -29,9 +28,6 @@ class Settings(BaseSettings):
 
     # Storage
     storage_root: str = "storage"
-
-    # Local document storage (set TECHUB_DNS_LOCAL_STORAGE to override)
-    local_document_storage: str = os.getenv("TECHUB_DNS_LOCAL_STORAGE", "/tmp/techhub-dns")
     picklist_template_path: str = "frontend/public/pdfs/sample.pdf"
 
     # SharePoint Storage
@@ -52,7 +48,7 @@ class Settings(BaseSettings):
     cors_allowed_origins: Optional[str] = None
 
     # Auth (structure only)
-    secret_key: Optional[str] = None
+    secret_key: str = "change-me-in-production"
 
     # Admin authorization
     # Allowlist of admin emails. See ADMIN_EMAILS env var.
@@ -212,10 +208,8 @@ class Settings(BaseSettings):
     # Vetting Editor (env-only, no Key Vault integration)
     vetting_editor_download_url: Optional[str] = None
     vetting_editor_upload_url: Optional[str] = None
-
-    # Compatibility Editor Staging (env-only, no Key Vault integration)
-    compatibility_editor_staging_download_url: Optional[str] = None
-    compatibility_editor_staging_upload_url: Optional[str] = None
+    vetting_editor_webdav_username: Optional[str] = None
+    vetting_editor_webdav_password: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env", case_sensitive=False, extra="ignore"

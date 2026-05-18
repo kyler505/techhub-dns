@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import type { User } from "../../contexts/AuthContext";
 import type { Vehicle, VehicleStatusItem } from "../../api/vehicleCheckouts";
 import { getStatusBadge, VehicleStatusMeta } from "../vehicles/VehicleStatusStrip";
-import { getUserDisplayName } from "../../utils/userDisplay";
 
 type Props = {
   selectedOrdersCount: number;
@@ -16,7 +15,7 @@ type Props = {
 };
 
 function runnerDisplay(user: User | null): string {
-  return getUserDisplayName(user, "you");
+  return user?.display_name || user?.email || "you";
 }
 
 function checkedOutByCurrentUser(status: VehicleStatusItem, user: User | null): boolean {
@@ -30,7 +29,7 @@ function checkedOutByCurrentUser(status: VehicleStatusItem, user: User | null): 
   const checkedOutBy = status.checked_out_by;
   if (!checkedOutBy) return false;
 
-  const candidates = [getUserDisplayName(user, ""), user?.email].filter(
+  const candidates = [user?.display_name, user?.email].filter(
     (value): value is string => typeof value === "string" && Boolean(value.trim())
   );
   return candidates.some((candidate) => candidate === checkedOutBy);

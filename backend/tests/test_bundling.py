@@ -33,7 +33,8 @@ def test_qa_pdf_generation():
         "qaSignature": "Test Signature",
         "verifyAssetTagSerialMatch": True,
         "verifyBoxesLabeledCorrectly": True,
-        "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved": True,
+        "verifyElectronicPackingSlipSaved": False,
+        "verifyOrderDetailsTemplateSent": True,
         "verifyPackagedProperly": True,
         "verifyPackingSlipSerialsMatch": True
     }
@@ -67,10 +68,8 @@ def test_qa_pdf_generation():
     checklist_items = [
         ("verifyAssetTagSerialMatch", "Asset tags match serial numbers"),
         ("verifyBoxesLabeledCorrectly", "Boxes labeled correctly"),
-        (
-            "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved",
-            "Order details template sent and electronic packing slip saved",
-        ),
+        ("verifyElectronicPackingSlipSaved", "Electronic packing slip saved"),
+        ("verifyOrderDetailsTemplateSent", "Order details template sent"),
         ("verifyPackagedProperly", "Packaged properly"),
         ("verifyPackingSlipSerialsMatch", "Packing slip serials match")
     ]
@@ -102,7 +101,7 @@ def test_qa_pdf_generation():
 
 def test_pdf_bundling():
     """Test PDF bundling (isolated)"""
-    from pypdf import PdfWriter
+    from pypdf import PdfMerger
 
     # Create temp directory
     temp_dir = Path("storage/temp")
@@ -129,11 +128,11 @@ def test_pdf_bundling():
     # Test bundling
     output_path = temp_dir / "test-bundle.pdf"
 
-    writer = PdfWriter()
-    writer.append(str(pdf1_path))
-    writer.append(str(pdf2_path))
-    with open(output_path, "wb") as output_file:
-        writer.write(output_file)
+    merger = PdfMerger()
+    merger.append(str(pdf1_path))
+    merger.append(str(pdf2_path))
+    merger.write(str(output_path))
+    merger.close()
 
     if output_path.exists():
         print(f"[SUCCESS] Bundled PDF created: {output_path}")

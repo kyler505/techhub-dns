@@ -1,23 +1,23 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, Union
-from uuid import UUID
-
+from typing import Any, Dict, List, Optional, Sequence
 from flask import g
-from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from uuid import UUID
+from typing import Union
 
-from app.database import get_db
-from app.models.audit_log import AuditLog
 from app.models.delivery_run import DeliveryRun, DeliveryRunStatus, VehicleEnum
+from app.utils.timezone import get_date_in_cst, is_morning_in_cst, to_utc_iso_z
+from sqlalchemy import func
 from app.models.order import Order, OrderStatus
+from app.models.audit_log import AuditLog
 from app.models.order_status_history import OrderStatusHistory
-from app.models.user import User
-from app.models.vehicle_checkout import VehicleCheckout
 from app.services.audit_service import AuditService
 from app.services.inflow_service import InflowService
+from app.models.vehicle_checkout import VehicleCheckout
 from app.utils.exceptions import ConflictError, NotFoundError, ValidationError
-from app.utils.timezone import get_date_in_cst, is_morning_in_cst, to_utc_iso_z
+
 
 class DeliveryRunService:
     def __init__(self, db: Session):
@@ -329,40 +329,21 @@ class DeliveryRunService:
             )
         return vehicle_norm
 
-    def _get_authenticated_actor(self) -> tuple[str, str, str]:
+    def _get_authenticated_actor(self) -> tuple[str, str, Optional[str]]:
         user_id = (getattr(g, "user_id", None) or "").strip()
         if not user_id:
             raise ValidationError("Authentication required")
 
-        user_data = getattr(g, "user_data", None) or {}
-        display_name = (user_data.get("display_name") or "").strip()
-
-        if not display_name:
-            legacy_user = getattr(g, "user", None)
-            if legacy_user is not None:
-                display_name = (
-                    (getattr(legacy_user, "display_name", None) or "").strip()
-                )
-
-        if not display_name:
-            with get_db() as db:
-                user = db.query(User).filter(User.id == user_id).first()
-                if user:
-                    display_name = (user.display_name or "").strip()
-
-        if not display_name:
-            raise ValidationError("Authenticated user missing display name")
-
-        email = (getattr(g, "user_email", None) or "").strip()
+        user = getattr(g, "user", None)
+        email = (getattr(user, "email", None) or "").strip()
+        display_name = (getattr(user, "display_name", None) or "").strip() or None
         if not email:
-            legacy_user = getattr(g, "user", None)
-            if legacy_user is not None:
-                email = (getattr(legacy_user, "email", None) or "").strip()
+            raise ValidationError("Authenticated user missing email")
 
-        return user_id, display_name, email
+        return user_id, email, display_name
 
-    def _format_actor_display(self, display_name: str) -> str:
-        return (display_name or "").strip()
+    def _format_actor_display(self, email: str, display_name: Optional[str]) -> str:
+        return (display_name or "").strip() or email.strip()
 
     def _get_active_checkout(self, vehicle: str) -> VehicleCheckout | None:
         return (
@@ -380,8 +361,8 @@ class DeliveryRunService:
         self, order_ids: Sequence[Union[UUID, str]], vehicle: str
     ) -> DeliveryRun:
         vehicle_norm = self._validate_vehicle(vehicle)
-        actor_user_id, actor_display_name, actor_email = self._get_authenticated_actor()
-        runner_display = self._format_actor_display(actor_display_name)
+        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
+        runner_display = self._format_actor_display(actor_email, actor_display_name)
 
         active_checkout = self._get_active_checkout(vehicle_norm)
         if not active_checkout:
@@ -437,20 +418,10 @@ class DeliveryRunService:
         """
         vehicle_norm = self._validate_vehicle(vehicle)
 
-        # Vehicle availability — lock existing active runs for this vehicle to prevent races
-        existing_run = (
-            self.db.query(DeliveryRun)
-            .filter(
-                DeliveryRun.vehicle == vehicle_norm,
-                DeliveryRun.status == DeliveryRunStatus.ACTIVE.value,
-            )
-            .with_for_update()
-            .first()
-        )
-        if existing_run is not None:
+        # Vehicle availability
+        if not self.check_vehicle_availability(vehicle_norm):
             raise ValidationError(
-                f"Vehicle {vehicle} is currently in use",
-                details={"vehicle": vehicle, "active_run_id": str(existing_run.id)},
+                f"Vehicle {vehicle} is currently in use", details={"vehicle": vehicle}
             )
 
         # Convert order IDs to strings for MySQL compatibility
@@ -571,38 +542,42 @@ class DeliveryRunService:
             successes: List[dict] = []
             failures: List[dict] = []
 
-            async def _fulfill_one(order):
+            for order in orders:
                 inflow_sales_order_id = order.inflow_sales_order_id
                 if not inflow_sales_order_id:
-                    return None, {
-                        "order_id": str(order.id),
-                        "inflow_order_id": order.inflow_order_id,
-                        "error": "missing_inflow_sales_order_id",
-                    }
+                    failures.append(
+                        {
+                            "order_id": str(order.id),
+                            "inflow_order_id": order.inflow_order_id,
+                            "error": "missing_inflow_sales_order_id",
+                        }
+                    )
+                    continue
+
                 try:
                     updated_inflow_order = await inflow_service.fulfill_sales_order(
                         inflow_sales_order_id,
                         db=self.db,
                         user_id=user_id,
-                        only_picked_items=True,
+                        only_picked_items=True,  # Only fulfill items that were actually picked
                     )
                     order.inflow_data = updated_inflow_order
-                    return {
-                        "order_id": str(order.id),
-                        "inflow_order_id": order.inflow_order_id,
-                        "inflow_sales_order_id": inflow_sales_order_id,
-                    }, None
+                    successes.append(
+                        {
+                            "order_id": str(order.id),
+                            "inflow_order_id": order.inflow_order_id,
+                            "inflow_sales_order_id": inflow_sales_order_id,
+                        }
+                    )
                 except Exception as exc:
-                    return None, {
-                        "order_id": str(order.id),
-                        "inflow_order_id": order.inflow_order_id,
-                        "inflow_sales_order_id": inflow_sales_order_id,
-                        "error": str(exc),
-                    }
-
-            results = await asyncio.gather(*[_fulfill_one(o) for o in orders])
-            successes.extend(s for s, _ in results if s is not None)
-            failures.extend(f for _, f in results if f is not None)
+                    failures.append(
+                        {
+                            "order_id": str(order.id),
+                            "inflow_order_id": order.inflow_order_id,
+                            "inflow_sales_order_id": inflow_sales_order_id,
+                            "error": str(exc),
+                        }
+                    )
 
             return successes, failures
 
@@ -618,15 +593,18 @@ class DeliveryRunService:
         """
         Finish a delivery run: fulfill orders in InFlow and optionally create remainder orders.
 
-        Splits into three phases to avoid holding the DB lock during network I/O:
-          1. Validate (read-only, no lock)
-          2. Fulfill in InFlow (no DB lock held)
-          3. Short locking transaction for final status + commit
+        Args:
+            run_id: ID of the delivery run
+            user_id: User completing the run
+            create_remainders: Legacy flag retained for API compatibility; partials now requeue the original order
         """
         run_id_str = str(run_id)
-
-        # Phase 1: validate state (read-only, no long-lived lock)
-        run = self.db.query(DeliveryRun).filter(DeliveryRun.id == run_id_str).first()
+        run = (
+            self.db.query(DeliveryRun)
+            .filter(DeliveryRun.id == run_id_str)
+            .with_for_update()
+            .first()
+        )
         if not run:
             raise NotFoundError("DeliveryRun", str(run_id))
 
@@ -663,16 +641,14 @@ class DeliveryRunService:
                 },
             )
 
-        # Phase 2: fulfill in InFlow (no DB lock held during network I/O)
         inflow_successes, inflow_failures = self._fulfill_orders_in_inflow(
             run.orders, user_id
         )
 
+        audit_service = AuditService(self.db)
         if inflow_failures:
-            # Log failure in a quick write
-            audit_service = AuditService(self.db)
             audit_service.log_delivery_run_action(
-                run_id=run_id_str,
+                run_id=str(run_id),
                 action="completion_failed",
                 user_id=user_id,
                 description="Delivery run completion failed during inFlow fulfillment",
@@ -691,25 +667,6 @@ class DeliveryRunService:
                 },
             )
 
-        # Phase 3: short locking transaction for final status update
-        audit_service = AuditService(self.db)
-        partial_delivery_results = self._requeue_partially_delivered_orders(
-            run.orders, user_id, audit_service
-        )
-
-        run = (
-            self.db.query(DeliveryRun)
-            .filter(DeliveryRun.id == run_id_str)
-            .with_for_update()
-            .first()
-        )
-        # Re-check status after acquiring lock
-        if run.status != DeliveryRunStatus.ACTIVE.value:
-            raise ValidationError(
-                "Delivery run status changed during completion",
-                details={"run_id": run_id_str, "current_status": run.status},
-            )
-
         run.status = DeliveryRunStatus.COMPLETED.value
         run.end_time = datetime.utcnow()
         run.updated_at = datetime.utcnow()
@@ -719,12 +676,12 @@ class DeliveryRunService:
         )
 
         audit_service.log_delivery_run_action(
-            run_id=run_id_str,
+            run_id=str(run_id),
             action="completed",
             user_id=user_id,
             description="Delivery run completed",
             audit_metadata={
-                "order_count": len(inflow_successes),
+                "order_count": len(run.orders),
                 "completed_at": to_utc_iso_z(run.end_time),
                 "fulfilled_orders": inflow_successes,
                 "create_remainders_requested": create_remainders,
@@ -752,8 +709,8 @@ class DeliveryRunService:
         if not reason_value:
             raise ValidationError("Recall reason is required", field="reason")
 
-        actor_user_id, actor_display_name, actor_email = self._get_authenticated_actor()
-        actor = self._format_actor_display(actor_display_name)
+        actor_user_id, actor_email, actor_display_name = self._get_authenticated_actor()
+        actor = self._format_actor_display(actor_email, actor_display_name)
 
         run_id_str = str(run_id)
         order_id_str = str(order_id)

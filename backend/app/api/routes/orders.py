@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, abort, send_file, current_app, g
+from flask import Blueprint, request, jsonify, abort, send_file, current_app
 from flask_socketio import emit
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
@@ -6,19 +6,16 @@ from typing import Optional, List
 from uuid import UUID
 from pathlib import Path
 from datetime import datetime
+import threading
 
 from app.database import get_db
-from app.models.user import User
 from app.services.order_service import OrderService
-from app.services.order_splitting import OrderSplittingService
 from app.services.inflow_service import InflowService
-from app.utils.broadcast_dedup import broadcast_dedup
 
 from app.schemas.order import (
     OrderResponse,
     OrderDetailResponse,
     OrderStatusUpdate,
-    OrderRollbackUpdate,
     BulkStatusUpdate,
     OrderUpdate,
     AssetTagUpdate,
@@ -38,14 +35,8 @@ from app.utils.exceptions import (
     NotFoundError,
     ValidationError,
 )
-from app.utils.display_labels import resolve_runner_display, resolve_user_display
 from app.utils.timezone import to_utc_iso_z
-from app.api.auth_middleware import (
-    get_current_user_display_name,
-    get_current_user_email,
-    require_auth,
-    require_admin,
-)
+from app.api.auth_middleware import get_current_user_email
 import logging
 
 bp = Blueprint("orders", __name__)
@@ -56,51 +47,14 @@ logger = logging.getLogger(__name__)
 _order_clients = set()
 
 
-def _resolve_order_user_fields(data: dict, db_session) -> dict:
-    """Resolve raw email/user identifiers to display names in order response data."""
-    if not db_session:
-        return data
-    user_fields = [
-        "assigned_deliverer",
-        "tagged_by",
-        "picklist_generated_by",
-        "qa_completed_by",
-        "shipping_workflow_status_updated_by",
-        "shipped_to_carrier_by",
-    ]
-    for field in user_fields:
-        raw = data.get(field)
-        if raw and isinstance(raw, str) and "@" in raw:
-            data[field] = resolve_user_display(db_session, raw)
-    return data
+def _order_response_json(order) -> dict:
+    return current_app.json.loads(OrderResponse.model_validate(order).model_dump_json())
 
 
-def _order_response_json(order, db_session=None) -> dict:
-    data = current_app.json.loads(OrderResponse.model_validate(order).model_dump_json())
-    return _resolve_order_user_fields(data, db_session)
-
-
-def _order_detail_response_json(order, db_session=None) -> dict:
-    data = current_app.json.loads(
+def _order_detail_response_json(order) -> dict:
+    return current_app.json.loads(
         OrderDetailResponse.model_validate(order).model_dump_json()
     )
-    if db_session:
-        linked_ids = {
-            "parent_order_id": data.get("parent_order_id"),
-            "remainder_order_id": data.get("remainder_order_id"),
-        }
-        for relation_field, linked_order_id in linked_ids.items():
-            inflow_field = relation_field.replace("_order_id", "_inflow_order_id")
-            if not linked_order_id:
-                data[inflow_field] = None
-                continue
-            linked_order = db_session.query(Order).filter(Order.id == linked_order_id).first()
-            data[inflow_field] = linked_order.inflow_order_id if linked_order else None
-    return _resolve_order_user_fields(data, db_session)
-
-
-def _get_current_user_display_name() -> str:
-    return get_current_user_display_name()
 
 
 def _order_list_item_json(order, pick_status_data=None) -> str:
@@ -125,7 +79,7 @@ def _serialize_utc_datetime(value: Optional[datetime]) -> Optional[str]:
     return to_utc_iso_z(value)
 
 
-def _serialize_order_list_item(order, pick_status_data=None, db_session=None) -> dict:
+def _serialize_order_list_item(order, pick_status_data=None) -> dict:
     latest_job = getattr(order, "latest_picklist_print_job", None)
     latest_job_payload = None
     if latest_job is not None:
@@ -140,7 +94,7 @@ def _serialize_order_list_item(order, pick_status_data=None, db_session=None) ->
             "last_error": latest_job.last_error,
         }
 
-    data = {
+    return {
         "id": str(order.id),
         "inflow_order_id": order.inflow_order_id,
         "inflow_sales_order_id": order.inflow_sales_order_id,
@@ -187,29 +141,20 @@ def _serialize_order_list_item(order, pick_status_data=None, db_session=None) ->
         "pick_status": pick_status_data,
         "latest_picklist_print_job": latest_job_payload,
     }
-    return _resolve_order_user_fields(data, db_session)
 
 
 def _broadcast_orders_sync(db_session: Session = None):
     """Send current orders to all connected clients (sync version)."""
-    if db_session is not None:
-        _do_broadcast_orders(db_session)
-        return
+    if db_session is None:
+        from app.database import get_db_session
 
-    from app.database import get_db
+        db_session = get_db_session()
 
-    with get_db() as db:
-        _do_broadcast_orders(db)
-
-
-def _do_broadcast_orders(db_session):
     try:
         service = OrderService(db_session)
         orders, _ = service.get_orders(limit=1000)
         payload = []
         for order in orders:
-            raw_deliverer = order.assigned_deliverer
-            deliverer_label = resolve_user_display(db_session, raw_deliverer, raw_deliverer) if raw_deliverer and "@" in raw_deliverer else raw_deliverer
             payload.append(
                 {
                     "id": str(order.id),
@@ -218,10 +163,11 @@ def _do_broadcast_orders(db_session):
                     "status": order.status,
                     "updated_at": _serialize_utc_datetime(order.updated_at),
                     "delivery_location": order.delivery_location,
-                    "assigned_deliverer": deliverer_label,
+                    "assigned_deliverer": order.assigned_deliverer,
                 }
             )
 
+        # Emit via SocketIO to all connected clients
         # Emit via SocketIO to all connected clients in 'orders' room
         try:
             from app.main import socketio
@@ -231,16 +177,17 @@ def _do_broadcast_orders(db_session):
                 {"type": "orders_update", "data": payload},
                 room="orders",
             )
+            # Keeping broadcast to all for backward compatibility if needed, but 'room' is preferred
         except Exception as e:
             import logging
 
             logging.getLogger(__name__).error(f"Failed to broadcast orders: {e}")
-    except Exception:
-        logger.exception("Failed to broadcast orders")
+    finally:
+        if db_session is not None:
+            db_session.close()
 
 
 @bp.route("/", methods=["GET"])
-@require_auth
 def get_orders():
     """Get orders with filters and pagination"""
     status = request.args.get("status")
@@ -249,7 +196,7 @@ def get_orders():
     limit = request.args.get("limit", 100, type=int)
 
     # Validate limit
-    limit = max(1, min(limit, 200))
+    limit = max(1, min(limit, 1000))
     skip = max(0, skip)
 
     # Convert status string to enum if provided
@@ -279,12 +226,7 @@ def get_orders():
             # Compute pick_status from inflow_data if available
             if include_pick_status and o.inflow_data:
                 try:
-                    pick_status_source = o.inflow_data
-                    if o.remainder_order_id and not o.parent_order_id:
-                        remainder_pick_source = OrderSplittingService(db).build_parent_remainder_pick_status_source(o)
-                        if remainder_pick_source is not None:
-                            pick_status_source = remainder_pick_source
-                    pick_status_data = inflow_service.get_pick_status(pick_status_source)
+                    pick_status_data = inflow_service.get_pick_status(o.inflow_data)
                 except Exception as exc:
                     logger.warning(
                         "Failed to compute pick_status for order %s: %s",
@@ -292,18 +234,12 @@ def get_orders():
                         exc,
                     )
 
-            result.append(_serialize_order_list_item(o, pick_status_data, db))
+            result.append(_serialize_order_list_item(o, pick_status_data))
 
-        return jsonify({
-            "items": result,
-            "total": total,
-            "skip": skip,
-            "limit": limit,
-        })
+        return jsonify(result)
 
 
 @bp.route("/resolve", methods=["GET"])
-@require_auth
 def resolve_order_by_number():
     """Resolve an inFlow order number to internal UUID.
 
@@ -334,7 +270,6 @@ def resolve_order_by_number():
 
 
 @bp.route("/tag-request/candidates", methods=["GET"])
-@require_auth
 def get_tag_request_candidates():
     """Get picked orders that still need a tag request batch."""
     limit = request.args.get("limit", default=200, type=int)
@@ -367,6 +302,13 @@ def get_tag_request_candidates():
 
         needing_request: list[dict] = []
         for order in candidates:
+            tag_data = order.tag_data or {}
+            sent_at = tag_data.get("canopyorders_request_sent_at") or tag_data.get(
+                "tag_request_sent_at"
+            )
+            if sent_at or tag_data.get("tag_request_status") == "sent":
+                continue
+
             if not order.inflow_data:
                 continue
             if not inflow_service.requires_asset_tags_cached(
@@ -375,15 +317,14 @@ def get_tag_request_candidates():
             ):
                 continue
 
-            needing_request.append(_order_response_json(order, db))
+            needing_request.append(_order_response_json(order))
             if len(needing_request) >= limit:
                 break
 
         return jsonify(needing_request)
 
 
-@bp.route("/<order_id>", methods=["GET"])
-@require_auth
+@bp.route("/<uuid:order_id>", methods=["GET"])
 def get_order(order_id):
     """Get order detail with audit logs and notifications"""
     with get_db() as db:
@@ -391,75 +332,29 @@ def get_order(order_id):
         order = service.get_order_detail(order_id)
         if not order:
             abort(404, description="Order not found")
-        response_data = _order_detail_response_json(order, db)
+        response_data = _order_detail_response_json(order)
         if order.inflow_data:
             inflow_service = InflowService()
-            order_view = order.inflow_data
-            pick_status_source = order.inflow_data
-            if order.remainder_order_id and not order.parent_order_id:
-                splitting_service = OrderSplittingService(db)
-                remainder_view = splitting_service.build_parent_remainder_document_view(order)
-                remainder_pick_source = splitting_service.build_parent_remainder_pick_status_source(order)
-                if remainder_view is not None:
-                    order_view = remainder_view
-                if remainder_pick_source is not None:
-                    pick_status_source = remainder_pick_source
-            response_data["inflow_data"] = order_view
             response_data["asset_tag_required"] = inflow_service.requires_asset_tags(
-                order_view
+                order.inflow_data
             )
             response_data["asset_tag_serials"] = inflow_service.get_asset_tag_serials(
-                order_view
+                order.inflow_data
             )
-            try:
-                response_data["pick_status"] = inflow_service.get_pick_status(pick_status_source)
-            except Exception as exc:
-                logger.warning(
-                    "Failed to compute pick_status for order detail %s: %s",
-                    order.inflow_order_id,
-                    exc,
-                )
 
         return jsonify(response_data)
 
 
-@bp.route("/<order_id>/picklist", methods=["POST"])
-@require_auth
-def generate_picklist(order_id):
-    """Generate a picklist PDF for an order."""
-    data = request.get_json(silent=True) or {}
-    request_payload = PicklistGenerationRequest(**data)
-
-    # Use auth context for identity — the frontend may send a display name
-    # in generated_by, but tagged_by stores email, so we compare against email.
-    current_user_email = get_current_user_email()
-    current_user_display = _get_current_user_display_name()
-    # generated_by is the primary identifier (used for same-user comparison
-    # against tagged_by which stores email). Override the frontend's value.
-    generated_by = current_user_email
-
-    with get_db() as db:
-        service = OrderService(db)
-        order = service.generate_picklist(
-            order_id=order_id,
-            generated_by=generated_by,
-            generated_by_display=current_user_display,
-            expected_updated_at=request_payload.expected_updated_at,
-            create_partial_leg=bool(request_payload.create_partial_leg and request_payload.confirm_create_partial_leg),
-        )
-        return jsonify(_order_response_json(order, db))
-
-
-@bp.route("/<order_id>", methods=["PATCH"])
-@require_auth
+@bp.route("/<uuid:order_id>", methods=["PATCH"])
 def update_order(order_id):
     """Update order fields"""
     data = request.get_json()
 
     with get_db() as db:
         service = OrderService(db)
-        order_id_str = str(order_id)
-        order = service._resolve_order(order_id_str, lock=True)
+        order = (
+            db.query(Order).filter(Order.id == str(order_id)).with_for_update().first()
+        )
         if not order:
             abort(404, description="Order not found")
 
@@ -484,15 +379,14 @@ def update_order(order_id):
 
         db.commit()
         db.refresh(order)
-        return jsonify(_order_response_json(order, db))
+        return jsonify(_order_response_json(order))
 
 
-@bp.route("/<order_id>/status", methods=["PATCH"])
-@require_auth
+@bp.route("/<uuid:order_id>/status", methods=["PATCH"])
 def update_order_status(order_id):
     """Transition order status"""
     data = request.get_json()
-    changed_by = request.args.get("changed_by") or get_current_user_display_name()
+    changed_by = request.args.get("changed_by")
 
     with get_db() as db:
         service = OrderService(db)
@@ -512,40 +406,16 @@ def update_order_status(order_id):
             teams_recipient_service.notify_orders_in_delivery([order])
 
         # Broadcast order update via SocketIO
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+        threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(_order_response_json(order, db))
-
-
-@bp.route("/<order_id>/rollback", methods=["PATCH"])
-@require_auth
-def rollback_order_status(order_id):
-    """Rollback order status to an earlier workflow state."""
-    data = request.get_json()
-    changed_by = request.args.get("changed_by") or get_current_user_display_name()
-
-    with get_db() as db:
-        service = OrderService(db)
-        rollback_update = OrderRollbackUpdate(**data)
-        order = service.rollback_status(
-            order_id=order_id,
-            target_status=rollback_update.status,
-            changed_by=changed_by,
-            reason=rollback_update.reason,
-            expected_updated_at=rollback_update.expected_updated_at,
-        )
-
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-
-        return jsonify(_order_response_json(order, db))
+        return jsonify(_order_response_json(order))
 
 
 @bp.route("/bulk-transition", methods=["POST"])
-@require_admin
 def bulk_transition_status():
     """Bulk transition multiple orders"""
     data = request.get_json()
-    changed_by = request.args.get("changed_by") or get_current_user_display_name()
+    changed_by = request.args.get("changed_by")
 
     with get_db() as db:
         service = OrderService(db)
@@ -564,13 +434,12 @@ def bulk_transition_status():
             teams_recipient_service.notify_orders_in_delivery(orders)
 
         # Broadcast order updates via SocketIO
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+        threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify([_order_response_json(o, db) for o in orders])
+        return jsonify([_order_response_json(o) for o in orders])
 
 
-@bp.route("/<order_id>/audit", methods=["GET"])
-@require_auth
+@bp.route("/<uuid:order_id>/audit", methods=["GET"])
 def get_order_audit(order_id):
     """Get audit log for an order"""
     with get_db() as db:
@@ -587,8 +456,7 @@ def get_order_audit(order_id):
         )
 
 
-@bp.route("/<order_id>/tag", methods=["POST"])
-@require_auth
+@bp.route("/<uuid:order_id>/tag", methods=["POST"])
 def tag_order(order_id):
     """Mock asset tagging step"""
     data = request.get_json()
@@ -608,12 +476,36 @@ def tag_order(order_id):
             expected_updated_at=tag_update.expected_updated_at,
         )
 
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
-        return jsonify(_order_response_json(order, db))
+        threading.Thread(target=_broadcast_orders_sync).start()
+        return jsonify(_order_response_json(order))
 
 
-@bp.route("/<order_id>/qa", methods=["POST"])
-@require_auth
+@bp.route("/<uuid:order_id>/picklist", methods=["POST"])
+def generate_picklist(order_id):
+    """Generate a picklist PDF for the order"""
+    data = request.get_json()
+
+    with get_db() as db:
+        service = OrderService(db)
+        gen_request = PicklistGenerationRequest(**data)
+
+        # Auto-assign generator from auth context
+        current_user = get_current_user_email()
+        generated_by = (
+            current_user if current_user != "system" else gen_request.generated_by
+        )
+
+        order = service.generate_picklist(
+            order_id=order_id,
+            generated_by=generated_by,
+            expected_updated_at=gen_request.expected_updated_at,
+        )
+
+        threading.Thread(target=_broadcast_orders_sync).start()
+        return jsonify(_order_response_json(order))
+
+
+@bp.route("/<uuid:order_id>/qa", methods=["POST"])
 def submit_qa(order_id):
     """Submit QA checklist for an order"""
     data = request.get_json()
@@ -624,7 +516,7 @@ def submit_qa(order_id):
 
         # Auto-assign technician from auth context
         current_user = get_current_user_email()
-        technician = _get_current_user_display_name() if current_user != "system" else submission.technician
+        technician = current_user if current_user != "system" else submission.technician
 
         order = service.submit_qa(
             order_id=order_id,
@@ -634,13 +526,12 @@ def submit_qa(order_id):
         )
 
         # Broadcast order update via SocketIO
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+        threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(_order_response_json(order, db))
+        return jsonify(_order_response_json(order))
 
 
-@bp.route("/<order_id>/picklist", methods=["GET"])
-@require_auth
+@bp.route("/<uuid:order_id>/picklist", methods=["GET"])
 def get_picklist(order_id):
     """Download generated picklist PDF (from local storage or SharePoint)"""
     from io import BytesIO
@@ -685,7 +576,7 @@ def get_picklist(order_id):
                 import logging
 
                 logging.error(f"Failed to download picklist from SharePoint: {e}")
-                abort(500, description="Failed to download picklist")
+                abort(500, description=f"Failed to download from SharePoint: {str(e)}")
         else:
             # Local file path
             path = Path(picklist_path)
@@ -696,62 +587,8 @@ def get_picklist(order_id):
                 path.resolve(), mimetype="application/pdf", download_name=path.name
             )
 
-@bp.route("/<order_id>/signed-picklist", methods=["GET"])
-@require_auth
-def get_signed_picklist(order_id):
-    """Download signed picklist PDF (from SharePoint or local storage)"""
-    from io import BytesIO
 
-    with get_db() as db:
-        service = OrderService(db)
-        order = service.get_order_detail(order_id)
-        if not order:
-            abort(404, description="Order not found")
-        if not order.signed_picklist_path:
-            abort(404, description="Signed picklist not found — order may not be signed yet")
-
-        signed_path = order.signed_picklist_path
-
-        # Check if this is a SharePoint URL
-        if signed_path.startswith("http"):
-            try:
-                from app.services.sharepoint_service import get_sharepoint_service
-
-                sp_service = get_sharepoint_service()
-
-                filename = f"{order.inflow_order_id}_signed.pdf"
-
-                pdf_bytes = sp_service.download_file("signed", filename)
-                if not pdf_bytes:
-                    abort(404, description="Signed picklist file not found in SharePoint")
-
-                pdf_stream = BytesIO(pdf_bytes)
-                pdf_stream.seek(0)
-
-                return send_file(
-                    pdf_stream,
-                    mimetype="application/pdf",
-                    as_attachment=False,
-                    download_name=filename,
-                )
-            except Exception as e:
-                import logging
-
-                logging.error(f"Failed to download signed picklist from SharePoint: {e}")
-                abort(500, description="Failed to download signed picklist")
-        else:
-            # Local file path
-            path = Path(signed_path)
-            if not path.exists():
-                abort(404, description="Signed picklist file missing")
-
-            return send_file(
-                path.resolve(), mimetype="application/pdf", download_name=path.name
-            )
-
-
-@bp.route("/<order_id>/fulfill", methods=["POST"])
-@require_admin
+@bp.route("/<uuid:order_id>/fulfill", methods=["POST"])
 def fulfill_order(order_id):
     """Mark an order as fulfilled in Inflow (best-effort)."""
     with get_db() as db:
@@ -769,31 +606,11 @@ def fulfill_order(order_id):
         return jsonify({"success": True, "result": result})
 
 
-@bp.route("/<order_id>/sign", methods=["POST"])
-@require_auth
+@bp.route("/<uuid:order_id>/sign", methods=["POST"])
 def sign_order(order_id):
     """Complete order signing, generate bundled documents, and transition to Delivered status"""
     data = request.get_json()
-    signature_data = SignatureData(**data)
-    import logging
-    logging.getLogger(__name__).info(
-        "SIG_ROUTE order_id=%s page_width=%s page_height=%s placements=%s",
-        order_id, signature_data.page_width, signature_data.page_height,
-        [{"p": p.page_number, "x": p.x, "y": p.y, "w": p.width, "h": p.height} for p in signature_data.placements]
-    )
 
-    # Phase 1: generate documents BEFORE locking the order row (no DB lock held during PDF I/O)
-    with get_db() as db:
-        service = OrderService(db)
-        signed_sp_url, bundle_sp_url = service.generate_bundled_documents(
-            order_id=order_id,
-            signature_data=signature_data.model_dump(exclude={"expected_updated_at"}),
-        )
-        # generate_bundled_documents now stores signed_picklist_path on the order internally
-        signed_picklist_path = signed_sp_url
-        bundled_path = bundle_sp_url
-
-    # Phase 2: short locking transaction for status update + commit
     with get_db() as db:
         service = OrderService(db)
 
@@ -812,7 +629,12 @@ def sign_order(order_id):
                 },
             )
 
+        signature_data = SignatureData(**data)
         service.assert_not_stale(order, signature_data.expected_updated_at)
+        bundled_path = service.generate_bundled_documents(
+            order_id=order_id,
+            signature_data=signature_data.model_dump(exclude={"expected_updated_at"}),
+        )
 
         from datetime import datetime
 
@@ -821,48 +643,25 @@ def sign_order(order_id):
         )
 
         order.signature_captured_at = datetime.utcnow()
-        order.signed_picklist_path = signed_picklist_path
+        order.signed_picklist_path = bundled_path
         order.updated_at = datetime.utcnow()
-
-        delivery_vehicle = order.delivery_run.vehicle if order.delivery_run else None
-        if delivery_vehicle:
-            from app.services.vehicle_checkout_service import VehicleCheckoutService
-
-            try:
-                checkout_service = VehicleCheckoutService(db)
-                checkout_service.checkin(
-                    vehicle=delivery_vehicle,
-                    notes=f"Auto check-in after completing delivery for {order.inflow_order_id or order.id}",
-                    allow_active_delivery_run=True,
-                )
-            except Exception as exc:
-                import logging
-
-                logging.warning(
-                    "Auto check-in failed after signing order %s on vehicle %s: %s",
-                    order.inflow_order_id or order.id,
-                    delivery_vehicle,
-                    exc,
-                )
 
         db.commit()
         db.refresh(order)
 
         # Broadcast order update via SocketIO
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+        threading.Thread(target=_broadcast_orders_sync).start()
 
         return jsonify(
             {
                 "success": True,
                 "message": "Order signed and bundled documents generated",
                 "bundled_document_path": bundled_path,
-                "signed_picklist_path": signed_picklist_path,
             }
         )
 
 
-@bp.route("/<order_id>/shipping-workflow", methods=["PATCH"])
-@require_auth
+@bp.route("/<uuid:order_id>/shipping-workflow", methods=["PATCH"])
 def update_shipping_workflow(order_id):
     """Update shipping workflow status for an order"""
     data = request.get_json()
@@ -880,13 +679,12 @@ def update_shipping_workflow(order_id):
         )
 
         # Broadcast order update via SocketIO
-        broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+        threading.Thread(target=_broadcast_orders_sync).start()
 
-        return jsonify(_order_response_json(order, db))
+        return jsonify(_order_response_json(order))
 
 
-@bp.route("/<order_id>/shipping-workflow", methods=["GET"])
-@require_auth
+@bp.route("/<uuid:order_id>/shipping-workflow", methods=["GET"])
 def get_shipping_workflow(order_id):
     """Get shipping workflow status for an order"""
     with get_db() as db:
@@ -907,8 +705,7 @@ def get_shipping_workflow(order_id):
         return jsonify(response.model_dump())
 
 
-@bp.route("/<order_id>/order-details.pdf", methods=["GET"])
-@require_auth
+@bp.route("/<uuid:order_id>/order-details.pdf", methods=["GET"])
 def get_order_details_pdf(order_id):
     """Generate and download Order Details PDF"""
     from app.services.pdf_service import pdf_service
@@ -955,8 +752,7 @@ def get_order_details_pdf(order_id):
             abort(500, description="Failed to generate PDF")
 
 
-@bp.route("/<order_id>/send-order-details", methods=["POST"])
-@require_auth
+@bp.route("/<uuid:order_id>/send-order-details", methods=["POST"])
 def send_order_details_email(order_id):
     """Generate Order Details PDF and email to recipient"""
     with get_db() as db:
@@ -970,7 +766,7 @@ def send_order_details_email(order_id):
         )
 
         if success:
-            broadcast_dedup.request_broadcast(_broadcast_orders_sync)
+            threading.Thread(target=_broadcast_orders_sync).start()
             return jsonify(
                 {
                     "success": True,

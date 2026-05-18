@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import apiClient from "../api/client";
+import axios from "axios";
 
 import type { Session } from "../contexts/AuthContext";
 
@@ -8,7 +8,7 @@ interface SessionsResponse {
 }
 
 const fetchSessions = async (): Promise<Session[]> => {
-  const response = await apiClient.get<SessionsResponse>("/auth/sessions", {
+  const response = await axios.get<SessionsResponse>("/auth/sessions", {
     withCredentials: true,
     headers: {
       "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -36,9 +36,9 @@ export const getSessionsQueryOptions = () =>
   });
 
 export const revokeSession = async (sessionId: string): Promise<void> => {
-  await apiClient.post("/auth/sessions/revoke", { session_id: sessionId }, { withCredentials: true });
+  await axios.post("/auth/sessions/revoke", { session_id: sessionId }, { withCredentials: true });
 };
 
 export const revokeAllOtherSessions = async (): Promise<void> => {
-  await apiClient.post("/auth/sessions/revoke_all", {}, { withCredentials: true });
+  await axios.post("/auth/sessions/revoke_all", {}, { withCredentials: true });
 };
