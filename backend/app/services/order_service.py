@@ -662,21 +662,6 @@ class OrderService:
             logger.error(f"SharePoint upload failed for QA: {e}")
             raise  # Fail fast
 
-        # Upload to SharePoint if enabled
-        qa_path = str(qa_file)
-        try:
-            from app.services.sharepoint_service import get_sharepoint_service
-
-            sp_service = get_sharepoint_service()
-            if sp_service.is_enabled:
-                sp_url = sp_service.upload_json(qa_payload, "qa", qa_filename)
-                qa_path = sp_url
-                logger.info(f"QA data uploaded to SharePoint: {sp_url}")
-        except Exception as e:
-            logger.warning(
-                f"SharePoint upload failed for QA data, using local path: {e}"
-            )
-
         # Update order object (BUT DO NOT COMMIT YET to keep transition atomic)
         order.qa_completed_at = datetime.utcnow()
         order.qa_completed_by = technician
