@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import apiClient from "../api/client";
 import { io, Socket } from "socket.io-client";
 import { OrderSummary } from "../types/websocket";
 
@@ -21,14 +22,8 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       setError(null);
       setLoading(true);
       // Try to fetch orders via HTTP API as fallback
-      const response = await fetch('/api/orders');
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data);
-      } else {
-        console.warn("HTTP fallback failed:", response.status);
-        setOrders([]);
-      }
+      const response = await apiClient.get('/orders');
+      setOrders(response.data.items);
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch orders via HTTP:", err);
@@ -59,6 +54,7 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       });
       socketRef.current = socket;
     } catch (e) {
+      console.error("Socket.IO init failed:", e);
     }
 
     if (!socket) {
@@ -71,13 +67,15 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       };
     }
 
-    socket.on("connect", () => {
+    const socketInstance = socket;
+
+    socketInstance.on("connect", () => {
       setError(null);
       // Join orders namespace/room
-      socket.emit("join", { room: "orders" });
+      socketInstance.emit("join", { room: "orders" });
     });
 
-    socket.on("orders_update", (payload: { type: string; data: OrderSummary[] }) => {
+    socketInstance.on("orders_update", (payload: { type: string; data: OrderSummary[] }) => {
       try {
         if (payload.type === "orders_update") {
           setOrders(payload.data || []);
@@ -88,10 +86,18 @@ export function useOrdersWebSocket(options?: string | UseOrdersWebSocketOptions)
       }
     });
 
-    socket.on("disconnect", () => {
+    socketInstance.on("disconnect", () => {
+      // Transient disconnects are normal with long-polling fallback.
+      // Socket.IO auto-reconnects; only flag if reconnection fails.
     });
 
-    socket.on("connect_error", () => {
+    socketInstance.on("reconnect_failed", () => {
+      console.error("Socket.IO reconnection failed — real-time updates unavailable");
+      setError("Real-time updates disconnected");
+    });
+
+    socketInstance.on("connect", () => {
+      setError(null);
     });
 
     return () => {
