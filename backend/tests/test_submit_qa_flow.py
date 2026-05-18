@@ -4,15 +4,12 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from app.models.order import Order, OrderStatus
 from app.services.order_service import OrderService
-from app.utils.exceptions import ValidationError
 
 
 def test_submit_qa_sets_completed_at_and_transitions_to_pre_delivery(tmp_path, monkeypatch):
@@ -64,7 +61,7 @@ def test_submit_qa_sets_completed_at_and_transitions_to_pre_delivery(tmp_path, m
     assert Path(tmp_path / "qa" / "TH123.json").exists()
 
 
-def test_submit_qa_rejects_parent_partial_leg(tmp_path, monkeypatch):
+def test_submit_qa_allows_parent_partial_leg(tmp_path, monkeypatch):
     mock_db = MagicMock()
     service = OrderService(mock_db)
 
@@ -88,6 +85,9 @@ def test_submit_qa_rejects_parent_partial_leg(tmp_path, monkeypatch):
 
     mock_db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = order
 
+    monkeypatch.setattr("app.services.order_service.AuditService.log_order_action", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.services.order_service.OrderService._prep_steps_complete", lambda self, order: True)
+
     qa_data = {
         "method": "Delivery",
         "orderNumber": order.inflow_order_id,
@@ -100,5 +100,9 @@ def test_submit_qa_rejects_parent_partial_leg(tmp_path, monkeypatch):
         "verifyBoxesLabeledCorrectly": True,
     }
 
-    with pytest.raises(ValidationError):
-        service.submit_qa(order.id, qa_data, technician="Test Tech")
+    result = service.submit_qa(order.id, qa_data, technician="Test Tech")
+
+    assert order.qa_completed_at is not None
+    assert order.qa_method == "Delivery"
+    assert result.status == OrderStatus.PRE_DELIVERY.value
+    assert Path(tmp_path / "qa" / "TH123.json").exists()
