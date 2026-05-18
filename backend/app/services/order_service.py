@@ -2,6 +2,7 @@ import re
 import json
 import logging
 import shutil
+from copy import deepcopy
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +56,24 @@ class OrderService:
     @staticmethod
     def _as_dict(value: Any) -> Dict[str, Any]:
         return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _preserve_partial_split_inflow_snapshot(
+        existing_order: Order,
+        inflow_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Merge a fresh InFlow snapshot without destroying locally split leg item sets."""
+        merged = dict(inflow_data or {})
+        if (
+            existing_order.parent_order_id
+            or existing_order.remainder_order_id
+            or existing_order.has_remainder
+        ):
+            current_snapshot = dict(existing_order.inflow_data or {})
+            for field in ("lines", "pickLines", "packLines", "shipLines", "subtotal", "total"):
+                if field in current_snapshot:
+                    merged[field] = deepcopy(current_snapshot.get(field))
+        return merged
 
     def _requires_asset_tags(self, order: Order) -> bool:
         if not SystemSettingService.is_setting_enabled(
@@ -1457,7 +1476,10 @@ class OrderService:
         shipping_address_obj = self._as_dict(inflow_data.get("shippingAddress"))
         email = inflow_data.get("email", "")
 
-        existing_order.inflow_data = inflow_data
+        existing_order.inflow_data = self._preserve_partial_split_inflow_snapshot(
+            existing_order,
+            inflow_data,
+        )
         existing_order.delivery_location = delivery_location
         existing_order.order_remarks = order_remarks
         existing_order.shipping_address = shipping_address_obj.get("address1", "")
@@ -1825,7 +1847,10 @@ class OrderService:
             if data_changed:
                 existing.updated_at = datetime.utcnow()
 
-            existing.inflow_data = inflow_data  # Always update to keep latest data
+            existing.inflow_data = self._preserve_partial_split_inflow_snapshot(
+                existing,
+                inflow_data,
+            )  # Always update to keep latest data without clobbering partial splits
 
             # Don't overwrite manual status changes - keep existing status
 
@@ -1921,7 +1946,10 @@ class OrderService:
                 # Another request created it — fetch and update instead
                 existing = self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
                 if existing:
-                    existing.inflow_data = inflow_data
+                    existing.inflow_data = self._preserve_partial_split_inflow_snapshot(
+                        existing,
+                        inflow_data,
+                    )
                     existing.updated_at = datetime.utcnow()
                     self.db.commit()
                     self.db.refresh(existing)

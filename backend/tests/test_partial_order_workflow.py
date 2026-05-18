@@ -24,6 +24,7 @@ sys.path.append(str(backend_path))
 from app.database import Base
 from app.models.order import Order, OrderStatus
 from app.services.inflow_service import InflowService
+from app.services.order_service import OrderService
 from app.services.order_splitting import OrderSplittingService
 
 
@@ -434,6 +435,132 @@ def test_partial_picklist_leg_creation_links_parent_and_child():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_create_order_from_inflow_preserves_existing_split_payload():
+    """Webhook refreshes should not overwrite local split item sets with the full InFlow order."""
+
+    session, engine = _make_sqlite_session()
+
+    existing_order = Order(
+        id="order-parent-sync-1",
+        inflow_order_id="TH3006",
+        inflow_sales_order_id="sales-order-3006",
+        recipient_name="Old Recipient",
+        recipient_contact="old@example.com",
+        delivery_location="Old Building",
+        po_number="PO-3006",
+        status=OrderStatus.PRE_DELIVERY.value,
+        has_remainder="Y",
+        remainder_order_id="child-order-sync-1",
+        inflow_data={
+            "orderNumber": "TH3006",
+            "salesOrderId": "sales-order-3006",
+            "contactName": "Old Recipient",
+            "email": "old@example.com",
+            "shippingAddress": {"address1": "Old Building"},
+            "lines": [
+                {
+                    "productId": "prod-a",
+                    "description": "Hub Adapter",
+                    "quantity": {"standardQuantity": "3"},
+                    "unitPrice": 47,
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-a",
+                    "description": "Hub Adapter",
+                    "quantity": {"standardQuantity": "3"},
+                    "unitPrice": 47,
+                }
+            ],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    session.add(existing_order)
+    session.commit()
+
+    service = OrderService(session)
+    incoming_payload = {
+        "orderNumber": "TH3006",
+        "salesOrderId": "sales-order-3006",
+        "contactName": "Updated Recipient",
+        "email": "updated@example.com",
+        "shippingAddress": {"address1": "Updated Building"},
+        "poNumber": "PO-3006-NEW",
+        "lines": [
+            {
+                "productId": "prod-a",
+                "description": "Hub Adapter",
+                "quantity": {"standardQuantity": "3"},
+                "unitPrice": 47,
+            },
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            },
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-a",
+                "description": "Hub Adapter",
+                "quantity": {"standardQuantity": "3"},
+                "unitPrice": 47,
+            },
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            },
+        ],
+        "packLines": [
+            {
+                "productId": "prod-a",
+                "quantity": {"standardQuantity": "3"},
+                "containerNumber": "DELIVERY-TH3006-1",
+            }
+        ],
+        "shipLines": [
+            {
+                "carrier": "TechHub",
+                "containers": ["DELIVERY-TH3006-1"],
+            }
+        ],
+    }
+
+    updated = service.create_order_from_inflow(incoming_payload)
+    session.refresh(updated)
+
+    assert updated.recipient_name == "Updated Recipient"
+    assert updated.recipient_contact == "updated@example.com"
+    assert updated.delivery_location == "Updated Building"
+    assert updated.po_number == "PO-3006-NEW"
+    assert updated.inflow_data["lines"] == [
+        {
+            "productId": "prod-a",
+            "description": "Hub Adapter",
+            "quantity": {"standardQuantity": "3"},
+            "unitPrice": 47,
+        }
+    ]
+    assert updated.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-a",
+            "description": "Hub Adapter",
+            "quantity": {"standardQuantity": "3"},
+            "unitPrice": 47,
+        }
+    ]
+    assert updated.inflow_data["packLines"] == []
+    assert updated.inflow_data["shipLines"] == []
+
+    session.close()
+    engine.dispose()
 
 
 def test_partial_order_remainder_creation_links_parent_and_child():
