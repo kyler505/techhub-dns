@@ -696,8 +696,6 @@ def get_picklist(order_id):
                 path.resolve(), mimetype="application/pdf", download_name=path.name
             )
 
-                sp_service = get_sharepoint_service()
-
 @bp.route("/<order_id>/signed-picklist", methods=["GET"])
 @require_auth
 def get_signed_picklist(order_id):

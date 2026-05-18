@@ -59,36 +59,6 @@ interface OrderDetailProps {
   generatingPicklist: boolean;
 }
 
-type OrderItemLine = {
-  productId?: string;
-  productName?: string;
-  description?: string;
-  product?: {
-    name?: string;
-  };
-  quantity?: {
-    standardQuantity?: number | string;
-    serialNumbers?: Array<string | number>;
-  } | number | string;
-};
-
-const getLineQuantity = (line: OrderItemLine): number => {
-  const rawQuantity =
-    typeof line.quantity === "object" && line.quantity !== null
-      ? line.quantity.standardQuantity
-      : line.quantity;
-
-  return Math.floor(Number(rawQuantity ?? 0));
-};
-
-const getLineSerials = (line: OrderItemLine): string[] => {
-  if (typeof line.quantity !== "object" || line.quantity === null) {
-    return [];
-  }
-
-  return (line.quantity.serialNumbers ?? []).map((serial) => String(serial));
-};
-
 export default function OrderDetail({
   order,
   auditLogs,

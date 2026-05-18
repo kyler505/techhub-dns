@@ -12,7 +12,6 @@ import OrdersRail from "../components/OrdersRail";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserDisplayName } from "../utils/userDisplay";
 import OrderDetailComponent from "../components/OrderDetail";
-import { Skeleton } from "../components/Skeleton";
 import StatusTransition from "../components/StatusTransition";
 import { Button } from "../components/ui/button";
 import { useOrdersWebSocket } from "../hooks/useOrdersWebSocket";
