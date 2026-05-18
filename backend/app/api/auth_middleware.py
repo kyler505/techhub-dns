@@ -29,7 +29,8 @@ _RATE_LIMIT_LOCK = Lock()
 
 # Routes that don't require authentication
 PUBLIC_ROUTES = [
-    "/auth/",  # All auth routes
+    "/auth/",  # Primary auth routes
+    "/api/auth/",  # Compatibility alias for older deployments/bundles
     "/health",
     "/api/inflow/webhook",  # Inflow webhook callbacks
     "/api/system/print-agent/",  # Fixed desktop print agent token auth
@@ -278,15 +279,15 @@ def is_current_user_admin() -> bool:
         return False
 
     env_allowlist = settings.get_admin_emails()
-    if env_allowlist:
-        return email in env_allowlist
 
-    # No env override: consult DB allowlist (if configured).
     with get_db() as db:
         raw = SystemSettingService.get_setting(db, SETTING_ADMIN_EMAILS)
         db_allowlist = settings._parse_admin_emails(raw)
-        if db_allowlist:
-            return email in db_allowlist
+
+    # Merge env + DB (env entries are immutable; DB entries are app-managed).
+    merged = set(env_allowlist or []) | set(db_allowlist or [])
+    if merged:
+        return email in merged
 
     # Default behavior when no allowlist is configured.
     if settings.is_dev():
@@ -333,4 +334,30 @@ def get_current_user_email() -> str:
                 if email is None:
                     return "system"
                 return str(email)
+    return "system"
+
+
+def get_current_user_display_name() -> str:
+    """
+    Get current user's display name for human-facing logs and UI labels.
+
+    Returns the user's display name when available, otherwise falls back to a
+    DB lookup for the stored display name. Does not fall back to email.
+    """
+    from app.models.user import User
+
+    user_data = getattr(g, "user_data", None) or {}
+    display_name = str(user_data.get("display_name") or "").strip()
+    if display_name:
+        return display_name
+
+    user_id = getattr(g, "user_id", None)
+    if user_id:
+        with get_db() as db:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                db_display_name = str(getattr(user, "display_name", "") or "").strip()
+                if db_display_name:
+                    return db_display_name
+
     return "system"

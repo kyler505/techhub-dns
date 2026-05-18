@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { RefreshCw, UploadCloud } from "lucide-react";
 import { settingsApi } from "../api/settings";
 import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { getTagRequestCandidatesQueryOptions, ordersQueryKeys } from "../queries/orders";
@@ -119,8 +120,8 @@ export default function TagRequest() {
                 message: response.error || "Upload failed.",
             });
         },
-        onError: (err: any) => {
-            const responseData = err?.response?.data as unknown;
+        onError: (err: unknown) => {
+            const responseData = isAxiosError(err) ? (err.response?.data as unknown) : undefined;
             const record = responseData && typeof responseData === "object" ? (responseData as Record<string, unknown>) : null;
 
             const missingOrders = parseStringArray(record?.missing_orders);
@@ -211,10 +212,10 @@ export default function TagRequest() {
             </div>
 
             <div className="grid gap-4 sm:gap-6 xl:grid-cols-[3fr_2fr]">
-                <Card className="min-w-0 overflow-hidden">
-                    <CardHeader className="pb-3">
+                <section className="min-w-0 overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none">
+                    <div className="pb-3">
                         <div className="flex items-start justify-between gap-3">
-                            <CardTitle className="text-base">Batch Builder</CardTitle>
+                            <h2 className="text-base font-semibold tracking-tight">Batch Builder</h2>
                             <div className="flex flex-wrap items-center gap-2">
                                 <Button type="button" variant="outline" size="sm" onClick={() => void loadCandidates()}>
                                     <RefreshCw className="mr-2 h-4 w-4" />
@@ -237,8 +238,8 @@ export default function TagRequest() {
                                 </Button>
                             </div>
                         </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+                    </div>
+                    <div className="space-y-4">
 
                         {candidatesLoading && safeCandidates.length === 0 ? (
                             <div className="rounded-lg border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
@@ -335,14 +336,14 @@ export default function TagRequest() {
                                 </div>
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                    </div>
+                </section>
 
-                <Card className="self-start lg:sticky lg:top-6">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Upload summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+                <section className="self-start rounded-2xl border border-border/70 bg-card/80 p-5 shadow-none lg:sticky lg:top-6">
+                    <div className="pb-3">
+                        <h2 className="text-base font-semibold tracking-tight">Upload summary</h2>
+                    </div>
+                    <div className="space-y-4">
                         <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
                             <p className="text-foreground font-medium">{selectedCount} selected</p>
                             {selectedCount > 0 ? (
@@ -430,8 +431,8 @@ export default function TagRequest() {
                                 {uploadMutation.isPending ? "Uploading..." : "Upload orders"}
                             </Button>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </section>
             </div>
 
             <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

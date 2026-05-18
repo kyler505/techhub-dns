@@ -16,10 +16,12 @@ import {
     sessionsQueryKeys,
 } from '../queries/sessions';
 import { formatToCentralTime } from '../utils/timezone';
+import { getUserDisplayName } from '../utils/userDisplay';
 
 export default function Sessions() {
     const { user, logout } = useAuth();
     const [error, setError] = useState<string | null>(null);
+    const currentUserLabel = getUserDisplayName(user, "your account");
     const queryClient = useQueryClient();
 
     const sessionsQuery = useQuery({
@@ -92,7 +94,7 @@ export default function Sessions() {
             <div className="mb-6 sm:mb-8">
                 <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Active Sessions</h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                    Logged in as <strong className="text-foreground">{user?.email}</strong>
+                    Logged in as <strong className="text-foreground">{currentUserLabel}</strong>
                 </p>
             </div>
 
