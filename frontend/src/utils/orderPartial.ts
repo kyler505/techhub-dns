@@ -238,24 +238,19 @@ export const getOrderProductTableView = (order: PartialOrderSource): OrderProduc
     const childRows = pickLines.length > 0 ? buildOrderProductRows(pickLines) : buildOrderProductRows(lines);
 
     return {
-      title: "Child leg items",
-      description: "Items included in this generated child leg only.",
+      title: "Picked leg items",
+      description: "Items included in this picked leg only.",
       rows: childRows,
-      emptyState: "No items found on this child leg.",
+      emptyState: "No items found on this picked leg.",
     };
   }
 
   if (partialInfo.hasRemainder) {
     return {
-      title: "Items left to pick",
-      description: "Items that remain on the parent leg after the partial leg was split out.",
-      rows: partialInfo.missingItems.map((item) => ({
-        productId: item.product_id,
-        productName: item.product_name,
-        quantity: Math.max(item.ordered - item.picked, 0),
-        serials: [],
-      })),
-      emptyState: "No items remain on the parent leg.",
+      title: "Remainder leg items",
+      description: "Items still left on the remainder leg after the split.",
+      rows: buildOrderProductRows(lines),
+      emptyState: "No items remain on the remainder leg.",
     };
   }
 

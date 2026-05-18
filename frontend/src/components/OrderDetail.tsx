@@ -297,20 +297,20 @@ export default function OrderDetail({
                   <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-foreground">
-                        {isPartialLeg ? "Partial leg" : "Partial order"}
+                        {isPartialLeg ? "Picked leg" : partialOrderInfo.hasRemainder ? "Remainder leg" : "Partial order"}
                       </p>
                       <Badge variant="warning">
                         {partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} picked
                       </Badge>
-                      {isPartialLeg ? <Badge variant="secondary">Child leg</Badge> : null}
+                      {isPartialLeg ? <Badge variant="secondary">Picked leg</Badge> : null}
                       {partialOrderInfo.hasRemainder ? (
-                        <Badge variant="secondary">Remainder exists</Badge>
+                        <Badge variant="secondary">Remainder leg</Badge>
                       ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {isPartialLeg
-                        ? "This is the generated partial leg. It only contains the picked items for this portion of the order."
-                        : "This order is only partially picked. Generating the picklist will create a partial leg/remainder workflow instead of treating it as a fully picked order."}
+                        ? "This is the picked leg. It only contains the items already selected for this split."
+                        : "This order is the remainder leg. Generating the picklist will keep the original order as the remainder and create the picked leg if needed."}
                     </p>
                     <div className="grid gap-2 text-sm sm:grid-cols-2">
                       {partialOrderInfo.parentOrderId ? (
@@ -717,10 +717,10 @@ export default function OrderDetail({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Create partial leg?
+              Create picked leg?
             </DialogTitle>
             <DialogDescription>
-              This order is partially picked ({partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} items). Generating the picklist will confirm the partial leg workflow and create a remainder order for the unpicked items, if the backend supports it.
+              This order is partially picked ({partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} items). Generating the picklist will create the picked leg and keep the original as the remainder leg.
             </DialogDescription>
           </DialogHeader>
 

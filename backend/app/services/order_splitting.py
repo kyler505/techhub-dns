@@ -168,25 +168,34 @@ class OrderSplittingService:
         order_view["total"] = subtotal
         return order_view
 
+    def _build_remainder_leg_state(self, inflow_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Build the persisted inflow snapshot for the remainder leg."""
+        if not inflow_data:
+            return None
+
+        remaining_lines, _ = self.get_remainder_items(inflow_data)
+        remainder_view = deepcopy(inflow_data)
+        remainder_view["lines"] = remaining_lines
+        remainder_view["pickLines"] = []
+        remainder_view["packLines"] = []
+        remainder_view["shipLines"] = []
+        remainder_view["subtotal"] = sum(
+            (float(line.get("unitPrice") or 0) if isinstance(line, dict) else 0.0)
+            * self._parse_standard_quantity(line.get("quantity") if isinstance(line, dict) else 0)
+            for line in remaining_lines
+            if isinstance(line, dict)
+        )
+        remainder_view["total"] = remainder_view["subtotal"]
+        return remainder_view
+
     def _get_partial_remainder_source(self, original_order: Order) -> Optional[Dict[str, Any]]:
-        """Build a synthetic pick-status source for the parent remainder leg."""
+        """Build the current inflow snapshot for the parent remainder leg."""
         if not original_order.inflow_data:
             return None
         if original_order.parent_order_id or not original_order.remainder_order_id:
             return None
 
-        child_order = (
-            self.db.query(Order)
-            .filter(Order.id == original_order.remainder_order_id)
-            .first()
-        )
-        if not child_order or not child_order.inflow_data:
-            return None
-
-        source = deepcopy(original_order.inflow_data)
-        child_pick_lines = child_order.inflow_data.get("pickLines") or child_order.inflow_data.get("lines") or []
-        source["pickLines"] = deepcopy(child_pick_lines)
-        return source
+        return deepcopy(original_order.inflow_data)
 
     def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
         """Build the remainder-only document snapshot for a parent partial leg."""
@@ -225,6 +234,9 @@ class OrderSplittingService:
         if not order.inflow_data:
             return False
 
+        if order.parent_order_id or order.has_remainder or order.remainder_order_id:
+            return False
+
         # Don't create remainder for remainder orders
         if order.inflow_order_id and order.inflow_order_id.endswith("-R"):
             return False
@@ -249,12 +261,22 @@ class OrderSplittingService:
                 .first()
             )
             if existing:
+                original_order.has_remainder = "Y"
+                remainder_leg_state = self._build_remainder_leg_state(original_order.inflow_data)
+                if remainder_leg_state is not None and original_order.inflow_data != remainder_leg_state:
+                    original_order.inflow_data = remainder_leg_state
+                    original_order.updated_at = datetime.utcnow()
+                    self.db.commit()
+                    self.db.refresh(original_order)
                 logger.info(
                     "Partial leg already exists for %s; keeping parent %s active",
                     original_order.inflow_order_id,
                     original_order.id,
                 )
-                return original_order
+                original_order.updated_at = datetime.utcnow()
+                self.db.commit()
+                self.db.refresh(original_order)
+                return existing
 
         pick_status = self.inflow_service.get_pick_status(original_order.inflow_data)
         if pick_status.get("is_fully_picked", True):
@@ -273,6 +295,7 @@ class OrderSplittingService:
             return existing
 
         picked_leg_inflow_data = self._build_partial_leg_view(original_order.inflow_data)
+        remainder_leg_state = self._build_remainder_leg_state(original_order.inflow_data)
 
         child_order = Order(
             id=str(uuid.uuid4()),
@@ -306,6 +329,8 @@ class OrderSplittingService:
 
         original_order.has_remainder = "Y"
         original_order.remainder_order_id = child_order.id
+        if remainder_leg_state is not None:
+            original_order.inflow_data = remainder_leg_state
         original_order.updated_at = datetime.utcnow()
 
         audit_service = AuditService(self.db)
@@ -357,10 +382,6 @@ class OrderSplittingService:
         Returns:
             The newly created remainder order, or None if no remainder needed
         """
-        if not self.should_create_remainder(original_order):
-            logger.info(f"No remainder needed for order {original_order.inflow_order_id}")
-            return None
-
         # Check if remainder already exists
         remainder_order_id = f"{original_order.inflow_order_id}-R"
         existing = self.db.query(Order).filter(
@@ -370,6 +391,10 @@ class OrderSplittingService:
         if existing:
             logger.info(f"Remainder order {remainder_order_id} already exists")
             return existing
+
+        if not self.should_create_remainder(original_order):
+            logger.info(f"No remainder needed for order {original_order.inflow_order_id}")
+            return None
 
         # Get remaining items
         remaining_lines, _ = self.get_remainder_items(original_order.inflow_data)

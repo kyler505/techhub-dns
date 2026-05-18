@@ -368,7 +368,7 @@ class OrderService:
             and pick_status.get("total_picked", 0) < pick_status.get("total_ordered", 0)
         )
 
-        if is_partial_order and not order.parent_order_id:
+        if is_partial_order and not order.parent_order_id and not order.remainder_order_id:
             # For a partially picked parent, create or resolve the child leg first.
             # The child leg is the one that should receive the generated picklist,
             # Order Details email, and downstream QA/status timestamps.

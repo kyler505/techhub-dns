@@ -117,8 +117,8 @@ export default function OrderTable({
     const getOrderNumber = (order: Order) => order.inflow_order_id || order.id;
     const getOrderLegLabel = (order: Order) => {
         const partialInfo = getPartialOrderInfo(order);
-        if (partialInfo.isPartialLeg) return "Partial leg";
-        if (partialInfo.hasRemainder) return "Parent leg";
+        if (partialInfo.isPartialLeg) return "Picked leg";
+        if (partialInfo.hasRemainder) return "Remainder leg";
         if (partialInfo.isPartial) return "Partial order";
         return null;
     };
@@ -164,7 +164,7 @@ export default function OrderTable({
                                             {order.inflow_order_id || order.id}
                                         </span>
                                         {legLabel ? (
-                                          <Badge variant={legLabel === "Parent leg" ? "warning" : "secondary"} className="text-[10px] uppercase tracking-wide">
+                                          <Badge variant={legLabel === "Remainder leg" ? "warning" : "secondary"} className="text-[10px] uppercase tracking-wide">
                                             {legLabel}
                                           </Badge>
                                         ) : null}
@@ -268,7 +268,7 @@ export default function OrderTable({
                                         {getOrderLegLabel(order) ? (
                                             <div>
                                                 <Badge
-                                                    variant={getOrderLegLabel(order) === "Parent leg" ? "warning" : "secondary"}
+                                                    variant={getOrderLegLabel(order) === "Remainder leg" ? "warning" : "secondary"}
                                                     className="text-[10px] uppercase tracking-wide"
                                                 >
                                                     {getOrderLegLabel(order)}
