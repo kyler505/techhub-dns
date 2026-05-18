@@ -787,6 +787,7 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
     ]
     assert captured_picklist_payloads[0]["pickLines"] == captured_picklist_payloads[0]["lines"]
     assert captured_order_details_payloads[0]["lines"] == captured_picklist_payloads[0]["lines"]
+    assert captured_order_details_payloads[0]["pickLines"] == []
 
     session.close()
     engine.dispose()
@@ -973,6 +974,101 @@ def test_parent_remainder_document_view_recovers_split_items_from_full_parent_pa
             "quantity": {"standardQuantity": 1.0},
         },
     ]
+    assert document_view["pickLines"] == [
+        {
+            "productId": "prod-2",
+            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
+
+    session.close()
+    engine.dispose()
+
+
+def test_parent_remainder_pick_status_source_excludes_child_leg_picks():
+    """Remainder pick status should not count the picked-leg quantities after a split."""
+
+    session, engine = _make_sqlite_session()
+    parent_order = Order(
+        id="order-parent-7",
+        inflow_order_id="TH3005",
+        inflow_sales_order_id="sales-order-3005",
+        recipient_name="User Seven",
+        recipient_contact="user.seven@example.com",
+        delivery_location="Building 707",
+        po_number="PO-3005",
+        status=OrderStatus.PICKED.value,
+        inflow_data={
+            "orderNumber": "TH3005",
+            "contactName": "User Seven",
+            "email": "user.seven@example.com",
+            "shippingAddress": {"address1": "707 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "2"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+
+    from app.services.order_splitting import OrderSplittingService
+
+    service = OrderSplittingService(session)
+    child_order = service.create_partial_picklist_leg(parent_order, user_id="tech@example.com")
+    session.refresh(parent_order)
+
+    assert child_order is not None
+
+    # Simulate the parent payload drifting back to the original order data.
+    parent_order.inflow_data = {
+        "orderNumber": "TH3005",
+        "contactName": "User Seven",
+        "email": "user.seven@example.com",
+        "shippingAddress": {"address1": "707 Example St"},
+        "lines": [
+            {
+                "productId": "prod-1",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "2"},
+            },
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-1",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "1"},
+            },
+        ],
+    }
+    session.commit()
+
+    pick_status_source = service.build_parent_remainder_pick_status_source(parent_order)
+    picklist_view = service.build_parent_remainder_picklist_view(parent_order)
+
+    assert pick_status_source is not None
+    assert pick_status_source["lines"] == [
+        {
+            "productId": "prod-1",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
+    assert pick_status_source["pickLines"] == []
+
+    assert picklist_view is not None
+    assert picklist_view["pickLines"] == picklist_view["lines"]
 
     session.close()
     engine.dispose()
@@ -1063,6 +1159,118 @@ def test_generate_picklist_raises_when_sharepoint_upload_fails():
         assert local_path.read_bytes().startswith(b"%PDF-1.4 fake picklist")
 
     assert raised is True
+    session.close()
+    engine.dispose()
+
+
+def test_generate_picklist_auto_print_enqueues_only_once():
+    """Auto-print should not enqueue the same picklist twice during one generation request."""
+
+    session, engine = _make_sqlite_session()
+    order = Order(
+        id="order-picklist-2",
+        inflow_order_id="TH000141",
+        inflow_sales_order_id="sales-order-141",
+        recipient_name="User Two",
+        recipient_contact="user.two@example.com",
+        delivery_location="Building 202",
+        po_number="PO-0141",
+        status=OrderStatus.PICKED.value,
+        tagged_by="tech@example.com",
+        inflow_data={
+            "orderNumber": "TH000141",
+            "contactName": "User Two",
+            "email": "user.two@example.com",
+            "shippingAddress": {"address1": "202 Example St"},
+            "customFields": {"custom4": "UIN-2"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                    "unitPrice": "12.50",
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    session.add(order)
+    session.commit()
+
+    from app.models.print_job import PrintJob
+    from app.services.order_service import OrderService
+
+    service = OrderService(session)
+
+    class FakeSharePointService:
+        is_enabled = True
+
+        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+        def upload_file(self, pdf_content, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+    def fake_generate_picklist_pdf(self, inflow_data, output_path):
+        Path(output_path).write_bytes(b"%PDF-1.4 fake picklist\n")
+
+    def fake_generate_order_details_pdf(inflow_data):
+        return b"%PDF-1.4 fake order details\n"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
+
+        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
+            with patch(
+                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
+                new=fake_generate_picklist_pdf,
+            ):
+                fake_pdf_module = SimpleNamespace(
+                    pdf_service=SimpleNamespace(generate_order_details_pdf=fake_generate_order_details_pdf)
+                )
+                fake_email_module = SimpleNamespace(
+                    email_service=SimpleNamespace(
+                        is_configured=lambda: True,
+                        send_order_details_email=lambda **kwargs: True,
+                    )
+                )
+                with patch.dict(
+                    sys.modules,
+                    {
+                        "app.services.pdf_service": fake_pdf_module,
+                        "app.services.email_service": fake_email_module,
+                    },
+                ):
+                    with patch(
+                        "app.services.order_service.SystemSettingService.is_setting_enabled",
+                        return_value=False,
+                    ):
+                        with patch(
+                            "app.services.order_service.SystemSettingService.get_setting",
+                            return_value="true",
+                        ):
+                            result = service.generate_picklist(
+                                order.id,
+                                generated_by="tech@example.com",
+                                generated_by_display="Tech Example",
+                                create_partial_leg=False,
+                            )
+
+    jobs = session.query(PrintJob).filter(PrintJob.order_id == order.id).all()
+
+    assert result.picklist_path == "sharepoint://picklists/TH000141.pdf"
+    assert len(jobs) == 1
+    assert jobs[0].trigger_source == "automatic"
+    assert jobs[0].requested_by == "Tech Example"
+
     session.close()
     engine.dispose()
 

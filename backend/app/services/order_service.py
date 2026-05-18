@@ -423,7 +423,7 @@ class OrderService:
         filename = f"{order.inflow_order_id or order.id}.pdf"
         document_inflow_data = order.inflow_data
         if getattr(order, "remainder_order_id", None) and not getattr(order, "parent_order_id", None):
-            remainder_view = OrderSplittingService(self.db).build_parent_remainder_document_view(order)
+            remainder_view = OrderSplittingService(self.db).build_parent_remainder_picklist_view(order)
             if remainder_view is not None:
                 document_inflow_data = remainder_view
 
@@ -481,16 +481,6 @@ class OrderService:
                 order,
                 trigger_source="automatic",
                 requested_by=generated_by_display or generated_by,
-            )
-
-        queued_print_job = None
-        if is_first_picklist and SystemSettingService.get_setting(
-            self.db, SETTING_PICKLIST_AUTO_PRINT_ENABLED
-        ).lower() in {"true", "1", "yes", "on"}:
-            queued_print_job = PrintJobService(self.db).enqueue_picklist_print(
-                order,
-                trigger_source="automatic",
-                requested_by=generated_by,
             )
 
         self.db.commit()

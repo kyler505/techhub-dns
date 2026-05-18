@@ -8,7 +8,7 @@ import logging
 import uuid
 from copy import deepcopy
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Optional, Dict, Any, Tuple, List, Literal
 
 from sqlalchemy.orm import Session
 
@@ -270,7 +270,94 @@ class OrderSplittingService:
 
         return remaining_lines
 
-    def _build_parent_remainder_assigned_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+    def _restrict_lines_to_source(
+        self,
+        candidate_lines: List[Dict[str, Any]],
+        allowed_lines: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Limit candidate lines to the quantities/serials available on the allowed line set."""
+        allowed_quantities: Dict[str, float] = {}
+        allowed_serials: Dict[str, List[str]] = {}
+
+        for line in allowed_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+            product_key = str(product_id)
+            allowed_quantities[product_key] = allowed_quantities.get(product_key, 0.0) + self._parse_standard_quantity(
+                line.get("quantity")
+            )
+            serial_numbers = line.get("quantity", {}).get("serialNumbers", []) or []
+            if serial_numbers:
+                allowed_serials.setdefault(product_key, []).extend(
+                    str(serial_number)
+                    for serial_number in serial_numbers
+                    if serial_number is not None
+                )
+
+        restricted_lines: List[Dict[str, Any]] = []
+
+        for line in candidate_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+
+            product_key = str(product_id)
+            available_quantity = allowed_quantities.get(product_key, 0.0)
+            if available_quantity <= 0.0001:
+                continue
+
+            copied_line = deepcopy(line)
+            quantity_data = dict(copied_line.get("quantity") or {})
+            serial_numbers = [
+                str(serial_number)
+                for serial_number in (quantity_data.get("serialNumbers", []) or [])
+                if serial_number is not None
+            ]
+
+            if serial_numbers and allowed_serials.get(product_key):
+                remaining_allowed_serials = allowed_serials[product_key]
+                matched_serials: List[str] = []
+                for serial_number in serial_numbers:
+                    if serial_number in remaining_allowed_serials:
+                        matched_serials.append(serial_number)
+                        remaining_allowed_serials.remove(serial_number)
+                if not matched_serials:
+                    continue
+                quantity_data["serialNumbers"] = matched_serials
+                quantity_data["standardQuantity"] = float(len(matched_serials))
+                copied_line["quantity"] = quantity_data
+                restricted_lines.append(copied_line)
+                allowed_quantities[product_key] = max(
+                    available_quantity - float(len(matched_serials)),
+                    0.0,
+                )
+                continue
+
+            line_quantity = self._parse_standard_quantity(quantity_data)
+            restricted_quantity = min(line_quantity, available_quantity)
+            if restricted_quantity <= 0.0001:
+                continue
+
+            quantity_data["standardQuantity"] = restricted_quantity
+            copied_line["quantity"] = quantity_data
+            restricted_lines.append(copied_line)
+            allowed_quantities[product_key] = max(
+                available_quantity - restricted_quantity,
+                0.0,
+            )
+
+        return restricted_lines
+
+    def _build_parent_remainder_assigned_view(
+        self,
+        original_order: Order,
+        pick_lines_mode: Literal["stored", "lines"] = "stored",
+    ) -> Optional[Dict[str, Any]]:
         """Build the remainder-leg item set for a parent order after a partial split."""
         remainder_source = self._get_partial_remainder_source(original_order)
         if not remainder_source:
@@ -326,7 +413,20 @@ class OrderSplittingService:
             normalized_lines.append(copied_line)
 
         assigned_view["lines"] = normalized_lines
-        assigned_view["pickLines"] = deepcopy(normalized_lines)
+        if pick_lines_mode == "lines":
+            assigned_view["pickLines"] = deepcopy(normalized_lines)
+        else:
+            stored_pick_lines = [
+                line
+                for line in assigned_view.get("pickLines", [])
+                if isinstance(line, dict)
+            ]
+            if child_lines and stored_pick_lines:
+                stored_pick_lines = self._subtract_lines(stored_pick_lines, child_lines)
+            assigned_view["pickLines"] = self._restrict_lines_to_source(
+                stored_pick_lines,
+                normalized_lines,
+            )
         assigned_view["packLines"] = []
         assigned_view["shipLines"] = []
         assigned_view["subtotal"] = subtotal
@@ -335,11 +435,15 @@ class OrderSplittingService:
 
     def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
         """Build the remainder-only document snapshot for a parent partial leg."""
-        return self._build_parent_remainder_assigned_view(original_order)
+        return self._build_parent_remainder_assigned_view(original_order, pick_lines_mode="stored")
 
     def build_parent_remainder_pick_status_source(self, original_order: Order) -> Optional[Dict[str, Any]]:
         """Build the pick-status snapshot for a parent partial leg."""
-        return self._build_parent_remainder_assigned_view(original_order)
+        return self._build_parent_remainder_assigned_view(original_order, pick_lines_mode="stored")
+
+    def build_parent_remainder_picklist_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the picklist payload for a parent remainder leg."""
+        return self._build_parent_remainder_assigned_view(original_order, pick_lines_mode="lines")
 
     def should_create_remainder(self, order: Order) -> bool:
         """

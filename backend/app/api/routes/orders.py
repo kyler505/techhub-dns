@@ -919,21 +919,24 @@ def get_order_details_pdf(order_id):
         order = service.get_order_by_id(order_id)
         if not order:
             abort(404, description="Order not found")
+        if not order.inflow_data:
+            abort(404, description="Order has no inFlow data")
 
-        # Get fresh inFlow data
         inflow_service = InflowService()
-        inflow_data = inflow_service.get_order_by_id_sync(order.inflow_sales_order_id)
-
-        if not inflow_data:
-            abort(404, description="Order not found in inFlow")
-
-        remaining_order_data = inflow_service.build_remaining_order_view(inflow_data)
-        order_details_data = (
-            remaining_order_data
-            if remaining_order_data.get("lines")
-            and remaining_order_data.get("lines") != inflow_data.get("lines", [])
-            else inflow_data
+        order_details_data = inflow_service.build_remaining_order_view(order.inflow_data)
+        remainder_mode = bool(
+            getattr(order, "remainder_order_id", None)
+            and not getattr(order, "parent_order_id", None)
         )
+        if remainder_mode:
+            remainder_view = OrderSplittingService(db).build_parent_remainder_document_view(order)
+            if remainder_view is not None:
+                order_details_data = remainder_view
+        elif not (
+            order_details_data.get("lines")
+            and order_details_data.get("lines") != order.inflow_data.get("lines", [])
+        ):
+            order_details_data = order.inflow_data
 
         # Generate PDF
         try:
