@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, RefreshCw, ShieldAlert, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, RefreshCw, ShieldAlert, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { inflowApi } from "../api/inflow";
@@ -8,6 +8,7 @@ import { ordersApi } from "../api/orders";
 import { settingsApi } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
 import { OrderStatus } from "../types/order";
+import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -25,6 +26,7 @@ const makeBypassSignatureData = () => ({
 
 export default function Settings() {
     const { user, isLoading: authLoading } = useAuth();
+    const queryClient = useQueryClient();
     const currentUserLabel = user?.email ?? "system";
 
     const [recipientEmail, setRecipientEmail] = useState("");
@@ -35,7 +37,27 @@ export default function Settings() {
     const [reopenReason, setReopenReason] = useState("");
     const [ownershipOrderId, setOwnershipOrderId] = useState("");
     const [ownershipDeliverer, setOwnershipDeliverer] = useState("");
+    const [webhookUrl, setWebhookUrl] = useState("");
+    const [webhookEvents, setWebhookEvents] = useState("");
     const [runningAction, setRunningAction] = useState<string | null>(null);
+
+    const webhookDefaultsQuery = useQuery({
+        queryKey: ["settings", "webhook-defaults"],
+        queryFn: async () => inflowApi.getWebhookDefaults(),
+        refetchOnWindowFocus: false,
+    });
+    const webhooksQuery = useQuery({
+        queryKey: ["settings", "webhooks"],
+        queryFn: async () => inflowApi.listWebhooks(),
+        refetchInterval: 60_000,
+    });
+
+    useEffect(() => {
+        const defaults = webhookDefaultsQuery.data;
+        if (!defaults) return;
+        setWebhookUrl((prev) => prev || defaults.url || "");
+        setWebhookEvents((prev) => prev || defaults.events.join(", "));
+    }, [webhookDefaultsQuery.data]);
 
     const testEmailMutation = useMutation({ mutationFn: async (email: string) => settingsApi.testEmail(email) });
     const testTeamsMutation = useMutation({ mutationFn: async (email: string) => settingsApi.testTeamsRecipient(email) });
@@ -44,6 +66,25 @@ export default function Settings() {
     const testWebhookMutation = useMutation({ mutationFn: async () => inflowApi.testWebhook() });
     const syncMutation = useMutation({ mutationFn: async () => inflowApi.sync() });
     const retryPicklistMutation = useMutation({ mutationFn: async (orderId: string) => settingsApi.retryPicklistPrint(orderId) });
+    const registerWebhookMutation = useMutation({
+        mutationFn: async ({ url, events }: { url: string; events: string[] }) => inflowApi.registerWebhook({ url, events }),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["settings", "webhooks"] }),
+                queryClient.invalidateQueries({ queryKey: ["settings", "webhook-defaults"] }),
+            ]);
+            toast.success("Webhook registered", {
+                description: "The Inflow webhook subscription was recreated from the admin settings page.",
+            });
+        },
+    });
+    const deleteWebhookMutation = useMutation({
+        mutationFn: async (webhookId: string) => inflowApi.deleteWebhook(webhookId),
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ["settings", "webhooks"] });
+            toast.success("Webhook deleted", { description: "The selected subscription was removed." });
+        },
+    });
     const bypassSigningMutation = useMutation({
         mutationFn: async ({ orderId }: { orderId: string }) => ordersApi.signOrder(orderId, makeBypassSignatureData()),
     });
@@ -61,6 +102,66 @@ export default function Settings() {
         refetchInterval: 60_000,
     });
 
+    const reopenTargetOptions = useMemo(
+        () =>
+            reopenTargets.map((status) => ({
+                value: status,
+                label: status.replace("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+            })),
+        [],
+    );
+
+    const webhookEventList = useMemo(
+        () => webhookEvents.split(",").map((item) => item.trim()).filter(Boolean),
+        [webhookEvents],
+    );
+
+    const webhookBusy =
+        registerWebhookMutation.isPending || deleteWebhookMutation.isPending || webhooksQuery.isFetching || webhookDefaultsQuery.isFetching;
+
+    const handleRegisterWebhook = async () => {
+        const url = webhookUrl.trim();
+        const events = webhookEventList;
+        if (!url) {
+            toast.error("Enter a webhook URL");
+            return;
+        }
+        if (!events.length) {
+            toast.error("Enter at least one webhook event");
+            return;
+        }
+        try {
+            setRunningAction("register-webhook");
+            await registerWebhookMutation.mutateAsync({ url, events });
+        } catch (error: unknown) {
+            toast.error("Failed to register webhook", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
+    const handleUseWebhookDefaults = () => {
+        const defaults = webhookDefaultsQuery.data;
+        if (!defaults) return;
+        setWebhookUrl(defaults.url || "");
+        setWebhookEvents(defaults.events.join(", "));
+    };
+
+    const handleDeleteWebhook = async (webhookId: string) => {
+        try {
+            setRunningAction(`delete-webhook:${webhookId}`);
+            await deleteWebhookMutation.mutateAsync(webhookId);
+        } catch (error: unknown) {
+            toast.error("Failed to delete webhook", {
+                description: extractApiErrorMessage(error, "Please try again."),
+            });
+        } finally {
+            setRunningAction(null);
+        }
+    };
+
     const busy =
         testEmailMutation.isPending ||
         testTeamsMutation.isPending ||
@@ -71,7 +172,8 @@ export default function Settings() {
         retryPicklistMutation.isPending ||
         bypassSigningMutation.isPending ||
         reopenOrderMutation.isPending ||
-        overrideOwnershipMutation.isPending;
+        overrideOwnershipMutation.isPending ||
+        webhookBusy;
 
     const handleRecipientActions = async (kind: "email" | "teams") => {
         if (!recipientEmail.trim()) {
@@ -201,15 +303,6 @@ export default function Settings() {
         }
     };
 
-    const reopenTargetOptions = useMemo(
-        () =>
-            reopenTargets.map((status) => ({
-                value: status,
-                label: status.replace("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
-            })),
-        [],
-    );
-
     if (authLoading) {
         return (
             <div className="container mx-auto py-6">
@@ -301,6 +394,84 @@ export default function Settings() {
                                     {runningAction === "sync" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                                     Recovery sync
                                 </Button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <div className="text-sm font-medium">Webhook management</div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Recreate the Inflow webhook subscription after it was removed from the admin settings.
+                                    </p>
+                                </div>
+                                <Button variant="outline" size="sm" onClick={handleUseWebhookDefaults} disabled={webhookBusy}>
+                                    Use defaults
+                                </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3">
+                                <Input
+                                    placeholder={webhookDefaultsQuery.data?.url || "https://dev-techhub.pythonanywhere.com/api/inflow/webhook"}
+                                    value={webhookUrl}
+                                    onChange={(event) => setWebhookUrl(event.target.value)}
+                                    disabled={busy}
+                                />
+                                <Input
+                                    placeholder="orderCreated, orderUpdated"
+                                    value={webhookEvents}
+                                    onChange={(event) => setWebhookEvents(event.target.value)}
+                                    disabled={busy}
+                                />
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                <Button onClick={() => void handleRegisterWebhook()} disabled={busy || webhookBusy}>
+                                    {runningAction === "register-webhook" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                    {runningAction === "register-webhook" ? "Registering..." : "Register / re-register webhook"}
+                                </Button>
+                                <Button variant="secondary" onClick={() => void webhooksQuery.refetch()} disabled={webhookBusy}>
+                                    Refresh list
+                                </Button>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-xs font-medium uppercase text-muted-foreground">Current webhooks</div>
+                                {webhooksQuery.data?.webhooks?.length ? (
+                                    <div className="space-y-2">
+                                        {webhooksQuery.data.webhooks.map((webhook) => (
+                                            <div key={webhook.id} className="rounded-lg border bg-background/60 p-3">
+                                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                    <div className="space-y-1">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="text-sm font-medium">{webhook.webhook_id}</span>
+                                                            <Badge variant={webhook.status === "active" ? "success" : "secondary"}>{webhook.status}</Badge>
+                                                        </div>
+                                                        <p className="break-all text-xs text-muted-foreground">{webhook.url}</p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {webhook.events.join(", ") || "No events recorded"}
+                                                        </p>
+                                                    </div>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => void handleDeleteWebhook(webhook.webhook_id)}
+                                                        disabled={busy}
+                                                    >
+                                                        {runningAction === `delete-webhook:${webhook.webhook_id}` ? (
+                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                        )}
+                                                        Delete
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No active webhook registrations found.</p>
+                                )}
                             </div>
                         </div>
                     </div>
