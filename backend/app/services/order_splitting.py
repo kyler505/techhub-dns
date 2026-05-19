@@ -379,23 +379,6 @@ class OrderSplittingService:
             assigned_view["total"] = 0.0
             return assigned_view
 
-        child_order = (
-            self.db.query(Order)
-            .filter(Order.id == original_order.remainder_order_id)
-            .first()
-        )
-        child_lines = []
-        if child_order and isinstance(child_order.inflow_data, dict):
-            child_lines = [
-                line
-                for line in child_order.inflow_data.get("lines", [])
-                if isinstance(line, dict)
-            ]
-
-        derived_lines = self._subtract_lines(source_lines, child_lines) if child_lines else []
-        if derived_lines and derived_lines != source_lines:
-            source_lines = derived_lines
-
         normalized_lines: List[Dict[str, Any]] = []
         subtotal = 0.0
 
@@ -422,8 +405,6 @@ class OrderSplittingService:
                 for line in assigned_view.get("pickLines", [])
                 if isinstance(line, dict)
             ]
-            if child_lines and stored_pick_lines:
-                stored_pick_lines = self._subtract_lines(stored_pick_lines, child_lines)
             assigned_view["pickLines"] = self._restrict_lines_to_source(
                 stored_pick_lines,
                 normalized_lines,
