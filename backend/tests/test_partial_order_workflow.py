@@ -701,6 +701,138 @@ def test_create_order_from_inflow_refreshes_pick_lines_for_split_orders():
     engine.dispose()
 
 
+def test_create_order_from_inflow_prefers_exact_order_number_for_split_orders():
+    """A split parent should be refreshed by its exact order number, not the shared sales order id."""
+
+    session, engine = _make_sqlite_session()
+
+    parent_order = Order(
+        id="order-parent-sync-3",
+        inflow_order_id="TH3008",
+        inflow_sales_order_id="sales-order-3008",
+        recipient_name="Parent Recipient",
+        recipient_contact="parent@example.com",
+        delivery_location="Parent Building",
+        po_number="PO-3008",
+        status=OrderStatus.PRE_DELIVERY.value,
+        has_remainder="Y",
+        remainder_order_id="child-order-sync-3",
+        inflow_data={
+            "orderNumber": "TH3008",
+            "salesOrderId": "sales-order-3008",
+            "contactName": "Parent Recipient",
+            "email": "parent@example.com",
+            "shippingAddress": {"address1": "Parent Building"},
+            "lines": [
+                {
+                    "productId": "prod-b",
+                    "description": "Surge Protector",
+                    "quantity": {"standardQuantity": "2"},
+                    "unitPrice": 15,
+                }
+            ],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    child_order = Order(
+        id="order-child-sync-3",
+        inflow_order_id="TH3008-P",
+        inflow_sales_order_id="sales-order-3008",
+        recipient_name="Picked Recipient",
+        recipient_contact="picked@example.com",
+        delivery_location="Parent Building",
+        po_number="PO-3008",
+        status=OrderStatus.PICKED.value,
+        parent_order_id=parent_order.id,
+        inflow_data={
+            "orderNumber": "TH3008-P",
+            "salesOrderId": "sales-order-3008",
+            "contactName": "Picked Recipient",
+            "email": "picked@example.com",
+            "shippingAddress": {"address1": "Parent Building"},
+            "lines": [
+                {
+                    "productId": "prod-a",
+                    "description": "Hub Adapter",
+                    "quantity": {"standardQuantity": "1"},
+                    "unitPrice": 47,
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-a",
+                    "description": "Hub Adapter",
+                    "quantity": {"standardQuantity": "1"},
+                    "unitPrice": 47,
+                }
+            ],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+    session.add(child_order)
+    session.commit()
+
+    service = OrderService(session)
+    incoming_payload = {
+        "orderNumber": "TH3008",
+        "salesOrderId": "sales-order-3008",
+        "contactName": "Parent Recipient Updated",
+        "email": "parent-updated@example.com",
+        "shippingAddress": {"address1": "Updated Parent Building"},
+        "poNumber": "PO-3008-NEW",
+        "lines": [
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            }
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            }
+        ],
+        "packLines": [],
+        "shipLines": [],
+    }
+
+    updated = service.create_order_from_inflow(incoming_payload)
+    session.refresh(parent_order)
+    session.refresh(child_order)
+
+    assert updated.id == parent_order.id
+    assert parent_order.recipient_name == "Parent Recipient Updated"
+    assert parent_order.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-b",
+            "description": "Surge Protector",
+            "quantity": {"standardQuantity": "2"},
+            "unitPrice": 15,
+        }
+    ]
+    assert child_order.recipient_name == "Picked Recipient"
+    assert child_order.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-a",
+            "description": "Hub Adapter",
+            "quantity": {"standardQuantity": "1"},
+            "unitPrice": 47,
+        }
+    ]
+
+    session.close()
+    engine.dispose()
+
+
 def test_partial_order_remainder_creation_links_parent_and_child():
     """Partial picks should create a linked remainder order with only missing items."""
 def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists():
@@ -770,6 +902,26 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
             ],
         },
     )
+    parent_order.inflow_data = {
+        "orderNumber": "TH3001",
+        "contactName": "User Three",
+        "email": "user.three@example.com",
+        "shippingAddress": {"address1": "303 Example St"},
+        "lines": [
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            }
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            }
+        ],
+    }
     session.add(parent_order)
     session.commit()
 

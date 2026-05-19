@@ -1859,16 +1859,18 @@ class OrderService:
                 f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'"
             )
 
-        # Check if order exists — prefer sales_order_id (stable) over order_number (may change)
+        # Check if order exists.
+        # Prefer an exact inFlow order number match first so split parent/child
+        # legs that share the same salesOrderId do not get updated ambiguously.
         sales_order_id = inflow_data.get("salesOrderId")
-        existing = None
-        if sales_order_id:
+        existing = (
+            self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+        )
+        if not existing and sales_order_id:
             existing = (
-                self.db.query(Order).filter(Order.inflow_sales_order_id == sales_order_id).first()
-            )
-        if not existing:
-            existing = (
-                self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+                self.db.query(Order)
+                .filter(Order.inflow_sales_order_id == sales_order_id)
+                .first()
             )
 
         if existing:
