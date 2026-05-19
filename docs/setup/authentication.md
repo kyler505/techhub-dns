@@ -147,6 +147,26 @@ SAML certificates expire periodically. To renew:
 4. Should redirect to TAMU SSO
 5. After authentication, should redirect back to app
 
+### Test Local Development Bypass
+
+For local-only testing, you can bypass TAMU SSO with an explicit development flag:
+
+```env
+FLASK_ENV=development
+DEV_AUTH_BYPASS=true
+DEV_AUTH_EMAIL=dev.user@example.com
+DEV_AUTH_DISPLAY_NAME=Local Dev User
+DEV_AUTH_DEPARTMENT=Development
+```
+
+With this enabled:
+
+1. `/auth/me` returns a synthetic local user/session.
+2. `/login` stays inside the app instead of redirecting to TAMU SSO.
+3. `require_auth` and `require_admin` continue to work against the synthetic identity.
+
+This bypass is only honored in development mode and should remain disabled in production.
+
 ### Test Graph API
 
 1. Go to Admin panel (`/admin`)

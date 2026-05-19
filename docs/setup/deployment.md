@@ -418,6 +418,10 @@ Look for `enabled: True` in the output.
 | `SAML_ENABLED` | Enable SAML authentication |
 | `SAML_IDP_ENTITY_ID` | IdP entity ID |
 | `SAML_IDP_SSO_URL` | IdP login URL |
+| `DEV_AUTH_BYPASS` | Development-only auth bypass for local testing |
+| `DEV_AUTH_EMAIL` | Email for the synthetic local dev user |
+| `DEV_AUTH_DISPLAY_NAME` | Display name for the synthetic local dev user |
+| `DEV_AUTH_DEPARTMENT` | Optional department for the synthetic local dev user |
 | `AZURE_TENANT_ID` | Azure tenant ID |
 | `AZURE_CLIENT_ID` | Service principal client ID |
 | `AZURE_CLIENT_SECRET` | Service principal secret |

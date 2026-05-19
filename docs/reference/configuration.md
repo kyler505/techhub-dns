@@ -20,6 +20,10 @@
 | `SAML_IDP_CERT_PATH` | Path to IdP certificate |
 | `SAML_SP_ENTITY_ID` | Service provider entity ID |
 | `SAML_ACS_URL` | Assertion consumer service URL |
+| `DEV_AUTH_BYPASS` | Development-only auth bypass that synthesizes a local user/session instead of using TAMU SSO |
+| `DEV_AUTH_EMAIL` | Email for the synthetic local dev user |
+| `DEV_AUTH_DISPLAY_NAME` | Display name for the synthetic local dev user |
+| `DEV_AUTH_DEPARTMENT` | Optional department label for the synthetic local dev user |
 | `AZURE_TENANT_ID` | Azure AD tenant ID |
 | `AZURE_CLIENT_ID` | Service principal client ID |
 | `AZURE_CLIENT_SECRET` | Service principal secret |
