@@ -64,11 +64,12 @@ export function RouteContentErrorBoundary({ children }: BoundaryProps) {
           }}
           onReset={reset}
           resetKeys={[location.pathname]}
-          fallback={({ error }) => (
+          fallback={({ error, reset: resetBoundary }) => (
             <ErrorFallback
               error={error}
               title="This page could not finish rendering"
               message="Please refresh the page."
+              onRetry={resetBoundary}
             />
           )}
         >
