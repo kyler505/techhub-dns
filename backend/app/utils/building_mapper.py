@@ -332,6 +332,10 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
         (r'\bSTUDENT\s+COMPUTING\b', "SCC"),  # Student Computing Center
         (r'\bSCHOOL\s+OF\s+PUBLIC\s+HEALTH\b', "SPHA"),
         (r'\bHEALTH\s+PROFESSIONS\b', "HPLB"),
+        (r'\bJ\.?\s*J\.?\s*CAIN\s+BUILDING\b', "JCAIN"),
+        (r'\bJ\.?\s*MIKE\s+WALKER\b', "JCAIN"),
+        (r'\bMECHANICAL\s+ENGINEERING\b', "JCAIN"),
+        (r'\bMATERIALS\s+SCIENCE\s+AND\s+ENGINEERING\b', "JCAIN"),
         (r'\bVISUALIZATION\s+(?:BLDG|BLDG\.|BUILDING|SCIENCES)\b', "VPIS"),
         (r'\bVETERINARY\s+(?:MEDICINE|PATHOBIOLOGY)\b', "VMBS"),
         (r'\bINTERDISCIPLINARY\s+LIFE\s+SCIENCES\b', "ILCB"),
@@ -354,6 +358,9 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
         (r'\bPETROLEUM\b', "PETR"),
         (r'\bSCOTES\b', "SCOT"),
         (r'\bREYNOLDS\b', "REYN"),  # Reynolds alone
+        (r'\bJ\.?\s*J\.?\s*CAIN\b', "JCAIN"),
+        (r'\bMECHANICAL\s+ENGINEERING\b', "JCAIN"),
+        (r'\bMATERIALS\s+SCIENCE\s+AND\s+ENGINEERING\b', "JCAIN"),
         (r'\bRELLIS\b', "RELS"),    # RELLIS campus
 
         # Specific address patterns
