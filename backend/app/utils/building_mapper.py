@@ -60,6 +60,14 @@ COMMON_BUILDING_CODES = {
 }
 
 
+WEST_CAMPUS_PORTABLE_PATTERN = re.compile(
+    r"\bWEST\s+CAMPUS\s+(?:BLVD|BOULEVARD)\s+BUILDING\s+0*(\d{2,4})\b"
+)
+EAST_29TH_STREET_PATTERN = re.compile(
+    r"\b2900\s+(?:E|EAST)\s+29TH\s+ST(?:REET)?\b"
+)
+
+
 def normalize_address(address: str) -> str:
     """
     Normalize an address for consistent matching.
@@ -199,6 +207,28 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
 
     # Track which patterns we're checking for debugging
     patterns_checked = []
+
+    # Pattern P0: West Campus portable buildings
+    patterns_checked.append("Pattern P0: West Campus portable building")
+    portable_match = WEST_CAMPUS_PORTABLE_PATTERN.search(location_upper)
+    if portable_match:
+        portable_number = portable_match.group(1).zfill(4)
+        portable_label = f"Portables {portable_number}"
+        logger.info(
+            "Extracted portable location from '%s': %s (Pattern P0)",
+            location,
+            portable_label,
+        )
+        return portable_label
+
+    # Pattern P1: Health Hub / 2900 East 29th Street variants
+    patterns_checked.append("Pattern P1: 2900 E 29th St variants")
+    if EAST_29TH_STREET_PATTERN.search(location_upper):
+        logger.info(
+            "Normalized East 29th Street location from '%s' to 'E 29th St' (Pattern P1)",
+            location,
+        )
+        return "E 29th St"
 
     # Pattern 0: Specific known addresses (highest priority)
     # These are addresses that should always map to specific building codes
