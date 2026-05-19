@@ -38,7 +38,7 @@ def _webhook_json(status: str, message: str, http_status: int, **extra):
 
 
 def _run_inflow_sync():
-    """Background task: sync recent started orders from Inflow with batch commits."""
+    """Background task: sync recent picked orders from Inflow with batch commits."""
     from app.models.order import Order
 
     inflow_service = InflowService()

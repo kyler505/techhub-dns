@@ -5,7 +5,7 @@ import hashlib
 import hmac
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from flask import Flask
 
@@ -149,6 +149,25 @@ def test_ingest_predicate_accepts_picked_orders_even_after_status_changes():
             "pickLines": [],
         }
     )
+
+
+def test_sync_recent_orders_scans_without_inventory_status_gate():
+    service = InflowService()
+    fetched_orders = [
+        {"orderNumber": "TH-1", "inventoryStatus": "started", "pickLines": [{"id": "a"}]},
+        {"orderNumber": "TH-2", "inventoryStatus": "fulfilled", "pickLines": [{"id": "b"}]},
+        {"orderNumber": "TH-3", "inventoryStatus": "started", "pickLines": []},
+    ]
+    fetch_mock = Mock(return_value=fetched_orders)
+
+    with patch.object(service, "fetch_orders_sync", fetch_mock):
+        matches = service.sync_recent_started_orders_sync(
+            max_pages=1, per_page=3, target_matches=10
+        )
+
+    assert fetch_mock.call_count == 1
+    assert fetch_mock.call_args.kwargs == {"count": 3, "skip": 0}
+    assert [order["orderNumber"] for order in matches] == ["TH-1", "TH-2"]
 
 
 def test_webhook_accepts_env_secret_when_db_secret_is_stale():

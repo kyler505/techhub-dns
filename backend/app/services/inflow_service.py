@@ -380,13 +380,11 @@ class InflowService:
     async def sync_recent_started_orders(
         self, max_pages: int = 3, per_page: int = 100, target_matches: int = 100
     ) -> List[Dict[str, Any]]:
-        """Sync recent unfulfilled orders, filtering for orders that already have pickLines."""
+        """Sync recent orders that already have pickLines."""
         matches = []
 
         for page in range(max_pages):
-            orders = await self.fetch_orders(
-                inventory_status="unfulfilled", count=per_page, skip=page * per_page
-            )
+            orders = await self.fetch_orders(count=per_page, skip=page * per_page)
 
             # Filter for orders that already have pickLines and are ready to ingest.
             for order in orders:
@@ -1161,13 +1159,11 @@ class InflowService:
     def sync_recent_started_orders_sync(
         self, max_pages: int = 3, per_page: int = 100, target_matches: int = 100
     ) -> List[Dict[str, Any]]:
-        """Sync recent unfulfilled orders (sync version)"""
+        """Sync recent orders that already have pickLines (sync version)."""
         matches = []
 
         for page in range(max_pages):
-            orders = self.fetch_orders_sync(
-                inventory_status="unfulfilled", count=per_page, skip=page * per_page
-            )
+            orders = self.fetch_orders_sync(count=per_page, skip=page * per_page)
 
             for order in orders:
                 if self.is_started_and_picked(order):
