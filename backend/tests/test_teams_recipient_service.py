@@ -37,7 +37,22 @@ class _FakeSession:
         self.closed += 1
 
 
-def _make_order(order_id: str, inflow_order_id: str, delivery_run_id: str, recipient_email: str, recipient_name: str, delivery_sequence: int, product_name: str):
+def _make_order(
+    order_id: str,
+    inflow_order_id: str,
+    delivery_run_id: str,
+    recipient_email: str,
+    recipient_name: str,
+    delivery_sequence: int,
+    product_name: str,
+    *,
+    assigned_deliverer: str | None = "Runner One",
+    delivery_run_runner: str | None = None,
+):
+    delivery_run = None
+    if delivery_run_runner is not None:
+        delivery_run = SimpleNamespace(runner=delivery_run_runner)
+
     return SimpleNamespace(
         id=order_id,
         inflow_order_id=inflow_order_id,
@@ -45,7 +60,8 @@ def _make_order(order_id: str, inflow_order_id: str, delivery_run_id: str, recip
         delivery_sequence=delivery_sequence,
         recipient_contact=recipient_email,
         recipient_name=recipient_name,
-        assigned_deliverer="Runner One",
+        assigned_deliverer=assigned_deliverer,
+        delivery_run=delivery_run,
         inflow_data={
             "lines": [
                 {"productName": product_name},
@@ -154,8 +170,47 @@ def test_notify_orders_in_delivery_keeps_separate_recipients_distinct() -> None:
     print("[PASS] different recipients in the same run still get separate Teams notifications")
 
 
+def test_notify_orders_in_delivery_uses_delivery_run_runner_when_order_field_missing() -> None:
+    service = TeamsRecipientService()
+    order = _make_order(
+        order_id="55555555-5555-5555-5555-555555555555",
+        inflow_order_id="TH3001",
+        delivery_run_id="run-3",
+        recipient_email="recipient@example.com",
+        recipient_name="Recipient",
+        delivery_sequence=1,
+        product_name="Widget C",
+        assigned_deliverer=None,
+        delivery_run_runner="Actual Technician",
+    )
+
+    uploaded_payloads: list[dict] = []
+
+    def fake_get_db_session():
+        return _FakeSession()
+
+    def fake_upload_file_to_sharepoint(**kwargs):
+        uploaded_payloads.append(json.loads(kwargs["file_content"].decode("utf-8")))
+        return "sharepoint://teams/notification.json"
+
+    with (
+        patch.object(TeamsRecipientService, "is_configured", return_value=True),
+        patch("app.services.teams_recipient_service.get_db_session", side_effect=fake_get_db_session),
+        patch("app.services.teams_recipient_service.check_recent_notification", return_value=None),
+        patch("app.services.teams_recipient_service.graph_service.upload_file_to_sharepoint", side_effect=fake_upload_file_to_sharepoint),
+        patch("app.services.background_tasks.run_in_background", side_effect=lambda task, **kwargs: task()),
+    ):
+        service.notify_orders_in_delivery([order])
+
+    assert len(uploaded_payloads) == 1
+    payload = uploaded_payloads[0]
+    assert payload["deliveryRunner"] == "Actual Technician"
+    print("[PASS] delivery run runner is used when the order-level field is blank")
+
+
 if __name__ == "__main__":
     print("Running Teams recipient notification tests...\n")
     test_notify_orders_in_delivery_aggregates_child_legs_for_same_recipient()
     test_notify_orders_in_delivery_keeps_separate_recipients_distinct()
+    test_notify_orders_in_delivery_uses_delivery_run_runner_when_order_field_missing()
     print("\n[SUCCESS] All Teams recipient notification tests passed!")
