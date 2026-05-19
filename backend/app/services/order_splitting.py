@@ -6,6 +6,7 @@ legs when the picklist is generated, then keeps those local legs in sync with
 later InFlow refreshes.
 """
 import logging
+import re
 import uuid
 from copy import deepcopy
 from datetime import datetime
@@ -354,6 +355,33 @@ class OrderSplittingService:
 
         return restricted_lines
 
+    def _next_partial_child_order_id(self, original_order: Order) -> str:
+        """Return the next recursive picked-leg order number for a remainder row."""
+        base_order_id = str(original_order.inflow_order_id or "").strip()
+        prefix = f"{base_order_id}-P"
+        pattern = re.compile(rf"^{re.escape(prefix)}(?:(\d+))?$", re.IGNORECASE)
+
+        highest_suffix = 0
+        child_order_ids = (
+            self.db.query(Order.inflow_order_id)
+            .filter(Order.parent_order_id == original_order.id)
+            .filter(Order.inflow_order_id.ilike(f"{prefix}%"))
+            .all()
+        )
+
+        for (child_order_id,) in child_order_ids:
+            if not child_order_id:
+                continue
+            match = pattern.match(str(child_order_id).strip())
+            if not match:
+                continue
+            suffix_text = match.group(1)
+            suffix = int(suffix_text) if suffix_text else 1
+            highest_suffix = max(highest_suffix, suffix)
+
+        next_suffix = highest_suffix + 1
+        return prefix if next_suffix == 1 else f"{prefix}{next_suffix}"
+
     def _build_parent_remainder_assigned_view(
         self,
         original_order: Order,
@@ -437,45 +465,11 @@ class OrderSplittingService:
         if original_order.parent_order_id:
             return original_order
 
-        if original_order.remainder_order_id:
-            existing = (
-                self.db.query(Order)
-                .filter(Order.id == original_order.remainder_order_id)
-                .first()
-            )
-            if existing:
-                original_order.has_remainder = "Y"
-                remainder_leg_state = self._build_remainder_leg_state(original_order.inflow_data)
-                if remainder_leg_state is not None and original_order.inflow_data != remainder_leg_state:
-                    original_order.inflow_data = remainder_leg_state
-                    original_order.updated_at = datetime.utcnow()
-                    self.db.commit()
-                    self.db.refresh(original_order)
-                logger.info(
-                    "Partial leg already exists for %s; keeping parent %s active",
-                    original_order.inflow_order_id,
-                    original_order.id,
-                )
-                original_order.updated_at = datetime.utcnow()
-                self.db.commit()
-                self.db.refresh(original_order)
-                return existing
-
         pick_status = self.inflow_service.get_pick_status(original_order.inflow_data)
         if pick_status.get("is_fully_picked", True):
             return None
 
-        leg_order_id = f"{original_order.inflow_order_id}-P"
-        existing = (
-            self.db.query(Order).filter(Order.inflow_order_id == leg_order_id).first()
-        )
-        if existing:
-            original_order.has_remainder = "Y"
-            original_order.remainder_order_id = existing.id
-            original_order.updated_at = datetime.utcnow()
-            self.db.commit()
-            self.db.refresh(existing)
-            return existing
+        leg_order_id = self._next_partial_child_order_id(original_order)
 
         picked_leg_inflow_data = self._build_partial_leg_view(original_order.inflow_data)
         remainder_leg_state = self._build_remainder_leg_state(original_order.inflow_data)

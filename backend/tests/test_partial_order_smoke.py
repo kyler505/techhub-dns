@@ -190,8 +190,65 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
             ("order-details", "TH9001-P.pdf"),
         ]
 
+        parent_order.inflow_data = {
+            "orderNumber": "TH9001",
+            "contactName": "Smoke Tester",
+            "email": "smoke.tester@example.com",
+            "shippingAddress": {"address1": "9001 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "1"},
+                },
+                {
+                    "productId": "prod-2",
+                    "description": "Dock",
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        }
+        session.commit()
+
+        recursive_child = order_service.generate_picklist(
+            parent_order.id,
+            generated_by="runner@example.com",
+            generated_by_display="Runner User",
+            create_partial_leg=False,
+        )
+
+        session.refresh(parent_order)
+        session.refresh(generated_child)
+        session.refresh(recursive_child)
+
+        assert recursive_child.parent_order_id == parent_order.id
+        assert recursive_child.inflow_order_id == "TH9001-P2"
+        assert parent_order.remainder_order_id == recursive_child.id
+        assert parent_order.inflow_data["lines"] == [
+            {
+                "productId": "prod-2",
+                "description": "Dock",
+                "quantity": {"standardQuantity": 1.0},
+            }
+        ]
+        assert parent_order.inflow_data["pickLines"] == []
+        assert generated_child.picklist_path == "sharepoint://picklists/TH9001-P.pdf"
+        assert recursive_child.picklist_path == "sharepoint://picklists/TH9001-P2.pdf"
+        assert recursive_child.order_details_path == "sharepoint://order-details/TH9001-P2.pdf"
+        assert sharepoint.uploads[2:4] == [
+            ("picklists", "TH9001-P2.pdf"),
+            ("order-details", "TH9001-P2.pdf"),
+        ]
+
         qa_payload = {
-            "orderNumber": generated_child.inflow_order_id,
+            "orderNumber": recursive_child.inflow_order_id,
             "technician": "Runner User",
             "qaSignature": "Smoke Signature",
             "method": "Delivery",
@@ -202,7 +259,7 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
             "verifyBoxesLabeledCorrectly": True,
         }
         qa_result = order_service.submit_qa(
-            generated_child.id,
+            recursive_child.id,
             qa_payload,
             technician="Runner User",
         )
@@ -210,9 +267,9 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         session.refresh(qa_result)
         assert qa_result.status == OrderStatus.PRE_DELIVERY.value
         assert qa_result.qa_completed_at is not None
-        assert qa_result.qa_path == "sharepoint://qa/TH9001-P.json"
+        assert qa_result.qa_path == "sharepoint://qa/TH9001-P2.json"
         assert qa_result.qa_method == "Delivery"
-        assert sharepoint.uploads[2] == ("qa", "TH9001-P.json")
+        assert sharepoint.uploads[4] == ("qa", "TH9001-P2.json")
 
         delivery_service = DeliveryRunService(session)
         delivery_service._get_authenticated_actor = lambda: (
@@ -227,15 +284,15 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
             purpose=None,
         )
 
-        run = delivery_service.create_run_for_current_user([generated_child.id], vehicle="van")
+        run = delivery_service.create_run_for_current_user([recursive_child.id], vehicle="van")
         session.refresh(run)
-        session.refresh(generated_child)
+        session.refresh(recursive_child)
         assert run.status == DeliveryRunStatus.ACTIVE.value
-        assert generated_child.status == OrderStatus.IN_DELIVERY.value
-        assert generated_child.delivery_run_id == run.id
+        assert recursive_child.status == OrderStatus.IN_DELIVERY.value
+        assert recursive_child.delivery_run_id == run.id
 
         delivered = order_service.transition_status(
-            generated_child.id,
+            recursive_child.id,
             OrderStatus.DELIVERED,
             changed_by="Runner User",
             reason="Delivered during smoke test",
@@ -244,7 +301,7 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         assert delivered.status == OrderStatus.DELIVERED.value
 
         partial_delivery_payload = {
-            **generated_child.inflow_data,
+            **recursive_child.inflow_data,
             "packLines": [
                 {
                     "productId": "prod-laptop",
@@ -255,7 +312,7 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
                 {
                     "salesOrderShipLineId": "ship-1",
                     "carrier": "TechHub",
-                    "containers": ["DELIVERY-TH9001-P-1"],
+                    "containers": ["DELIVERY-TH9001-P2-1"],
                 }
             ],
         }
@@ -271,19 +328,19 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         )
 
         session.refresh(completed_run)
-        session.refresh(generated_child)
+        session.refresh(recursive_child)
 
         assert completed_run.status == DeliveryRunStatus.COMPLETED.value
-        assert generated_child.status == OrderStatus.DELIVERED.value
-        assert generated_child.delivery_run_id == run.id
-        assert generated_child.picklist_generated_at is not None
-        assert generated_child.picklist_path is not None
-        assert generated_child.qa_completed_at is not None
-        assert generated_child.qa_path is not None
-        assert generated_child.order_details_path is not None
-        assert generated_child.qa_method == "Delivery"
-        assert generated_child.inflow_data == partial_delivery_payload
-        assert parent_order.remainder_order_id == generated_child.id
+        assert recursive_child.status == OrderStatus.DELIVERED.value
+        assert recursive_child.delivery_run_id == run.id
+        assert recursive_child.picklist_generated_at is not None
+        assert recursive_child.picklist_path is not None
+        assert recursive_child.qa_completed_at is not None
+        assert recursive_child.qa_path is not None
+        assert recursive_child.order_details_path is not None
+        assert recursive_child.qa_method == "Delivery"
+        assert recursive_child.inflow_data == partial_delivery_payload
+        assert parent_order.remainder_order_id == recursive_child.id
 
         print("[PASS] partial-order smoke chain split -> docs -> QA -> delivery -> delivered")
     finally:

@@ -196,6 +196,32 @@ class OrderService:
         total_picked = float(pick_status.get("total_picked", 0) or 0)
         return total_ordered > 0 and total_picked < total_ordered
 
+    def _parent_remainder_can_generate_picklist(self, order: Order) -> bool:
+        """Return True when an active remainder leg has picked items that can be split off again."""
+        if not getattr(order, "remainder_order_id", None) or getattr(
+            order, "parent_order_id", None
+        ):
+            return False
+
+        if not order.inflow_data:
+            return False
+
+        from app.services.inflow_service import InflowService
+
+        try:
+            pick_status = InflowService().get_pick_status(order.inflow_data)
+        except Exception as exc:
+            logger.warning(
+                "Failed to compute pick status for recursive remainder split %s: %s",
+                order.inflow_order_id,
+                exc,
+            )
+            return False
+
+        total_ordered = float(pick_status.get("total_ordered", 0) or 0)
+        total_picked = float(pick_status.get("total_picked", 0) or 0)
+        return total_ordered > 0 and 0 < total_picked < total_ordered
+
     def _ensure_remainder_leg_ready(self, order: Order, action: str) -> None:
         """Block prep actions on remainder parent legs until their items are picked."""
         if not self._parent_remainder_has_unpicked_items(order):
@@ -415,7 +441,8 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
-        self._ensure_remainder_leg_ready(order, "generate the picklist")
+        if not self._parent_remainder_can_generate_picklist(order):
+            self._ensure_remainder_leg_ready(order, "generate the picklist")
 
         if not order.inflow_data:
             raise ValidationError("Order must have inFlow data to generate picklist")
@@ -440,7 +467,7 @@ class OrderService:
             and pick_status.get("total_picked", 0) < pick_status.get("total_ordered", 0)
         )
 
-        if is_partial_order and not order.parent_order_id and not order.remainder_order_id:
+        if is_partial_order and not order.parent_order_id:
             # For a partially picked parent, create or resolve the child leg first.
             # The child leg is the one that should receive the generated picklist,
             # Order Details email, and downstream QA/status timestamps.

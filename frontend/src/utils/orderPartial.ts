@@ -9,7 +9,11 @@ type PartialOrderSource = Pick<
   | "remainder_inflow_order_id"
   | "parent_order_id"
   | "parent_inflow_order_id"
->;
+  | "tagged_at"
+  | "picklist_generated_at"
+> & {
+  asset_tag_required?: boolean;
+};
 
 export interface PartialOrderInfo {
   isPartial: boolean;
@@ -267,4 +271,22 @@ export const isPartialOrder = (order: PartialOrderSource): boolean => getPartial
 export const isRemainderLegWaitingOnPickup = (order: PartialOrderSource): boolean => {
   const partialInfo = getPartialOrderInfo(order);
   return partialInfo.hasRemainder && !partialInfo.isPartialLeg && partialInfo.missingItems.length > 0;
+};
+
+export const canGeneratePicklist = (order: PartialOrderSource): boolean => {
+  if (order.picklist_generated_at) {
+    return false;
+  }
+
+  const assetTagRequired = order.asset_tag_required !== false;
+  if (assetTagRequired && !order.tagged_at) {
+    return false;
+  }
+
+  const partialInfo = getPartialOrderInfo(order);
+  if (partialInfo.hasRemainder && partialInfo.totalPicked === 0 && partialInfo.missingItems.length > 0) {
+    return false;
+  }
+
+  return true;
 };

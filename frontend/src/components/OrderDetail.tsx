@@ -25,6 +25,7 @@ import {
 } from "./ui/table";
 import { formatToCentralTime } from "../utils/timezone";
 import {
+  canGeneratePicklist as canGeneratePicklistForOrder,
   getOrderProductTableView,
   getPartialOrderInfo,
   isRemainderLegWaitingOnPickup,
@@ -89,8 +90,13 @@ export default function OrderDetail({
   const productTableView = getOrderProductTableView(order);
   const isPartialLeg = partialOrderInfo.isPartialLeg;
   const remainderLegWaitingOnPickup = isRemainderLegWaitingOnPickup(order);
-  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
+  const recursiveSplitEligible =
+    partialOrderInfo.hasRemainder &&
+    partialOrderInfo.totalPicked > 0 &&
+    partialOrderInfo.missingItems.length > 0;
+  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !isPartialLeg;
   const assetTagRequired = order.asset_tag_required !== false;
+  const canGeneratePicklist = canGeneratePicklistForOrder(order);
 
   const requestSentAt =
     order.tag_data?.canopyorders_request_sent_at || order.tag_data?.tag_request_sent_at;
@@ -344,7 +350,9 @@ export default function OrderDetail({
                     </div>
                     {remainderLegWaitingOnPickup ? (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                        This remainder leg is waiting on the remaining items to be picked. Asset tagging, picklist generation, and order details are blocked until that happens.
+                        {recursiveSplitEligible
+                          ? "This remainder leg still has picked items. Asset tagging and order details stay blocked until the remainder is fully picked, but you can generate another picklist to split off the picked subset."
+                          : "This remainder leg is waiting on the remaining items to be picked. Asset tagging, picklist generation, and order details are blocked until that happens."}
                       </div>
                     ) : null}
                     {partialOrderInfo.missingItems.length > 0 ? (
@@ -469,9 +477,8 @@ export default function OrderDetail({
                   disabled={
                     generatingPicklist ||
                     partialConfirmSubmitting ||
-                    remainderLegWaitingOnPickup ||
-                    (assetTagRequired && !order.tagged_at) ||
-                    Boolean(order.picklist_generated_at)
+                    !canGeneratePicklist ||
+                    (remainderLegWaitingOnPickup && !recursiveSplitEligible)
                   }
                   size="sm"
                 >
@@ -732,7 +739,9 @@ export default function OrderDetail({
               Create picked leg?
             </DialogTitle>
             <DialogDescription>
-              This order is partially picked ({partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} items). Generating the picklist will create the picked leg and keep the original as the remainder leg.
+              {recursiveSplitEligible
+                ? `This remainder leg already has picked items (${partialOrderInfo.totalPicked}/${partialOrderInfo.totalOrdered}). Generating the picklist will create another picked leg and keep the original as the remainder leg.`
+                : `This order is partially picked (${partialOrderInfo.totalPicked}/${partialOrderInfo.totalOrdered} items). Generating the picklist will create the picked leg and keep the original as the remainder leg.`}
             </DialogDescription>
           </DialogHeader>
 

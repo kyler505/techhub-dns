@@ -1109,6 +1109,190 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
     engine.dispose()
 
 
+def test_recursive_remainder_split_creates_next_partial_leg():
+    """A partially picked remainder row should create a new recursive picked leg."""
+
+    session, engine = _make_sqlite_session()
+
+    parent_order = Order(
+        id="order-parent-8",
+        inflow_order_id="TH3009",
+        inflow_sales_order_id="sales-order-3009",
+        recipient_name="User Eight",
+        recipient_contact="user.eight@example.com",
+        delivery_location="Building 808",
+        po_number="PO-3009",
+        status=OrderStatus.PICKED.value,
+        tagged_by="tech@example.com",
+        inflow_data={
+            "orderNumber": "TH3009",
+            "contactName": "User Eight",
+            "email": "user.eight@example.com",
+            "shippingAddress": {"address1": "808 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-a",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "2"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-a",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    first_child = Order(
+        id="order-child-8",
+        inflow_order_id="TH3009-P",
+        inflow_sales_order_id="sales-order-3009",
+        recipient_name="User Eight",
+        recipient_contact="user.eight@example.com",
+        delivery_location="Building 808",
+        po_number="PO-3009",
+        status=OrderStatus.PICKED.value,
+        parent_order_id=parent_order.id,
+        inflow_data={
+            "orderNumber": "TH3009-P",
+            "contactName": "User Eight",
+            "email": "user.eight@example.com",
+            "shippingAddress": {"address1": "808 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-a",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-a",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+
+    session.add(parent_order)
+    session.commit()
+    session.add(first_child)
+    session.commit()
+
+    parent_order.has_remainder = "Y"
+    parent_order.remainder_order_id = first_child.id
+    parent_order.inflow_data = {
+        "orderNumber": "TH3009",
+        "contactName": "User Eight",
+        "email": "user.eight@example.com",
+        "shippingAddress": {"address1": "808 Example St"},
+        "lines": [
+            {
+                "productId": "prod-a",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "2"},
+            }
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-a",
+                "product": {"name": "Laptop", "sku": "LAP-1"},
+                "quantity": {"standardQuantity": "1"},
+            }
+        ],
+    }
+    session.commit()
+
+    service = OrderService(session)
+
+    assert service._parent_remainder_has_unpicked_items(parent_order) is True
+    with pytest.raises(
+        ValidationError, match="remainder leg still has items waiting to be picked"
+    ):
+        service.mark_asset_tagged(parent_order.id, ["TAG-1"], technician="tech@example.com")
+
+    with pytest.raises(
+        ValidationError, match="remainder leg still has items waiting to be picked"
+    ):
+        service.send_order_details_email(parent_order.id, generated_by="tech@example.com")
+
+    class FakeSharePointService:
+        is_enabled = True
+
+        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+    def fake_generate_picklist_pdf(self, inflow_data, output_path):
+        Path(output_path).write_bytes(b"%PDF-1.4 fake recursive picklist\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
+
+        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
+            with patch(
+                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
+                new=fake_generate_picklist_pdf,
+            ):
+                with patch(
+                    "app.services.order_service.SystemSettingService.is_setting_enabled",
+                    return_value=False,
+                ), patch(
+                    "app.services.order_service.SystemSettingService.get_setting",
+                    return_value="false",
+                ):
+                    with patch.object(service, "_send_order_details_email", return_value=True):
+                        result = service.generate_picklist(
+                            parent_order.id,
+                            generated_by="tech@example.com",
+                            generated_by_display="tech@example.com",
+                            create_partial_leg=False,
+                        )
+
+    session.refresh(parent_order)
+    session.refresh(first_child)
+    session.refresh(result)
+
+    assert result.id != parent_order.id
+    assert result.inflow_order_id == "TH3009-P2"
+    assert result.parent_order_id == parent_order.id
+    assert parent_order.remainder_order_id == result.id
+    assert parent_order.inflow_data["lines"] == [
+        {
+            "productId": "prod-a",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": 1.0},
+        }
+    ]
+    assert parent_order.inflow_data["pickLines"] == []
+    assert first_child.inflow_data["lines"] == [
+        {
+            "productId": "prod-a",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": "1"},
+        }
+    ]
+    assert result.inflow_data["lines"] == [
+        {
+            "productId": "prod-a",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": "1.0"},
+        }
+    ]
+    assert result.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-a",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": "1.0"},
+        }
+    ]
+
+    session.close()
+    engine.dispose()
+
+
 def test_parent_remainder_document_view_keeps_items_when_fully_picked():
     """A remainder leg should keep showing its leg items even after all of them are picked."""
 
