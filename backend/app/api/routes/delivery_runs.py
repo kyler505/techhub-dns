@@ -235,7 +235,7 @@ def get_run(run_id):
 @bp.route("/<run_id>/finish", methods=["PUT"])
 @require_auth
 def finish_run(run_id):
-    """Finish a delivery run, optionally creating remainder orders for partial picks"""
+    """Finish a delivery run and complete already delivered local partial legs."""
     data = request.get_json() or {}
 
     try:

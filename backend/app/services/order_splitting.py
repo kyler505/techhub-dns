@@ -1,8 +1,9 @@
 """
 Order Splitting Service for handling partial pick remainder orders.
 
-When a partial pick order is delivered, this service creates a local remainder
-order to track the unpicked items, linking back to the same InFlow sales order.
+The active workflow splits a partial order into separate picked and remainder
+legs when the picklist is generated, then keeps those local legs in sync with
+later InFlow refreshes.
 """
 import logging
 import uuid
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class OrderSplittingService:
-    """Service for splitting partial pick orders into remainder orders."""
+    """Service for splitting partial pick orders into picked and remainder legs."""
 
     def __init__(self, db: Session):
         self.db = db
