@@ -245,8 +245,19 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
 
         partial_delivery_payload = {
             **generated_child.inflow_data,
-            "packLines": [],
-            "shipLines": [],
+            "packLines": [
+                {
+                    "productId": "prod-laptop",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "shipLines": [
+                {
+                    "salesOrderShipLineId": "ship-1",
+                    "carrier": "TechHub",
+                    "containers": ["DELIVERY-TH9001-P-1"],
+                }
+            ],
         }
         monkeypatch.setattr(
             "app.services.inflow_service.InflowService.fulfill_sales_order",
@@ -263,20 +274,18 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         session.refresh(generated_child)
 
         assert completed_run.status == DeliveryRunStatus.COMPLETED.value
-        assert generated_child.status == OrderStatus.PICKED.value
-        assert generated_child.delivery_run_id is None
-        assert generated_child.picklist_generated_at is None
-        assert generated_child.picklist_path is None
-        assert generated_child.qa_completed_at is None
-        assert generated_child.qa_path is None
-        assert generated_child.order_details_path is None
-        assert generated_child.signature_captured_at is None
-        assert generated_child.tagged_at is None
-        assert generated_child.qa_method is None
+        assert generated_child.status == OrderStatus.DELIVERED.value
+        assert generated_child.delivery_run_id == run.id
+        assert generated_child.picklist_generated_at is not None
+        assert generated_child.picklist_path is not None
+        assert generated_child.qa_completed_at is not None
+        assert generated_child.qa_path is not None
+        assert generated_child.order_details_path is not None
+        assert generated_child.qa_method == "Delivery"
         assert generated_child.inflow_data == partial_delivery_payload
         assert parent_order.remainder_order_id == generated_child.id
 
-        print("[PASS] partial-order smoke chain split -> docs -> QA -> delivery -> requeue")
+        print("[PASS] partial-order smoke chain split -> docs -> QA -> delivery -> delivered")
     finally:
         session.close()
         engine.dispose()

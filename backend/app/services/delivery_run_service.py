@@ -616,7 +616,7 @@ class DeliveryRunService:
         expected_updated_at: Optional[datetime] = None,
     ) -> DeliveryRun:
         """
-        Finish a delivery run: fulfill orders in InFlow and optionally create remainder orders.
+        Finish a delivery run by fulfilling delivered orders in InFlow and marking the run complete.
 
         Splits into three phases to avoid holding the DB lock during network I/O:
           1. Validate (read-only, no lock)
@@ -692,10 +692,10 @@ class DeliveryRunService:
             )
 
         # Phase 3: short locking transaction for final status update
+        # ``create_remainders`` is retained for API compatibility but no longer
+        # requeues local partial legs. Those are already split into separate
+        # local orders and should remain delivered once the run finishes.
         audit_service = AuditService(self.db)
-        partial_delivery_results = self._requeue_partially_delivered_orders(
-            run.orders, user_id, audit_service
-        )
 
         run = (
             self.db.query(DeliveryRun)
@@ -714,10 +714,6 @@ class DeliveryRunService:
         run.end_time = datetime.utcnow()
         run.updated_at = datetime.utcnow()
 
-        partial_delivery_results = self._requeue_partially_delivered_orders(
-            run.orders, user_id, audit_service
-        )
-
         audit_service.log_delivery_run_action(
             run_id=run_id_str,
             action="completed",
@@ -728,10 +724,8 @@ class DeliveryRunService:
                 "completed_at": to_utc_iso_z(run.end_time),
                 "fulfilled_orders": inflow_successes,
                 "create_remainders_requested": create_remainders,
-                "partial_orders_requeued": partial_delivery_results.get(
-                    "requeued_count", 0
-                ),
-                "requeued_orders": partial_delivery_results.get("orders_requeued", []),
+                "partial_orders_requeued": 0,
+                "requeued_orders": [],
             },
         )
 
