@@ -6,10 +6,13 @@ import os
 import sys
 import tempfile
 import types
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
@@ -26,6 +29,7 @@ from app.models.order import Order, OrderStatus
 from app.services.inflow_service import InflowService
 from app.services.order_service import OrderService
 from app.services.order_splitting import OrderSplittingService
+from app.utils.exceptions import ValidationError
 
 
 def test_fulfill_sales_order_appends_new_partial_shipment_lines():
@@ -762,78 +766,30 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
     session.commit()
 
     from app.services.order_service import OrderService
+    from app.services.order_splitting import OrderSplittingService
 
     service = OrderService(session)
-    captured_picklist_payloads: list[dict[str, Any]] = []
-    captured_order_details_payloads: list[dict[str, Any]] = []
+    picklist_view = OrderSplittingService(session).build_parent_remainder_picklist_view(parent_order)
 
-    class FakeSharePointService:
-        is_enabled = True
-
-        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
-            return f"sharepoint://{subfolder}/{filename}"
-
-        def upload_file(self, pdf_content, subfolder: str, filename: str) -> str:
-            return f"sharepoint://{subfolder}/{filename}"
-
-    def fake_generate_picklist_pdf(self, inflow_data, output_path):
-        captured_picklist_payloads.append(inflow_data)
-        Path(output_path).write_bytes(b"%PDF-1.4 fake picklist\n")
-
-    def fake_generate_order_details_pdf(inflow_data):
-        captured_order_details_payloads.append(inflow_data)
-        return b"%PDF-1.4 fake order details\n"
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
-
-        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
-            with patch(
-                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
-                new=fake_generate_picklist_pdf,
-            ):
-                fake_pdf_module = SimpleNamespace(
-                    pdf_service=SimpleNamespace(generate_order_details_pdf=fake_generate_order_details_pdf)
-                )
-                fake_email_module = SimpleNamespace(
-                    email_service=SimpleNamespace(
-                        is_configured=lambda: True,
-                        send_order_details_email=lambda **kwargs: True,
-                    )
-                )
-                with patch.dict(
-                    sys.modules,
-                    {
-                        "app.services.pdf_service": fake_pdf_module,
-                        "app.services.email_service": fake_email_module,
-                    },
-                ):
-                    with patch(
-                        "app.services.order_service.SystemSettingService.is_setting_enabled",
-                        return_value=False,
-                    ):
-                        with patch(
-                            "app.services.order_service.SystemSettingService.get_setting",
-                            return_value="false",
-                        ):
-                            result = service.generate_picklist(
-                                parent_order.id,
-                                generated_by="tech@example.com",
-                                generated_by_display="tech@example.com",
-                                create_partial_leg=False,
-                            )
-
-    assert result.id == parent_order.id
-    assert captured_picklist_payloads[0]["lines"] == [
+    assert picklist_view is not None
+    assert picklist_view["lines"] == [
         {
             "productId": "prod-2",
             "product": {"name": "Dock", "sku": "DOCK-1"},
             "quantity": {"standardQuantity": 1.0},
         },
     ]
-    assert captured_picklist_payloads[0]["pickLines"] == captured_picklist_payloads[0]["lines"]
-    assert captured_order_details_payloads[0]["lines"] == captured_picklist_payloads[0]["lines"]
-    assert captured_order_details_payloads[0]["pickLines"] == []
+    assert picklist_view["pickLines"] == picklist_view["lines"]
+
+    with pytest.raises(
+        ValidationError, match="remainder leg still has items waiting to be picked"
+    ):
+        service.generate_picklist(
+            parent_order.id,
+            generated_by="tech@example.com",
+            generated_by_display="tech@example.com",
+            create_partial_leg=False,
+        )
 
     session.close()
     engine.dispose()
@@ -1118,6 +1074,131 @@ def test_parent_remainder_pick_status_source_excludes_child_leg_picks():
 
     session.close()
     engine.dispose()
+
+
+def test_parent_remainder_blocks_prep_actions_until_remaining_items_are_picked():
+    """Remainder parent legs should not allow prep actions before their items are picked."""
+
+    session, engine = _make_sqlite_session()
+    session.execute(text("PRAGMA foreign_keys=ON"))
+
+    parent_order = Order(
+        id="order-parent-blocked",
+        inflow_order_id="TH4001",
+        inflow_sales_order_id="sales-order-4001",
+        recipient_name="User Four",
+        recipient_contact="user.four@example.com",
+        delivery_location="Building 401",
+        po_number="PO-4001",
+        status=OrderStatus.PICKED.value,
+        has_remainder="Y",
+        inflow_data={
+            "orderNumber": "TH4001",
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Dock",
+                    "unitPrice": 120,
+                    "quantity": {"standardQuantity": "2"},
+                }
+            ],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    child_order = Order(
+        id="order-child-blocked",
+        inflow_order_id="TH4001-P",
+        inflow_sales_order_id="sales-order-4001",
+        recipient_name="User Four",
+        recipient_contact="user.four@example.com",
+        delivery_location="Building 401",
+        po_number="PO-4001",
+        status=OrderStatus.PICKED.value,
+        parent_order_id=parent_order.id,
+        inflow_data={
+            "orderNumber": "TH4001-P",
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Dock",
+                    "unitPrice": 120,
+                    "quantity": {"standardQuantity": "2"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Dock",
+                    "unitPrice": 120,
+                    "quantity": {"standardQuantity": "2"},
+                }
+            ],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+
+    session.add(parent_order)
+    session.commit()
+    session.add(child_order)
+    session.commit()
+    parent_order.remainder_order_id = child_order.id
+    session.commit()
+
+    try:
+        service = OrderService(session)
+
+        assert service._parent_remainder_has_unpicked_items(parent_order) is True
+
+        with pytest.raises(
+            ValidationError, match="remainder leg still has items waiting to be picked"
+        ):
+            service.mark_asset_tagged(
+                parent_order.id, ["TAG-1"], technician="tech@example.com"
+            )
+
+        with pytest.raises(
+            ValidationError, match="remainder leg still has items waiting to be picked"
+        ):
+            service.generate_picklist(
+                parent_order.id, generated_by="tech@example.com"
+            )
+
+        with pytest.raises(
+            ValidationError, match="remainder leg still has items waiting to be picked"
+        ):
+            service.send_order_details_email(
+                parent_order.id, generated_by="tech@example.com"
+            )
+
+        parent_order.picklist_generated_at = datetime.utcnow()
+        session.commit()
+
+        with pytest.raises(
+            ValidationError, match="remainder leg still has items waiting to be picked"
+        ):
+            service.submit_qa(
+                parent_order.id,
+                qa_data={
+                    "orderNumber": "TH4001",
+                    "technician": "tech",
+                    "qaSignature": "tech",
+                    "method": "Delivery",
+                    "verifyAssetTagSerialMatch": True,
+                    "verifyOrderDetailsTemplateSentAndElectronicPackingSlipSaved": True,
+                    "verifyPackagedProperly": True,
+                    "verifyPackingSlipSerialsMatch": True,
+                    "verifyBoxesLabeledCorrectly": True,
+                },
+                technician="tech@example.com",
+            )
+    finally:
+        session.close()
+        engine.dispose()
+
+    print("[PASS] Parent remainder prep actions are blocked until remaining items are picked")
 
 
 def test_generate_picklist_raises_when_sharepoint_upload_fails():

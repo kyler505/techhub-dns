@@ -24,7 +24,11 @@ import {
   TableRow,
 } from "./ui/table";
 import { formatToCentralTime } from "../utils/timezone";
-import { getOrderProductTableView, getPartialOrderInfo } from "../utils/orderPartial";
+import {
+  getOrderProductTableView,
+  getPartialOrderInfo,
+  isRemainderLegWaitingOnPickup,
+} from "../utils/orderPartial";
 import {
   AuditLog,
   OrderDetail as OrderDetailType,
@@ -84,6 +88,7 @@ export default function OrderDetail({
   const partialOrderInfo = getPartialOrderInfo(order);
   const productTableView = getOrderProductTableView(order);
   const isPartialLeg = partialOrderInfo.isPartialLeg;
+  const remainderLegWaitingOnPickup = isRemainderLegWaitingOnPickup(order);
   const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
   const assetTagRequired = order.asset_tag_required !== false;
 
@@ -96,7 +101,8 @@ export default function OrderDetail({
     assetTagRequired &&
     order.status === OrderStatus.PICKED &&
     !order.tagged_at &&
-    Boolean(order.inflow_order_id);
+    Boolean(order.inflow_order_id) &&
+    !remainderLegWaitingOnPickup;
 
 
 
@@ -336,6 +342,11 @@ export default function OrderDetail({
                         </div>
                       ) : null}
                     </div>
+                    {remainderLegWaitingOnPickup ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        This remainder leg is waiting on the remaining items to be picked. Asset tagging, picklist generation, and order details are blocked until that happens.
+                      </div>
+                    ) : null}
                     {partialOrderInfo.missingItems.length > 0 ? (
                       <details className="group">
                         <summary className="cursor-pointer select-none text-sm font-medium text-foreground">
@@ -397,7 +408,7 @@ export default function OrderDetail({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {assetTagRequired && !order.tagged_at && order.status === OrderStatus.PICKED && (
+                {assetTagRequired && !order.tagged_at && order.status === OrderStatus.PICKED && !remainderLegWaitingOnPickup && (
                   <Button
                     onClick={() => setRequestTagsConfirmOpen(true)}
                     disabled={!canRequestTags || requestingTags}
@@ -406,7 +417,7 @@ export default function OrderDetail({
                     {requestingTags ? "Requesting..." : "Request Tags"}
                   </Button>
                 )}
-                {assetTagRequired && !order.tagged_at && requestSent && (
+                {assetTagRequired && !order.tagged_at && requestSent && !remainderLegWaitingOnPickup && (
                   <Button
                     onClick={() => setTagPrintedDialogOpen(true)}
                     variant="secondary"
@@ -447,22 +458,23 @@ export default function OrderDetail({
                   </div>
                 )}
               </div>
-              <Button
-                onClick={() => {
-                  if (shouldConfirmPartialPicklist) {
-                    setPartialConfirmOpen(true);
-                    return;
+                <Button
+                  onClick={() => {
+                    if (shouldConfirmPartialPicklist) {
+                      setPartialConfirmOpen(true);
+                      return;
+                    }
+                    void handleGeneratePicklist();
+                  }}
+                  disabled={
+                    generatingPicklist ||
+                    partialConfirmSubmitting ||
+                    remainderLegWaitingOnPickup ||
+                    (assetTagRequired && !order.tagged_at) ||
+                    Boolean(order.picklist_generated_at)
                   }
-                  void handleGeneratePicklist();
-                }}
-                disabled={
-                  generatingPicklist ||
-                  partialConfirmSubmitting ||
-                  (assetTagRequired && !order.tagged_at) ||
-                  Boolean(order.picklist_generated_at)
-                }
-                size="sm"
-              >
+                  size="sm"
+                >
                 {order.picklist_generated_at
                   ? "Generated"
                   : generatingPicklist || partialConfirmSubmitting

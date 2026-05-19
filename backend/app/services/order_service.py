@@ -160,6 +160,53 @@ class OrderService:
 
         return missing_steps
 
+    def _parent_remainder_has_unpicked_items(self, order: Order) -> bool:
+        """Return True when a remainder parent leg is still waiting on item pickup."""
+        if not getattr(order, "remainder_order_id", None) or getattr(
+            order, "parent_order_id", None
+        ):
+            return False
+
+        if not order.inflow_data:
+            return False
+
+        from app.services.inflow_service import InflowService
+        from app.services.order_splitting import OrderSplittingService
+
+        pick_status_source = OrderSplittingService(
+            self.db
+        ).build_parent_remainder_pick_status_source(order)
+        if not pick_status_source:
+            return False
+
+        try:
+            pick_status = InflowService().get_pick_status(pick_status_source)
+        except Exception as exc:
+            logger.warning(
+                "Failed to compute pick status for remainder leg %s: %s",
+                order.inflow_order_id,
+                exc,
+            )
+            return False
+
+        total_ordered = float(pick_status.get("total_ordered", 0) or 0)
+        total_picked = float(pick_status.get("total_picked", 0) or 0)
+        return total_ordered > 0 and total_picked < total_ordered
+
+    def _ensure_remainder_leg_ready(self, order: Order, action: str) -> None:
+        """Block prep actions on remainder parent legs until their items are picked."""
+        if not self._parent_remainder_has_unpicked_items(order):
+            return
+
+        raise ValidationError(
+            "This remainder leg still has items waiting to be picked. "
+            f"Finish picking the remaining items before you can {action}.",
+            details={
+                "order_id": order.inflow_order_id,
+                "remainder_order_id": order.remainder_order_id,
+            },
+        )
+
     def _is_shipping_order(self, order: Order) -> bool:
         """Determine if an order is a shipping order (not local delivery)"""
         if not order.inflow_data:
@@ -293,6 +340,7 @@ class OrderService:
         if not order:
             raise NotFoundError("Order", str(order_id))
 
+        self._ensure_remainder_leg_ready(order, "send the order details email")
         return self._send_order_details_email(order, generated_by)
 
     def mark_asset_tagged(
@@ -308,6 +356,7 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
+        self._ensure_remainder_leg_ready(order, "tag assets")
 
         tag_data = dict(order.tag_data or {})
         tag_data["tag_ids"] = tag_ids
@@ -363,6 +412,7 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
+        self._ensure_remainder_leg_ready(order, "generate the picklist")
 
         if not order.inflow_data:
             raise ValidationError("Order must have inFlow data to generate picklist")
@@ -583,6 +633,7 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
+        self._ensure_remainder_leg_ready(order, "complete QA")
 
         if not order.picklist_generated_at:
             raise ValidationError(

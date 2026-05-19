@@ -344,6 +344,7 @@ def get_tag_request_candidates():
 
     with get_db() as db:
         inflow_service = InflowService()
+        order_service = OrderService(db)
         asset_tag_requirement_cache: dict[tuple[object, ...], bool] = {}
         query = (
             db.query(Order)
@@ -373,6 +374,8 @@ def get_tag_request_candidates():
                 order.inflow_data,
                 asset_tag_requirement_cache,
             ):
+                continue
+            if order_service._parent_remainder_has_unpicked_items(order):
                 continue
 
             needing_request.append(_order_response_json(order, db))
