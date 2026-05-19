@@ -442,7 +442,7 @@ def test_partial_picklist_leg_creation_links_parent_and_child():
 
 
 def test_create_order_from_inflow_preserves_existing_split_payload():
-    """Webhook refreshes should not overwrite local split item sets with the full InFlow order."""
+    """Webhook refreshes should preserve split lines but allow fresh pick state through."""
 
     session, engine = _make_sqlite_session()
 
@@ -558,10 +558,144 @@ def test_create_order_from_inflow_preserves_existing_split_payload():
             "description": "Hub Adapter",
             "quantity": {"standardQuantity": "3"},
             "unitPrice": 47,
+        },
+        {
+            "productId": "prod-b",
+            "description": "Surge Protector",
+            "quantity": {"standardQuantity": "2"},
+            "unitPrice": 15,
         }
     ]
-    assert updated.inflow_data["packLines"] == []
-    assert updated.inflow_data["shipLines"] == []
+    assert updated.inflow_data["packLines"] == [
+        {
+            "productId": "prod-a",
+            "quantity": {"standardQuantity": "3"},
+            "containerNumber": "DELIVERY-TH3006-1",
+        }
+    ]
+    assert updated.inflow_data["shipLines"] == [
+        {
+            "carrier": "TechHub",
+            "containers": ["DELIVERY-TH3006-1"],
+        }
+    ]
+
+
+def test_create_order_from_inflow_refreshes_pick_lines_for_split_orders():
+    """Split remainder legs should accept refreshed pickLines so they can unblock."""
+
+    session, engine = _make_sqlite_session()
+
+    existing_order = Order(
+        id="order-parent-sync-2",
+        inflow_order_id="TH3007",
+        inflow_sales_order_id="sales-order-3007",
+        recipient_name="Old Recipient",
+        recipient_contact="old@example.com",
+        delivery_location="Old Building",
+        po_number="PO-3007",
+        status=OrderStatus.PRE_DELIVERY.value,
+        has_remainder="Y",
+        remainder_order_id="child-order-sync-2",
+        inflow_data={
+            "orderNumber": "TH3007",
+            "salesOrderId": "sales-order-3007",
+            "contactName": "Old Recipient",
+            "email": "old@example.com",
+            "shippingAddress": {"address1": "Old Building"},
+            "lines": [
+                {
+                    "productId": "prod-b",
+                    "description": "Surge Protector",
+                    "quantity": {"standardQuantity": "2"},
+                    "unitPrice": 15,
+                }
+            ],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    session.add(existing_order)
+    session.commit()
+
+    service = OrderService(session)
+    incoming_payload = {
+        "orderNumber": "TH3007",
+        "salesOrderId": "sales-order-3007",
+        "contactName": "Updated Recipient",
+        "email": "updated@example.com",
+        "shippingAddress": {"address1": "Updated Building"},
+        "poNumber": "PO-3007-NEW",
+        "lines": [
+            {
+                "productId": "prod-a",
+                "description": "Hub Adapter",
+                "quantity": {"standardQuantity": "3"},
+                "unitPrice": 47,
+            },
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            },
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            }
+        ],
+        "packLines": [
+            {
+                "productId": "prod-b",
+                "quantity": {"standardQuantity": "2"},
+                "containerNumber": "DELIVERY-TH3007-1",
+            }
+        ],
+        "shipLines": [
+            {
+                "carrier": "TechHub",
+                "containers": ["DELIVERY-TH3007-1"],
+            }
+        ],
+    }
+
+    updated = service.create_order_from_inflow(incoming_payload)
+    session.refresh(updated)
+
+    assert updated.inflow_data["lines"] == [
+        {
+            "productId": "prod-b",
+            "description": "Surge Protector",
+            "quantity": {"standardQuantity": "2"},
+            "unitPrice": 15,
+        }
+    ]
+    assert updated.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-b",
+            "description": "Surge Protector",
+            "quantity": {"standardQuantity": "2"},
+            "unitPrice": 15,
+        }
+    ]
+    assert updated.inflow_data["packLines"] == [
+        {
+            "productId": "prod-b",
+            "quantity": {"standardQuantity": "2"},
+            "containerNumber": "DELIVERY-TH3007-1",
+        }
+    ]
+    assert updated.inflow_data["shipLines"] == [
+        {
+            "carrier": "TechHub",
+            "containers": ["DELIVERY-TH3007-1"],
+        }
+    ]
 
     session.close()
     engine.dispose()

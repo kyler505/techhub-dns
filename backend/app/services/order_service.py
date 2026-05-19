@@ -70,7 +70,10 @@ class OrderService:
             or existing_order.has_remainder
         ):
             current_snapshot = dict(existing_order.inflow_data or {})
-            for field in ("lines", "pickLines", "packLines", "shipLines", "subtotal", "total"):
+            # Preserve the split leg item set, but let fresh pick/pack/ship state
+            # flow through so remainder legs can unblock once the remaining items
+            # are actually picked.
+            for field in ("lines", "subtotal", "total"):
                 if field in current_snapshot:
                     merged[field] = deepcopy(current_snapshot.get(field))
         return merged
