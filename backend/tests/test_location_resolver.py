@@ -228,7 +228,48 @@ def test_east_29th_street_variants_normalize_to_street_label():
 
     print("[PASS] East 29th Street normalization test passed")
 
+def test_jcain_variants_normalize_to_building_code():
+    """Test that Cain/Mechanical Engineering variants normalize to JCAIN."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
 
+    variants = [
+        "Mechanical Engineering 327 J.J. Cain Building",
+        "College Of Engineering Dept of Mechanical Engineering",
+        "College Of Engineering",
+        "Materials Science and Engineering 327 J.J. Cain Building",
+    ]
+
+    expected = {
+        "Mechanical Engineering 327 J.J. Cain Building": "JCAIN",
+        "College Of Engineering Dept of Mechanical Engineering": "JCAIN",
+        "College Of Engineering": None,
+        "Materials Science and Engineering 327 J.J. Cain Building": "JCAIN",
+    }
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == expected[address]
+
+    service = LocationResolverService()
+    resolved = service.resolve_location(
+        {
+            "orderNumber": "TESTJCAIN1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "Mechanical Engineering 327 J.J. Cain Building",
+                "address2": "",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+    assert resolved.building_code == "JCAIN"
+    assert resolved.display_location == "JCAIN"
+    assert resolved.source == "address"
+
+    print("[PASS] JCAIN normalization test passed")
 if __name__ == "__main__":
     print("Running LocationResolverService tests...")
     print()
@@ -242,6 +283,7 @@ if __name__ == "__main__":
     test_extract_location_from_remarks()
     test_west_campus_portable_address_maps_to_portables_label()
     test_east_29th_street_variants_normalize_to_street_label()
+    test_jcain_variants_normalize_to_building_code()
 
     # Integration tests
     test_local_delivery_detection()

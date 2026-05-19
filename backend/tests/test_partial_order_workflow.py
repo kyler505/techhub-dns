@@ -701,6 +701,138 @@ def test_create_order_from_inflow_refreshes_pick_lines_for_split_orders():
     engine.dispose()
 
 
+def test_create_order_from_inflow_prefers_exact_order_number_for_split_orders():
+    """A split parent should be refreshed by its exact order number, not the shared sales order id."""
+
+    session, engine = _make_sqlite_session()
+
+    parent_order = Order(
+        id="order-parent-sync-3",
+        inflow_order_id="TH3008",
+        inflow_sales_order_id="sales-order-3008",
+        recipient_name="Parent Recipient",
+        recipient_contact="parent@example.com",
+        delivery_location="Parent Building",
+        po_number="PO-3008",
+        status=OrderStatus.PRE_DELIVERY.value,
+        has_remainder="Y",
+        remainder_order_id="child-order-sync-3",
+        inflow_data={
+            "orderNumber": "TH3008",
+            "salesOrderId": "sales-order-3008",
+            "contactName": "Parent Recipient",
+            "email": "parent@example.com",
+            "shippingAddress": {"address1": "Parent Building"},
+            "lines": [
+                {
+                    "productId": "prod-b",
+                    "description": "Surge Protector",
+                    "quantity": {"standardQuantity": "2"},
+                    "unitPrice": 15,
+                }
+            ],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    child_order = Order(
+        id="order-child-sync-3",
+        inflow_order_id="TH3008-P",
+        inflow_sales_order_id="sales-order-3008",
+        recipient_name="Picked Recipient",
+        recipient_contact="picked@example.com",
+        delivery_location="Parent Building",
+        po_number="PO-3008",
+        status=OrderStatus.PICKED.value,
+        parent_order_id=parent_order.id,
+        inflow_data={
+            "orderNumber": "TH3008-P",
+            "salesOrderId": "sales-order-3008",
+            "contactName": "Picked Recipient",
+            "email": "picked@example.com",
+            "shippingAddress": {"address1": "Parent Building"},
+            "lines": [
+                {
+                    "productId": "prod-a",
+                    "description": "Hub Adapter",
+                    "quantity": {"standardQuantity": "1"},
+                    "unitPrice": 47,
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-a",
+                    "description": "Hub Adapter",
+                    "quantity": {"standardQuantity": "1"},
+                    "unitPrice": 47,
+                }
+            ],
+            "packLines": [],
+            "shipLines": [],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+    session.add(child_order)
+    session.commit()
+
+    service = OrderService(session)
+    incoming_payload = {
+        "orderNumber": "TH3008",
+        "salesOrderId": "sales-order-3008",
+        "contactName": "Parent Recipient Updated",
+        "email": "parent-updated@example.com",
+        "shippingAddress": {"address1": "Updated Parent Building"},
+        "poNumber": "PO-3008-NEW",
+        "lines": [
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            }
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-b",
+                "description": "Surge Protector",
+                "quantity": {"standardQuantity": "2"},
+                "unitPrice": 15,
+            }
+        ],
+        "packLines": [],
+        "shipLines": [],
+    }
+
+    updated = service.create_order_from_inflow(incoming_payload)
+    session.refresh(parent_order)
+    session.refresh(child_order)
+
+    assert updated.id == parent_order.id
+    assert parent_order.recipient_name == "Parent Recipient Updated"
+    assert parent_order.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-b",
+            "description": "Surge Protector",
+            "quantity": {"standardQuantity": "2"},
+            "unitPrice": 15,
+        }
+    ]
+    assert child_order.recipient_name == "Picked Recipient"
+    assert child_order.inflow_data["pickLines"] == [
+        {
+            "productId": "prod-a",
+            "description": "Hub Adapter",
+            "quantity": {"standardQuantity": "1"},
+            "unitPrice": 47,
+        }
+    ]
+
+    session.close()
+    engine.dispose()
+
+
 def test_partial_order_remainder_creation_links_parent_and_child():
     """Partial picks should create a linked remainder order with only missing items."""
 def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists():
@@ -770,6 +902,26 @@ def test_generate_picklist_keeps_parent_active_when_partial_leg_already_exists()
             ],
         },
     )
+    parent_order.inflow_data = {
+        "orderNumber": "TH3001",
+        "contactName": "User Three",
+        "email": "user.three@example.com",
+        "shippingAddress": {"address1": "303 Example St"},
+        "lines": [
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            }
+        ],
+        "pickLines": [
+            {
+                "productId": "prod-2",
+                "product": {"name": "Dock", "sku": "DOCK-1"},
+                "quantity": {"standardQuantity": "1"},
+            }
+        ],
+    }
     session.add(parent_order)
     session.commit()
 
@@ -847,17 +999,18 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
             "shippingAddress": {"address1": "404 Example St"},
             "lines": [
                 {
-                    "productId": "prod-1",
-                    "product": {"name": "Laptop", "sku": "LAP-1"},
-                    "quantity": {"standardQuantity": "1"},
-                },
-                {
                     "productId": "prod-2",
                     "product": {"name": "Dock", "sku": "DOCK-1"},
                     "quantity": {"standardQuantity": "1"},
                 },
             ],
-            "pickLines": [],
+            "pickLines": [
+                {
+                    "productId": "prod-2",
+                    "product": {"name": "Dock", "sku": "DOCK-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
         },
     )
     child_order = Order(
@@ -915,15 +1068,42 @@ def test_generate_picklist_uses_parent_remainder_items_when_child_leg_exists():
     ]
     assert picklist_view["pickLines"] == picklist_view["lines"]
 
-    with pytest.raises(
-        ValidationError, match="remainder leg still has items waiting to be picked"
-    ):
-        service.generate_picklist(
-            parent_order.id,
-            generated_by="tech@example.com",
-            generated_by_display="tech@example.com",
-            create_partial_leg=False,
-        )
+    class FakeSharePointService:
+        is_enabled = True
+
+        def upload_pdf(self, pdf_path: str, subfolder: str, filename: str) -> str:
+            return f"sharepoint://{subfolder}/{filename}"
+
+    def fake_generate_picklist_pdf(self, inflow_data, output_path):
+        Path(output_path).write_bytes(b"%PDF-1.4 fake picklist\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service._local_doc_path = lambda category, filename: Path(tmpdir) / category / filename  # type: ignore[method-assign]
+
+        with patch("app.services.sharepoint_service.get_sharepoint_service", return_value=FakeSharePointService()):
+            with patch(
+                "app.services.picklist_service.PicklistService.generate_picklist_pdf",
+                new=fake_generate_picklist_pdf,
+            ):
+                with patch(
+                    "app.services.order_service.SystemSettingService.is_setting_enabled",
+                    return_value=False,
+                ), patch(
+                    "app.services.order_service.SystemSettingService.get_setting",
+                    return_value="false",
+                ):
+                    with patch.object(service, "_send_order_details_email", return_value=True):
+                        result = service.generate_picklist(
+                            parent_order.id,
+                            generated_by="tech@example.com",
+                            generated_by_display="tech@example.com",
+                            create_partial_leg=False,
+                        )
+
+    assert result.id == parent_order.id
+    assert result.inflow_order_id == "TH3002"
+    assert parent_order.picklist_path is not None
+    assert child_order.picklist_path is None
 
     session.close()
     engine.dispose()
@@ -982,11 +1162,6 @@ def test_parent_remainder_document_view_keeps_items_when_fully_picked():
         **parent_order.inflow_data,
         "pickLines": [
             {
-                "productId": "prod-1",
-                "product": {"name": "Laptop", "sku": "LAP-1"},
-                "quantity": {"standardQuantity": "1"},
-            },
-            {
                 "productId": "prod-2",
                 "product": {"name": "Dock", "sku": "DOCK-1"},
                 "quantity": {"standardQuantity": "1"},
@@ -1017,8 +1192,8 @@ def test_parent_remainder_document_view_keeps_items_when_fully_picked():
     engine.dispose()
 
 
-def test_parent_remainder_document_view_recovers_split_items_from_full_parent_payload():
-    """If the parent order drifts back to the full original payload, the remainder view should still show only the split remainder."""
+def test_parent_remainder_document_view_keeps_current_remainder_snapshot_for_same_product_split():
+    """A remainder leg should keep its own picked items even when the split uses the same product IDs."""
 
     session, engine = _make_sqlite_session()
     parent_order = Order(
@@ -1067,7 +1242,7 @@ def test_parent_remainder_document_view_recovers_split_items_from_full_parent_pa
 
     assert child_order is not None
 
-    # Simulate the parent order being refreshed from InFlow back to the full original payload.
+    # Simulate the remainder leg being refreshed from InFlow with the picked remainder items.
     parent_order.inflow_data = {
         "orderNumber": "TH3004",
         "contactName": "User Six",
@@ -1079,11 +1254,6 @@ def test_parent_remainder_document_view_recovers_split_items_from_full_parent_pa
                 "product": {"name": "Laptop", "sku": "LAP-1"},
                 "quantity": {"standardQuantity": "1"},
             },
-            {
-                "productId": "prod-2",
-                "product": {"name": "Dock", "sku": "DOCK-1"},
-                "quantity": {"standardQuantity": "1"},
-            },
         ],
         "pickLines": [
             {
@@ -1091,32 +1261,31 @@ def test_parent_remainder_document_view_recovers_split_items_from_full_parent_pa
                 "product": {"name": "Laptop", "sku": "LAP-1"},
                 "quantity": {"standardQuantity": "1"},
             },
-            {
-                "productId": "prod-2",
-                "product": {"name": "Dock", "sku": "DOCK-1"},
-                "quantity": {"standardQuantity": "1"},
-            },
         ],
     }
     session.commit()
 
     document_view = service.build_parent_remainder_document_view(parent_order)
+    pick_status_source = service.build_parent_remainder_pick_status_source(parent_order)
 
     assert document_view is not None
     assert document_view["lines"] == [
         {
-            "productId": "prod-2",
-            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "productId": "prod-1",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
             "quantity": {"standardQuantity": 1.0},
         },
     ]
     assert document_view["pickLines"] == [
         {
-            "productId": "prod-2",
-            "product": {"name": "Dock", "sku": "DOCK-1"},
+            "productId": "prod-1",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
             "quantity": {"standardQuantity": 1.0},
         },
     ]
+    assert pick_status_source is not None
+    assert pick_status_source["lines"] == document_view["lines"]
+    assert pick_status_source["pickLines"] == document_view["pickLines"]
 
     session.close()
     engine.dispose()
@@ -1177,7 +1346,7 @@ def test_parent_remainder_pick_status_source_excludes_child_leg_picks():
             {
                 "productId": "prod-1",
                 "product": {"name": "Laptop", "sku": "LAP-1"},
-                "quantity": {"standardQuantity": "2"},
+                "quantity": {"standardQuantity": "1"},
             },
         ],
         "pickLines": [
@@ -1201,7 +1370,13 @@ def test_parent_remainder_pick_status_source_excludes_child_leg_picks():
             "quantity": {"standardQuantity": 1.0},
         },
     ]
-    assert pick_status_source["pickLines"] == []
+    assert pick_status_source["pickLines"] == [
+        {
+            "productId": "prod-1",
+            "product": {"name": "Laptop", "sku": "LAP-1"},
+            "quantity": {"standardQuantity": 1.0},
+        },
+    ]
 
     assert picklist_view is not None
     assert picklist_view["pickLines"] == picklist_view["lines"]
