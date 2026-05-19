@@ -142,6 +142,93 @@ def test_combine_addresses():
     print("[PASS] Combine addresses test passed")
 
 
+def test_west_campus_portable_address_maps_to_portables_label():
+    """Test that West Campus portable addresses resolve to a stable label."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    address = "781 West Campus Blvd Building 0067"
+
+    extracted = extract_building_code_from_location(address)
+    assert extracted == "Portables 0067"
+
+    service = LocationResolverService()
+    resolved = service.resolve_location(
+        {
+            "orderNumber": "TESTPORTABLE",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "781 West Campus Blvd",
+                "address2": "Building 0067",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+
+    assert resolved.is_local_delivery is True
+    assert resolved.building_code == "Portables 0067"
+    assert resolved.display_location == "Portables 0067"
+    assert resolved.source == "address"
+
+    print("[PASS] West Campus portable address mapping test passed")
+
+
+def test_east_29th_street_variants_normalize_to_street_label():
+    """Test that noisy 2900 E 29th Street variants collapse to one display label."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    variants = [
+        "2900 East 29th Street Health Hub, Room S11",
+        "2900 East 29th St. Room S11",
+        "2900 E 29th St",
+    ]
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == "E 29th St"
+
+    service = LocationResolverService()
+
+    resolved_with_address2 = service.resolve_location(
+        {
+            "orderNumber": "TEST29TH1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "2900 East 29th Street",
+                "address2": "Health Hub, Room S11",
+                "city": "Bryan",
+                "state": "TX",
+                "postalCode": "77802",
+            },
+        }
+    )
+    assert resolved_with_address2.building_code == "E 29th St"
+    assert resolved_with_address2.display_location == "E 29th St"
+    assert resolved_with_address2.source == "address"
+
+    resolved_single_line = service.resolve_location(
+        {
+            "orderNumber": "TEST29TH2",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "2900 E 29th St",
+                "address2": "",
+                "city": "Bryan",
+                "state": "TX",
+                "postalCode": "77802",
+            },
+        }
+    )
+    assert resolved_single_line.building_code == "E 29th St"
+    assert resolved_single_line.display_location == "E 29th St"
+    assert resolved_single_line.source == "address"
+
+    print("[PASS] East 29th Street normalization test passed")
+
+
 if __name__ == "__main__":
     print("Running LocationResolverService tests...")
     print()
@@ -153,6 +240,8 @@ if __name__ == "__main__":
     # Unit tests
     test_combine_addresses()
     test_extract_location_from_remarks()
+    test_west_campus_portable_address_maps_to_portables_label()
+    test_east_29th_street_variants_normalize_to_street_label()
 
     # Integration tests
     test_local_delivery_detection()
