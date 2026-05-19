@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     # TAMU Entra ID Authentication (SAML + Service Principal)
     # ===========================================
 
+    # Local development auth bypass
+    dev_auth_bypass: bool = False
+    dev_auth_email: str = "dev.user@example.com"
+    dev_auth_display_name: str = "Local Dev User"
+    dev_auth_department: Optional[str] = "Development"
+
     # SAML Configuration (User Authentication)
     saml_enabled: bool = False
     saml_idp_entity_id: Optional[str] = None  # From Azure: Microsoft Entra Identifier

@@ -12,7 +12,7 @@ from flask import Blueprint, request, redirect, make_response, jsonify, g
 from app.config import settings
 from app.database import get_db
 from app.services.saml_auth_service import saml_auth_service
-from app.api.auth_middleware import is_current_user_admin
+from app.api.auth_middleware import is_current_user_admin, is_dev_auth_bypass_enabled
 from app.utils.exceptions import DNSApiError
 from app.utils.csrf import csrf_protect
 
@@ -58,6 +58,10 @@ def saml_login():
 
     Redirects user to TAMU Entra ID login page.
     """
+    if is_dev_auth_bypass_enabled():
+        relay_state = _sanitize_relay_state(request.args.get("next"), request.host)
+        return redirect(relay_state)
+
     if not saml_auth_service.is_configured():
         return jsonify({"error": "SAML not configured"}), 503
 
@@ -88,6 +92,10 @@ def saml_callback():
     Validates the SAML assertion, creates/updates user, creates session,
     and sets session cookie.
     """
+    if is_dev_auth_bypass_enabled():
+        relay_state = _sanitize_relay_state(request.form.get("RelayState"), request.host)
+        return redirect(relay_state)
+
     if not saml_auth_service.is_configured():
         return jsonify({"error": "SAML not configured"}), 503
 
