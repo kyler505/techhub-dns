@@ -1,6 +1,6 @@
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { reportFrontendError } from "../../lib/errorReporting";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -51,7 +51,6 @@ export function AppShellErrorBoundary({ children }: BoundaryProps) {
 
 export function RouteContentErrorBoundary({ children }: BoundaryProps) {
   const location = useLocation();
-  const navigate = useNavigate();
 
   return (
     <QueryErrorResetBoundary>
@@ -65,13 +64,11 @@ export function RouteContentErrorBoundary({ children }: BoundaryProps) {
           }}
           onReset={reset}
           resetKeys={[location.pathname]}
-          fallback={({ error, reset: resetBoundary }) => (
+          fallback={({ error }) => (
             <ErrorFallback
               error={error}
               title="This page could not finish rendering"
-              message="Try the page again. If the problem persists, head back to the dashboard and retry the workflow from there."
-              onRetry={resetBoundary}
-              onNavigateHome={() => navigate("/")}
+              message="Please refresh the page."
             />
           )}
         >
