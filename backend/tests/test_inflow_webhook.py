@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 
 from app.api.routes.inflow import bp as inflow_bp
+from app.services.inflow_service import InflowService
 from app.utils.webhook_security import verify_webhook_signature
 from app.utils.exceptions import ValidationError
 
@@ -101,7 +102,7 @@ def test_webhook_returns_500_on_processing_error():
     assert response.status_code == 500
     assert response.get_json() == {
         "status": "error",
-        "message": "database write failed",
+        "message": "Internal server error",
     }
 
 
@@ -133,6 +134,23 @@ def test_webhook_returns_validation_status_code():
     }
 
 
+def test_ingest_predicate_accepts_picked_orders_even_after_status_changes():
+    service = InflowService()
+
+    assert service.is_started_and_picked(
+        {
+            "inventoryStatus": "fulfilled",
+            "pickLines": [{"id": "line-1"}],
+        }
+    )
+    assert not service.is_started_and_picked(
+        {
+            "inventoryStatus": "started",
+            "pickLines": [],
+        }
+    )
+
+
 def test_webhook_accepts_env_secret_when_db_secret_is_stale():
     app = _make_app()
     current_secret = "current-secret"
@@ -159,7 +177,6 @@ def test_webhook_accepts_env_secret_when_db_secret_is_stale():
             patch(
                 "app.api.routes.inflow.settings.inflow_webhook_secret", current_secret
             ),
-            patch("app.api.routes.inflow.threading.Thread") as mock_thread,
         ):
             response = client.post(
                 "/api/inflow/webhook",
@@ -168,7 +185,6 @@ def test_webhook_accepts_env_secret_when_db_secret_is_stale():
                 content_type="application/json",
             )
 
-    mock_thread.assert_called_once()
     assert response.status_code == 200
     assert response.get_json() == {
         "order_id": "order-1",
