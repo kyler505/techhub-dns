@@ -50,6 +50,8 @@ logger = logging.getLogger(__name__)
 
 
 class OrderService:
+    VIDI_CUSTOM1_OVERRIDE = "TAMU - College of Veterinary Medicine"
+
     def __init__(self, db: Session):
         self.db = db
 
@@ -90,6 +92,25 @@ class OrderService:
         from app.services.inflow_service import InflowService
 
         return InflowService().requires_asset_tags(order.inflow_data)
+
+    def _apply_delivery_location_overrides(
+        self, inflow_data: Dict[str, Any], delivery_location: str
+    ) -> str:
+        custom_fields = self._as_dict(inflow_data.get("customFields"))
+        custom1 = custom_fields.get("custom1")
+
+        if (
+            isinstance(custom1, str)
+            and custom1.strip() == self.VIDI_CUSTOM1_OVERRIDE
+            and delivery_location != "VIDI"
+        ):
+            logger.info(
+                "Overriding delivery_location to 'VIDI' based on customFields.custom1='%s'",
+                custom1,
+            )
+            return "VIDI"
+
+        return delivery_location
 
     @staticmethod
     def _normalize_stale_timestamp(value: datetime) -> datetime:
@@ -1858,6 +1879,10 @@ class OrderService:
             logger.info(
                 f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'"
             )
+
+        delivery_location = self._apply_delivery_location_overrides(
+            inflow_data, delivery_location
+        )
 
         # Check if order exists.
         # Prefer an exact inFlow order number match first so split parent/child
