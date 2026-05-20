@@ -61,7 +61,7 @@ COMMON_BUILDING_CODES = {
 
 
 WEST_CAMPUS_PORTABLE_PATTERN = re.compile(
-    r"\bWEST\s+CAMPUS\s+(?:BLVD|BOULEVARD)\s+BUILDING\s+0*(\d{2,4})\b"
+    r"\bWEST\s+CAMPUS\s+(?:BLVD|BOULEVARD)\.?\s+(?:BLDG\.?|BUILDING)\s+0*(\d{2,4})\b"
 )
 EAST_29TH_STREET_PATTERN = re.compile(
     r"\b2900\s+(?:E|EAST)\s+29TH\s+ST(?:REET)?\b"
@@ -77,6 +77,9 @@ ALLEN_PATTERN = re.compile(
 )
 ZACH_ADDRESS_PATTERN = re.compile(
     r"\b(?:125\s+SPENCE\s+ST(?:REET)?|TAMU\s+3579|3579\s+TAMU)\b"
+)
+FERMIER_PATTERN = re.compile(
+    r"\b(?:FERMIER(?:\s+HALL)?|MS\s+3367)\b"
 )
 
 
@@ -277,6 +280,15 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
             location,
         )
         return "ZACH"
+
+    # Pattern P6: FERM / Fermier Hall variants
+    patterns_checked.append("Pattern P6: FERM / Fermier Hall variants")
+    if FERMIER_PATTERN.search(location_upper):
+        logger.info(
+            "Normalized Fermier location from '%s' to 'FERM' (Pattern P6)",
+            location,
+        )
+        return "FERM"
 
     # Pattern 0: Specific known addresses (highest priority)
     # These are addresses that should always map to specific building codes
