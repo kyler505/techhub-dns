@@ -27,6 +27,7 @@ OIDC_SCOPES = ["openid", "profile"]
 OIDC_SESSION_STATE_KEY = "oidc_login_state"
 OIDC_SESSION_NONCE_KEY = "oidc_login_nonce"
 OIDC_SESSION_NEXT_KEY = "oidc_login_next"
+OIDC_SESSION_FLOW_KEY = "oidc_login_flow"
 
 
 def _sanitize_relay_state(relay_state: str | None, request_host: str | None) -> str:
@@ -121,22 +122,20 @@ def _start_saml_login(relay_state: str) -> str:
 def _start_oidc_login(relay_state: str):
     oidc_client = _build_oidc_client()
     state = secrets.token_urlsafe(32)
-    nonce = secrets.token_urlsafe(32)
     redirect_uri = _build_oidc_redirect_uri()
 
     flask_session[OIDC_SESSION_STATE_KEY] = state
-    flask_session[OIDC_SESSION_NONCE_KEY] = nonce
     flask_session[OIDC_SESSION_NEXT_KEY] = relay_state
 
-    auth_url = oidc_client.get_authorization_request_url(
-        scopes=OIDC_SCOPES,
+    flow = oidc_client.initiate_auth_code_flow(
+        scopes=[],
         state=state,
         redirect_uri=redirect_uri,
         prompt="select_account",
-        nonce=nonce,
     )
+    flask_session[OIDC_SESSION_FLOW_KEY] = flow
 
-    return redirect(auth_url)
+    return redirect(flow["auth_uri"])
 
 
 def _oidc_login_debug_context() -> dict:
@@ -160,8 +159,8 @@ def _oidc_login_debug_context() -> dict:
 
 def _clear_oidc_login_state() -> None:
     flask_session.pop(OIDC_SESSION_STATE_KEY, None)
-    flask_session.pop(OIDC_SESSION_NONCE_KEY, None)
     flask_session.pop(OIDC_SESSION_NEXT_KEY, None)
+    flask_session.pop(OIDC_SESSION_FLOW_KEY, None)
 
 
 def _complete_oidc_login() -> tuple[str, dict]:
@@ -186,7 +185,6 @@ def _complete_oidc_login() -> tuple[str, dict]:
             details={"reason": "state_mismatch"},
         )
 
-    nonce = flask_session.get(OIDC_SESSION_NONCE_KEY)
     relay_state = _sanitize_relay_state(
         flask_session.get(OIDC_SESSION_NEXT_KEY),
         request.host,
@@ -194,11 +192,15 @@ def _complete_oidc_login() -> tuple[str, dict]:
 
     oidc_client = _build_oidc_client()
     redirect_uri = _build_oidc_redirect_uri()
-    result = oidc_client.acquire_token_by_authorization_code(
-        code,
-        scopes=OIDC_SCOPES,
-        redirect_uri=redirect_uri,
-        nonce=nonce,
+    flow = flask_session.get(OIDC_SESSION_FLOW_KEY) or {
+        "auth_uri": "",
+        "state": expected_state,
+        "redirect_uri": redirect_uri,
+    }
+    result = oidc_client.acquire_token_by_auth_code_flow(
+        flow,
+        {"code": code, "state": state},
+        scopes=[],
     )
 
     if "error" in result:
@@ -213,13 +215,6 @@ def _complete_oidc_login() -> tuple[str, dict]:
         )
 
     id_token_claims = result.get("id_token_claims") or {}
-    if nonce and id_token_claims.get("nonce") != nonce:
-        raise DNSApiError(
-            code="OIDC_AUTH_ERROR",
-            message="Microsoft Entra login failed nonce validation",
-            status_code=401,
-            details={"reason": "nonce_mismatch"},
-        )
 
     _clear_oidc_login_state()
     return relay_state, id_token_claims

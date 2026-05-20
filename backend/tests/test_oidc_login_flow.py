@@ -22,19 +22,22 @@ class _DummyMsalClient:
         self.authorization_request_kwargs = None
         self.authorization_code_kwargs = None
 
-    def get_authorization_request_url(self, **kwargs):
+    def initiate_auth_code_flow(self, **kwargs):
         self.authorization_request_kwargs = kwargs
-        return (
-            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"
-            f"prompt={kwargs.get('prompt')}&state={kwargs.get('state')}"
-        )
+        return {
+            "auth_uri": (
+                "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"
+                f"prompt={kwargs.get('prompt')}&state={kwargs.get('state')}"
+            ),
+            "state": kwargs.get("state"),
+            "redirect_uri": kwargs.get("redirect_uri"),
+        }
 
-    def acquire_token_by_authorization_code(self, code, scopes, redirect_uri=None, nonce=None, **kwargs):
+    def acquire_token_by_auth_code_flow(self, flow, auth_response, scopes=None, **kwargs):
         self.authorization_code_kwargs = {
-            "code": code,
+            "flow": flow,
+            "auth_response": auth_response,
             "scopes": scopes,
-            "redirect_uri": redirect_uri,
-            "nonce": nonce,
             "kwargs": kwargs,
         }
         return {
@@ -42,7 +45,6 @@ class _DummyMsalClient:
                 "oid": "oid-123",
                 "preferred_username": "user@tamu.edu",
                 "name": "Test User",
-                "nonce": nonce,
             }
         }
 
@@ -101,13 +103,13 @@ def test_login_prefers_oidc_and_requests_account_selection(monkeypatch):
         client_instance = factory.instances[0]
         assert client_instance.authorization_request_kwargs is not None
         assert client_instance.authorization_request_kwargs["prompt"] == "select_account"
-        assert client_instance.authorization_request_kwargs["scopes"] == ["openid", "profile"]
+        assert client_instance.authorization_request_kwargs["scopes"] == []
         assert client_instance.authorization_request_kwargs["redirect_uri"] == "https://dev-techhub.pythonanywhere.com/api/auth/oidc/callback"
 
         with client.session_transaction() as sess:
             assert sess["oidc_login_state"] == client_instance.authorization_request_kwargs["state"]
             assert sess["oidc_login_next"] == "/orders"
-            assert sess["oidc_login_nonce"] == client_instance.authorization_request_kwargs["nonce"]
+            assert sess["oidc_login_flow"]["state"] == client_instance.authorization_request_kwargs["state"]
     finally:
         (
             settings.azure_tenant_id,
