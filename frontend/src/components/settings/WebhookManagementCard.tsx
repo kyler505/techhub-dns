@@ -20,6 +20,8 @@ interface RecentWebhookAction {
     status: "success" | "error";
 }
 
+type RecentWebhookActionInput = Omit<RecentWebhookAction, "id">;
+
 function parseEvents(raw: string) {
     return raw
         .split(",")
@@ -43,6 +45,10 @@ export function WebhookManagementCard() {
     const [recentActions, setRecentActions] = useState<RecentWebhookAction[]>([]);
     const [deleteTarget, setDeleteTarget] = useState<WebhookResponse | null>(null);
 
+    const recordRecentAction = (action: RecentWebhookActionInput) => {
+        setRecentActions((current) => [{ id: `${Date.now()}`, ...action }, ...current].slice(0, 4));
+    };
+
     const webhookDefaultsQuery = useQuery({
         queryKey: ["settings", "webhook-defaults"],
         queryFn: async () => inflowApi.getWebhookDefaults(),
@@ -64,18 +70,12 @@ export function WebhookManagementCard() {
             toast.success("Webhook registered", {
                 description: "The Inflow webhook subscription was recreated from the settings page.",
             });
-            setRecentActions((current) => [
-                { id: `${Date.now()}`, label: "Register", message: "Webhook registration updated", status: "success" },
-                ...current,
-            ].slice(0, 4));
+            recordRecentAction({ label: "Register", message: "Webhook registration updated", status: "success" });
         },
         onError: (error: unknown) => {
             const message = extractApiErrorMessage(error, "Please try again.");
             toast.error("Failed to register webhook", { description: message });
-            setRecentActions((current) => [
-                { id: `${Date.now()}`, label: "Register", message, status: "error" },
-                ...current,
-            ].slice(0, 4));
+            recordRecentAction({ label: "Register", message, status: "error" });
         },
     });
     const deleteWebhookMutation = useMutation({
@@ -83,18 +83,12 @@ export function WebhookManagementCard() {
         onSuccess: async (_result, webhookId) => {
             await queryClient.invalidateQueries({ queryKey: ["settings", "webhooks"] });
             toast.success("Webhook deleted", { description: `${webhookId} removed` });
-            setRecentActions((current) => [
-                { id: `${Date.now()}`, label: "Delete", message: `${webhookId} removed`, status: "success" },
-                ...current,
-            ].slice(0, 4));
+            recordRecentAction({ label: "Delete", message: `${webhookId} removed`, status: "success" });
         },
         onError: (error: unknown) => {
             const message = extractApiErrorMessage(error, "Please try again.");
             toast.error("Failed to delete webhook", { description: message });
-            setRecentActions((current) => [
-                { id: `${Date.now()}`, label: "Delete", message, status: "error" },
-                ...current,
-            ].slice(0, 4));
+            recordRecentAction({ label: "Delete", message, status: "error" });
         },
     });
 
