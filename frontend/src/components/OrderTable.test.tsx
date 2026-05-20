@@ -5,7 +5,7 @@ import { OrderStatus } from "../types/order";
 import OrderTable from "./OrderTable";
 
 describe("OrderTable", () => {
-    it("renders the status indicator inline and removes the old status and updated columns", () => {
+    it("renders the status pill inline and removes the old status and updated columns", () => {
         render(
             <OrderTable
                 orders={[
@@ -24,7 +24,7 @@ describe("OrderTable", () => {
         );
 
         expect(screen.getByRole("button", { name: "TH1001" })).toBeInTheDocument();
-        expect(screen.getAllByLabelText("Status: Picked").length).toBeGreaterThan(0);
+        expect(screen.getByText("Picked")).toBeInTheDocument();
         expect(screen.queryByRole("columnheader", { name: /status/i })).not.toBeInTheDocument();
         expect(screen.queryByRole("columnheader", { name: /updated/i })).not.toBeInTheDocument();
     });

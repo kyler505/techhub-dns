@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpDown, BadgeCheck, ClipboardCheck, Clock3, PackageCheck, PackageSearch, Ship, Truck } from "lucide-react";
-import { Order, OrderStatusDisplayNames } from "../types/order";
+import { ArrowUpDown, PackageSearch } from "lucide-react";
+import { Order } from "../types/order";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -11,6 +11,7 @@ import {
     TableHeader,
     TableRow,
 } from "./ui/table";
+import StatusBadge from "./StatusBadge";
 import { formatDeliveryLocation } from "../utils/location";
 import { getPartialOrderInfo } from "../utils/orderPartial";
 import { formatToCentralTime } from "../utils/timezone";
@@ -20,42 +21,6 @@ interface OrderTableProps {
     onViewDetail: (orderId: string) => void;
     showEmptyState?: boolean;
     loading?: boolean;
-}
-
-const statusIconMap = {
-    picked: PackageCheck,
-    qa: ClipboardCheck,
-    "pre-delivery": Clock3,
-    "in-delivery": Truck,
-    shipping: Ship,
-    delivered: BadgeCheck,
-    issue: AlertTriangle,
-} as const;
-
-const statusToneMap = {
-    picked: "bg-secondary text-foreground",
-    qa: "bg-primary/10 text-foreground",
-    "pre-delivery": "bg-primary/10 text-foreground",
-    "in-delivery": "bg-amber-500/10 text-amber-700",
-    shipping: "bg-muted text-foreground",
-    delivered: "bg-emerald-500/10 text-emerald-700",
-    issue: "bg-destructive/10 text-destructive",
-} as const;
-
-function OrderStatusIcon({ status }: { status: Order["status"] }) {
-    const Icon = statusIconMap[status];
-    const tone = statusToneMap[status];
-
-    return (
-        <span
-            aria-label={`Status: ${OrderStatusDisplayNames[status]}`}
-            title={OrderStatusDisplayNames[status]}
-            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${tone}`}
-        >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only">{OrderStatusDisplayNames[status]}</span>
-        </span>
-    );
 }
 
 export default function OrderTable({
@@ -192,7 +157,10 @@ export default function OrderTable({
                                         <span className="truncate text-sm font-semibold text-foreground">
                                             {order.inflow_order_id || order.id}
                                         </span>
-                                        <OrderStatusIcon status={order.status} />
+                                        <StatusBadge
+                                            status={order.status}
+                                            className="h-6 px-2 py-0 text-[10px] font-medium uppercase tracking-wide"
+                                        />
                                         {legLabel ? (
                                             <Badge variant={legLabel === "Remainder leg" ? "warning" : "secondary"} className="text-[10px] uppercase tracking-wide">
                                                 {legLabel}
@@ -282,7 +250,10 @@ export default function OrderTable({
                                         >
                                             {order.inflow_order_id || order.id}
                                         </Button>
-                                        <OrderStatusIcon status={order.status} />
+                                        <StatusBadge
+                                            status={order.status}
+                                            className="h-6 px-2 py-0 text-[10px] font-medium uppercase tracking-wide"
+                                        />
                                         {getOrderLegLabel(order) ? (
                                             <div className="basis-full">
                                                 <Badge
