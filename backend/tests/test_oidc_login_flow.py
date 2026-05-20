@@ -101,7 +101,7 @@ def test_login_prefers_oidc_and_requests_account_selection(monkeypatch):
         client_instance = factory.instances[0]
         assert client_instance.authorization_request_kwargs is not None
         assert client_instance.authorization_request_kwargs["prompt"] == "select_account"
-        assert client_instance.authorization_request_kwargs["scopes"] == ["openid", "profile", "email"]
+        assert client_instance.authorization_request_kwargs["scopes"] == ["openid", "profile"]
         assert client_instance.authorization_request_kwargs["redirect_uri"] == "https://dev-techhub.pythonanywhere.com/api/auth/oidc/callback"
 
         with client.session_transaction() as sess:

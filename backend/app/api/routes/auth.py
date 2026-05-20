@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
-OIDC_SCOPES = ["openid", "profile", "email"]
+OIDC_SCOPES = ["openid", "profile"]
 OIDC_SESSION_STATE_KEY = "oidc_login_state"
 OIDC_SESSION_NONCE_KEY = "oidc_login_nonce"
 OIDC_SESSION_NEXT_KEY = "oidc_login_next"
