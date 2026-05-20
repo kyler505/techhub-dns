@@ -13,6 +13,10 @@ def test_auth_blueprint_is_available_under_both_api_and_legacy_prefixes():
 
     rules = sorted(r.rule for r in app.url_map.iter_rules() if "auth" in r.rule)
 
+    assert "/api/auth/login" in rules
+    assert "/auth/login" in rules
+    assert "/api/auth/oidc/callback" in rules
+    assert "/auth/oidc/callback" in rules
     assert "/api/auth/saml/login" in rules
     assert "/auth/saml/login" in rules
     assert "/api/auth/me" in rules

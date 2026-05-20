@@ -285,6 +285,60 @@ class SamlAuthService:
         db.refresh(user)
         return user
 
+    def build_user_attributes_from_oidc_claims(self, oidc_claims: dict) -> dict:
+        """Normalize Microsoft Entra OIDC claims into the shared user-attribute shape."""
+        oid = self._get_attr(
+            oidc_claims,
+            "oid",
+            "objectid",
+        )
+        email = self._get_attr(
+            oidc_claims,
+            "preferred_username",
+            "email",
+            "upn",
+            "userprincipalname",
+        )
+        display_name = self._get_attr(
+            oidc_claims,
+            "name",
+            "display_name",
+            "displayname",
+        )
+        given_name = self._get_attr(
+            oidc_claims,
+            "given_name",
+            "givenname",
+        )
+        surname = self._get_attr(
+            oidc_claims,
+            "family_name",
+            "surname",
+        )
+        department = self._get_attr(oidc_claims, "department")
+        employee_id = self._get_attr(oidc_claims, "employeeid", "employee_id")
+
+        return {
+            "oid": oid,
+            "email": email,
+            "display_name": display_name,
+            "given_name": given_name,
+            "surname": surname,
+            "department": department,
+            "employeeid": employee_id,
+        }
+
+    def get_or_create_user_from_oidc_claims(
+        self,
+        db: DbSession,
+        oidc_claims: dict,
+    ) -> User:
+        """Create or update a TAMU user from Microsoft Entra OIDC claims."""
+        return self.get_or_create_user(
+            db,
+            self.build_user_attributes_from_oidc_claims(oidc_claims),
+        )
+
     def _get_attr(self, attributes: dict, *keys: str) -> Optional[str]:
         """Extract the first single-value attribute found for any candidate key."""
         for key in keys:

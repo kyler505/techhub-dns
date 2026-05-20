@@ -104,7 +104,7 @@ def test_dev_auth_login_route_skips_saml():
 
     def run():
         client = app.test_client()
-        res = client.get("/api/auth/saml/login?next=/orders")
+        res = client.get("/api/auth/login?next=/orders")
         assert res.status_code == 302
         assert res.headers["Location"].endswith("/orders")
 

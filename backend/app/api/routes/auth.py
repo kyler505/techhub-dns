@@ -1,13 +1,16 @@
 """
 Authentication API routes.
 
-Provides endpoints for SAML login/logout and session management.
+Provides endpoints for interactive Microsoft Entra login, SAML fallback,
+logout, and session management.
 """
 
 import logging
+import secrets
 from datetime import datetime
 from urllib.parse import urlparse
-from flask import Blueprint, request, redirect, make_response, jsonify, g
+from flask import Blueprint, request, redirect, make_response, jsonify, g, session as flask_session
+import msal
 
 from app.config import settings
 from app.database import get_db
@@ -19,6 +22,11 @@ from app.utils.csrf import csrf_protect
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+
+OIDC_SCOPES = ["openid", "profile", "email"]
+OIDC_SESSION_STATE_KEY = "oidc_login_state"
+OIDC_SESSION_NONCE_KEY = "oidc_login_nonce"
+OIDC_SESSION_NEXT_KEY = "oidc_login_next"
 
 
 def _sanitize_relay_state(relay_state: str | None, request_host: str | None) -> str:
@@ -51,6 +59,186 @@ def _sanitize_relay_state(relay_state: str | None, request_host: str | None) -> 
     return raw_state
 
 
+def _oidc_is_configured() -> bool:
+    return bool(
+        settings.azure_tenant_id
+        and settings.azure_client_id
+        and settings.azure_client_secret
+    )
+
+
+def _get_browser_origin() -> str:
+    """Return the public-facing origin the browser should return to."""
+    frontend_url = (settings.frontend_url or "").strip().rstrip("/")
+    if frontend_url:
+        parsed_frontend = urlparse(frontend_url)
+        if parsed_frontend.scheme and parsed_frontend.netloc and parsed_frontend.netloc != request.host:
+            return frontend_url
+
+    return f"{request.scheme}://{request.host}"
+
+
+def _build_oidc_redirect_uri() -> str:
+    """Build the absolute redirect URI for the current login route."""
+    if request.path.endswith("/login"):
+        callback_path = f"{request.path[:-len('/login')]}/oidc/callback"
+    elif request.path.endswith("/oidc/callback"):
+        callback_path = request.path
+    else:
+        raise DNSApiError(
+            code="OIDC_CONFIG_ERROR",
+            message="OIDC login redirect URI could not be determined",
+            status_code=500,
+        )
+
+    return f"{_get_browser_origin()}{callback_path}"
+
+
+def _build_oidc_client() -> msal.ConfidentialClientApplication:
+    if not _oidc_is_configured():
+        raise DNSApiError(
+            code="OIDC_CONFIG_ERROR",
+            message="Microsoft Entra login is not fully configured",
+            status_code=503,
+            details={"reason": "missing_required_settings"},
+        )
+
+    authority = f"https://login.microsoftonline.com/{settings.azure_tenant_id}"
+    return msal.ConfidentialClientApplication(
+        settings.azure_client_id,
+        authority=authority,
+        client_credential=settings.azure_client_secret,
+    )
+
+
+def _start_saml_login(relay_state: str) -> str:
+    from onelogin.saml2.auth import OneLogin_Saml2_Auth
+
+    req = _prepare_flask_request()
+    auth = OneLogin_Saml2_Auth(req, saml_auth_service.get_saml_settings())
+    redirect_url = auth.login(return_to=relay_state, force_authn=True)
+    return redirect_url
+
+
+def _start_oidc_login(relay_state: str):
+    oidc_client = _build_oidc_client()
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    redirect_uri = _build_oidc_redirect_uri()
+
+    flask_session[OIDC_SESSION_STATE_KEY] = state
+    flask_session[OIDC_SESSION_NONCE_KEY] = nonce
+    flask_session[OIDC_SESSION_NEXT_KEY] = relay_state
+
+    auth_url = oidc_client.get_authorization_request_url(
+        scopes=OIDC_SCOPES,
+        state=state,
+        redirect_uri=redirect_uri,
+        prompt="select_account",
+        nonce=nonce,
+    )
+
+    return redirect(auth_url)
+
+
+def _clear_oidc_login_state() -> None:
+    flask_session.pop(OIDC_SESSION_STATE_KEY, None)
+    flask_session.pop(OIDC_SESSION_NONCE_KEY, None)
+    flask_session.pop(OIDC_SESSION_NEXT_KEY, None)
+
+
+def _complete_oidc_login() -> tuple[str, dict]:
+    if request.args.get("error"):
+        error = request.args.get("error")
+        description = request.args.get("error_description")
+        raise DNSApiError(
+            code="OIDC_AUTH_ERROR",
+            message="Authentication was cancelled or rejected",
+            status_code=401,
+            details={"error": error, "error_description": description},
+        )
+
+    code = (request.args.get("code") or "").strip()
+    state = (request.args.get("state") or "").strip()
+    expected_state = (flask_session.get(OIDC_SESSION_STATE_KEY) or "").strip()
+    if not code or not state or state != expected_state:
+        raise DNSApiError(
+            code="OIDC_AUTH_ERROR",
+            message="Invalid Microsoft Entra login state",
+            status_code=401,
+            details={"reason": "state_mismatch"},
+        )
+
+    nonce = flask_session.get(OIDC_SESSION_NONCE_KEY)
+    relay_state = _sanitize_relay_state(
+        flask_session.get(OIDC_SESSION_NEXT_KEY),
+        request.host,
+    )
+
+    oidc_client = _build_oidc_client()
+    redirect_uri = _build_oidc_redirect_uri()
+    result = oidc_client.acquire_token_by_authorization_code(
+        code,
+        scopes=OIDC_SCOPES,
+        redirect_uri=redirect_uri,
+        nonce=nonce,
+    )
+
+    if "error" in result:
+        raise DNSApiError(
+            code="OIDC_AUTH_ERROR",
+            message="Microsoft Entra login failed",
+            status_code=401,
+            details={
+                "error": result.get("error"),
+                "error_description": result.get("error_description"),
+            },
+        )
+
+    id_token_claims = result.get("id_token_claims") or {}
+    if nonce and id_token_claims.get("nonce") != nonce:
+        raise DNSApiError(
+            code="OIDC_AUTH_ERROR",
+            message="Microsoft Entra login failed nonce validation",
+            status_code=401,
+            details={"reason": "nonce_mismatch"},
+        )
+
+    _clear_oidc_login_state()
+    return relay_state, id_token_claims
+
+
+def _finalize_oidc_login(relay_state: str, oidc_claims: dict):
+    with get_db() as db:
+        user = saml_auth_service.get_or_create_user_from_oidc_claims(db, oidc_claims)
+        session = saml_auth_service.create_session(
+            db,
+            user,
+            user_agent=request.headers.get("User-Agent"),
+            ip_address=request.remote_addr,
+        )
+
+    response = make_response(redirect(relay_state))
+    is_secure = settings.flask_env != "development"
+    logger.info(
+        "Setting session cookie: name=%s, session_id=%s..., secure=%s, flask_env=%s, relay_state=%s",
+        settings.session_cookie_name,
+        session.id[:8],
+        is_secure,
+        settings.flask_env,
+        relay_state,
+    )
+    response.set_cookie(
+        settings.session_cookie_name,
+        session.id,
+        max_age=settings.session_max_age_hours * 3600,
+        httponly=True,
+        secure=is_secure,
+        samesite="Lax",
+    )
+    return response
+
+
 @bp.route("/saml/login", methods=["GET"])
 def saml_login():
     """
@@ -66,22 +254,49 @@ def saml_login():
         return jsonify({"error": "SAML not configured"}), 503
 
     try:
-        from onelogin.saml2.auth import OneLogin_Saml2_Auth
-
-        # Prepare request for python3-saml
-        req = _prepare_flask_request()
-        auth = OneLogin_Saml2_Auth(req, saml_auth_service.get_saml_settings())
-
-        # Get the redirect URL with optional RelayState
         relay_state = request.args.get("next", "/")
-        redirect_url = auth.login(return_to=relay_state)
-
+        redirect_url = _start_saml_login(relay_state)
         return redirect(redirect_url)
     except DNSApiError:
         raise
     except Exception as e:
         logger.exception(f"SAML login error: {e}")
         return jsonify({"error": "Failed to initiate login"}), 500
+
+
+@bp.route("/login", methods=["GET"])
+def login():
+    """
+    Initiate interactive Microsoft Entra login.
+
+    Prefers OIDC with account selection when configured, then falls back to
+    SAML reauthentication when only the legacy SAML configuration is present.
+    """
+    if is_dev_auth_bypass_enabled():
+        relay_state = _sanitize_relay_state(request.args.get("next"), request.host)
+        return redirect(relay_state)
+
+    relay_state = _sanitize_relay_state(request.args.get("next"), request.host)
+
+    if _oidc_is_configured():
+        try:
+            return _start_oidc_login(relay_state)
+        except DNSApiError:
+            raise
+        except Exception as exc:
+            logger.exception("OIDC login error: %s", exc)
+            return jsonify({"error": "Failed to initiate Microsoft Entra login"}), 500
+
+    if saml_auth_service.is_configured():
+        try:
+            return redirect(_start_saml_login(relay_state))
+        except DNSApiError:
+            raise
+        except Exception as exc:
+            logger.exception("SAML fallback login error: %s", exc)
+            return jsonify({"error": "Failed to initiate login"}), 500
+
+    return jsonify({"error": "Authentication not configured"}), 503
 
 
 @bp.route("/saml/callback", methods=["POST"])
@@ -166,6 +381,27 @@ def saml_callback():
         raise
     except Exception as e:
         logger.exception(f"SAML callback error: {e}")
+        return jsonify({"error": "Authentication processing failed"}), 500
+
+
+@bp.route("/oidc/callback", methods=["GET"])
+def oidc_callback():
+    """Handle the Microsoft Entra OIDC authorization-code callback."""
+    if is_dev_auth_bypass_enabled():
+        relay_state = _sanitize_relay_state(request.args.get("next"), request.host)
+        return redirect(relay_state)
+
+    if not _oidc_is_configured():
+        return jsonify({"error": "Microsoft Entra login not configured"}), 503
+
+    try:
+        relay_state, oidc_claims = _complete_oidc_login()
+        return _finalize_oidc_login(relay_state, oidc_claims)
+    except DNSApiError:
+        raise
+    except Exception as exc:
+        _clear_oidc_login_state()
+        logger.exception("OIDC callback error: %s", exc)
         return jsonify({"error": "Authentication processing failed"}), 500
 
 

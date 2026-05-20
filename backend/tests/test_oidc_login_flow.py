@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Tests for the Microsoft Entra OIDC login flow."""
+
+import contextlib
+import os
+import sys
+
+# Ensure app imports work when running from backend/
+sys.path.append(".")
+
+os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+
+from flask import Flask  # noqa: E402
+
+import app.api.routes.auth as auth_routes  # noqa: E402
+from app.api.routes.auth import bp as auth_bp  # noqa: E402
+from app.config import settings  # noqa: E402
+
+
+class _DummyMsalClient:
+    def __init__(self):
+        self.authorization_request_kwargs = None
+        self.authorization_code_kwargs = None
+
+    def get_authorization_request_url(self, **kwargs):
+        self.authorization_request_kwargs = kwargs
+        return (
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"
+            f"prompt={kwargs.get('prompt')}&state={kwargs.get('state')}"
+        )
+
+    def acquire_token_by_authorization_code(self, code, scopes, redirect_uri=None, nonce=None, **kwargs):
+        self.authorization_code_kwargs = {
+            "code": code,
+            "scopes": scopes,
+            "redirect_uri": redirect_uri,
+            "nonce": nonce,
+            "kwargs": kwargs,
+        }
+        return {
+            "id_token_claims": {
+                "oid": "oid-123",
+                "preferred_username": "user@tamu.edu",
+                "name": "Test User",
+                "nonce": nonce,
+            }
+        }
+
+
+class _DummyMsalFactory:
+    def __init__(self):
+        self.instances: list[_DummyMsalClient] = []
+
+    def __call__(self, *args, **kwargs):
+        client = _DummyMsalClient()
+        client.factory_args = args
+        client.factory_kwargs = kwargs
+        self.instances.append(client)
+        return client
+
+
+def _make_app() -> Flask:
+    app = Flask(__name__)
+    app.secret_key = "test-secret-key"
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(auth_bp, url_prefix="/auth", name_prefix="legacy_auth")
+    return app
+
+
+def _configure_oidc_settings() -> tuple[str | None, str | None, str | None, str | None]:
+    previous = (
+        settings.azure_tenant_id,
+        settings.azure_client_id,
+        settings.azure_client_secret,
+        settings.flask_env,
+    )
+    settings.azure_tenant_id = "tenant-id"
+    settings.azure_client_id = "client-id"
+    settings.azure_client_secret = "client-secret"
+    settings.flask_env = "development"
+    return previous
+
+
+def test_login_prefers_oidc_and_requests_account_selection(monkeypatch):
+    previous = _configure_oidc_settings()
+    factory = _DummyMsalFactory()
+    monkeypatch.setattr(auth_routes.msal, "ConfidentialClientApplication", factory)
+
+    try:
+        app = _make_app()
+        client = app.test_client()
+
+        response = client.get("/api/auth/login?next=/orders")
+
+        assert response.status_code == 302
+        assert "prompt=select_account" in response.headers["Location"]
+
+        assert factory.instances, "expected the MSAL client factory to be called"
+        client_instance = factory.instances[0]
+        assert client_instance.authorization_request_kwargs is not None
+        assert client_instance.authorization_request_kwargs["prompt"] == "select_account"
+        assert client_instance.authorization_request_kwargs["scopes"] == ["openid", "profile", "email"]
+        assert client_instance.authorization_request_kwargs["redirect_uri"].endswith("/api/auth/oidc/callback")
+
+        with client.session_transaction() as sess:
+            assert sess["oidc_login_state"] == client_instance.authorization_request_kwargs["state"]
+            assert sess["oidc_login_next"] == "/orders"
+            assert sess["oidc_login_nonce"] == client_instance.authorization_request_kwargs["nonce"]
+    finally:
+        (
+            settings.azure_tenant_id,
+            settings.azure_client_id,
+            settings.azure_client_secret,
+            settings.flask_env,
+        ) = previous
+
+
+def test_oidc_callback_creates_session_cookie_and_redirects(monkeypatch):
+    previous = _configure_oidc_settings()
+    factory = _DummyMsalFactory()
+    monkeypatch.setattr(auth_routes.msal, "ConfidentialClientApplication", factory)
+
+    captured = {}
+
+    class _DummyUser:
+        email = "user@tamu.edu"
+
+    class _DummySession:
+        id = "session-123"
+
+    def _fake_get_db():
+        return contextlib.nullcontext(object())
+
+    def _fake_get_or_create_user_from_oidc_claims(_db, claims):
+        captured["claims"] = claims
+        return _DummyUser()
+
+    def _fake_create_session(_db, user, user_agent=None, ip_address=None):
+        captured["user_agent"] = user_agent
+        captured["ip_address"] = ip_address
+        return _DummySession()
+
+    monkeypatch.setattr(auth_routes, "get_db", _fake_get_db)
+    monkeypatch.setattr(auth_routes.saml_auth_service, "get_or_create_user_from_oidc_claims", _fake_get_or_create_user_from_oidc_claims)
+    monkeypatch.setattr(auth_routes.saml_auth_service, "create_session", _fake_create_session)
+
+    try:
+        app = _make_app()
+        client = app.test_client()
+
+        with client.session_transaction() as sess:
+            sess["oidc_login_state"] = "state-123"
+            sess["oidc_login_nonce"] = "nonce-123"
+            sess["oidc_login_next"] = "/orders"
+
+        response = client.get("/api/auth/oidc/callback?code=auth-code&state=state-123", headers={"User-Agent": "pytest"})
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/orders"
+        assert "techhub_session=session-123" in response.headers.get("Set-Cookie", "")
+
+        assert captured["claims"]["oid"] == "oid-123"
+        assert captured["claims"]["preferred_username"] == "user@tamu.edu"
+        assert captured["user_agent"] == "pytest"
+    finally:
+        (
+            settings.azure_tenant_id,
+            settings.azure_client_id,
+            settings.azure_client_secret,
+            settings.flask_env,
+        ) = previous
