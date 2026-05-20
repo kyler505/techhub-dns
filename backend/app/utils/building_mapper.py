@@ -73,6 +73,9 @@ ESL_RELLIS_PATTERN = re.compile(
 ALLEN_PATTERN = re.compile(
     r"\b(?:4220\s+TAMU|ALLEN(?:\s+BLDG|\s+BUILDING)?)\b"
 )
+ZACH_ADDRESS_PATTERN = re.compile(
+    r"\b(?:125\s+SPENCE\s+ST(?:REET)?|TAMU\s+3579|3579\s+TAMU)\b"
+)
 
 
 def normalize_address(address: str) -> str:
@@ -263,6 +266,15 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
             location,
         )
         return "ALLEN"
+
+    # Pattern P5: ZACH / 125 Spence Street / TAMU 3579 variants
+    patterns_checked.append("Pattern P5: ZACH / 125 Spence Street / TAMU 3579 variants")
+    if ZACH_ADDRESS_PATTERN.search(location_upper):
+        logger.info(
+            "Normalized Zachry location from '%s' to 'ZACH' (Pattern P5)",
+            location,
+        )
+        return "ZACH"
 
     # Pattern 0: Specific known addresses (highest priority)
     # These are addresses that should always map to specific building codes
