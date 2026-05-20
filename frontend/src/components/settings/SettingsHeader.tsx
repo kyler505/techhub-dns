@@ -32,7 +32,7 @@ export function SettingsHeader({ syncHealth, systemStatus }: SettingsHeaderProps
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
             <CardHeader className="space-y-4">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge variant={failedWebhook ? "warning" : "success"}>
                                 {failedWebhook ? "Webhook attention needed" : "Live operations"}
@@ -46,7 +46,7 @@ export function SettingsHeader({ syncHealth, systemStatus }: SettingsHeaderProps
                         </CardDescription>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 md:justify-end">
                         <Button asChild variant="outline" size="sm">
                             <Link to="/admin">
                                 Admin tools
@@ -65,11 +65,11 @@ export function SettingsHeader({ syncHealth, systemStatus }: SettingsHeaderProps
                 <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr]">
                     <div className="grid gap-3 sm:grid-cols-2">
                         {statusItems.map((item) => (
-                            <div key={item.name} className="rounded-xl border bg-muted/20 p-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div>
+                            <div key={item.name} className="min-w-0 rounded-xl border bg-muted/20 p-3">
+                                <div className="flex min-w-0 items-start justify-between gap-2">
+                                    <div className="min-w-0">
                                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{item.name}</p>
-                                        <p className="mt-1 text-sm font-medium">{item.details}</p>
+                                        <p className="mt-1 break-words text-sm font-medium">{item.details}</p>
                                     </div>
                                     <Badge variant={getStatusBadgeVariant(item.status)}>{formatStatusLabel(item.status)}</Badge>
                                 </div>
@@ -77,13 +77,13 @@ export function SettingsHeader({ syncHealth, systemStatus }: SettingsHeaderProps
                         ))}
                     </div>
                     <div className="rounded-xl border border-dashed bg-background/60 p-4">
-                        <div className="flex items-start gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
                             <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-muted/40">
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </div>
-                            <div className="space-y-1">
+                            <div className="min-w-0 space-y-1">
                                 <p className="text-sm font-medium">Operational focus</p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="break-words text-sm text-muted-foreground">
                                     Use this page for live checks, recovery actions, and temporary overrides. Keep long-lived policy in admin tools.
                                 </p>
                             </div>
@@ -93,7 +93,7 @@ export function SettingsHeader({ syncHealth, systemStatus }: SettingsHeaderProps
 
                 <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <ShieldCheck className="h-4 w-4" />
-                    <span>Configuration visibility is redacted to status, health, and last-seen information only.</span>
+                <span className="break-words">Configuration visibility is redacted to status, health, and last-seen information only.</span>
                 </div>
             </CardHeader>
 

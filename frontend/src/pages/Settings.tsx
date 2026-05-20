@@ -3,7 +3,6 @@ import { Loader2 } from "lucide-react";
 
 import { settingsApi } from "../api/settings";
 import { useAuth } from "../contexts/AuthContext";
-import { Card, CardContent } from "../components/ui/card";
 import { SettingsHeader } from "../components/settings/SettingsHeader";
 import { SettingsTabs } from "../components/settings/SettingsTabs";
 import { SystemHealthCard } from "../components/settings/SystemHealthCard";
@@ -56,15 +55,6 @@ export default function Settings() {
             <div className="space-y-6">
                 <WebhookManagementCard />
                 <PrintQueueCard />
-                <Card className="border-border/70 bg-card/70">
-                    <CardContent className="space-y-2 p-5">
-                        <p className="text-sm font-medium">What belongs here</p>
-                        <p className="text-sm text-muted-foreground">
-                            Use settings for temporary recovery, verification, and operational checks. Durable workflow policy and access control
-                            stay on /admin.
-                        </p>
-                    </CardContent>
-                </Card>
             </div>
         </div>
     );
@@ -72,15 +62,6 @@ export default function Settings() {
     const advanced = (
         <div className="space-y-6">
             <OperatorOverrideCard />
-            <Card className="border-border/70 bg-card/70">
-                <CardContent className="space-y-2 p-5">
-                    <p className="text-sm font-medium">Advanced recovery guidance</p>
-                    <p className="text-sm text-muted-foreground">
-                        These actions are intentionally separated from the default view. Use them only when you need to repair workflow state
-                        or unblock a specific order.
-                    </p>
-                </CardContent>
-            </Card>
         </div>
     );
 

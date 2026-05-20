@@ -144,17 +144,17 @@ export function WebhookManagementCard() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-xl border bg-muted/20 p-3">
+                        <div className="min-w-0 rounded-xl border bg-muted/20 p-3">
                             <div className="text-xs font-medium uppercase text-muted-foreground">Active subscription</div>
-                            <p className="mt-1 text-sm">{summary.active ? summary.active.webhook_id : "None"}</p>
+                            <p className="mt-1 break-words text-sm">{summary.active ? summary.active.webhook_id : "None"}</p>
                         </div>
-                        <div className="rounded-xl border bg-muted/20 p-3">
+                        <div className="min-w-0 rounded-xl border bg-muted/20 p-3">
                             <div className="text-xs font-medium uppercase text-muted-foreground">Last received</div>
                             <p className="mt-1 text-sm">{formatTimestamp(summary.lastReceivedAt)}</p>
                         </div>
-                        <div className="rounded-xl border bg-muted/20 p-3">
+                        <div className="min-w-0 rounded-xl border bg-muted/20 p-3">
                             <div className="text-xs font-medium uppercase text-muted-foreground">Default URL</div>
-                            <p className="mt-1 break-all text-sm">{defaults?.url || "Not configured"}</p>
+                            <p className="mt-1 break-words text-sm">{defaults?.url || "Not configured"}</p>
                         </div>
                     </div>
 
@@ -200,7 +200,7 @@ export function WebhookManagementCard() {
                                 Copy defaults
                             </Button>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex min-w-0 flex-wrap gap-2">
                             {eventList.map((event) => (
                                 <Badge key={event} variant="secondary" className="gap-2 pr-1">
                                     {event}
@@ -233,7 +233,7 @@ export function WebhookManagementCard() {
                                 Add event
                             </Button>
                         </div>
-                        <div className="rounded-xl border bg-background/60 p-3 text-sm text-muted-foreground">
+                        <div className="rounded-xl border bg-background/60 p-3 break-words text-sm text-muted-foreground">
                             {eventList.length ? eventList.join(", ") : "No events selected"}
                         </div>
                     </div>
@@ -254,19 +254,19 @@ export function WebhookManagementCard() {
                             <div className="space-y-2">
                                 {webhooks.map((webhook) => (
                                     <div key={webhook.id} className="rounded-xl border bg-background/60 p-3">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="space-y-1">
+                                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0 space-y-1">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="text-sm font-medium">{webhook.webhook_id}</span>
+                                                    <span className="min-w-0 break-words text-sm font-medium">{webhook.webhook_id}</span>
                                                     <Badge variant={getStatusBadgeVariant(webhook.status === "active" ? "active" : "warning")}>
                                                         {webhook.status}
                                                     </Badge>
                                                 </div>
-                                                <p className="break-all text-xs text-muted-foreground">{webhook.url}</p>
-                                                <p className="text-xs text-muted-foreground">
+                                                <p className="break-words text-xs text-muted-foreground">{webhook.url}</p>
+                                                <p className="break-words text-xs text-muted-foreground">
                                                     {webhook.events.join(", ") || "No events recorded"}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">Last received: {formatTimestamp(webhook.last_received_at)}</p>
+                                                <p className="break-words text-xs text-muted-foreground">Last received: {formatTimestamp(webhook.last_received_at)}</p>
                                             </div>
                                             <Button
                                                 variant="outline"
@@ -292,10 +292,10 @@ export function WebhookManagementCard() {
                             <div className="mt-3 space-y-2">
                                 {recentActions.map((action) => (
                                     <div key={action.id} className="rounded-lg border bg-background/70 p-3">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div>
+                                        <div className="flex min-w-0 items-center justify-between gap-2">
+                                            <div className="min-w-0">
                                                 <div className="text-sm font-medium">{action.label}</div>
-                                                <p className="text-xs text-muted-foreground">{action.message}</p>
+                                                <p className="break-words text-xs text-muted-foreground">{action.message}</p>
                                             </div>
                                             <span className={`text-xs font-semibold ${action.status === "success" ? "text-emerald-600" : "text-destructive"}`}>
                                                 {action.status}

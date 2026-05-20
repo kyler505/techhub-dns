@@ -183,10 +183,13 @@ export function IntegrationSmokeTestsCard() {
                     {recentActions.length ? (
                         <div className="mt-3 space-y-2">
                             {recentActions.map((action) => (
-                                <div key={action.id} className="flex flex-col gap-1 rounded-lg border bg-background/70 p-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
+                                <div
+                                    key={action.id}
+                                    className="flex min-w-0 flex-col gap-1 rounded-lg border bg-background/70 p-3 sm:flex-row sm:items-start sm:justify-between"
+                                >
+                                    <div className="min-w-0">
                                         <div className="text-sm font-medium">{action.label}</div>
-                                        <p className="text-xs text-muted-foreground">{action.message}</p>
+                                        <p className="break-words text-xs text-muted-foreground">{action.message}</p>
                                     </div>
                                     <span className={`text-xs font-semibold ${action.status === "success" ? "text-emerald-600" : "text-destructive"}`}>
                                         {action.status}

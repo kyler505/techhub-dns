@@ -72,11 +72,11 @@ export function SystemHealthCard({
                         <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">Loading status...</div>
                     ) : (
                         statusCards.map((item) => (
-                            <div key={item.name} className="rounded-xl border bg-muted/20 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
+                            <div key={item.name} className="min-w-0 rounded-xl border bg-muted/20 p-4">
+                                <div className="flex min-w-0 items-start justify-between gap-3">
+                                    <div className="min-w-0">
                                         <h3 className="text-sm font-semibold">{item.name}</h3>
-                                        <p className="mt-1 text-sm text-muted-foreground">{item.details}</p>
+                                        <p className="mt-1 break-words text-sm text-muted-foreground">{item.details}</p>
                                     </div>
                                     <Badge variant={getStatusBadgeVariant(item.status)}>{formatStatusLabel(item.status)}</Badge>
                                 </div>

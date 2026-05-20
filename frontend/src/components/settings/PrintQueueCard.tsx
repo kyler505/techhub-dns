@@ -36,21 +36,21 @@ export function PrintQueueCard() {
                 {jobs.length ? (
                     jobs.map((job) => (
                         <div key={job.id} className="rounded-xl border bg-muted/20 p-3">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-sm font-medium">{job.order_id}</p>
+                                        <p className="break-words text-sm font-medium">{job.order_id}</p>
                                         <Badge variant={getStatusBadgeVariant(job.status === "completed" ? "active" : job.status === "failed" ? "error" : "warning")}>
                                             {formatJobStatus(job.status)}
                                         </Badge>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="break-words text-xs text-muted-foreground">
                                         {job.document_type} · {job.trigger_source} · attempts {job.attempt_count}
                                     </p>
-                                    <p className="text-xs text-muted-foreground">Updated {formatTimestamp(job.updated_at)}</p>
-                                    {job.last_error ? <p className="mt-1 text-xs text-destructive">{job.last_error}</p> : null}
+                                    <p className="break-words text-xs text-muted-foreground">Updated {formatTimestamp(job.updated_at)}</p>
+                                    {job.last_error ? <p className="mt-1 break-words text-xs text-destructive">{job.last_error}</p> : null}
                                 </div>
-                                <p className="text-xs text-muted-foreground">{formatTimestamp(job.completed_at || job.claimed_at || job.created_at)}</p>
+                                <p className="break-words text-xs text-muted-foreground">{formatTimestamp(job.completed_at || job.claimed_at || job.created_at)}</p>
                             </div>
                         </div>
                     ))

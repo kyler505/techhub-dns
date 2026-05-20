@@ -62,7 +62,7 @@ export function OperatorOverrideCard() {
                     <div className="rounded-xl border bg-muted/20 p-4">
                         <div className="space-y-1 pb-3">
                             <h3 className="text-sm font-semibold">Bypass signing</h3>
-                            <p className="text-sm text-muted-foreground">Force delivery by signing with a transparent placeholder.</p>
+                            <p className="break-words text-sm text-muted-foreground">Force delivery by signing with a transparent placeholder.</p>
                         </div>
                         <div className="space-y-3">
                             <Input
@@ -81,7 +81,7 @@ export function OperatorOverrideCard() {
                     <div className="rounded-xl border bg-muted/20 p-4">
                         <div className="space-y-1 pb-3">
                             <h3 className="text-sm font-semibold">Force reopen</h3>
-                            <p className="text-sm text-muted-foreground">Rollback an order to an earlier workflow step.</p>
+                            <p className="break-words text-sm text-muted-foreground">Rollback an order to an earlier workflow step.</p>
                         </div>
                         <div className="space-y-3">
                             <Input
@@ -118,7 +118,7 @@ export function OperatorOverrideCard() {
                     <div className="rounded-xl border bg-muted/20 p-4">
                         <div className="space-y-1 pb-3">
                             <h3 className="text-sm font-semibold">Override ownership</h3>
-                            <p className="text-sm text-muted-foreground">Reassign the deliverer for an order.</p>
+                            <p className="break-words text-sm text-muted-foreground">Reassign the deliverer for an order.</p>
                         </div>
                         <div className="space-y-3">
                             <Input
