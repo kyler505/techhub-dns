@@ -1293,6 +1293,50 @@ def test_recursive_remainder_split_creates_next_partial_leg():
     engine.dispose()
 
 
+def test_recursive_partial_split_requires_base_order_number():
+    """Recursive child ID generation should fail fast when the base order number is blank."""
+
+    session, engine = _make_sqlite_session()
+
+    parent_order = Order(
+        id="order-parent-blank",
+        inflow_order_id="   ",
+        inflow_sales_order_id="sales-order-blank",
+        recipient_name="User Blank",
+        recipient_contact="user.blank@example.com",
+        delivery_location="Building 909",
+        po_number="PO-blank",
+        status=OrderStatus.PICKED.value,
+        inflow_data={
+            "orderNumber": "   ",
+            "lines": [
+                {
+                    "productId": "prod-a",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "2"},
+                }
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-a",
+                    "product": {"name": "Laptop", "sku": "LAP-1"},
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        },
+    )
+    session.add(parent_order)
+    session.commit()
+
+    service = OrderSplittingService(session)
+
+    with pytest.raises(ValidationError, match="base inflow order number"):
+        service.create_partial_picklist_leg(parent_order, user_id="tech@example.com")
+
+    session.close()
+    engine.dispose()
+
+
 def test_parent_remainder_document_view_keeps_items_when_fully_picked():
     """A remainder leg should keep showing its leg items even after all of them are picked."""
 

@@ -268,10 +268,12 @@ export const getOrderProductTableView = (order: PartialOrderSource): OrderProduc
 
 export const isPartialOrder = (order: PartialOrderSource): boolean => getPartialOrderInfo(order).isPartial;
 
-export const isRemainderLegWaitingOnPickup = (order: PartialOrderSource): boolean => {
+export const isActiveRemainderLegWaitingOnPickup = (order: PartialOrderSource): boolean => {
   const partialInfo = getPartialOrderInfo(order);
   return partialInfo.hasRemainder && !partialInfo.isPartialLeg && partialInfo.missingItems.length > 0;
 };
+
+export const isRemainderLegWaitingOnPickup = isActiveRemainderLegWaitingOnPickup;
 
 export const canGeneratePicklist = (order: PartialOrderSource): boolean => {
   if (order.picklist_generated_at) {

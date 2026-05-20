@@ -28,7 +28,7 @@ import {
   canGeneratePicklist as canGeneratePicklistForOrder,
   getOrderProductTableView,
   getPartialOrderInfo,
-  isRemainderLegWaitingOnPickup,
+  isActiveRemainderLegWaitingOnPickup,
 } from "../utils/orderPartial";
 import {
   AuditLog,
@@ -89,7 +89,7 @@ export default function OrderDetail({
   const partialOrderInfo = getPartialOrderInfo(order);
   const productTableView = getOrderProductTableView(order);
   const isPartialLeg = partialOrderInfo.isPartialLeg;
-  const remainderLegWaitingOnPickup = isRemainderLegWaitingOnPickup(order);
+  const remainderLegWaitingOnPickup = isActiveRemainderLegWaitingOnPickup(order);
   const recursiveSplitEligible =
     partialOrderInfo.hasRemainder &&
     partialOrderInfo.totalPicked > 0 &&

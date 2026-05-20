@@ -165,31 +165,10 @@ class OrderService:
 
     def _parent_remainder_has_unpicked_items(self, order: Order) -> bool:
         """Return True when a remainder parent leg is still waiting on item pickup."""
-        if not getattr(order, "remainder_order_id", None) or getattr(
-            order, "parent_order_id", None
-        ):
-            return False
-
-        if not order.inflow_data:
-            return False
-
-        from app.services.inflow_service import InflowService
-        from app.services.order_splitting import OrderSplittingService
-
-        pick_status_source = OrderSplittingService(
-            self.db
-        ).build_parent_remainder_pick_status_source(order)
-        if not pick_status_source:
-            return False
-
-        try:
-            pick_status = InflowService().get_pick_status(pick_status_source)
-        except Exception as exc:
-            logger.warning(
-                "Failed to compute pick status for remainder leg %s: %s",
-                order.inflow_order_id,
-                exc,
-            )
+        pick_status = self._get_active_remainder_pick_status(
+            order, warning_context="remainder leg"
+        )
+        if not pick_status:
             return False
 
         total_ordered = float(pick_status.get("total_ordered", 0) or 0)
@@ -198,29 +177,47 @@ class OrderService:
 
     def _parent_remainder_can_generate_picklist(self, order: Order) -> bool:
         """Return True when an active remainder leg has picked items that can be split off again."""
-        if not getattr(order, "remainder_order_id", None) or getattr(
-            order, "parent_order_id", None
-        ):
-            return False
-
-        if not order.inflow_data:
-            return False
-
-        from app.services.inflow_service import InflowService
-
-        try:
-            pick_status = InflowService().get_pick_status(order.inflow_data)
-        except Exception as exc:
-            logger.warning(
-                "Failed to compute pick status for recursive remainder split %s: %s",
-                order.inflow_order_id,
-                exc,
-            )
+        pick_status = self._get_active_remainder_pick_status(
+            order, warning_context="recursive remainder split"
+        )
+        if not pick_status:
             return False
 
         total_ordered = float(pick_status.get("total_ordered", 0) or 0)
         total_picked = float(pick_status.get("total_picked", 0) or 0)
         return total_ordered > 0 and 0 < total_picked < total_ordered
+
+    def _get_active_remainder_pick_status(
+        self, order: Order, *, warning_context: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the current pick status for an active remainder leg, if any."""
+        if not getattr(order, "remainder_order_id", None) or getattr(
+            order, "parent_order_id", None
+        ):
+            return None
+
+        if not order.inflow_data:
+            return None
+
+        from app.services.inflow_service import InflowService
+        from app.services.order_splitting import OrderSplittingService
+
+        pick_status_source = OrderSplittingService(
+            self.db
+        ).build_parent_remainder_pick_status_source(order)
+        if not pick_status_source:
+            return None
+
+        try:
+            return InflowService().get_pick_status(pick_status_source)
+        except Exception as exc:
+            logger.warning(
+                "Failed to compute pick status for %s %s: %s",
+                warning_context,
+                order.inflow_order_id,
+                exc,
+            )
+            return None
 
     def _ensure_remainder_leg_ready(self, order: Order, action: str) -> None:
         """Block prep actions on remainder parent legs until their items are picked."""
@@ -485,10 +482,6 @@ class OrderService:
                 )
                 if split_order is not None:
                     order = split_order
-                    if not order.parent_order_id and order.remainder_order_id:
-                        child_order = self.get_order_by_id(order.remainder_order_id)
-                        if child_order is not None:
-                            order = child_order
 
         # Enforce that the user generating the picklist is the same user who tagged the assets,
         # unless one of them is missing (legacy data).

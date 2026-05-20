@@ -18,6 +18,7 @@ from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
 from app.services.inflow_service import InflowService
 from app.services.audit_service import AuditService
+from app.utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +359,10 @@ class OrderSplittingService:
     def _next_partial_child_order_id(self, original_order: Order) -> str:
         """Return the next recursive picked-leg order number for a remainder row."""
         base_order_id = str(original_order.inflow_order_id or "").strip()
+        if not base_order_id:
+            raise ValidationError(
+                "Partial child order generation requires a base inflow order number"
+            )
         prefix = f"{base_order_id}-P"
         pattern = re.compile(rf"^{re.escape(prefix)}(?:(\d+))?$", re.IGNORECASE)
 
