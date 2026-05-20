@@ -66,6 +66,15 @@ WEST_CAMPUS_PORTABLE_PATTERN = re.compile(
 EAST_29TH_STREET_PATTERN = re.compile(
     r"\b2900\s+(?:E|EAST)\s+29TH\s+ST(?:REET)?\b"
 )
+LIBRARY_ANNEX_PATTERN = re.compile(
+    r"\b(?:5000\s+TAMU|LIBR(?:ARY)?\s+ANNEX|ANNEX\s+6TH\s+FLOOR\s+DIGITAL\s+INITIATIVES\s+SUITE)\b"
+)
+ESL_RELLIS_PATTERN = re.compile(
+    r"\b1210\s+AVENUE\s+A\b"
+)
+ALLEN_PATTERN = re.compile(
+    r"\b(?:4220\s+TAMU|ALLEN(?:\s+BLDG|\s+BUILDING)?)\b"
+)
 
 
 def normalize_address(address: str) -> str:
@@ -229,6 +238,33 @@ def extract_building_code_from_location(location: str) -> Optional[str]:
             location,
         )
         return "E 29th St"
+
+    # Pattern P2: Library Annex / 5000 TAMU variants
+    patterns_checked.append("Pattern P2: Library Annex / 5000 TAMU variants")
+    if LIBRARY_ANNEX_PATTERN.search(location_upper):
+        logger.info(
+            "Normalized Library Annex location from '%s' to 'ANEX' (Pattern P2)",
+            location,
+        )
+        return "ANEX"
+
+    # Pattern P3: ESL RELLIS / 1210 Avenue A
+    patterns_checked.append("Pattern P3: ESL RELLIS / 1210 Avenue A")
+    if ESL_RELLIS_PATTERN.search(location_upper):
+        logger.info(
+            "Normalized ESL RELLIS location from '%s' to 'ESL RELLIS' (Pattern P3)",
+            location,
+        )
+        return "ESL RELLIS"
+
+    # Pattern P4: ALLEN / 4220 TAMU variants
+    patterns_checked.append("Pattern P4: ALLEN / 4220 TAMU variants")
+    if ALLEN_PATTERN.search(location_upper):
+        logger.info(
+            "Normalized Allen location from '%s' to 'ALLEN' (Pattern P4)",
+            location,
+        )
+        return "ALLEN"
 
     # Pattern 0: Specific known addresses (highest priority)
     # These are addresses that should always map to specific building codes
