@@ -1735,6 +1735,45 @@ def test_parent_remainder_blocks_prep_actions_until_remaining_items_are_picked()
         session.close()
         engine.dispose()
 
+
+def test_create_order_from_inflow_overrides_delivery_location_to_vidi_from_custom_field():
+    """Orders with the veterinary medicine custom field should store VIDI."""
+
+    session, engine = _make_sqlite_session()
+
+    try:
+        service = OrderService(session)
+        incoming_payload = {
+            "orderNumber": "THVIDI001",
+            "salesOrderId": "sales-order-vidi-1",
+            "contactName": "Vet Med User",
+            "email": "vetmed@example.com",
+            "poNumber": "PO-VIDI-1",
+            "shippingAddress": {
+                "address1": "123 Main St",
+                "address2": "",
+                "city": "College Station",
+                "stateProvince": "TX",
+                "postalCode": "77843",
+            },
+            "customFields": {
+                "custom1": "TAMU - College of Veterinary Medicine",
+            },
+            "lines": [],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        }
+
+        created = service.create_order_from_inflow(incoming_payload)
+        session.refresh(created)
+
+        assert created.delivery_location == "VIDI"
+        assert created.inflow_data["customFields"]["custom1"] == "TAMU - College of Veterinary Medicine"
+    finally:
+        session.close()
+        engine.dispose()
+
     print("[PASS] Parent remainder prep actions are blocked until remaining items are picked")
 
 
