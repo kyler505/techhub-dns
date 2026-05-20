@@ -166,7 +166,7 @@ export function Sidebar({ className }: { className?: string }) {
       )}
       <motion.aside
         initial={false}
-        animate={isMobile ? { x: isMobileOpen ? 0 : -288 } : { width: collapsed ? 72 : 256 }}
+        animate={isMobile ? { x: isMobileOpen ? 0 : -288 } : { x: 0, width: collapsed ? 72 : 256 }}
         transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
           "fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-border bg-background text-foreground will-change-transform",

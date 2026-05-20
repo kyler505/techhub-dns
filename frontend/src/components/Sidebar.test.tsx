@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,7 +31,7 @@ describe("Sidebar", () => {
     });
 
     it("resets the mobile sidebar when crossing the breakpoint", async () => {
-        render(
+        const { container } = render(
             <MemoryRouter>
                 <Sidebar />
             </MemoryRouter>
@@ -44,7 +44,10 @@ describe("Sidebar", () => {
         expect(screen.getByLabelText("Close sidebar overlay")).toBeInTheDocument();
 
         currentMatches = false;
-        fireEvent(window, new Event("resize"));
+        act(() => {
+            window.dispatchEvent(new Event("resize"));
+            window.dispatchEvent(new Event("orientationchange"));
+        });
 
         await waitFor(() => {
             expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("256px");
@@ -53,5 +56,6 @@ describe("Sidebar", () => {
         expect(screen.queryByLabelText("Open sidebar")).not.toBeInTheDocument();
         expect(screen.getByLabelText("Collapse sidebar")).toBeInTheDocument();
         expect(screen.queryByLabelText("Close sidebar overlay")).not.toBeInTheDocument();
+        expect(container.querySelector("aside")).toHaveStyle({ transform: "translateX(0px)" });
     });
 });
