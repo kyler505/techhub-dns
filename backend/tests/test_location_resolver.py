@@ -270,6 +270,133 @@ def test_jcain_variants_normalize_to_building_code():
     assert resolved.source == "address"
 
     print("[PASS] JCAIN normalization test passed")
+
+
+def test_library_annex_variants_normalize_to_anex():
+    """Test that library annex / 5000 TAMU variants normalize to ANEX."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    variants = [
+        "5000 TAMU LIBR Annex",
+        "library annex 6th floor digital initiatives suite",
+        "5000 TAMU",
+    ]
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == "ANEX"
+
+    service = LocationResolverService()
+
+    resolved_split_address = service.resolve_location(
+        {
+            "orderNumber": "TESTANEX1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "5000 TAMU",
+                "address2": "LIBR Annex",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+    assert resolved_split_address.building_code == "ANEX"
+    assert resolved_split_address.display_location == "ANEX"
+    assert resolved_split_address.source in {"address2", "address"}
+
+    resolved_single_line = service.resolve_location(
+        {
+            "orderNumber": "TESTANEX2",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "5000 TAMU LIBR Annex",
+                "address2": "",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+    assert resolved_single_line.building_code == "ANEX"
+    assert resolved_single_line.display_location == "ANEX"
+    assert resolved_single_line.source == "address"
+
+    print("[PASS] Library Annex normalization test passed")
+
+
+def test_esl_rellis_address_normalizes_to_display_label():
+    """Test that 1210 Avenue A resolves to ESL RELLIS."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    variants = [
+        "1210 Avenue A",
+        "1210 Avenue A, Bryan, TX, 77807",
+    ]
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == "ESL RELLIS"
+
+    service = LocationResolverService()
+    resolved = service.resolve_location(
+        {
+            "orderNumber": "TESTRELLIS1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "1210 Avenue A",
+                "address2": "",
+                "city": "Bryan",
+                "state": "TX",
+                "postalCode": "77807",
+            },
+        }
+    )
+    assert resolved.building_code == "ESL RELLIS"
+    assert resolved.display_location == "ESL RELLIS"
+    assert resolved.source == "address"
+
+    print("[PASS] ESL RELLIS normalization test passed")
+
+
+def test_allen_variants_normalize_to_display_label():
+    """Test that 4220 TAMU / ALLEN variants resolve to ALLEN."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    variants = [
+        "4220 TAMU",
+        "ALLEN BLDG ROOM 2004A",
+        "4220 TAMU ALLEN BLDG ROOM 2004A, College Station, TX, 77845",
+    ]
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == "ALLEN"
+
+    service = LocationResolverService()
+    resolved = service.resolve_location(
+        {
+            "orderNumber": "TESTALLEN1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "4220 TAMU",
+                "address2": "ALLEN BLDG ROOM 2004A",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77845",
+            },
+        }
+    )
+    assert resolved.building_code == "ALLEN"
+    assert resolved.display_location == "ALLEN"
+    assert resolved.source in {"address2", "address"}
+
+    print("[PASS] ALLEN normalization test passed")
+
+
 if __name__ == "__main__":
     print("Running LocationResolverService tests...")
     print()
@@ -284,6 +411,9 @@ if __name__ == "__main__":
     test_west_campus_portable_address_maps_to_portables_label()
     test_east_29th_street_variants_normalize_to_street_label()
     test_jcain_variants_normalize_to_building_code()
+    test_library_annex_variants_normalize_to_anex()
+    test_esl_rellis_address_normalizes_to_display_label()
+    test_allen_variants_normalize_to_display_label()
 
     # Integration tests
     test_local_delivery_detection()
