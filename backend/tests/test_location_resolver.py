@@ -147,10 +147,19 @@ def test_west_campus_portable_address_maps_to_portables_label():
     from app.services.location_resolver_service import LocationResolverService
     from app.utils.building_mapper import extract_building_code_from_location
 
-    address = "781 West Campus Blvd Building 0067"
+    addresses = [
+        "781 West Campus Blvd Building 0067",
+        "769 West Campus Blvd. Bldg. 0066 - Suite 110 - TAMU 2592",
+    ]
 
-    extracted = extract_building_code_from_location(address)
-    assert extracted == "Portables 0067"
+    expected = {
+        "781 West Campus Blvd Building 0067": "Portables 0067",
+        "769 West Campus Blvd. Bldg. 0066 - Suite 110 - TAMU 2592": "Portables 0066",
+    }
+
+    for address in addresses:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == expected[address]
 
     service = LocationResolverService()
     resolved = service.resolve_location(
@@ -171,6 +180,23 @@ def test_west_campus_portable_address_maps_to_portables_label():
     assert resolved.building_code == "Portables 0067"
     assert resolved.display_location == "Portables 0067"
     assert resolved.source == "address"
+
+    resolved_alt_format = service.resolve_location(
+        {
+            "orderNumber": "TESTPORTABLE2",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "769 West Campus Blvd. Bldg. 0066 - Suite 110 - TAMU 2592",
+                "address2": "",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+    assert resolved_alt_format.building_code == "Portables 0066"
+    assert resolved_alt_format.display_location == "Portables 0066"
+    assert resolved_alt_format.source == "address"
 
     print("[PASS] West Campus portable address mapping test passed")
 
@@ -441,6 +467,42 @@ def test_zach_address_variants_normalize_to_display_label():
     print("[PASS] ZACH address normalization test passed")
 
 
+def test_fermier_variants_normalize_to_display_label():
+    """Test that Fermier Hall / MS 3367 variants resolve to FERM."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    variants = [
+        "106 Fermier Hall, MS 3367, College Station, TX, 77843",
+        "Fermier Hall",
+        "MS 3367",
+    ]
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == "FERM"
+
+    service = LocationResolverService()
+    resolved = service.resolve_location(
+        {
+            "orderNumber": "TESTFERM1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "106 Fermier Hall",
+                "address2": "MS 3367",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+    assert resolved.building_code == "FERM"
+    assert resolved.display_location == "FERM"
+    assert resolved.source in {"address2", "address"}
+
+    print("[PASS] FERM normalization test passed")
+
+
 if __name__ == "__main__":
     print("Running LocationResolverService tests...")
     print()
@@ -459,6 +521,7 @@ if __name__ == "__main__":
     test_esl_rellis_address_normalizes_to_display_label()
     test_allen_variants_normalize_to_display_label()
     test_zach_address_variants_normalize_to_display_label()
+    test_fermier_variants_normalize_to_display_label()
 
     # Integration tests
     test_local_delivery_detection()
