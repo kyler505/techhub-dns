@@ -71,9 +71,7 @@ def _get_browser_origin() -> str:
     """Return the public-facing origin the browser should return to."""
     frontend_url = (settings.frontend_url or "").strip().rstrip("/")
     if frontend_url:
-        parsed_frontend = urlparse(frontend_url)
-        if parsed_frontend.scheme and parsed_frontend.netloc and parsed_frontend.netloc != request.host:
-            return frontend_url
+        return frontend_url
 
     return f"{request.scheme}://{request.host}"
 

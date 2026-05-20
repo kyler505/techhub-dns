@@ -72,11 +72,13 @@ def _configure_oidc_settings() -> tuple[str | None, str | None, str | None, str 
         settings.azure_tenant_id,
         settings.azure_client_id,
         settings.azure_client_secret,
+        settings.frontend_url,
         settings.flask_env,
     )
     settings.azure_tenant_id = "tenant-id"
     settings.azure_client_id = "client-id"
     settings.azure_client_secret = "client-secret"
+    settings.frontend_url = "https://dev-techhub.pythonanywhere.com"
     settings.flask_env = "development"
     return previous
 
@@ -100,7 +102,7 @@ def test_login_prefers_oidc_and_requests_account_selection(monkeypatch):
         assert client_instance.authorization_request_kwargs is not None
         assert client_instance.authorization_request_kwargs["prompt"] == "select_account"
         assert client_instance.authorization_request_kwargs["scopes"] == ["openid", "profile", "email"]
-        assert client_instance.authorization_request_kwargs["redirect_uri"].endswith("/api/auth/oidc/callback")
+        assert client_instance.authorization_request_kwargs["redirect_uri"] == "https://dev-techhub.pythonanywhere.com/api/auth/oidc/callback"
 
         with client.session_transaction() as sess:
             assert sess["oidc_login_state"] == client_instance.authorization_request_kwargs["state"]
@@ -111,6 +113,7 @@ def test_login_prefers_oidc_and_requests_account_selection(monkeypatch):
             settings.azure_tenant_id,
             settings.azure_client_id,
             settings.azure_client_secret,
+            settings.frontend_url,
             settings.flask_env,
         ) = previous
 
@@ -167,6 +170,7 @@ def test_oidc_callback_creates_session_cookie_and_redirects(monkeypatch):
             settings.azure_tenant_id,
             settings.azure_client_id,
             settings.azure_client_secret,
+            settings.frontend_url,
             settings.flask_env,
         ) = previous
 
@@ -197,5 +201,6 @@ def test_login_surfaces_oidc_initiation_failure_details(monkeypatch):
             settings.azure_tenant_id,
             settings.azure_client_id,
             settings.azure_client_secret,
+            settings.frontend_url,
             settings.flask_env,
         ) = previous

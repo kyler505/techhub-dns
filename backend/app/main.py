@@ -41,6 +41,7 @@ if settings.secret_key is None:
     logger.warning("No SECRET_KEY configured — using ephemeral random key (sessions will not persist across restarts)")
 
 app = Flask(__name__)
+app.secret_key = settings.secret_key
 app.url_map.strict_slashes = False  # Prevent 308 redirects that break CORS
 
 # Fix for running behind proxy (PythonAnywhere) - ensures correct URL generation
