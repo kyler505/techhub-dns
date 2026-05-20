@@ -224,7 +224,7 @@ export default function OrderQAPage() {
                     )}
                     {isParentPartialLeg && (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                            This is the remainder parent leg. QA is only allowed on the picked child leg.
+                            This is the remainder parent leg. QA can be completed here as a separate delivery order.
                         </div>
                     )}
                 </div>
@@ -334,9 +334,9 @@ export default function OrderQAPage() {
                             <button
                                 type="button"
                                 onClick={submitQA}
-                                disabled={submitQaMutation.isPending || !isFormComplete(form) || isParentPartialLeg}
+                                disabled={submitQaMutation.isPending || !isFormComplete(form)}
                                 className={`rounded-2xl px-5 py-2 text-sm font-semibold transition-colors ${
-                                    submitQaMutation.isPending || !isFormComplete(form) || isParentPartialLeg
+                                    submitQaMutation.isPending || !isFormComplete(form)
                                         ? "bg-muted text-muted-foreground/70 cursor-not-allowed"
                                         : "bg-primary text-primary-foreground hover:bg-maroon-800 hover:text-white"
                                 }`}

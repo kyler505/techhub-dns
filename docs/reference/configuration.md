@@ -20,9 +20,13 @@
 | `SAML_IDP_CERT_PATH` | Path to IdP certificate |
 | `SAML_SP_ENTITY_ID` | Service provider entity ID |
 | `SAML_ACS_URL` | Assertion consumer service URL |
-| `AZURE_TENANT_ID` | Azure AD tenant ID |
-| `AZURE_CLIENT_ID` | Service principal client ID |
-| `AZURE_CLIENT_SECRET` | Service principal secret |
+| `DEV_AUTH_BYPASS` | Development-only auth bypass that synthesizes a local user/session instead of using TAMU SSO |
+| `DEV_AUTH_EMAIL` | Email for the synthetic local dev user |
+| `DEV_AUTH_DISPLAY_NAME` | Display name for the synthetic local dev user |
+| `DEV_AUTH_DEPARTMENT` | Optional department label for the synthetic local dev user |
+| `AZURE_TENANT_ID` | Azure AD tenant ID used for Graph access and interactive login |
+| `AZURE_CLIENT_ID` | Azure app client ID used for Graph access and interactive login |
+| `AZURE_CLIENT_SECRET` | Azure app client secret used for Graph access and interactive login |
 
 ## Admin Authorization
 
@@ -68,4 +72,4 @@ These endpoints are intended for the Admin UI (Flow + Database tabs) and are alw
 | Variable | Description |
 |----------|-------------|
 | `FLASK_ENV` | Environment (development/production) |
-| `FRONTEND_URL` | Frontend URL for CORS |
+| `FRONTEND_URL` | Browser-facing frontend origin for CORS and OIDC redirect URIs |

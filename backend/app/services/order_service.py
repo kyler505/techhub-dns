@@ -2,6 +2,7 @@ import re
 import json
 import logging
 import shutil
+from copy import deepcopy
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,12 +50,36 @@ logger = logging.getLogger(__name__)
 
 
 class OrderService:
+    VIDI_CUSTOM1_OVERRIDE = "TAMU - College of Veterinary Medicine"
+    ZACH_CONTACT_OVERRIDE = "TAKODA POWELL"
+
     def __init__(self, db: Session):
         self.db = db
 
     @staticmethod
     def _as_dict(value: Any) -> Dict[str, Any]:
         return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _preserve_partial_split_inflow_snapshot(
+        existing_order: Order,
+        inflow_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Merge a fresh InFlow snapshot without destroying locally split leg item sets."""
+        merged = dict(inflow_data or {})
+        if (
+            existing_order.parent_order_id
+            or existing_order.remainder_order_id
+            or existing_order.has_remainder
+        ):
+            current_snapshot = dict(existing_order.inflow_data or {})
+            # Preserve the split leg item set, but let fresh pick/pack/ship state
+            # flow through so remainder legs can unblock once the remaining items
+            # are actually picked.
+            for field in ("lines", "subtotal", "total"):
+                if field in current_snapshot:
+                    merged[field] = deepcopy(current_snapshot.get(field))
+        return merged
 
     def _requires_asset_tags(self, order: Order) -> bool:
         if not SystemSettingService.is_setting_enabled(
@@ -68,6 +93,43 @@ class OrderService:
         from app.services.inflow_service import InflowService
 
         return InflowService().requires_asset_tags(order.inflow_data)
+
+    def _apply_delivery_location_overrides(
+        self, inflow_data: Dict[str, Any], delivery_location: str
+    ) -> str:
+        contact_name = inflow_data.get("contactName")
+        shipping_addr_obj = self._as_dict(inflow_data.get("shippingAddress"))
+        address1 = shipping_addr_obj.get("address1", "")
+        address2 = shipping_addr_obj.get("address2", "")
+        shipping_parts = [part for part in [address1, address2] if part]
+        shipping_address = " ".join(shipping_parts) if shipping_parts else address1
+        custom_fields = self._as_dict(inflow_data.get("customFields"))
+        custom1 = custom_fields.get("custom1")
+
+        if (
+            isinstance(contact_name, str)
+            and contact_name.strip().upper() == self.ZACH_CONTACT_OVERRIDE
+            and delivery_location in {address1, address2, shipping_address, ""}
+            and delivery_location != "ZACH"
+        ):
+            logger.info(
+                "Overriding delivery_location to 'ZACH' based on contactName='%s'",
+                contact_name,
+            )
+            return "ZACH"
+
+        if (
+            isinstance(custom1, str)
+            and custom1.strip() == self.VIDI_CUSTOM1_OVERRIDE
+            and delivery_location != "VIDI"
+        ):
+            logger.info(
+                "Overriding delivery_location to 'VIDI' based on customFields.custom1='%s'",
+                custom1,
+            )
+            return "VIDI"
+
+        return delivery_location
 
     @staticmethod
     def _normalize_stale_timestamp(value: datetime) -> datetime:
@@ -140,6 +202,76 @@ class OrderService:
             missing_steps.append("qa")
 
         return missing_steps
+
+    def _parent_remainder_has_unpicked_items(self, order: Order) -> bool:
+        """Return True when a remainder parent leg is still waiting on item pickup."""
+        pick_status = self._get_active_remainder_pick_status(
+            order, warning_context="remainder leg"
+        )
+        if not pick_status:
+            return False
+
+        total_ordered = float(pick_status.get("total_ordered", 0) or 0)
+        total_picked = float(pick_status.get("total_picked", 0) or 0)
+        return total_ordered > 0 and total_picked < total_ordered
+
+    def _parent_remainder_can_generate_picklist(self, order: Order) -> bool:
+        """Return True when an active remainder leg has picked items that can be split off again."""
+        pick_status = self._get_active_remainder_pick_status(
+            order, warning_context="recursive remainder split"
+        )
+        if not pick_status:
+            return False
+
+        total_ordered = float(pick_status.get("total_ordered", 0) or 0)
+        total_picked = float(pick_status.get("total_picked", 0) or 0)
+        return total_ordered > 0 and 0 < total_picked < total_ordered
+
+    def _get_active_remainder_pick_status(
+        self, order: Order, *, warning_context: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the current pick status for an active remainder leg, if any."""
+        if not getattr(order, "remainder_order_id", None) or getattr(
+            order, "parent_order_id", None
+        ):
+            return None
+
+        if not order.inflow_data:
+            return None
+
+        from app.services.inflow_service import InflowService
+        from app.services.order_splitting import OrderSplittingService
+
+        pick_status_source = OrderSplittingService(
+            self.db
+        ).build_parent_remainder_pick_status_source(order)
+        if not pick_status_source:
+            return None
+
+        try:
+            return InflowService().get_pick_status(pick_status_source)
+        except Exception as exc:
+            logger.warning(
+                "Failed to compute pick status for %s %s: %s",
+                warning_context,
+                order.inflow_order_id,
+                exc,
+            )
+            return None
+
+    def _ensure_remainder_leg_ready(self, order: Order, action: str) -> None:
+        """Block prep actions on remainder parent legs until their items are picked."""
+        if not self._parent_remainder_has_unpicked_items(order):
+            return
+
+        raise ValidationError(
+            "This remainder leg still has items waiting to be picked. "
+            f"Finish picking the remaining items before you can {action}.",
+            details={
+                "order_id": order.inflow_order_id,
+                "remainder_order_id": order.remainder_order_id,
+            },
+        )
 
     def _is_shipping_order(self, order: Order) -> bool:
         """Determine if an order is a shipping order (not local delivery)"""
@@ -274,6 +406,7 @@ class OrderService:
         if not order:
             raise NotFoundError("Order", str(order_id))
 
+        self._ensure_remainder_leg_ready(order, "send the order details email")
         return self._send_order_details_email(order, generated_by)
 
     def mark_asset_tagged(
@@ -289,6 +422,7 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
+        self._ensure_remainder_leg_ready(order, "tag assets")
 
         tag_data = dict(order.tag_data or {})
         tag_data["tag_ids"] = tag_ids
@@ -344,6 +478,8 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
+        if not self._parent_remainder_can_generate_picklist(order):
+            self._ensure_remainder_leg_ready(order, "generate the picklist")
 
         if not order.inflow_data:
             raise ValidationError("Order must have inFlow data to generate picklist")
@@ -368,7 +504,7 @@ class OrderService:
             and pick_status.get("total_picked", 0) < pick_status.get("total_ordered", 0)
         )
 
-        if is_partial_order and not order.parent_order_id and not order.remainder_order_id:
+        if is_partial_order and not order.parent_order_id:
             # For a partially picked parent, create or resolve the child leg first.
             # The child leg is the one that should receive the generated picklist,
             # Order Details email, and downstream QA/status timestamps.
@@ -386,10 +522,6 @@ class OrderService:
                 )
                 if split_order is not None:
                     order = split_order
-                    if not order.parent_order_id and order.remainder_order_id:
-                        child_order = self.get_order_by_id(order.remainder_order_id)
-                        if child_order is not None:
-                            order = child_order
 
         # Enforce that the user generating the picklist is the same user who tagged the assets,
         # unless one of them is missing (legacy data).
@@ -423,7 +555,7 @@ class OrderService:
         filename = f"{order.inflow_order_id or order.id}.pdf"
         document_inflow_data = order.inflow_data
         if getattr(order, "remainder_order_id", None) and not getattr(order, "parent_order_id", None):
-            remainder_view = OrderSplittingService(self.db).build_parent_remainder_document_view(order)
+            remainder_view = OrderSplittingService(self.db).build_parent_remainder_picklist_view(order)
             if remainder_view is not None:
                 document_inflow_data = remainder_view
 
@@ -481,16 +613,6 @@ class OrderService:
                 order,
                 trigger_source="automatic",
                 requested_by=generated_by_display or generated_by,
-            )
-
-        queued_print_job = None
-        if is_first_picklist and SystemSettingService.get_setting(
-            self.db, SETTING_PICKLIST_AUTO_PRINT_ENABLED
-        ).lower() in {"true", "1", "yes", "on"}:
-            queued_print_job = PrintJobService(self.db).enqueue_picklist_print(
-                order,
-                trigger_source="automatic",
-                requested_by=generated_by,
             )
 
         self.db.commit()
@@ -574,15 +696,11 @@ class OrderService:
             raise NotFoundError("Order", str(order_id))
 
         self.assert_not_stale(order, expected_updated_at)
+        self._ensure_remainder_leg_ready(order, "complete QA")
 
         if not order.picklist_generated_at:
             raise ValidationError(
                 "Picklist must be generated before QA can be completed"
-            )
-
-        if order.remainder_order_id and not order.parent_order_id:
-            raise ValidationError(
-                "Parent legs cannot be submitted for QA until the partial child leg is picked."
             )
 
         # Inject authenticated technician into QA data if provided
@@ -671,21 +789,6 @@ class OrderService:
         except Exception as e:
             logger.error(f"SharePoint upload failed for QA: {e}")
             raise  # Fail fast
-
-        # Upload to SharePoint if enabled
-        qa_path = str(qa_file)
-        try:
-            from app.services.sharepoint_service import get_sharepoint_service
-
-            sp_service = get_sharepoint_service()
-            if sp_service.is_enabled:
-                sp_url = sp_service.upload_json(qa_payload, "qa", qa_filename)
-                qa_path = sp_url
-                logger.info(f"QA data uploaded to SharePoint: {sp_url}")
-        except Exception as e:
-            logger.warning(
-                f"SharePoint upload failed for QA data, using local path: {e}"
-            )
 
         # Update order object (BUT DO NOT COMMIT YET to keep transition atomic)
         order.qa_completed_at = datetime.utcnow()
@@ -1487,7 +1590,10 @@ class OrderService:
         shipping_address_obj = self._as_dict(inflow_data.get("shippingAddress"))
         email = inflow_data.get("email", "")
 
-        existing_order.inflow_data = inflow_data
+        existing_order.inflow_data = self._preserve_partial_split_inflow_snapshot(
+            existing_order,
+            inflow_data,
+        )
         existing_order.delivery_location = delivery_location
         existing_order.order_remarks = order_remarks
         existing_order.shipping_address = shipping_address_obj.get("address1", "")
@@ -1813,16 +1919,22 @@ class OrderService:
                 f"Using city as delivery_location for shipping order {order_number}: '{delivery_location}'"
             )
 
-        # Check if order exists — prefer sales_order_id (stable) over order_number (may change)
+        delivery_location = self._apply_delivery_location_overrides(
+            inflow_data, delivery_location
+        )
+
+        # Check if order exists.
+        # Prefer an exact inFlow order number match first so split parent/child
+        # legs that share the same salesOrderId do not get updated ambiguously.
         sales_order_id = inflow_data.get("salesOrderId")
-        existing = None
-        if sales_order_id:
+        existing = (
+            self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+        )
+        if not existing and sales_order_id:
             existing = (
-                self.db.query(Order).filter(Order.inflow_sales_order_id == sales_order_id).first()
-            )
-        if not existing:
-            existing = (
-                self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
+                self.db.query(Order)
+                .filter(Order.inflow_sales_order_id == sales_order_id)
+                .first()
             )
 
         if existing:
@@ -1855,7 +1967,10 @@ class OrderService:
             if data_changed:
                 existing.updated_at = datetime.utcnow()
 
-            existing.inflow_data = inflow_data  # Always update to keep latest data
+            existing.inflow_data = self._preserve_partial_split_inflow_snapshot(
+                existing,
+                inflow_data,
+            )  # Always update to keep latest data without clobbering partial splits
 
             # Don't overwrite manual status changes - keep existing status
 
@@ -1951,7 +2066,10 @@ class OrderService:
                 # Another request created it — fetch and update instead
                 existing = self.db.query(Order).filter(Order.inflow_order_id == order_number).first()
                 if existing:
-                    existing.inflow_data = inflow_data
+                    existing.inflow_data = self._preserve_partial_split_inflow_snapshot(
+                        existing,
+                        inflow_data,
+                    )
                     existing.updated_at = datetime.utcnow()
                     self.db.commit()
                     self.db.refresh(existing)

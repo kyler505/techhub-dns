@@ -67,9 +67,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = () => {
-        // Redirect to SAML login endpoint
-        // The backend will redirect to TAMU SSO
-        window.location.href = '/auth/saml/login?next=' + encodeURIComponent(window.location.pathname);
+        const returnTo = (() => {
+            if (typeof window === 'undefined') {
+                return '/';
+            }
+
+            try {
+                const storedReturnTo = window.sessionStorage.getItem('auth:returnTo') ?? '';
+                if (storedReturnTo) {
+                    return storedReturnTo;
+                }
+            } catch (_error) {
+                // Ignore storage access failures and fall back to the current URL.
+            }
+
+            return `${window.location.pathname}${window.location.search}${window.location.hash}` || '/';
+        })();
+
+        // Redirect to the backend login endpoint.
+        window.location.href = '/auth/login?next=' + encodeURIComponent(returnTo);
     };
 
     const logout = async () => {

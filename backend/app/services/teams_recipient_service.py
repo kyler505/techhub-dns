@@ -164,6 +164,24 @@ class TeamsRecipientService:
         return group_scope, recipient_email
 
     @staticmethod
+    def _resolve_delivery_runner(order, email_to_display: Dict[str, str]) -> str:
+        assigned = (getattr(order, "assigned_deliverer", None) or "").strip()
+        if assigned:
+            if "@" in assigned:
+                return email_to_display.get(assigned, assigned)
+            return assigned
+
+        delivery_run = getattr(order, "delivery_run", None)
+        if delivery_run is not None:
+            runner = (getattr(delivery_run, "runner", None) or "").strip()
+            if runner:
+                if "@" in runner:
+                    return email_to_display.get(runner, runner)
+                return runner
+
+        return "TechHub Staff"
+
+    @staticmethod
     def _collect_item_names(orders: List) -> List[str]:
         item_names: List[str] = []
         for order in orders:
@@ -225,11 +243,17 @@ class TeamsRecipientService:
 
         def _notify_task():
             # Batch fetch display names for deliverers with email addresses
-            deliverer_emails = {
-                order.assigned_deliverer
-                for order in orders
-                if order.assigned_deliverer and "@" in order.assigned_deliverer
-            }
+            deliverer_emails = set()
+            for order in orders:
+                assigned = (getattr(order, "assigned_deliverer", None) or "").strip()
+                if assigned and "@" in assigned:
+                    deliverer_emails.add(assigned)
+
+                delivery_run = getattr(order, "delivery_run", None)
+                runner = (getattr(delivery_run, "runner", None) or "").strip() if delivery_run else ""
+                if runner and "@" in runner:
+                    deliverer_emails.add(runner)
+
             email_to_display = {}
             if deliverer_emails:
                 db = get_db_session()
@@ -278,14 +302,10 @@ class TeamsRecipientService:
                             str(getattr(grouped[0], "inflow_order_id", "")).strip() or "UNKNOWN"
                         ]
 
-                    assigned = grouped[0].assigned_deliverer
-                    if assigned:
-                        if "@" in assigned:
-                            delivery_runner = email_to_display.get(assigned, assigned)
-                        else:
-                            delivery_runner = assigned
-                    else:
-                        delivery_runner = "TechHub Staff"
+                    delivery_runner = self._resolve_delivery_runner(
+                        grouped[0],
+                        email_to_display,
+                    )
 
                     recipient_name = grouped[0].recipient_name or "TechHub User"
                     success = self.send_delivery_notification(

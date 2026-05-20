@@ -24,7 +24,12 @@ import {
   TableRow,
 } from "./ui/table";
 import { formatToCentralTime } from "../utils/timezone";
-import { getOrderProductTableView, getPartialOrderInfo } from "../utils/orderPartial";
+import {
+  canGeneratePicklist as canGeneratePicklistForOrder,
+  getOrderProductTableView,
+  getPartialOrderInfo,
+  isActiveRemainderLegWaitingOnPickup,
+} from "../utils/orderPartial";
 import {
   AuditLog,
   OrderDetail as OrderDetailType,
@@ -84,8 +89,14 @@ export default function OrderDetail({
   const partialOrderInfo = getPartialOrderInfo(order);
   const productTableView = getOrderProductTableView(order);
   const isPartialLeg = partialOrderInfo.isPartialLeg;
-  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !partialOrderInfo.hasRemainder;
+  const remainderLegWaitingOnPickup = isActiveRemainderLegWaitingOnPickup(order);
+  const recursiveSplitEligible =
+    partialOrderInfo.hasRemainder &&
+    partialOrderInfo.totalPicked > 0 &&
+    partialOrderInfo.missingItems.length > 0;
+  const shouldConfirmPartialPicklist = partialOrderInfo.isPartial && !isPartialLeg;
   const assetTagRequired = order.asset_tag_required !== false;
+  const canGeneratePicklist = canGeneratePicklistForOrder(order);
 
   const requestSentAt =
     order.tag_data?.canopyorders_request_sent_at || order.tag_data?.tag_request_sent_at;
@@ -96,7 +107,8 @@ export default function OrderDetail({
     assetTagRequired &&
     order.status === OrderStatus.PICKED &&
     !order.tagged_at &&
-    Boolean(order.inflow_order_id);
+    Boolean(order.inflow_order_id) &&
+    !remainderLegWaitingOnPickup;
 
 
 
@@ -336,6 +348,13 @@ export default function OrderDetail({
                         </div>
                       ) : null}
                     </div>
+                    {remainderLegWaitingOnPickup ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        {recursiveSplitEligible
+                          ? "This remainder leg still has picked items. Asset tagging and order details stay blocked until the remainder is fully picked, but you can generate another picklist to split off the picked subset."
+                          : "This remainder leg is waiting on the remaining items to be picked. Asset tagging, picklist generation, and order details are blocked until that happens."}
+                      </div>
+                    ) : null}
                     {partialOrderInfo.missingItems.length > 0 ? (
                       <details className="group">
                         <summary className="cursor-pointer select-none text-sm font-medium text-foreground">
@@ -397,7 +416,7 @@ export default function OrderDetail({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {assetTagRequired && !order.tagged_at && order.status === OrderStatus.PICKED && (
+                {assetTagRequired && !order.tagged_at && order.status === OrderStatus.PICKED && !remainderLegWaitingOnPickup && (
                   <Button
                     onClick={() => setRequestTagsConfirmOpen(true)}
                     disabled={!canRequestTags || requestingTags}
@@ -406,7 +425,7 @@ export default function OrderDetail({
                     {requestingTags ? "Requesting..." : "Request Tags"}
                   </Button>
                 )}
-                {assetTagRequired && !order.tagged_at && requestSent && (
+                {assetTagRequired && !order.tagged_at && requestSent && !remainderLegWaitingOnPickup && (
                   <Button
                     onClick={() => setTagPrintedDialogOpen(true)}
                     variant="secondary"
@@ -447,22 +466,22 @@ export default function OrderDetail({
                   </div>
                 )}
               </div>
-              <Button
-                onClick={() => {
-                  if (shouldConfirmPartialPicklist) {
-                    setPartialConfirmOpen(true);
-                    return;
+                <Button
+                  onClick={() => {
+                    if (shouldConfirmPartialPicklist) {
+                      setPartialConfirmOpen(true);
+                      return;
+                    }
+                    void handleGeneratePicklist();
+                  }}
+                  disabled={
+                    generatingPicklist ||
+                    partialConfirmSubmitting ||
+                    !canGeneratePicklist ||
+                    (remainderLegWaitingOnPickup && !recursiveSplitEligible)
                   }
-                  void handleGeneratePicklist();
-                }}
-                disabled={
-                  generatingPicklist ||
-                  partialConfirmSubmitting ||
-                  (assetTagRequired && !order.tagged_at) ||
-                  Boolean(order.picklist_generated_at)
-                }
-                size="sm"
-              >
+                  size="sm"
+                >
                 {order.picklist_generated_at
                   ? "Generated"
                   : generatingPicklist || partialConfirmSubmitting
@@ -720,7 +739,9 @@ export default function OrderDetail({
               Create picked leg?
             </DialogTitle>
             <DialogDescription>
-              This order is partially picked ({partialOrderInfo.totalPicked}/{partialOrderInfo.totalOrdered} items). Generating the picklist will create the picked leg and keep the original as the remainder leg.
+              {recursiveSplitEligible
+                ? `This remainder leg already has picked items (${partialOrderInfo.totalPicked}/${partialOrderInfo.totalOrdered}). Generating the picklist will create another picked leg and keep the original as the remainder leg.`
+                : `This order is partially picked (${partialOrderInfo.totalPicked}/${partialOrderInfo.totalOrdered} items). Generating the picklist will create the picked leg and keep the original as the remainder leg.`}
             </DialogDescription>
           </DialogHeader>
 

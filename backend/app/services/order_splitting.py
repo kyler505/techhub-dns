@@ -1,14 +1,16 @@
 """
 Order Splitting Service for handling partial pick remainder orders.
 
-When a partial pick order is delivered, this service creates a local remainder
-order to track the unpicked items, linking back to the same InFlow sales order.
+The active workflow splits a partial order into separate picked and remainder
+legs when the picklist is generated, then keeps those local legs in sync with
+later InFlow refreshes.
 """
 import logging
+import re
 import uuid
 from copy import deepcopy
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Optional, Dict, Any, Tuple, List, Literal
 
 from sqlalchemy.orm import Session
 
@@ -16,12 +18,13 @@ from app.models.order import Order, OrderStatus
 from app.models.audit_log import AuditLog
 from app.services.inflow_service import InflowService
 from app.services.audit_service import AuditService
+from app.utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
 
 class OrderSplittingService:
-    """Service for splitting partial pick orders into remainder orders."""
+    """Service for splitting partial pick orders into picked and remainder legs."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -197,52 +200,265 @@ class OrderSplittingService:
 
         return deepcopy(original_order.inflow_data)
 
-    def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
-        """Build the remainder-only document snapshot for a parent partial leg."""
+    def _subtract_lines(
+        self,
+        source_lines: List[Dict[str, Any]],
+        subtract_lines: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Subtract one line set from another by product and quantity."""
+        subtract_quantities: Dict[str, float] = {}
+        subtract_serials: Dict[str, List[str]] = {}
+
+        for line in subtract_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+            product_key = str(product_id)
+            subtract_quantities[product_key] = subtract_quantities.get(product_key, 0.0) + self._parse_standard_quantity(
+                line.get("quantity")
+            )
+            serial_numbers = line.get("quantity", {}).get("serialNumbers", []) or []
+            if serial_numbers:
+                subtract_serials.setdefault(product_key, []).extend(
+                    str(serial_number)
+                    for serial_number in serial_numbers
+                    if serial_number is not None
+                )
+
+        remaining_lines: List[Dict[str, Any]] = []
+        remaining_subtract_quantities = dict(subtract_quantities)
+
+        for line in source_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+
+            product_key = str(product_id)
+            copied_line = deepcopy(line)
+            quantity_data = dict(copied_line.get("quantity") or {})
+            line_quantity = self._parse_standard_quantity(quantity_data)
+            serial_numbers = [
+                str(serial_number)
+                for serial_number in (quantity_data.get("serialNumbers", []) or [])
+                if serial_number is not None
+            ]
+
+            if serial_numbers and subtract_serials.get(product_key):
+                remaining_serials = list(serial_numbers)
+                for serial_number in subtract_serials[product_key]:
+                    if serial_number in remaining_serials:
+                        remaining_serials.remove(serial_number)
+                if not remaining_serials:
+                    continue
+                quantity_data["serialNumbers"] = remaining_serials
+                quantity_data["standardQuantity"] = float(len(remaining_serials))
+                copied_line["quantity"] = quantity_data
+                remaining_lines.append(copied_line)
+                continue
+
+            subtract_quantity = remaining_subtract_quantities.get(product_key, 0.0)
+            remaining_quantity = line_quantity - subtract_quantity
+            if remaining_quantity <= 0.0001:
+                remaining_subtract_quantities[product_key] = max(-remaining_quantity, 0.0)
+                continue
+
+            quantity_data["standardQuantity"] = remaining_quantity
+            copied_line["quantity"] = quantity_data
+            remaining_lines.append(copied_line)
+            remaining_subtract_quantities[product_key] = 0.0
+
+        return remaining_lines
+
+    def _restrict_lines_to_source(
+        self,
+        candidate_lines: List[Dict[str, Any]],
+        allowed_lines: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Limit candidate lines to the quantities/serials available on the allowed line set."""
+        allowed_quantities: Dict[str, float] = {}
+        allowed_serials: Dict[str, List[str]] = {}
+
+        for line in allowed_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+            product_key = str(product_id)
+            allowed_quantities[product_key] = allowed_quantities.get(product_key, 0.0) + self._parse_standard_quantity(
+                line.get("quantity")
+            )
+            serial_numbers = line.get("quantity", {}).get("serialNumbers", []) or []
+            if serial_numbers:
+                allowed_serials.setdefault(product_key, []).extend(
+                    str(serial_number)
+                    for serial_number in serial_numbers
+                    if serial_number is not None
+                )
+
+        restricted_lines: List[Dict[str, Any]] = []
+
+        for line in candidate_lines:
+            if not isinstance(line, dict):
+                continue
+            product_id = line.get("productId")
+            if not product_id:
+                continue
+
+            product_key = str(product_id)
+            available_quantity = allowed_quantities.get(product_key, 0.0)
+            if available_quantity <= 0.0001:
+                continue
+
+            copied_line = deepcopy(line)
+            quantity_data = dict(copied_line.get("quantity") or {})
+            serial_numbers = [
+                str(serial_number)
+                for serial_number in (quantity_data.get("serialNumbers", []) or [])
+                if serial_number is not None
+            ]
+
+            if serial_numbers and allowed_serials.get(product_key):
+                remaining_allowed_serials = allowed_serials[product_key]
+                matched_serials: List[str] = []
+                for serial_number in serial_numbers:
+                    if serial_number in remaining_allowed_serials:
+                        matched_serials.append(serial_number)
+                        remaining_allowed_serials.remove(serial_number)
+                if not matched_serials:
+                    continue
+                quantity_data["serialNumbers"] = matched_serials
+                quantity_data["standardQuantity"] = float(len(matched_serials))
+                copied_line["quantity"] = quantity_data
+                restricted_lines.append(copied_line)
+                allowed_quantities[product_key] = max(
+                    available_quantity - float(len(matched_serials)),
+                    0.0,
+                )
+                continue
+
+            line_quantity = self._parse_standard_quantity(quantity_data)
+            restricted_quantity = min(line_quantity, available_quantity)
+            if restricted_quantity <= 0.0001:
+                continue
+
+            quantity_data["standardQuantity"] = restricted_quantity
+            copied_line["quantity"] = quantity_data
+            restricted_lines.append(copied_line)
+            allowed_quantities[product_key] = max(
+                available_quantity - restricted_quantity,
+                0.0,
+            )
+
+        return restricted_lines
+
+    def _next_partial_child_order_id(self, original_order: Order) -> str:
+        """Return the next recursive picked-leg order number for a remainder row."""
+        base_order_id = str(original_order.inflow_order_id or "").strip()
+        if not base_order_id:
+            raise ValidationError(
+                "Partial child order generation requires a base inflow order number"
+            )
+        prefix = f"{base_order_id}-P"
+        pattern = re.compile(rf"^{re.escape(prefix)}(?:(\d+))?$", re.IGNORECASE)
+
+        highest_suffix = 0
+        child_order_ids = (
+            self.db.query(Order.inflow_order_id)
+            .filter(Order.parent_order_id == original_order.id)
+            .filter(Order.inflow_order_id.ilike(f"{prefix}%"))
+            .all()
+        )
+
+        for (child_order_id,) in child_order_ids:
+            if not child_order_id:
+                continue
+            match = pattern.match(str(child_order_id).strip())
+            if not match:
+                continue
+            suffix_text = match.group(1)
+            suffix = int(suffix_text) if suffix_text else 1
+            highest_suffix = max(highest_suffix, suffix)
+
+        next_suffix = highest_suffix + 1
+        return prefix if next_suffix == 1 else f"{prefix}{next_suffix}"
+
+    def _build_parent_remainder_assigned_view(
+        self,
+        original_order: Order,
+        pick_lines_mode: Literal["stored", "lines"] = "stored",
+    ) -> Optional[Dict[str, Any]]:
+        """Build the remainder-leg item set for a parent order after a partial split."""
         remainder_source = self._get_partial_remainder_source(original_order)
         if not remainder_source:
             return None
 
-        remaining_lines, _ = self.get_remainder_items(remainder_source)
-        document_view = deepcopy(original_order.inflow_data or {})
-        document_view["lines"] = remaining_lines
-        document_view["pickLines"] = deepcopy(remaining_lines)
-        document_view["packLines"] = []
-        document_view["shipLines"] = []
-        document_view["subtotal"] = sum(
-            (float(line.get("unitPrice") or 0) if isinstance(line, dict) else 0.0)
-            * self._parse_standard_quantity(line.get("quantity") if isinstance(line, dict) else 0)
-            for line in remaining_lines
+        assigned_view = deepcopy(remainder_source)
+        source_lines = [
+            line
+            for line in assigned_view.get("lines", [])
             if isinstance(line, dict)
-        )
-        document_view["total"] = document_view["subtotal"]
-        return document_view
+        ]
+        if not source_lines:
+            assigned_view["lines"] = []
+            assigned_view["pickLines"] = []
+            assigned_view["packLines"] = []
+            assigned_view["shipLines"] = []
+            assigned_view["subtotal"] = 0.0
+            assigned_view["total"] = 0.0
+            return assigned_view
+
+        normalized_lines: List[Dict[str, Any]] = []
+        subtotal = 0.0
+
+        for line in source_lines:
+            copied_line = deepcopy(line)
+            quantity_data = dict(copied_line.get("quantity") or {})
+            quantity_value = self._parse_standard_quantity(quantity_data)
+            quantity_data["standardQuantity"] = quantity_value
+            copied_line["quantity"] = quantity_data
+            raw_price = copied_line.get("unitPrice")
+            try:
+                unit_price = float(raw_price or 0)
+            except (TypeError, ValueError):
+                unit_price = 0.0
+            subtotal += unit_price * quantity_value
+            normalized_lines.append(copied_line)
+
+        assigned_view["lines"] = normalized_lines
+        if pick_lines_mode == "lines":
+            assigned_view["pickLines"] = deepcopy(normalized_lines)
+        else:
+            stored_pick_lines = [
+                line
+                for line in assigned_view.get("pickLines", [])
+                if isinstance(line, dict)
+            ]
+            assigned_view["pickLines"] = self._restrict_lines_to_source(
+                stored_pick_lines,
+                normalized_lines,
+            )
+        assigned_view["packLines"] = []
+        assigned_view["shipLines"] = []
+        assigned_view["subtotal"] = subtotal
+        assigned_view["total"] = subtotal
+        return assigned_view
+
+    def build_parent_remainder_document_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the remainder-only document snapshot for a parent partial leg."""
+        return self._build_parent_remainder_assigned_view(original_order, pick_lines_mode="stored")
 
     def build_parent_remainder_pick_status_source(self, original_order: Order) -> Optional[Dict[str, Any]]:
         """Build the pick-status snapshot for a parent partial leg."""
-        return self._get_partial_remainder_source(original_order)
+        return self._build_parent_remainder_assigned_view(original_order, pick_lines_mode="stored")
 
-    def should_create_remainder(self, order: Order) -> bool:
-        """
-        Check if a remainder order should be created for this order.
-
-        Returns True if:
-        - Order has inflow_data
-        - Order is not already a remainder (doesn't have -R suffix)
-        - Order has items that weren't fully picked
-        """
-        if not order.inflow_data:
-            return False
-
-        if order.parent_order_id or order.has_remainder or order.remainder_order_id:
-            return False
-
-        # Don't create remainder for remainder orders
-        if order.inflow_order_id and order.inflow_order_id.endswith("-R"):
-            return False
-
-        pick_status = self.inflow_service.get_pick_status(order.inflow_data)
-        return not pick_status.get("is_fully_picked", True)
+    def build_parent_remainder_picklist_view(self, original_order: Order) -> Optional[Dict[str, Any]]:
+        """Build the picklist payload for a parent remainder leg."""
+        return self._build_parent_remainder_assigned_view(original_order, pick_lines_mode="lines")
 
     def create_partial_picklist_leg(
         self, original_order: Order, user_id: Optional[str] = None
@@ -254,45 +470,11 @@ class OrderSplittingService:
         if original_order.parent_order_id:
             return original_order
 
-        if original_order.remainder_order_id:
-            existing = (
-                self.db.query(Order)
-                .filter(Order.id == original_order.remainder_order_id)
-                .first()
-            )
-            if existing:
-                original_order.has_remainder = "Y"
-                remainder_leg_state = self._build_remainder_leg_state(original_order.inflow_data)
-                if remainder_leg_state is not None and original_order.inflow_data != remainder_leg_state:
-                    original_order.inflow_data = remainder_leg_state
-                    original_order.updated_at = datetime.utcnow()
-                    self.db.commit()
-                    self.db.refresh(original_order)
-                logger.info(
-                    "Partial leg already exists for %s; keeping parent %s active",
-                    original_order.inflow_order_id,
-                    original_order.id,
-                )
-                original_order.updated_at = datetime.utcnow()
-                self.db.commit()
-                self.db.refresh(original_order)
-                return existing
-
         pick_status = self.inflow_service.get_pick_status(original_order.inflow_data)
         if pick_status.get("is_fully_picked", True):
             return None
 
-        leg_order_id = f"{original_order.inflow_order_id}-P"
-        existing = (
-            self.db.query(Order).filter(Order.inflow_order_id == leg_order_id).first()
-        )
-        if existing:
-            original_order.has_remainder = "Y"
-            original_order.remainder_order_id = existing.id
-            original_order.updated_at = datetime.utcnow()
-            self.db.commit()
-            self.db.refresh(existing)
-            return existing
+        leg_order_id = self._next_partial_child_order_id(original_order)
 
         picked_leg_inflow_data = self._build_partial_leg_view(original_order.inflow_data)
         remainder_leg_state = self._build_remainder_leg_state(original_order.inflow_data)
@@ -366,169 +548,3 @@ class OrderSplittingService:
             original_order.inflow_order_id,
         )
         return child_order
-
-    def create_remainder_order(
-        self,
-        original_order: Order,
-        user_id: Optional[str] = None
-    ) -> Optional[Order]:
-        """
-        Create a remainder order for unpicked items from a partial pick order.
-
-        Args:
-            original_order: The original order that was partially picked
-            user_id: User who triggered the creation
-
-        Returns:
-            The newly created remainder order, or None if no remainder needed
-        """
-        # Check if remainder already exists
-        remainder_order_id = f"{original_order.inflow_order_id}-R"
-        existing = self.db.query(Order).filter(
-            Order.inflow_order_id == remainder_order_id
-        ).first()
-
-        if existing:
-            logger.info(f"Remainder order {remainder_order_id} already exists")
-            return existing
-
-        if not self.should_create_remainder(original_order):
-            logger.info(f"No remainder needed for order {original_order.inflow_order_id}")
-            return None
-
-        # Get remaining items
-        remaining_lines, _ = self.get_remainder_items(original_order.inflow_data)
-        if not remaining_lines:
-            return None
-
-        # Create modified inflow_data with only remaining items
-        remainder_inflow_data = deepcopy(original_order.inflow_data)
-        remainder_inflow_data["lines"] = remaining_lines
-        # Clear pick/pack/ship lines since this is a new order waiting for picking
-        remainder_inflow_data["pickLines"] = []
-        remainder_inflow_data["packLines"] = []
-        remainder_inflow_data["shipLines"] = []
-
-        # Create the remainder order
-        remainder_order = Order(
-            id=str(uuid.uuid4()),
-            inflow_order_id=remainder_order_id,
-            inflow_sales_order_id=original_order.inflow_sales_order_id,  # Same InFlow order!
-            recipient_name=original_order.recipient_name,
-            recipient_contact=original_order.recipient_contact,
-            delivery_location=original_order.delivery_location,
-            po_number=original_order.po_number,
-            status=OrderStatus.PICKED.value,  # Initial state awaiting more picking
-            inflow_data=remainder_inflow_data,
-            parent_order_id=str(original_order.id),  # Track the parent order
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
-
-        self.db.add(remainder_order)
-        self.db.flush()
-
-        # Create AuditLog entry for initial 'picked' status in timeline
-        audit_log = AuditLog(
-            order_id=remainder_order.id,
-            changed_by=user_id or "system",
-            from_status=None,  # No previous status - order was just created
-            to_status=OrderStatus.PICKED.value,
-            reason=f"Remainder order created from {original_order.inflow_order_id}",
-            timestamp=datetime.utcnow()
-        )
-        self.db.add(audit_log)
-
-        # Update original order to mark that it has a remainder
-        original_order.has_remainder = 'Y'
-        original_order.remainder_order_id = remainder_order.id
-        original_order.updated_at = datetime.utcnow()
-
-        # Also log to system audit log for full traceability
-        audit_service = AuditService(self.db)
-
-        # Log on original order
-        audit_service.log_action(
-            entity_type="order",
-            entity_id=str(original_order.id),
-            action="remainder_created",
-            user_id=user_id,
-            description=f"Remainder order {remainder_order_id} created for unpicked items",
-            audit_metadata={
-                "remainder_order_id": str(remainder_order.id),
-                "remaining_items_count": len(remaining_lines)
-            }
-        )
-
-        # Log on new remainder order
-        audit_service.log_action(
-            entity_type="order",
-            entity_id=str(remainder_order.id),
-            action="created_as_remainder",
-            user_id=user_id,
-            description=f"Created as remainder for order {original_order.inflow_order_id}",
-            audit_metadata={
-                "parent_order_id": str(original_order.id),
-                "parent_inflow_order_id": original_order.inflow_order_id,
-                "remaining_items_count": len(remaining_lines)
-            }
-        )
-
-        self.db.commit()
-        self.db.refresh(remainder_order)
-
-        logger.info(f"Created remainder order {remainder_order_id} with {len(remaining_lines)} items")
-        return remainder_order
-
-    def process_partial_fulfillments(
-        self,
-        orders: list[Order],
-        user_id: Optional[str] = None,
-        create_remainders: bool = True
-    ) -> Dict[str, Any]:
-        """
-        Process a batch of orders after delivery, creating remainder orders for partial picks.
-
-        Args:
-            orders: List of orders that were delivered
-            user_id: User who completed the delivery
-            create_remainders: Whether to create remainder orders (user confirmed)
-
-        Returns:
-            Summary of created remainders
-        """
-        results = {
-            "remainder_count": 0,
-            "remainders_created": [],
-            "skipped": []
-        }
-
-        if not create_remainders:
-            return results
-
-        for order in orders:
-            try:
-                remainder = self.create_remainder_order(order, user_id)
-                if remainder:
-                    results["remainder_count"] += 1
-                    results["remainders_created"].append({
-                        "original_order_id": str(order.id),
-                        "original_inflow_id": order.inflow_order_id,
-                        "remainder_order_id": str(remainder.id),
-                        "remainder_inflow_id": remainder.inflow_order_id
-                    })
-                else:
-                    results["skipped"].append({
-                        "order_id": str(order.id),
-                        "inflow_id": order.inflow_order_id,
-                        "reason": "no_remainder_needed"
-                    })
-            except Exception as e:
-                logger.error(f"Failed to create remainder for {order.inflow_order_id}: {e}")
-                results["skipped"].append({
-                    "order_id": str(order.id),
-                    "inflow_id": order.inflow_order_id,
-                    "reason": str(e)
-                })
-
-        return results

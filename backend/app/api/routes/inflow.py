@@ -38,7 +38,7 @@ def _webhook_json(status: str, message: str, http_status: int, **extra):
 
 
 def _run_inflow_sync():
-    """Background task: sync recent started orders from Inflow with batch commits."""
+    """Background task: sync recent picked orders from Inflow with batch commits."""
     from app.models.order import Order
 
     inflow_service = InflowService()
@@ -269,12 +269,12 @@ def inflow_webhook():
             if not inflow_service.is_started_and_picked(inflow_order):
                 identifier = order_number or sales_order_id or "unknown"
                 logger.info(
-                    f"Order {identifier} skipped (not 'started' status or no pickLines)"
+                    f"Order {identifier} skipped (no pickLines)"
                 )
                 return jsonify(
                     {
                         "status": "skipped",
-                        "message": "Order not in 'started' status or has no pickLines",
+                        "message": "Order has no pickLines",
                     }
                 )
 

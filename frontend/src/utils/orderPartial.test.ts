@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOrderProductTableView, getPartialOrderInfo } from "./orderPartial";
+import { canGeneratePicklist, getOrderProductTableView, getPartialOrderInfo } from "./orderPartial";
 
 describe("getPartialOrderInfo", () => {
   it("marks a child partial leg as a partial leg even when it is fully picked itself", () => {
@@ -76,5 +76,47 @@ describe("getOrderProductTableView", () => {
         serials: [],
       },
     ]);
+  });
+});
+
+describe("canGeneratePicklist", () => {
+  it("allows a normal picked order to generate a picklist", () => {
+    expect(
+      canGeneratePicklist({
+        inflow_data: {
+          lines: [{ productId: "1", quantity: { standardQuantity: 1 } }],
+          pickLines: [{ productId: "1", quantity: { standardQuantity: 1 } }],
+        },
+        asset_tag_required: false,
+      } as any),
+    ).toBe(true);
+  });
+
+  it("blocks a remainder leg that has not picked anything yet", () => {
+    expect(
+      canGeneratePicklist({
+        inflow_data: {
+          lines: [{ productId: "1", quantity: { standardQuantity: 2 } }],
+          pickLines: [],
+        },
+        has_remainder: "Y",
+        remainder_order_id: "remainder-uuid",
+        asset_tag_required: false,
+      } as any),
+    ).toBe(false);
+  });
+
+  it("allows a partially picked remainder leg to generate the next split", () => {
+    expect(
+      canGeneratePicklist({
+        inflow_data: {
+          lines: [{ productId: "1", quantity: { standardQuantity: 2 } }],
+          pickLines: [{ productId: "1", quantity: { standardQuantity: 1 } }],
+        },
+        has_remainder: "Y",
+        remainder_order_id: "remainder-uuid",
+        asset_tag_required: false,
+      } as any),
+    ).toBe(true);
   });
 });

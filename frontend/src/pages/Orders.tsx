@@ -151,21 +151,6 @@ export default function Orders() {
 
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    const handleStatusChange = (orderId: string, newStatus: OrderStatus, reason?: string) => {
-        const currentStatus = orders.find((order) => order.id === orderId)?.status;
-        if (!currentStatus) {
-            toast.error("Order status is unavailable. Reload the list and try again.");
-            return;
-        }
-
-        const requireReason = newStatus === OrderStatus.ISSUE;
-        if (requireReason && reason === undefined) {
-            setTransitioningOrder({ orderId, currentStatus, newStatus, requireReason: true });
-        } else {
-            performStatusChange(orderId, newStatus, reason);
-        }
-    };
-
     const performStatusChange = async (
         orderId: string,
         newStatus: OrderStatus,
@@ -233,7 +218,6 @@ export default function Orders() {
                             <div className={`transition-opacity duration-150 ${loading ? "opacity-90" : "opacity-100"}`}>
                                 <OrderTable
                                     orders={orders}
-                                    onStatusChange={handleStatusChange}
                                     onViewDetail={handleViewDetail}
                                     showEmptyState={false}
                                     loading={loading}

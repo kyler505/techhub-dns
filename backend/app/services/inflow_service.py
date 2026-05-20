@@ -380,15 +380,13 @@ class InflowService:
     async def sync_recent_started_orders(
         self, max_pages: int = 3, per_page: int = 100, target_matches: int = 100
     ) -> List[Dict[str, Any]]:
-        """Sync recent unfulfilled orders, filtering for 'started' status AND pickLines"""
+        """Sync recent orders that already have pickLines."""
         matches = []
 
         for page in range(max_pages):
-            orders = await self.fetch_orders(
-                inventory_status="unfulfilled", count=per_page, skip=page * per_page
-            )
+            orders = await self.fetch_orders(count=per_page, skip=page * per_page)
 
-            # Filter for 'started' status AND pickLines exist
+            # Filter for orders that already have pickLines and are ready to ingest.
             for order in orders:
                 if self.is_started_and_picked(order):
                     matches.append(order)
@@ -405,8 +403,8 @@ class InflowService:
         return str(order.get("inventoryStatus", "")).strip().lower() == "started"
 
     def is_started_and_picked(self, order: Dict[str, Any]) -> bool:
-        """Check if order has started status AND has pickLines (ready for TechHub)"""
-        return self.is_strict_started(order) and bool(order.get("pickLines"))
+        """Check if order has pickLines and should be ingested into TechHub."""
+        return bool(order.get("pickLines"))
 
     async def get_order_by_id(self, sales_order_id: str) -> Optional[Dict[str, Any]]:
         """Fetch a specific order by sales order ID (UUID)."""
@@ -1161,13 +1159,11 @@ class InflowService:
     def sync_recent_started_orders_sync(
         self, max_pages: int = 3, per_page: int = 100, target_matches: int = 100
     ) -> List[Dict[str, Any]]:
-        """Sync recent unfulfilled orders (sync version)"""
+        """Sync recent orders that already have pickLines (sync version)."""
         matches = []
 
         for page in range(max_pages):
-            orders = self.fetch_orders_sync(
-                inventory_status="unfulfilled", count=per_page, skip=page * per_page
-            )
+            orders = self.fetch_orders_sync(count=per_page, skip=page * per_page)
 
             for order in orders:
                 if self.is_started_and_picked(order):

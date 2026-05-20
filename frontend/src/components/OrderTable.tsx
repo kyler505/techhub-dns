@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
-import { Order, OrderStatus } from "../types/order";
-import StatusBadge from "./StatusBadge";
-import { Badge } from "./ui/badge";
-import { formatToCentralTime } from "../utils/timezone";
-import { formatDeliveryLocation } from "../utils/location";
-import { getPartialOrderInfo } from "../utils/orderPartial";
 import { ArrowUpDown, PackageSearch } from "lucide-react";
+import { Order } from "../types/order";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import {
     Table,
     TableBody,
@@ -14,11 +11,13 @@ import {
     TableHeader,
     TableRow,
 } from "./ui/table";
-import { Button } from "./ui/button";
+import StatusBadge from "./StatusBadge";
+import { formatDeliveryLocation } from "../utils/location";
+import { getPartialOrderInfo } from "../utils/orderPartial";
+import { formatToCentralTime } from "../utils/timezone";
 
 interface OrderTableProps {
     orders: Order[];
-    onStatusChange?: (orderId: string, newStatus: OrderStatus, reason?: string) => void;
     onViewDetail: (orderId: string) => void;
     showEmptyState?: boolean;
     loading?: boolean;
@@ -30,7 +29,7 @@ export default function OrderTable({
     showEmptyState = true,
     loading = false,
 }: OrderTableProps) {
-    const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date" | "status" | "updated">("date");
+    const [sortKey, setSortKey] = useState<"id" | "recipient" | "location" | "date">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -86,12 +85,6 @@ export default function OrderTable({
                 case "location":
                     comparison = compareText(formatDeliveryLocation(a), formatDeliveryLocation(b));
                     break;
-                case "status":
-                    comparison = compareText(a.status, b.status);
-                    break;
-                case "updated":
-                    comparison = compareDate(a.updated_at, b.updated_at);
-                    break;
                 case "date":
                 default:
                     comparison = compareDate(a.created_at, b.created_at);
@@ -143,6 +136,7 @@ export default function OrderTable({
                     const orderId = order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`;
                     const isExpanded = expandedOrderId === orderId;
                     const legLabel = getOrderLegLabel(order);
+
                     return (
                         <div
                             key={orderId}
@@ -163,17 +157,20 @@ export default function OrderTable({
                                         <span className="truncate text-sm font-semibold text-foreground">
                                             {order.inflow_order_id || order.id}
                                         </span>
+                                        <StatusBadge
+                                            status={order.status}
+                                            className="h-6 px-2 py-0 text-[10px] font-medium uppercase tracking-wide"
+                                        />
                                         {legLabel ? (
-                                          <Badge variant={legLabel === "Remainder leg" ? "warning" : "secondary"} className="text-[10px] uppercase tracking-wide">
-                                            {legLabel}
-                                          </Badge>
+                                            <Badge variant={legLabel === "Remainder leg" ? "warning" : "secondary"} className="text-[10px] uppercase tracking-wide">
+                                                {legLabel}
+                                            </Badge>
                                         ) : null}
                                     </div>
                                     <p className="break-words text-sm text-muted-foreground">
                                         {order.recipient_name || "N/A"}
                                     </p>
                                 </div>
-                                <StatusBadge status={order.status} />
                             </div>
                             <div className={`mt-3 grid gap-2 text-xs text-muted-foreground ${isExpanded ? "grid-cols-1" : "grid-cols-2"}`}>
                                 <div>
@@ -208,7 +205,7 @@ export default function OrderTable({
             </div>
 
             <div className="hidden md:block overflow-x-auto ios-scroll">
-                <Table className="min-w-[960px]">
+                <Table className="min-w-[900px]">
                     <TableHeader className="sticky top-0 z-20 bg-muted/40">
                         <TableRow>
                             <TableHead className="w-[220px] lg:w-[260px]" aria-sort={sortKey === "id" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
@@ -235,25 +232,13 @@ export default function OrderTable({
                                     <ArrowUpDown className="h-3.5 w-3.5" />
                                 </button>
                             </TableHead>
-                            <TableHead aria-sort={sortKey === "status" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
-                                <button type="button" onClick={() => toggleSort("status")} className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
-                                    Status
-                                    <ArrowUpDown className="h-3.5 w-3.5" />
-                                </button>
-                            </TableHead>
-                            <TableHead className="whitespace-nowrap" aria-sort={sortKey === "updated" ? sortDir === "asc" ? "ascending" : "descending" : "none"}>
-                                <button type="button" onClick={() => toggleSort("updated")} className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-muted-foreground hover:text-foreground">
-                                    Updated
-                                    <ArrowUpDown className="h-3.5 w-3.5" />
-                                </button>
-                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {sortedOrders.map((order, index) => (
                             <TableRow key={order.id || order.inflow_order_id || `${order.created_at || "order"}-${index}`} className="hover:bg-muted/30 transition-colors">
                                 <TableCell className="min-w-0 break-words">
-                                    <div className="space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Button
                                             variant="link"
                                             disabled={loading}
@@ -263,10 +248,14 @@ export default function OrderTable({
                                             }}
                                             className={`h-auto min-h-0 p-0 font-normal text-foreground/90 hover:text-foreground ${loading ? "opacity-75 cursor-not-allowed" : ""}`}
                                         >
-                                            {order.inflow_order_id}
+                                            {order.inflow_order_id || order.id}
                                         </Button>
+                                        <StatusBadge
+                                            status={order.status}
+                                            className="h-6 px-2 py-0 text-[10px] font-medium uppercase tracking-wide"
+                                        />
                                         {getOrderLegLabel(order) ? (
-                                            <div>
+                                            <div className="basis-full">
                                                 <Badge
                                                     variant={getOrderLegLabel(order) === "Remainder leg" ? "warning" : "secondary"}
                                                     className="text-[10px] uppercase tracking-wide"
@@ -280,10 +269,6 @@ export default function OrderTable({
                                 <TableCell className="break-words">{order.recipient_name || "N/A"}</TableCell>
                                 <TableCell className="break-words">{formatDeliveryLocation(order)}</TableCell>
                                 <TableCell className="whitespace-nowrap">{formatToCentralTime(order.created_at, "MMM d, yyyy")}</TableCell>
-                                <TableCell>
-                                    <StatusBadge status={order.status} />
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap">{formatToCentralTime(order.updated_at, "MMM d, yyyy")}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>

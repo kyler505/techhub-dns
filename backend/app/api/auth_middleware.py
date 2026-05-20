@@ -6,6 +6,7 @@ Validates session cookies and attaches user to request context.
 
 import logging
 from collections import defaultdict, deque
+from datetime import datetime, timedelta
 from functools import wraps
 from threading import Lock
 from time import monotonic
@@ -104,6 +105,53 @@ def _consume_rate_limit(
         return True
 
 
+def is_dev_auth_bypass_enabled() -> bool:
+    """Return True when local development auth bypass is explicitly enabled."""
+    return settings.is_dev() and bool(getattr(settings, "dev_auth_bypass", False))
+
+
+def _set_dev_auth_context() -> None:
+    """Populate request context with a synthetic local dev user/session."""
+    from app.models.session import Session
+    from app.models.user import User
+
+    now = datetime.utcnow()
+    email = (getattr(settings, "dev_auth_email", "") or "dev.user@example.com").strip().lower()
+    display_name = (
+        (getattr(settings, "dev_auth_display_name", "") or "Local Dev User")
+        .strip()
+        or "Local Dev User"
+    )
+    department = (getattr(settings, "dev_auth_department", None) or "").strip() or None
+
+    user = User(
+        id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"techhub-dns-dev-user:{email}")),
+        tamu_oid=f"dev:{email}",
+        email=email,
+        display_name=display_name,
+        department=department,
+        created_at=now,
+        last_login_at=now,
+    )
+    session = Session(
+        id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"techhub-dns-dev-session:{email}")),
+        user_id=user.id,
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(hours=settings.session_max_age_hours),
+        user_agent=request.headers.get("User-Agent"),
+        ip_address=request.remote_addr,
+    )
+
+    g.user_id = user.id
+    g.session_id = session.id
+    g.user_email = user.email
+    g.user_data = user.to_dict()
+    g.session_data = session.to_dict()
+    g.user = user
+    g.session = session
+
+
 def get_rate_limit_snapshot() -> dict:
     now = monotonic()
     window_seconds = settings.rate_limit_window_seconds
@@ -157,6 +205,10 @@ def init_auth_middleware(app):
 
         # Skip auth session checks for static assets served by Flask SPA host.
         if _is_static_asset_request(path):
+            return None
+
+        if is_dev_auth_bypass_enabled():
+            _set_dev_auth_context()
             return None
 
         # Check if SAML is configured
@@ -267,6 +319,9 @@ def is_current_user_admin() -> bool:
     - If ADMIN_EMAILS is empty, allow any authenticated user ONLY in development.
     - If not authenticated, always False.
     """
+    if is_dev_auth_bypass_enabled():
+        return True
+
     if not getattr(g, "user_id", None):
         return False
 

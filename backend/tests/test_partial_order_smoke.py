@@ -190,8 +190,65 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
             ("order-details", "TH9001-P.pdf"),
         ]
 
+        parent_order.inflow_data = {
+            "orderNumber": "TH9001",
+            "contactName": "Smoke Tester",
+            "email": "smoke.tester@example.com",
+            "shippingAddress": {"address1": "9001 Example St"},
+            "lines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "1"},
+                },
+                {
+                    "productId": "prod-2",
+                    "description": "Dock",
+                    "quantity": {"standardQuantity": "1"},
+                },
+            ],
+            "pickLines": [
+                {
+                    "productId": "prod-1",
+                    "description": "Laptop",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+        }
+        session.commit()
+
+        recursive_child = order_service.generate_picklist(
+            parent_order.id,
+            generated_by="runner@example.com",
+            generated_by_display="Runner User",
+            create_partial_leg=False,
+        )
+
+        session.refresh(parent_order)
+        session.refresh(generated_child)
+        session.refresh(recursive_child)
+
+        assert recursive_child.parent_order_id == parent_order.id
+        assert recursive_child.inflow_order_id == "TH9001-P2"
+        assert parent_order.remainder_order_id == recursive_child.id
+        assert parent_order.inflow_data["lines"] == [
+            {
+                "productId": "prod-2",
+                "description": "Dock",
+                "quantity": {"standardQuantity": 1.0},
+            }
+        ]
+        assert parent_order.inflow_data["pickLines"] == []
+        assert generated_child.picklist_path == "sharepoint://picklists/TH9001-P.pdf"
+        assert recursive_child.picklist_path == "sharepoint://picklists/TH9001-P2.pdf"
+        assert recursive_child.order_details_path == "sharepoint://order-details/TH9001-P2.pdf"
+        assert sharepoint.uploads[2:4] == [
+            ("picklists", "TH9001-P2.pdf"),
+            ("order-details", "TH9001-P2.pdf"),
+        ]
+
         qa_payload = {
-            "orderNumber": generated_child.inflow_order_id,
+            "orderNumber": recursive_child.inflow_order_id,
             "technician": "Runner User",
             "qaSignature": "Smoke Signature",
             "method": "Delivery",
@@ -202,7 +259,7 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
             "verifyBoxesLabeledCorrectly": True,
         }
         qa_result = order_service.submit_qa(
-            generated_child.id,
+            recursive_child.id,
             qa_payload,
             technician="Runner User",
         )
@@ -210,9 +267,9 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         session.refresh(qa_result)
         assert qa_result.status == OrderStatus.PRE_DELIVERY.value
         assert qa_result.qa_completed_at is not None
-        assert qa_result.qa_path == "sharepoint://qa/TH9001-P.json"
+        assert qa_result.qa_path == "sharepoint://qa/TH9001-P2.json"
         assert qa_result.qa_method == "Delivery"
-        assert sharepoint.uploads[2] == ("qa", "TH9001-P.json")
+        assert sharepoint.uploads[4] == ("qa", "TH9001-P2.json")
 
         delivery_service = DeliveryRunService(session)
         delivery_service._get_authenticated_actor = lambda: (
@@ -227,15 +284,15 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
             purpose=None,
         )
 
-        run = delivery_service.create_run_for_current_user([generated_child.id], vehicle="van")
+        run = delivery_service.create_run_for_current_user([recursive_child.id], vehicle="van")
         session.refresh(run)
-        session.refresh(generated_child)
+        session.refresh(recursive_child)
         assert run.status == DeliveryRunStatus.ACTIVE.value
-        assert generated_child.status == OrderStatus.IN_DELIVERY.value
-        assert generated_child.delivery_run_id == run.id
+        assert recursive_child.status == OrderStatus.IN_DELIVERY.value
+        assert recursive_child.delivery_run_id == run.id
 
         delivered = order_service.transition_status(
-            generated_child.id,
+            recursive_child.id,
             OrderStatus.DELIVERED,
             changed_by="Runner User",
             reason="Delivered during smoke test",
@@ -244,9 +301,20 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         assert delivered.status == OrderStatus.DELIVERED.value
 
         partial_delivery_payload = {
-            **generated_child.inflow_data,
-            "packLines": [],
-            "shipLines": [],
+            **recursive_child.inflow_data,
+            "packLines": [
+                {
+                    "productId": "prod-laptop",
+                    "quantity": {"standardQuantity": "1"},
+                }
+            ],
+            "shipLines": [
+                {
+                    "salesOrderShipLineId": "ship-1",
+                    "carrier": "TechHub",
+                    "containers": ["DELIVERY-TH9001-P2-1"],
+                }
+            ],
         }
         monkeypatch.setattr(
             "app.services.inflow_service.InflowService.fulfill_sales_order",
@@ -260,193 +328,27 @@ def test_partial_order_smoke_split_to_delivery(monkeypatch):
         )
 
         session.refresh(completed_run)
-        session.refresh(generated_child)
+        session.refresh(recursive_child)
 
         assert completed_run.status == DeliveryRunStatus.COMPLETED.value
-        assert generated_child.status == OrderStatus.PICKED.value
-        assert generated_child.delivery_run_id is None
-        assert generated_child.picklist_generated_at is None
-        assert generated_child.picklist_path is None
-        assert generated_child.qa_completed_at is None
-        assert generated_child.qa_path is None
-        assert generated_child.order_details_path is None
-        assert generated_child.signature_captured_at is None
-        assert generated_child.tagged_at is None
-        assert generated_child.qa_method is None
-        assert generated_child.inflow_data == partial_delivery_payload
-        assert parent_order.remainder_order_id == generated_child.id
+        assert recursive_child.status == OrderStatus.DELIVERED.value
+        assert recursive_child.delivery_run_id == run.id
+        assert recursive_child.picklist_generated_at is not None
+        assert recursive_child.picklist_path is not None
+        assert recursive_child.qa_completed_at is not None
+        assert recursive_child.qa_path is not None
+        assert recursive_child.order_details_path is not None
+        assert recursive_child.qa_method == "Delivery"
+        assert recursive_child.inflow_data == partial_delivery_payload
+        assert parent_order.remainder_order_id == recursive_child.id
 
-        print("[PASS] partial-order smoke chain split -> docs -> QA -> delivery -> requeue")
+        print("[PASS] partial-order smoke chain split -> docs -> QA -> delivery -> delivered")
     finally:
         session.close()
         engine.dispose()
 
 
 
-
-
-def test_delivery_remainder_creation(monkeypatch):
-    """Test that -R remainder orders are created for partially-fulfilled deliveries."""
-
-    session, engine = _make_sqlite_session()
-    sharepoint = _SmokeSharePointService()
-
-    try:
-        monkeypatch.setattr(
-            "app.services.audit_service.AuditService.log_order_action",
-            lambda *args, **kwargs: None,
-        )
-        monkeypatch.setattr(
-            "app.services.audit_service.AuditService.log_delivery_run_action",
-            lambda *args, **kwargs: None,
-        )
-        monkeypatch.setattr(
-            "app.services.order_service.OrderService._record_status_history",
-            lambda *args, **kwargs: None,
-        )
-        monkeypatch.setattr(
-            "app.services.delivery_run_service.DeliveryRunService._record_status_history",
-            lambda *args, **kwargs: None,
-        )
-        monkeypatch.setattr(
-            "app.services.sharepoint_service.get_sharepoint_service",
-            lambda: sharepoint,
-        )
-        monkeypatch.setattr(
-            "app.services.email_service.email_service.is_configured",
-            lambda: True,
-        )
-        monkeypatch.setattr(
-            "app.services.email_service.email_service.send_order_details_email",
-            lambda *args, **kwargs: True,
-        )
-
-        # Build a parent order where the Dock (prod-2) was on the original
-        # lines but NOT in pickLines — simulating a partially fulfilled delivery.
-        order = Order(
-            id="order-remainder-test",
-            inflow_order_id="TH9902",
-            inflow_sales_order_id="sales-order-remainder-1",
-            recipient_name="Remainder Tester",
-            recipient_contact="remainder@example.com",
-            delivery_location="Building 9902",
-            po_number="PO-9902",
-            status=OrderStatus.DELIVERED.value,
-            inflow_data={
-                "orderNumber": "TH9902",
-                "contactName": "Remainder Tester",
-                "email": "remainder@example.com",
-                "shippingAddress": {"address1": "9902 Example St"},
-                "lines": [
-                    {
-                        "productId": "prod-1",
-                        "description": "Laptop",
-                        "quantity": {"standardQuantity": "2"},
-                    },
-                    {
-                        "productId": "prod-2",
-                        "description": "Dock",
-                        "quantity": {"standardQuantity": "1"},
-                    },
-                ],
-                "pickLines": [
-                    {
-                        "productId": "prod-1",
-                        "description": "Laptop",
-                        "quantity": {"standardQuantity": "2"},
-                    },
-                    # prod-2 (Dock) NOT in pickLines — never picked
-                ],
-                "packLines": [],
-                "shipLines": [],
-            },
-        )
-        session.add(order)
-        session.flush()  # get an id without committing (no need for a full commit)
-        session.commit()
-
-        splitting_service = OrderSplittingService(session)
-
-        # ---------- should_create_remainder ----------
-        assert splitting_service.should_create_remainder(order) is True
-
-        # ---------- create_remainder_order ----------
-        remainder = splitting_service.create_remainder_order(
-            order, user_id="runner-1"
-        )
-        assert remainder is not None, "Expected a -R remainder order to be created"
-        assert remainder.inflow_order_id == "TH9902-R"
-        assert remainder.inflow_sales_order_id == order.inflow_sales_order_id
-        assert remainder.parent_order_id == order.id
-        assert remainder.status == OrderStatus.PICKED.value
-        assert remainder.po_number == "PO-9902"
-
-        # Only the unpicked Dock should be present
-        assert len(remainder.inflow_data.get("lines", [])) == 1
-        line = remainder.inflow_data["lines"][0]
-        assert line["productId"] == "prod-2"
-        assert line["quantity"]["standardQuantity"] == 1.0
-
-        # Pick/pack/ship lines must be empty — fresh state
-        assert remainder.inflow_data.get("pickLines") == []
-        assert remainder.inflow_data.get("packLines") == []
-        assert remainder.inflow_data.get("shipLines") == []
-
-        # Audit log should exist for the initial PICKED transition
-        audit_logs = (
-            session.query(AuditLog)
-            .filter(AuditLog.order_id == remainder.id)
-            .all()
-        )
-        assert len(audit_logs) >= 1
-        assert audit_logs[0].to_status == OrderStatus.PICKED.value
-        assert "Remainder order created" in (audit_logs[0].reason or "")
-
-        # ---------- idempotent re-call ----------
-        same = splitting_service.create_remainder_order(order, user_id="runner-1")
-        assert same.id == remainder.id
-
-        # ---------- process_partial_fulfillments ----------
-        results = splitting_service.process_partial_fulfillments(
-            [order], user_id="runner-1", create_remainders=True
-        )
-        assert results["remainder_count"] == 1
-        detail = results["remainders_created"][0]
-        assert detail["original_inflow_id"] == "TH9902"
-        assert detail["remainder_inflow_id"] == "TH9902-R"
-
-        # ---------- create_remainders=False skips ----------
-        fresh_order = Order(
-            id="order-remainder-skip-test",
-            inflow_order_id="TH9903",
-            inflow_sales_order_id="sales-order-remainder-2",
-            recipient_name="Skip Tester",
-            recipient_contact="skip@example.com",
-            delivery_location="Building 9903",
-            po_number="PO-9903",
-            status=OrderStatus.DELIVERED.value,
-            inflow_data=order.inflow_data,
-        )
-        session.add(fresh_order)
-        session.commit()
-
-        skipped_results = splitting_service.process_partial_fulfillments(
-            [fresh_order], user_id="runner-1", create_remainders=False
-        )
-        assert skipped_results["remainder_count"] == 0
-
-        # No -R order should exist for TH9903
-        no_remainder = (
-            session.query(Order)
-            .filter(Order.inflow_order_id == "TH9903-R")
-            .first()
-        )
-        assert no_remainder is None
-
-        print("[PASS] delivery remainder -R order creation")
-    finally:
-        session.close()
-        engine.dispose()
 
 
 if __name__ == "__main__":
