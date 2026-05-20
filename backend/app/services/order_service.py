@@ -98,12 +98,18 @@ class OrderService:
         self, inflow_data: Dict[str, Any], delivery_location: str
     ) -> str:
         contact_name = inflow_data.get("contactName")
+        shipping_addr_obj = self._as_dict(inflow_data.get("shippingAddress"))
+        address1 = shipping_addr_obj.get("address1", "")
+        address2 = shipping_addr_obj.get("address2", "")
+        shipping_parts = [part for part in [address1, address2] if part]
+        shipping_address = " ".join(shipping_parts) if shipping_parts else address1
         custom_fields = self._as_dict(inflow_data.get("customFields"))
         custom1 = custom_fields.get("custom1")
 
         if (
             isinstance(contact_name, str)
             and contact_name.strip().upper() == self.ZACH_CONTACT_OVERRIDE
+            and delivery_location in {address1, address2, shipping_address, ""}
             and delivery_location != "ZACH"
         ):
             logger.info(

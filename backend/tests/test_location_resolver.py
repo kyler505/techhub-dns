@@ -395,6 +395,48 @@ def test_allen_variants_normalize_to_display_label():
     assert resolved.source in {"address2", "address"}
 
     print("[PASS] ALLEN normalization test passed")
+def test_zach_address_variants_normalize_to_display_label():
+    """Test that 125 Spence Street / TAMU 3579 variants resolve to ZACH."""
+    from app.services.location_resolver_service import LocationResolverService
+    from app.utils.building_mapper import extract_building_code_from_location
+
+    variants = [
+        "125 Spence Street",
+        "125 Spence St",
+        "TAMU 3579",
+        "4220 TAMU ALLEN BLDG ROOM 2004A, College Station, TX, 77845",
+    ]
+
+    expected = {
+        "125 Spence Street": "ZACH",
+        "125 Spence St": "ZACH",
+        "TAMU 3579": "ZACH",
+        "4220 TAMU ALLEN BLDG ROOM 2004A, College Station, TX, 77845": "ALLEN",
+    }
+
+    for address in variants:
+        extracted = extract_building_code_from_location(address)
+        assert extracted == expected[address]
+
+    service = LocationResolverService()
+    resolved = service.resolve_location(
+        {
+            "orderNumber": "TESTZACHADDR1",
+            "orderRemarks": "",
+            "shippingAddress": {
+                "address1": "125 Spence Street",
+                "address2": "",
+                "city": "College Station",
+                "state": "TX",
+                "postalCode": "77843",
+            },
+        }
+    )
+    assert resolved.building_code == "ZACH"
+    assert resolved.display_location == "ZACH"
+    assert resolved.source == "address"
+
+    print("[PASS] ZACH address normalization test passed")
 if __name__ == "__main__":
     print("Running LocationResolverService tests...")
     print()
@@ -412,6 +454,7 @@ if __name__ == "__main__":
     test_library_annex_variants_normalize_to_anex()
     test_esl_rellis_address_normalizes_to_display_label()
     test_allen_variants_normalize_to_display_label()
+    test_zach_address_variants_normalize_to_display_label()
 
     # Integration tests
     test_local_delivery_detection()

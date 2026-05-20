@@ -1811,6 +1811,43 @@ def test_create_order_from_inflow_overrides_delivery_location_to_zach_from_conta
         session.close()
         engine.dispose()
 
+
+def test_create_order_from_inflow_prefers_address_resolution_over_zach_contact_override():
+    """Takoda Powell should keep a concrete address-derived mapping instead of forcing ZACH."""
+
+    session, engine = _make_sqlite_session()
+
+    try:
+        service = OrderService(session)
+        incoming_payload = {
+            "orderNumber": "THZACH002",
+            "salesOrderId": "sales-order-zach-2",
+            "contactName": "TAKODA POWELL",
+            "email": "takoda@example.com",
+            "poNumber": "PO-ZACH-2",
+            "shippingAddress": {
+                "address1": "4220 TAMU",
+                "address2": "ALLEN BLDG ROOM 2004A",
+                "city": "College Station",
+                "stateProvince": "TX",
+                "postalCode": "77845",
+            },
+            "customFields": {},
+            "lines": [],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        }
+
+        created = service.create_order_from_inflow(incoming_payload)
+        session.refresh(created)
+
+        assert created.delivery_location == "ALLEN"
+        assert created.recipient_name == "TAKODA POWELL"
+    finally:
+        session.close()
+        engine.dispose()
+
     print("[PASS] Parent remainder prep actions are blocked until remaining items are picked")
 
 
