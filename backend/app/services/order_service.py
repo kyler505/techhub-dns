@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 class OrderService:
     VIDI_CUSTOM1_OVERRIDE = "TAMU - College of Veterinary Medicine"
+    ZACH_CONTACT_OVERRIDE = "TAKODA POWELL"
 
     def __init__(self, db: Session):
         self.db = db
@@ -96,8 +97,20 @@ class OrderService:
     def _apply_delivery_location_overrides(
         self, inflow_data: Dict[str, Any], delivery_location: str
     ) -> str:
+        contact_name = inflow_data.get("contactName")
         custom_fields = self._as_dict(inflow_data.get("customFields"))
         custom1 = custom_fields.get("custom1")
+
+        if (
+            isinstance(contact_name, str)
+            and contact_name.strip().upper() == self.ZACH_CONTACT_OVERRIDE
+            and delivery_location != "ZACH"
+        ):
+            logger.info(
+                "Overriding delivery_location to 'ZACH' based on contactName='%s'",
+                contact_name,
+            )
+            return "ZACH"
 
         if (
             isinstance(custom1, str)

@@ -1546,6 +1546,43 @@ def test_create_order_from_inflow_overrides_delivery_location_to_vidi_from_custo
         session.close()
         engine.dispose()
 
+
+def test_create_order_from_inflow_overrides_delivery_location_to_zach_from_contact_name():
+    """Orders for Takoda Powell should store ZACH."""
+
+    session, engine = _make_sqlite_session()
+
+    try:
+        service = OrderService(session)
+        incoming_payload = {
+            "orderNumber": "THZACH001",
+            "salesOrderId": "sales-order-zach-1",
+            "contactName": "TAKODA POWELL",
+            "email": "takoda@example.com",
+            "poNumber": "PO-ZACH-1",
+            "shippingAddress": {
+                "address1": "500 Example Rd",
+                "address2": "",
+                "city": "College Station",
+                "stateProvince": "TX",
+                "postalCode": "77843",
+            },
+            "customFields": {},
+            "lines": [],
+            "pickLines": [],
+            "packLines": [],
+            "shipLines": [],
+        }
+
+        created = service.create_order_from_inflow(incoming_payload)
+        session.refresh(created)
+
+        assert created.delivery_location == "ZACH"
+        assert created.recipient_name == "TAKODA POWELL"
+    finally:
+        session.close()
+        engine.dispose()
+
     print("[PASS] Parent remainder prep actions are blocked until remaining items are picked")
 
 
