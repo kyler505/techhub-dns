@@ -26,7 +26,7 @@ const OrderQAPage = lazy(() => import("./pages/OrderQAPage"));
 const DeliveryRunDetailPage = lazy(() => import("./pages/DeliveryRunDetailPage"));
 const Login = lazy(() => import("./pages/Login"));
 const Sessions = lazy(() => import("./pages/Sessions"));
-const TagRequest = lazy(() => import("./pages/TagRequest"));
+const Preparation = lazy(() => import("./pages/Preparation"));
 const VettingEditor = lazy(() => import("./pages/VettingEditor"));
 
 const prefetchRoutes = () => {
@@ -41,7 +41,8 @@ function AppRoutes() {
             <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
             <Route path="/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
             <Route path="/orders/:orderId/qa" element={<ProtectedRoute><OrderQAPage /></ProtectedRoute>} />
-            <Route path="/tag-request" element={<ProtectedRoute><TagRequest /></ProtectedRoute>} />
+            <Route path="/preparation" element={<ProtectedRoute><Preparation /></ProtectedRoute>} />
+            <Route path="/tag-request" element={<Navigate to="/preparation" replace />} />
             <Route path="/vetting-editor" element={<ProtectedRoute><VettingEditor /></ProtectedRoute>} />
             <Route path="/order-qa" element={<ProtectedRoute><OrderQAChecklist /></ProtectedRoute>} />
             <Route path="/delivery" element={<ProtectedRoute><DeliveryLayout /></ProtectedRoute>}>

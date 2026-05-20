@@ -29,7 +29,7 @@ type LeafNavItem = {
 const navItems: LeafNavItem[] = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/orders", label: "Orders", icon: Package },
-  { path: "/tag-request", label: "Tag Request", icon: Tag },
+  { path: "/preparation", label: "Preparation", icon: Tag },
   { path: "/order-qa", label: "QA Checklist", icon: ClipboardCheck },
   { path: "/delivery", to: "/delivery/dispatch", label: "Delivery", icon: Truck },
   { path: "/shipping", label: "Shipping", icon: Send },
@@ -68,15 +68,22 @@ export function Sidebar({ className }: { className?: string }) {
     if (typeof window === "undefined") return;
 
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
-    const syncCollapsed = (event: MediaQueryList | MediaQueryListEvent) => {
-      setIsMobile(event.matches);
-      setCollapsed(event.matches);
+    const syncResponsiveState = () => {
+      const matches = mediaQuery.matches;
+      setIsMobile(matches);
+      setCollapsed(matches);
       setIsMobileOpen(false);
     };
 
-    syncCollapsed(mediaQuery);
-    mediaQuery.addEventListener("change", syncCollapsed);
-    return () => mediaQuery.removeEventListener("change", syncCollapsed);
+    syncResponsiveState();
+    mediaQuery.addEventListener("change", syncResponsiveState);
+    window.addEventListener("resize", syncResponsiveState);
+    window.addEventListener("orientationchange", syncResponsiveState);
+    return () => {
+      mediaQuery.removeEventListener("change", syncResponsiveState);
+      window.removeEventListener("resize", syncResponsiveState);
+      window.removeEventListener("orientationchange", syncResponsiveState);
+    };
   }, []);
 
   useEffect(() => {
