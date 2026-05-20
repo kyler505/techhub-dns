@@ -141,6 +141,25 @@ def _start_oidc_login(relay_state: str):
     return redirect(auth_url)
 
 
+def _oidc_login_debug_context() -> dict:
+    """Return a small, non-sensitive snapshot to help debug initiation failures."""
+    redirect_uri = None
+    try:
+        redirect_uri = _build_oidc_redirect_uri()
+    except Exception:
+        redirect_uri = None
+
+    return {
+        "tenant_configured": bool(settings.azure_tenant_id),
+        "client_configured": bool(settings.azure_client_id),
+        "secret_configured": bool(settings.azure_client_secret),
+        "frontend_url": settings.frontend_url,
+        "request_host": request.host,
+        "request_scheme": request.scheme,
+        "redirect_uri": redirect_uri,
+    }
+
+
 def _clear_oidc_login_state() -> None:
     flask_session.pop(OIDC_SESSION_STATE_KEY, None)
     flask_session.pop(OIDC_SESSION_NONCE_KEY, None)
@@ -284,8 +303,20 @@ def login():
         except DNSApiError:
             raise
         except Exception as exc:
-            logger.exception("OIDC login error: %s", exc)
-            return jsonify({"error": "Failed to initiate Microsoft Entra login"}), 500
+            logger.exception("OIDC login error: %s context=%s", exc, _oidc_login_debug_context())
+            return (
+                jsonify(
+                    {
+                        "error": "Failed to initiate Microsoft Entra login",
+                        "details": {
+                            "type": exc.__class__.__name__,
+                            "message": str(exc),
+                            "context": _oidc_login_debug_context(),
+                        },
+                    }
+                ),
+                500,
+            )
 
     if saml_auth_service.is_configured():
         try:

@@ -169,3 +169,33 @@ def test_oidc_callback_creates_session_cookie_and_redirects(monkeypatch):
             settings.azure_client_secret,
             settings.flask_env,
         ) = previous
+
+
+def test_login_surfaces_oidc_initiation_failure_details(monkeypatch):
+    previous = _configure_oidc_settings()
+
+    def _raise(_relay_state):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(auth_routes, "_start_oidc_login", _raise)
+
+    try:
+        app = _make_app()
+        client = app.test_client()
+
+        response = client.get("/api/auth/login?next=/orders")
+        body = response.get_json() or {}
+
+        assert response.status_code == 500
+        assert body["error"] == "Failed to initiate Microsoft Entra login"
+        assert body["details"]["type"] == "RuntimeError"
+        assert body["details"]["message"] == "boom"
+        assert body["details"]["context"]["tenant_configured"] is True
+        assert body["details"]["context"]["client_configured"] is True
+    finally:
+        (
+            settings.azure_tenant_id,
+            settings.azure_client_id,
+            settings.azure_client_secret,
+            settings.flask_env,
+        ) = previous
